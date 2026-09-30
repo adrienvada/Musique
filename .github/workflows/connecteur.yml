@@ -7,8 +7,7 @@ name: Connecteur reMarkable
 
 on:
   push:
-    # ccr-6b1e284f-bv8j0c : la branche de la PR #1, à retirer une fois fusionnée.
-    branches: [main, ccr-6b1e284f-bv8j0c]
+    branches: [main]
     paths:
       - "supabase/functions/portee-remarkable/**"
       - "outils/deployer-connecteur.mjs"
