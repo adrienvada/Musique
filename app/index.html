@@ -84,6 +84,20 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 .carte .titre { font-weight: 600; }
 .carte .meta { font-size: 0.8rem; color: var(--gris); font-variant-numeric: tabular-nums; }
 .carte .infos .pastille { align-self: flex-start; }
+.arbre { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow: auto; }
+.arbre details > summary { cursor: pointer; padding: 5px 6px; border-radius: 6px; font-weight: 500; list-style: none; display: flex; align-items: center; gap: 8px; }
+.arbre details > summary::before { content: "▸"; color: var(--gris); width: 1em; }
+.arbre details[open] > summary::before { content: "▾"; }
+.arbre details > summary:hover { background: var(--papier); }
+.arbre .enfants { padding-left: 18px; border-left: 1px solid var(--trait); margin-left: 12px; display: flex; flex-direction: column; gap: 2px; }
+.doc-rm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 5px 6px; border-radius: 6px; }
+.doc-rm:hover { background: var(--papier); }
+.doc-rm .nom { min-width: 0; overflow-wrap: anywhere; }
+.doc-rm .meta { font-size: 0.8rem; color: var(--gris); font-variant-numeric: tabular-nums; }
+.doc-rm .btn { margin-left: auto; }
+.aide-connecteur { border: 1px solid var(--surligneur); background: var(--surligneur-doux); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 0.92rem; }
+.aide-connecteur ol { margin: 0; padding-left: 1.2em; }
+.aide-connecteur p:empty { display: none; }
 .vide { border: 1px solid var(--trait); background: var(--feuille); border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 10px; max-width: 70ch; }
 .vide ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
 
@@ -161,16 +175,29 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
       </div>
     </div>
     <div class="depot" id="depot">
-      <p><strong>Ajoute une page écrite sur un modèle Portée.</strong> Sur la tablette : <em>Partager → PDF</em>, ou exporte le document en PDF depuis l'appli reMarkable de l'ordinateur. Dépose le fichier ici.</p>
-      <label class="btn btn-plein" for="fichier">Choisir des PDF</label>
+      <p><strong>Ajoute une page écrite sur un modèle Portée.</strong> Va la chercher sur ta reMarkable, ou dépose ici son PDF (sur la tablette : <em>Partager → PDF</em>).</p>
+      <div class="rangee">
+        <button class="btn btn-plein" id="ouvrir-remarkable">Parcourir ma reMarkable</button>
+        <label class="btn" for="fichier">Choisir des PDF</label>
+      </div>
       <input id="fichier" type="file" accept="application/pdf,.pdf" multiple hidden>
+    </div>
+    <div class="panneau" id="panneau-remarkable" hidden>
+      <div class="rangee">
+        <h2 style="font-size:1.3rem">Ma reMarkable</h2>
+        <input class="champ" id="recherche-rm" type="search" placeholder="Chercher un document…" aria-label="Chercher un document de la reMarkable" style="flex:0 1 260px">
+        <button class="btn btn-petit" id="actualiser-rm">Actualiser</button>
+        <button class="btn btn-petit pousse" id="fermer-rm">Fermer</button>
+      </div>
+      <div class="etat" id="etat-rm" role="status"></div>
+      <div class="arbre" id="arbre-rm"></div>
     </div>
     <div id="liste" class="grille" aria-live="polite"></div>
     <div id="vide" class="vide" hidden>
       <h2>Ta bibliothèque est vide</h2>
       <ol>
         <li>Sur la tablette, duplique un modèle Portée et écris ta partition dessus.</li>
-        <li>Exporte-la en PDF et dépose le fichier ci-dessus.</li>
+        <li>Importe-la avec « Parcourir ma reMarkable », ou dépose son PDF ci-dessus.</li>
         <li>Relis ce que Portée a compris dans l'atelier, puis écoute-la.</li>
       </ol>
       <div class="rangee"><button class="btn" id="exemples">Essayer avec tes pages d'essai du 30 septembre</button></div>

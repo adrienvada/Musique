@@ -25,6 +25,12 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
 - **Modèles (`modeles/`)** : générés par `outils/generer_modeles.py`, jamais
   retouchés à la main. Changer un modèle change sa calibration : on
   incrémente `VERSION`.
+- **Connecteur (`supabase/functions/portee-remarkable/`)** : lecture seule du
+  cloud reMarkable, en JavaScript que Deno (Supabase) et Node (tests) lisent
+  tous deux ; seul `index.ts` est propre à Deno. Ne jamais afficher, journaliser
+  ni recopier le jeton d'appareil : il vit dans le compartiment privé
+  `portee-remarkable` du stockage Supabase. L'appli l'appelle par son nom,
+  « Portée reMarkable » : le changer des deux côtés à la fois.
 
 ## Vérifier
 
@@ -46,7 +52,9 @@ L'appli est un artefact claude.ai : https://claude.ai/artifact/NwXEpHs69MYngQMii
    - `files` : le contenu de `dist.fichiers.json`, avec un `contentType`
      explicite pour `.mjs` (`text/javascript`), `.mp3` (`audio/mpeg`) et
      `.pdf` (`application/pdf`) ;
-   - ne pas repasser `capabilities`, pour garder `db` et `downloads`.
+   - ne pas repasser `capabilities`, pour garder `db`, `downloads` et `mcp`
+     (connecteur « Portée reMarkable » : `arborescence`, `document`, `relier`).
+     Si on les repasse, redonner l'ensemble complet : ce qui manque est retiré.
 
    Sans l'URL, on crée une seconde appli vide, et Adrien perd sa bibliothèque.
 3. La base de l'appli (`partitions/<id>`, `partitions/<id>/pages/<n>`) contient
@@ -55,4 +63,5 @@ L'appli est un artefact claude.ai : https://claude.ai/artifact/NwXEpHs69MYngQMii
 
 Avant de publier, tester la version autonome dans Chromium : servir `dist/`
 après `npm run appli -- --autonome`, importer les pages d'essai, écouter,
-exporter.
+exporter. Pour le panneau « Ma reMarkable », simuler `window.claude.use("mcp")`
+en appelant `traiter()` (connecteur) sur le faux cloud de `tests/faux-cloud.mjs`.

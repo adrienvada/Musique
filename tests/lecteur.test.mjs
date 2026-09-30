@@ -26,7 +26,9 @@ test("page de mélodie : gamme, puis 12/8 en mi bémol avec levée et reprise", 
     [
       "C2 D2 E2 F2 G2 A2 B2 c2",
       "[K:Eb][M:12/8]G |: c2 c2 edc g2 GG G | c2 c edc g2 z GG",
-      "c2 c agf gccagf || gcc dedc z z2 G :|",
+      // Deux ligatures séparées (sol do do | la sol fa), groupées par trois
+      // comme en 12/8. Avant le 30/09 au soir, le lecteur les soudait à tort.
+      "c2 c agf gcc agf || gcc dedc z z2 G :|",
     ].join("\n"),
   );
   // Deux doutes attendus : un petit trait au bout d'une hampe, et la mesure
@@ -39,5 +41,16 @@ test("l'ABC produit se lit sans avertissement", async () => {
     const r = await lireFichier(f);
     const [tune] = abcjs.parseOnly(r.abc);
     assert.equal((tune.warnings || []).length, 0, `${f} : ${tune.warnings}`);
+  }
+});
+
+test("arrondir les traits au demi-pixel (transport du connecteur) ne change aucune lecture", async () => {
+  const { lirePartition } = await import("../lecteur/partition.js");
+  for (const f of ["tests/pages/2026-09-30-piano-standard.pdf", "tests/pages/2026-09-30-melodie-standard.pdf"]) {
+    const r = await lireFichier(f);
+    const arrondis = r.pages.map((p) => p.traits.map((t) => t.map(([x, y]) => [Math.round(x * 2) / 2, Math.round(y * 2) / 2])));
+    const res = lirePartition(arrondis, r.cal, { titre: "x" });
+    assert.equal(corps(res.abc), corps(r.abc), f);
+    assert.equal(res.doutes.length, r.doutes.length, f);
   }
 });

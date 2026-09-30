@@ -1,6 +1,6 @@
 # Propositions — de la tablette au piano
 
-*Mis à jour le 30 septembre 2026 (nuit) : la version 1 est en ligne.*
+*Mis à jour le 30 septembre 2026 (soir) : import à la demande depuis la reMarkable.*
 
 **L'appli : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj** (privée).
 
@@ -39,8 +39,8 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
 
   Les partitions et leurs traits sont rangés dans la base de la page claude.ai
   (capacité `db`) : ils suivent Adrien sur tous ses appareils, sans Supabase ni
-  hébergement. La synchronisation automatique (`rmapi`) reste à brancher :
-  voir « Suite ».
+  hébergement. La synchronisation automatique prévue alors a laissé place à
+  l'import à la demande (décision plus bas).
 
   **Pourquoi ce choix plutôt que B tout de suite.** Supabase et Cloudflare
   demandent des accès que la session n'a pas (clés, tableau de bord). Là,
@@ -49,6 +49,27 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
 - **30/09 · Le lecteur est réécrit en JavaScript** (`lecteur/`). Le même code
   sert au navigateur et aux tests Node. Le vérificateur Python
   (`verifier_page.py`, PyMuPDF sous licence AGPL) est retiré.
+- **30/09 · Import à la demande depuis la reMarkable.** Demandé par Adrien :
+  un bouton dans l'appli, l'arborescence de la tablette, un import au clic,
+  « à la demande, pas régulièrement ». Ni synchro planifiée ni routine.
+  - La page claude.ai ne peut joindre aucun serveur. Elle passe par un
+    **connecteur claude.ai personnel**, « Portée reMarkable », qu'elle appelle
+    avec la capacité `mcp`.
+  - Ce connecteur est une fonction Supabase
+    (`supabase/functions/portee-remarkable/`) dans le projet du site : gratuit,
+    rien de plus à héberger. Il reprend le protocole du cloud de `rmapi` et lit
+    les `.rm` v6 comme `rmscene`, en JavaScript. Il n'écrit jamais dans le cloud.
+  - Trois outils : `arborescence`, `document` et `relier`. La tablette se relie
+    depuis l'appli avec le code à 8 lettres de my.remarkable.com. Le jeton
+    d'appareil va dans un compartiment privé du stockage Supabase : il ne
+    passe ni par la conversation, ni par l'appli, ni par le dépôt.
+  - Protection : l'adresse du connecteur finit par une clé aléatoire (secret
+    `PORTEE_CLE`) ; sans elle, la fonction répond 404. Un connecteur OAuth
+    serait disproportionné pour un seul utilisateur.
+  - Le lecteur reçoit les traits des `.rm`, pas un PDF exporté. Le repère est
+    le même une fois l'abscisse décalée de 702 px. Les tests vérifient que la
+    lecture ne change pas, même en arrondissant les traits au demi-pixel pour
+    le transport.
 
 ## Ce que les pages d'essai ont appris
 
@@ -84,7 +105,7 @@ jouables avec un son de piano correct. Contrainte : **0 €**.
 | # | Étape | Qui | Ce qui en sort |
 |---|---|---|---|
 | 1 | Écrire | Adrien, sur la tablette | traits vectoriels `.rm` (format v6) |
-| 2 | Récupérer | automatique | une image par page |
+| 2 | Récupérer | Adrien, au clic | les traits de chaque page |
 | 3 | **Lire** | automatique | ABC + mesures douteuses |
 | 4 | Relire | Adrien, 1 à 2 min | ABC validé |
 | 5 | Écouter | le portable | SVG, MIDI, MusicXML |
@@ -96,15 +117,14 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 
 ## Les briques retenues ou à tester
 
-- **Récupérer** : [`rmapi`](https://github.com/ddvk/rmapi) (fork maintenu par
-  ddvk, v0.0.35 en août 2026) dans une tâche GitHub planifiée, puis
-  [`rmscene`](https://github.com/ricklupton/rmscene) /
-  [`rmc`](https://github.com/ricklupton/rmc) pour le rendu.
+- **Récupérer** : le connecteur « Portée reMarkable » (décision du 30/09,
+  import à la demande). Il reprend le protocole de
+  [`rmapi`](https://github.com/ddvk/rmapi) (fork maintenu par ddvk) et le
+  format `.rm` v6 de [`rmscene`](https://github.com/ricklupton/rmscene), en
+  JavaScript : `rmc` et Python ne servent plus.
   - API non officielle, qui a déjà cassé une fois lors d'un changement de protocole.
   - Adrien a l'abonnement Connect (30/09) : la synchro cloud est complète.
-  - `rmc` 0.3 exige `rmscene < 0.7`, ce qui le met en conflit avec rmscene 0.8.
-  - Secours : l'export manuel depuis la tablette (e-mail en PDF, PNG ou **SVG**,
-    ou Google Drive).
+  - Secours : l'export PDF depuis la tablette, déposé dans l'appli.
 - **Lire** : le papier calibré est le moteur principal (décision du 30/09).
     Les trois pistes étudiées sont gardées ci-dessous pour mémoire.
   - **Gemini** (vision), *écarté le 30/09*. Un test public de septembre 2026 sur du manuscrit
@@ -159,8 +179,7 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 
 - **Supabase** : l'offre gratuite plafonne à 2 projets actifs. Le site
   (`adrienvada-site`) et Candela en occupent déjà deux. Musique irait donc dans
-  le projet du site, dans un schéma à part. Un projet s'endort après une semaine
-  sans requête ; la synchro toutes les 2 h suffit à le garder éveillé.
+  le projet du site. Un projet s'endort après une semaine sans requête.
 - **GitHub Pages** n'est pas gratuit pour un dépôt privé. L'appli serait donc
   servie par Cloudflare, comme les aperçus de branche du site.
 - **GitHub Actions** donne 2 000 min/mois gratuites en privé. Une synchro toutes
@@ -169,7 +188,8 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 ## Où en est chaque étape
 
 0. **Modèles de papier calibré** : *fait (v1)*.
-1. **Pages d'essai** : *fait*. Récupération automatique : **à faire** (voir « Suite »).
+1. **Pages d'essai** : *fait*. Import depuis la reMarkable : *code fait et testé
+   sur un faux cloud*, **reste à brancher** (voir « Brancher la reMarkable »).
 2. **Lecture des notes** : *fait (v1)*. Le lecteur reconnaît :
    - hauteurs, têtes pleines et vides, hampes, crochets et ligatures (niveaux compris) ;
    - points de durée, barres simples, doubles et reprises ;
@@ -184,23 +204,31 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
      triolets, lecture des chiffres du chiffrage. Le classifieur HOMUS reste à faire.
 5. **Atelier** : *fait, sur claude.ai*. Ta page redessinée, les doutes
    surlignés, l'ABC éditable (enregistré automatiquement), la validation.
-6. **Bouton « Synchroniser maintenant »** : à faire, avec la récupération automatique.
+6. **Bouton « Parcourir ma reMarkable »** : *fait*. Arborescence, recherche,
+   import au clic, « Réimporter » pour une page complétée depuis. Même état que
+   l'étape 1.
 7. *(option)* Second avis JAZZMUS. 8. *(option)* MusicXML et PDF.
    9. *(option)* Passerelle Ableton : l'export MIDI (une piste par main) est déjà là.
 
-## Suite possible : la récupération automatique
+## Brancher la reMarkable (une fois)
 
-La base de la page claude.ai n'est pas joignable depuis une tâche GitHub.
-Pour que les pages arrivent seules, il faut choisir :
-- **Une routine Claude Code** (dans l'abonnement d'Adrien). Chaque jour, elle
-  lance `rmapi` sur le dossier « Partitions », lit les nouvelles pages et les
-  range dans l'appli (outil `ArtifactData`). Aucun nouveau service, mais elle
-  consomme de l'usage Claude.
-- **La formule B d'origine.** Une tâche GitHub avec `rmapi` écrit dans Supabase,
-  et l'appli lit Supabase. Tout est gratuit, mais il faut : les clés du projet
-  du site, un schéma `musique`, et l'hébergement de l'appli sur Cloudflare.
+1. **Déployer le connecteur** dans le projet Supabase du site. Il faut un jeton
+   d'accès Supabase (supabase.com/dashboard/account/tokens, révocable juste
+   après) :
+   ```bash
+   SUPABASE_ACCESS_TOKEN=sbp_… npm run connecteur              # liste les projets
+   SUPABASE_ACCESS_TOKEN=sbp_… npm run connecteur -- <ref>     # déploie
+   ```
+   Le script tire la clé de l'adresse et affiche l'URL du connecteur.
+2. **L'ajouter à claude.ai** : Paramètres → Connecteurs → Ajouter un connecteur
+   personnalisé. Nom : **Portée reMarkable**, exactement (l'appli l'appelle par
+   ce nom). URL : celle du script.
+3. **Relier la tablette depuis Portée** : « Parcourir ma reMarkable ». claude.ai
+   demande d'autoriser la page. Ensuite, recopier le code à 8 lettres de
+   my.remarkable.com/device/desktop/connect, puis « Relier ».
 
-Dans les deux cas, il faudra le code à 8 lettres de my.remarkable.com.
+Pour couper l'accès : retirer l'appareil « desktop-linux » sur my.remarkable.com,
+ou supprimer la fonction dans Supabase.
 
 ## Pièges connus
 
@@ -217,10 +245,22 @@ Dans les deux cas, il faudra le code à 8 lettres de my.remarkable.com.
 - **Seuils du lecteur** : ils sont exprimés en interlignes et réglés sur les
   pages du 30/09. Tout réglage qui change une lecture doit mettre à jour
   `tests/lecteur.test.mjs` dans le même commit.
+- **Traits arrondis au demi-pixel par le connecteur.** Des seuils trop justes
+  font basculer une lecture (une ligature à 0,80 interligne, deux bémols
+  fusionnés). Le test « arrondir les traits » garde la lecture identique pour
+  des pas de 0 à 1 px.
+- **Le projet Supabase gratuit s'endort** après une semaine sans requête. Le
+  connecteur répond alors « ne répond pas » : relancer le projet depuis le
+  tableau de bord.
+- **Supabase ne rend jamais la valeur d'un secret.** L'adresse du connecteur
+  se note au déploiement. Perdue : `npm run connecteur -- <ref> --nouvelle-cle`,
+  puis changer l'URL dans claude.ai.
+- **Code à 8 lettres** : il expire en quelques minutes et ne sert qu'une fois.
 
 ## Questions ouvertes
 
-1. Récupération automatique : routine Claude Code ou formule B (voir « Suite ») ?
+1. Brancher la reMarkable : me confier un jeton d'accès Supabase (révoqué
+   ensuite), ou lancer `npm run connecteur` toi-même ?
 2. Tes pages d'essai du 30/09 : ce que tu voulais écrire. La 3ᵉ mesure de la
    ligne 2 fait 11 croches au lieu de 12 : est-ce le petit trait au bout d'une
    hampe, un crochet oublié ?

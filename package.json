@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "lire": "node outils/lire.mjs",
-    "appli": "node outils/assembler-appli.mjs"
+    "appli": "node outils/assembler-appli.mjs",
+    "connecteur": "node outils/deployer-connecteur.mjs"
   },
   "devDependencies": {
     "abcjs": "6.7.1",

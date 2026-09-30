@@ -229,17 +229,37 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     });
     if (colle) s.role = "retouche";
   }
+  // Une retouche qui prolonge une hampe au-delà de son bout (pour rejoindre
+  // la ligature, typiquement) déplace ce bout : sinon la hampe « s'arrête »
+  // avant la ligature et la note perd sa durée (page de piano du 30/09).
+  for (const s of segments) {
+    if (s.role !== "retouche") continue;
+    for (const h of hampes) {
+      const x = xA(h.seg.a, h.seg.b, (s.a[1] + s.b[1]) / 2);
+      if (Math.abs(x - (s.a[0] + s.b[0]) / 2) > 0.4 * il) continue;
+      const sens = Math.sign(h.bout[1] - h.pied[1]); // +1 : hampe descendante
+      const loin = sens > 0 ? (s.a[1] > s.b[1] ? s.a : s.b) : (s.a[1] < s.b[1] ? s.a : s.b);
+      const depasse = (loin[1] - h.bout[1]) * sens;
+      const proche = Math.min(Math.abs(s.a[1] - h.bout[1]), Math.abs(s.b[1] - h.bout[1])) < 0.8 * il;
+      if (depasse > 0 && proche) h.bout = [loin[0], loin[1]];
+    }
+  }
 
   // 5. Ligatures : segments qui passent par les bouts de plusieurs hampes.
-  const touche = (s, h, portee) => {
-    // La ligature passe près du bout de la hampe (ou un peu en dessous : ligature secondaire).
-    const pas = 12;
-    for (let i = 0; i <= pas; i++) {
-      const f = (i / pas) * Math.min(1.8 * il, dist(h.bout, h.pied));
-      const u = [h.bout[0] + ((h.pied[0] - h.bout[0]) * f) / dist(h.bout, h.pied), h.bout[1] + ((h.pied[1] - h.bout[1]) * f) / dist(h.bout, h.pied)];
-      if (distSegment(u, s.a, s.b) < portee) return true;
-    }
-    return false;
+  // Une ligature touche une hampe si elle passe au-dessus (ou en dessous) de
+  // son bout. La main s'arrête souvent un peu avant la dernière hampe (jusqu'à
+  // 0,34 interligne sur les pages du 30/09), mais une ligature qui finit
+  // 0,72 interligne avant la hampe du groupe suivant ne la prend pas
+  // (mélodie du 30/09, 3ᵉ ligne) : on tolère 0,55 interligne.
+  const touche = (s, h, tolerance) => {
+    const x = h.bout[0];
+    if (x < Math.min(s.a[0], s.b[0]) - 0.55 * il || x > Math.max(s.a[0], s.b[0]) + 0.55 * il) return false;
+    const yl = yA(s.a, s.b, x);
+    const sens = Math.sign(h.pied[1] - h.bout[1]) || 1;
+    const y0 = h.bout[1], y1 = h.bout[1] + sens * Math.min(1.8 * il, dist(h.bout, h.pied));
+    const bas = Math.min(y0, y1), haut = Math.max(y0, y1);
+    const d = yl < bas ? bas - yl : yl > haut ? yl - haut : 0;
+    return d < tolerance;
   };
   const ligatures = [];
   const candidatsLig = segments.filter((s) => !s.role && s.ang <= 60 && s.lg >= 0.7 * il);
@@ -351,9 +371,10 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
       for (let j = 0; j < libres.length; j++) {
         if (pris.has(j)) continue;
         const a = groupe[k], b = libres[j];
-        const proches = b.x0 < a.x1 + 0.2 * il && a.x0 < b.x1 + 0.2 * il && b.y0 < a.y1 + 0.2 * il && a.y0 < b.y1 + 0.2 * il;
+        const voisins = b.x0 < a.x1 + 0.3 * il && a.x0 < b.x1 + 0.3 * il && b.y0 < a.y1 + 0.3 * il && a.y0 < b.y1 + 0.3 * il;
         const petits = Math.max(a.l, a.h, b.l, b.h) < 3 * il;
-        if (proches && petits) { groupe.push(b); pris.add(j); }
+        // Les traits doivent vraiment se toucher : deux bémols côte à côte ne font pas un signe.
+        if (voisins && petits && seTouchent(a.points, b.points, 0.22 * il)) { groupe.push(b); pris.add(j); }
       }
     }
     const pts = groupe.flatMap((g) => g.points);
@@ -411,6 +432,19 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
 // Formes des signes
 // ------------------------------------------------------------------------
 
+/** Deux tracés se touchent-ils (à `tol` près) ? On compare des points pris le long de chacun. */
+function seTouchent(a, b, tol) {
+  const echantillon = (pts) => (pts.length <= 60 ? pts : pts.filter((_, i) => i % Math.ceil(pts.length / 60) === 0));
+  const ea = echantillon(a), eb = echantillon(b);
+  for (let i = 0; i < ea.length; i++) {
+    for (let j = 0; j < eb.length; j++) {
+      if (Math.abs(ea[i][0] - eb[j][0]) < tol && Math.abs(ea[i][1] - eb[j][1]) < tol) return true;
+      if (j < eb.length - 1 && distSegment(ea[i], eb[j], eb[j + 1]) < tol) return true;
+    }
+  }
+  return false;
+}
+
 /** Recolle les segments consécutifs presque alignés (moins de 18° d'écart). */
 function recoller(pts) {
   if (pts.length < 3) return pts;
@@ -461,13 +495,18 @@ function formeAlteration(g, il) {
     if (enBas && aDroite) return "bemol";
     if (boucle.h > 0.9 * il) return "becarre";
   }
-  if (membres.length === 1) {
-    const haut = g.points.filter((p) => p[1] < g.y0 + 0.4 * g.h);
-    const bas = g.points.filter((p) => p[1] > g.y0 + 0.6 * g.h);
-    if (haut.length && bas.length) {
-      const lh = Math.max(...haut.map((p) => p[0])) - Math.min(...haut.map((p) => p[0]));
-      const lb = Math.max(...bas.map((p) => p[0])) - Math.min(...bas.map((p) => p[0]));
-      if (lh < 0.35 * il && lb > 0.35 * il && lb > 1.5 * lh && g.l < 1.2 * il) return "bemol";
+  if (membres.length === 1 && g.l < 1.2 * il) {
+    // D'un seul trait : d'abord la barre, qui descend, puis la boucle, en bas
+    // à droite. Le « 1 » d'un chiffrage (qui monte en biais puis descend)
+    // ne passe pas.
+    const s = recoller(simplifier(g.points, 0.14 * il));
+    const [a, b] = s;
+    const barre = b && angle(a, b) > 65 && b[1] > a[1] && dist(a, b) > 0.8 * il;
+    const reste = g.points.slice(g.points.findIndex((p) => p[0] === b?.[0] && p[1] === b?.[1]));
+    if (barre && reste.length > 3) {
+      const bx = Math.min(...reste.map((p) => p[1]));
+      const droite = Math.max(...reste.map((p) => p[0])) - Math.max(a[0], b[0]);
+      if (bx > g.y0 + 0.4 * g.h && droite > 0.25 * il) return "bemol";
     }
   }
   if (membres.length >= 3 && membres.length <= 5 && g.l < 1.8 * il) return "diese";
