@@ -35,11 +35,14 @@ function entetesCors(req, origines) {
  */
 export async function repondreHttp(req, { cle, cloud, origines = ORIGINES }) {
   const cors = entetesCors(req, origines);
+  // Le préflight du navigateur passe quelle que soit la clé (il ne dit rien) :
+  // sinon, une clé fausse ressemblerait à un connecteur injoignable, et le
+  // site ne pourrait pas dire « adresse incorrecte ».
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   const segments = new URL(req.url).pathname.split("/").filter(Boolean);
   if (!cle || cle.length < 24 || segments[segments.length - 1] !== cle) {
     return new Response("Introuvable", { status: 404, headers: cors });
   }
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (req.method !== "POST") {
     return new Response("Ce connecteur ne répond qu'en POST.", { status: 405, headers: { ...cors, allow: "POST, OPTIONS" } });
   }

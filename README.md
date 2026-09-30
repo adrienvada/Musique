@@ -3,34 +3,39 @@
 Des partitions écrites à la main sur la reMarkable, lues, corrigées et
 jouées au piano. Gratuitement.
 
-**L'appli : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj** (privée,
-ouverte depuis ton compte claude.ai, sur l'ordinateur comme sur le téléphone).
+**L'appli : https://adrienvada.github.io/Musique/**, sur l'ordinateur comme
+sur le téléphone. Elle s'installe comme une appli (bouton « Installer
+l'appli » du navigateur) et marche hors ligne. Une version privée existe aussi
+sur claude.ai : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj (bibliothèque
+enregistrée sur ton compte claude.ai).
 
 ## S'en servir
 
-1. **Une fois** : importe les modèles de [modeles/](modeles/README.md) sur la
-   tablette (appli reMarkable de l'ordinateur ou my.remarkable.com).
-2. **Pour chaque pièce** : duplique un modèle, renomme la copie avec le titre
-   de la pièce, écris.
-3. **Importe** la page dans Portée : « Parcourir ma reMarkable », puis
-   « Importer » à côté du document. À défaut, exporte-la en PDF (sur la
-   tablette *Partager → PDF*) et dépose le fichier.
-4. **Relis** : le lecteur transcrit la page, l'atelier te la montre à côté de
-   ce qu'il a lu, avec les points à vérifier surlignés. Tu corriges le texte
-   ABC si besoin.
-5. **Écoute** au piano, change le tempo, transpose. Exporte l'ABC ou le MIDI
-   (pour Ableton ou MuseScore).
+1. **Une fois** : « Modèles pour la tablette » → télécharge un modèle et mets-le
+   sur ta reMarkable (my.remarkable.com ou l'appli de l'ordinateur).
+2. **Pour chaque pièce** : duplique le modèle, renomme la copie avec le titre,
+   écris.
+3. **Importe** la page : « Importer de ma reMarkable », puis « Importer » à
+   côté du document. À défaut, dépose son PDF (sur la tablette *Partager → PDF*).
+4. **Corrige en touchant les notes** : touche une note de la partition (ou
+   glisse-la), puis plus haut, plus bas, noire, croche, ♯, silence… Les points
+   douteux sont surlignés sur ta page. Rien à écrire, tout s'annule.
+5. **Écoute et exporte** : piano, tempo, transposition, puis « Télécharger le
+   MIDI » (une piste par main, prête pour Ableton, MuseScore ou GarageBand).
+   Aussi : imprimer ou PDF, tout exporter en MIDI d'un coup.
 
-« Parcourir ma reMarkable » passe par un connecteur claude.ai personnel, à
-brancher une fois : voir [docs/PROPOSITIONS.md](docs/PROPOSITIONS.md),
-section « Brancher la reMarkable ».
+Sur le site, ta bibliothèque reste dans le navigateur : « Sauvegarder ma
+bibliothèque » en fait un fichier, que « Restaurer une sauvegarde » remet
+ailleurs. Le bouton reMarkable passe par un connecteur personnel, à brancher
+une fois : voir [docs/PROPOSITIONS.md](docs/PROPOSITIONS.md), « Brancher la
+reMarkable ».
 
 ## Le dépôt
 
 | Dossier | Contenu |
 |---|---|
 | `lecteur/` | Le lecteur de traits (JavaScript, sans dépendance) : PDF → traits → notes → ABC |
-| `app/` | L'appli : bibliothèque, atelier, lecteur, piano échantillonné |
+| `app/` | L'appli : bibliothèque, correction au toucher (`edition.js`), écoute et exports, piano échantillonné, site installable |
 | `supabase/functions/portee-remarkable/` | Le connecteur « Portée reMarkable » : lit le cloud reMarkable au clic (fonction Supabase) |
 | `modeles/` | Les modèles de papier calibré (PDF, calibration JSON, aperçus) |
 | `outils/` | Générateur de modèles (Python), lecture en ligne de commande, assemblage de l'appli, déploiement du connecteur |
@@ -42,7 +47,7 @@ npm ci                      # pdf.js et abcjs, versions figées
 npm test                    # le lecteur relit les pages d'essai
 npm run lire -- page.pdf --svg   # lit une page, image de contrôle en prime
 npm run appli               # assemble l'appli dans dist/ (pour claude.ai)
-npm run appli -- --autonome # idem, page complète pour un hébergement ordinaire
+npm run appli -- --autonome # le site GitHub Pages (publié par .github/workflows/site.yml)
 SUPABASE_ACCESS_TOKEN=… npm run connecteur -- <ref>   # déploie le connecteur
 ```
 

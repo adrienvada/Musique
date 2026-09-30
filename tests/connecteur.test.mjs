@@ -142,10 +142,11 @@ test("HTTP : clé, CORS pour le site GitHub Pages seulement, préflight", async 
   const mauvaise = await appel("nimporte", { corps: ping, origine: "https://adrienvada.github.io" });
   assert.equal(mauvaise.status, 404);
   assert.equal(mauvaise.headers.get("access-control-allow-origin"), "https://adrienvada.github.io");
-  // Préflight du navigateur.
+  // Préflight du navigateur, même avec une clé fausse (la vraie requête dira 404).
   const pre = await appel(cle, { methode: "OPTIONS", origine: "https://adrienvada.github.io" });
   assert.equal(pre.status, 204);
   assert.match(pre.headers.get("access-control-allow-headers"), /content-type/);
+  assert.equal((await appel("nimporte", { methode: "OPTIONS", origine: "https://adrienvada.github.io" })).status, 204);
   // Appel du site : réponse et CORS.
   const site = await appel(cle, { corps: ping, origine: "https://adrienvada.github.io" });
   assert.equal(site.status, 200);

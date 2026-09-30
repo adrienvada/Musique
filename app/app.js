@@ -229,7 +229,8 @@ async function restaurerBibliotheque(fichier) {
   try {
     const contenu = JSON.parse(await fichier.text());
     const { ajoutees, ignorees } = await restaurer(etat.stockage, contenu, new Set(etat.partitions.map((p) => p.id)));
-    toast(`${ajoutees} partition${ajoutees > 1 ? "s" : ""} ajoutée${ajoutees > 1 ? "s" : ""}` + (ignorees ? `, ${ignorees} déjà là.` : "."));
+    const deja = ignorees ? ` (${ignorees} déjà dans ta bibliothèque)` : "";
+    toast(ajoutees ? `${ajoutees} partition${ajoutees > 1 ? "s" : ""} restaurée${ajoutees > 1 ? "s" : ""}${deja}.` : `Rien à restaurer : tout est déjà dans ta bibliothèque.`);
   } catch (e) {
     toast(e instanceof SyntaxError ? "Ce fichier n'est pas une sauvegarde de Portée." : (e.message || "La restauration n'a pas abouti."), 7000);
   }

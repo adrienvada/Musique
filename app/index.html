@@ -137,8 +137,9 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 /* Corriger au toucher */
 .guide { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; border: 1px solid var(--stylo); background: var(--stylo-doux); border-radius: 10px; padding: 10px 14px; font-size: 0.92rem; }
 .outils-note { position: sticky; top: 58px; z-index: 3; background: var(--feuille); border: 1px solid var(--trait-fort); border-radius: 10px; padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.outils-note { column-gap: 16px; }
 .outils-note .groupe { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.outils-note .groupe + .groupe { border-left: 1px solid var(--trait); padding-left: 10px; }
+.outils-note [data-alteration] { font-size: 1.15rem; line-height: 1; min-width: 2.4em; justify-content: center; padding-top: 3px; padding-bottom: 3px; }
 .outils-note .note-choisie { font-weight: 600; min-width: 12ch; }
 .outils-note button[aria-pressed="true"] { background: var(--encre); color: var(--feuille); border-color: var(--encre); }
 .gravure-edit svg { cursor: pointer; }
@@ -161,7 +162,6 @@ kbd { font-family: var(--f-code); font-size: 0.78rem; border: 1px solid var(--tr
   .deux { grid-template-columns: 1fr; }
   .mode { margin-left: 0; width: 100%; }
   .outils-note { top: 0; }
-  .outils-note .groupe + .groupe { border-left: 0; padding-left: 0; }
 }
 @media print {
   body { background: #fff; }

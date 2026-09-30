@@ -34,6 +34,12 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   Tout changement poussé sur `main` dans ce dossier est déployé par
   `.github/workflows/connecteur.yml` : lancer `npm test` et `deno check`
   avant de pousser.
+- **Dépôt public** : les journaux de GitHub Actions le sont aussi. N'y
+  afficher aucune clé, aucune adresse de connecteur. La clé du connecteur
+  vient du secret GitHub `PORTEE_CLE`.
+- **Correction au toucher (`app/edition.js`)** : Adrien ne lit pas l'ABC.
+  Toute correction passe par un geste (bouton, glissé, clavier) qui réécrit
+  l'ABC ; le texte reste en « mode avancé ».
 
 ## Vérifier
 
@@ -47,14 +53,19 @@ C'est le premier réflexe quand une lecture est fausse.
 
 ## Republier l'appli
 
-L'appli est un artefact claude.ai : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj
+**Le site** (https://adrienvada.github.io/Musique/) se republie tout seul à
+chaque fusion sur `main` (`.github/workflows/site.yml`). Hors de claude.ai, la
+bibliothèque est dans IndexedDB : ne jamais changer le nom de la base
+(`portee`) ni ses magasins sans migration.
+
+**La version claude.ai** est un artefact : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj
 
 1. `npm run appli` assemble `dist/` et écrit `dist.fichiers.json`.
 2. Republier avec l'outil `Artifact` en passant **cette URL** en `url` :
    - `file_path` : `dist/index.html` ;
    - `files` : le contenu de `dist.fichiers.json`, avec un `contentType`
-     explicite pour `.mjs` (`text/javascript`), `.mp3` (`audio/mpeg`) et
-     `.pdf` (`application/pdf`) ;
+     explicite pour `.mjs` (`text/javascript`), `.mp3` (`audio/mpeg`),
+     `.pdf` (`application/pdf`) et `.svg` (`image/svg+xml`) ;
    - ne pas repasser `capabilities`, pour garder `db`, `downloads` et `mcp`
      (connecteur « Portée reMarkable » : `arborescence`, `document`, `relier`).
      Si on les repasse, redonner l'ensemble complet : ce qui manque est retiré.
@@ -64,7 +75,8 @@ L'appli est un artefact claude.ai : https://claude.ai/artifact/NwXEpHs69MYngQMii
    les vraies partitions d'Adrien : la lire avec `ArtifactData` si besoin, ne
    jamais y écrire sans qu'il l'ait demandé.
 
-Avant de publier, tester la version autonome dans Chromium : servir `dist/`
-après `npm run appli -- --autonome`, importer les pages d'essai, écouter,
-exporter. Pour le panneau « Ma reMarkable », simuler `window.claude.use("mcp")`
+Avant de publier, tester la version autonome dans Chromium (lancé avec
+`LANG=C.UTF-8`) : servir `dist/` après `npm run appli -- --autonome`, importer
+les pages d'essai, corriger une note, écouter, exporter le MIDI, sauvegarder
+puis restaurer. Pour le panneau « Ma reMarkable », simuler `window.claude.use("mcp")`
 en appelant `traiter()` (connecteur) sur le faux cloud de `tests/faux-cloud.mjs`.
