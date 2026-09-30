@@ -1,0 +1,123 @@
+{
+  "modele": "melodie-standard",
+  "titre": "Mélodie, standard",
+  "version": 1,
+  "page": {
+    "largeur": 1404,
+    "hauteur": 1872,
+    "unite": "pixel de l'écran de la reMarkable 2 (226 ppp), origine en haut à gauche, y vers le bas"
+  },
+  "interligne": 32,
+  "ecart_entre_blocs": 100.9,
+  "x_debut": 80,
+  "x_fin": 1344,
+  "x_apres_cle": 182,
+  "systemes": [
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            200.4,
+            232.4,
+            264.4,
+            296.4,
+            328.4
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            429.3,
+            461.3,
+            493.3,
+            525.3,
+            557.3
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            658.1,
+            690.1,
+            722.1,
+            754.1,
+            786.1
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            887.0,
+            919.0,
+            951.0,
+            983.0,
+            1015.0
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            1115.9,
+            1147.9,
+            1179.9,
+            1211.9,
+            1243.9
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            1344.7,
+            1376.7,
+            1408.7,
+            1440.7,
+            1472.7
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            1573.6,
+            1605.6,
+            1637.6,
+            1669.6,
+            1701.6
+          ]
+        }
+      ]
+    }
+  ],
+  "a_verifier": "Dans les fichiers .rm v6, l'abscisse des traits semble centrée sur la page (x_page = x_rm + 702). À confirmer sur la première page écrite."
+}

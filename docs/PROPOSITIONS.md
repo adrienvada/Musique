@@ -1,10 +1,25 @@
 # Propositions — de la tablette au piano
 
-*État au 30 septembre 2026. Rien n'est encore décidé : ce document décrit les
-options, la recommandation, et les questions qui attendent Adrien.*
+*Mis à jour le 30 septembre 2026 (après-midi), avec les réponses d'Adrien.*
 
 Version illustrée (schémas, maquettes jouables de l'interface) :
 https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
+
+## Décisions actées
+
+- **30/09 · Contenu des pages : mélodie seule ou piano à deux mains.** Avec
+  Adrien. Le moteur de lecture doit donc gérer deux portées liées. JAZZMUS ne
+  lit qu'une ligne mélodique : il ne peut être qu'un second avis.
+- **30/09 · reMarkable 2 avec abonnement Connect.** Avec Adrien. La
+  synchronisation cloud est complète : la voie `rmapi` est retenue, et le doute
+  sur les comptes gratuits ne nous concerne plus.
+- **30/09 · Pas de Gemini.** Avec Adrien. Son abonnement Gemini est l'offre
+  grand public, sans accès à l'API, et l'API gratuite pose problème (voir plus
+  bas). **Le papier calibré devient le moteur de lecture principal.**
+- **30/09 · Plusieurs modèles de papier calibré.** Demandé par Adrien. Quatre
+  modèles v1 sont livrés dans `modeles/` : mélodie large, mélodie standard,
+  piano large et piano standard. Ils sont générés par
+  `outils/generer_modeles.py` au format exact de l'écran de la reMarkable 2.
 
 ## Le besoin
 
@@ -22,8 +37,8 @@ jouables avec un son de piano correct. Contrainte : **0 €**.
 | 4 | Relire | Adrien, 1 à 2 min | ABC validé |
 | 5 | Écouter | le portable | SVG, MIDI, MusicXML |
 
-**Format pivot : l'ABC.** C'est du texte : une IA l'écrit, on le corrige à la
-main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
+**Format pivot : l'ABC.** C'est du texte : le lecteur l'écrit, on le corrige à
+la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 
 **Seule l'étape 3 est incertaine.** Les autres sont de la plomberie connue.
 
@@ -34,12 +49,13 @@ main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
   [`rmscene`](https://github.com/ricklupton/rmscene) /
   [`rmc`](https://github.com/ricklupton/rmc) pour le rendu.
   - API non officielle, qui a déjà cassé une fois lors d'un changement de protocole.
-  - Pas confirmé sans l'abonnement Connect : à vérifier dès l'étape 1.
+  - Adrien a l'abonnement Connect (30/09) : la synchro cloud est complète.
   - `rmc` 0.3 exige `rmscene < 0.7`, ce qui le met en conflit avec rmscene 0.8.
   - Secours : l'export manuel depuis la tablette (e-mail en PDF, PNG ou **SVG**,
     ou Google Drive).
-- **Lire** : trois moteurs, à départager au banc d'essai.
-  - **Gemini** (vision). Un test public de septembre 2026 sur du manuscrit
+- **Lire** : le papier calibré est le moteur principal (décision du 30/09).
+    Les trois pistes étudiées sont gardées ci-dessous pour mémoire.
+  - **Gemini** (vision), *écarté le 30/09*. Un test public de septembre 2026 sur du manuscrit
     conclut que les hauteurs se lisent, pas le rythme.
     ⚠ Les conditions de l'API réservent l'usage aux fins professionnelles et,
     pour les utilisateurs de l'EEE, aux offres payantes. En gratuit, Google
@@ -54,8 +70,11 @@ main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
     ligatures). Silences et altérations passent par un classifieur entraîné
     sur [HOMUS](https://grfia.dlsi.ua.es/homus/).
   - Écartés : Audiveris, oemer, homr, LEGATO, tous entraînés sur de l'imprimé.
-  - Pari : le papier calibré pour les hauteurs, plus un second moteur pour le
-    rythme. Leurs désaccords deviennent les mesures à relire.
+  - Retenu : le papier calibré lit hauteurs et rythmes à partir des traits.
+    JAZZMUS peut servir de second avis sur les mélodies ; leurs désaccords
+    deviennent des mesures à relire.
+  - Piste pour plus tard, sans coût supplémentaire : une routine Claude Code
+    (dans l'abonnement d'Adrien) qui relit les pages douteuses.
 - **Relire** : un atelier dans l'appli. La page manuscrite et la partition
   gravée sont côte à côte, avec l'ABC éditable dessous et les doutes surlignés.
   MuseScore sert pour les gros chantiers.
@@ -100,28 +119,32 @@ main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 Les étapes 0 à 3 sont communes aux trois formules. Le choix A/B/C peut donc
 attendre l'étape 3.
 
-0. **Banc d'essai de la lecture.** Cinq pages réelles, dont deux sur papier
-   calibré, passent dans les trois moteurs. On compte séparément les hauteurs
-   justes et les rythmes justes.
-1. **Récupération** : rmapi + rmscene dans une tâche GitHub, jeton d'appareil
-   en secret, seules les pages modifiées sont retraitées.
-2. **Lecture automatique** par le moteur retenu, avec contrôle de l'ABC et des
-   temps par mesure.
+0. **Modèles de papier calibré** : *livrés le 30/09 (v1)*. Quatre PDF, leur
+   calibration JSON et leurs aperçus SVG (voir `modeles/README.md`).
+1. **Récupération et pages d'essai.** Adrien écrit 3 à 5 pages sur les
+   modèles, dont une gamme en noires. `rmapi` + `rmscene` les téléchargent
+   (d'abord à la main, puis dans une tâche GitHub avec le jeton d'appareil en
+   secret). Première vérification : la correspondance entre les coordonnées
+   des traits et celles du JSON.
+2. **Lecture des notes.** On rattache chaque tête à sa portée et on en tire
+   la hauteur, puis la durée à partir des têtes pleines ou vides, des hampes,
+   des crochets et des ligatures. Les barres donnent les mesures. Sortie : de
+   l'ABC plus la liste des doutes, et le contrôle des temps par mesure.
 3. **Lecteur** : appli web avec bibliothèque, gravure, piano, tempo,
    transposition et export MIDI.
-4. **Atelier + Supabase** : connexion par lien magique et historique des versions.
-5. **Bouton « Synchroniser maintenant »** : une Edge Function lance le workflow.
-6. *(option)* **Papier calibré et lecture hybride.** Passe en deuxième si le
-   banc d'essai le désigne.
-7. *(option)* **Exports MusicXML et PDF.**
-8. *(option)* **Passerelle Ableton** : dossier de `.mid` synchronisé et
+4. **Les autres signes** : silences, altérations, points, liaisons, armure et
+   chiffrage, reconnus par un petit classifieur entraîné sur HOMUS et sur les
+   traits d'Adrien.
+5. **Atelier + Supabase** : connexion par lien magique et historique des versions.
+6. **Bouton « Synchroniser maintenant »** : une Edge Function lance le workflow.
+7. *(option)* **Second avis JAZZMUS** sur les mélodies.
+8. *(option)* **Exports MusicXML et PDF.**
+9. *(option)* **Passerelle Ableton** : dossier de `.mid` synchronisé et
    version enregistrée suivie par le curseur. L'export MIDI simple arrive dès
    l'étape 3.
 
 ## Questions ouvertes
 
-1. Que contiennent les pages : mélodie seule, piano à deux mains, accords, paroles ?
-2. Quelle tablette (reMarkable 2, Paper Pro) ? Abonnement Connect ou non ?
-3. Gemini : l'offre gratuite est une zone grise (voir plus haut). Faut-il s'en
-   passer, ou payer moins d'un centime par page ?
-4. Formule A, B ou C ? B par défaut.
+1. Formule A, B ou C ? B par défaut ; la décision peut attendre l'étape 3.
+2. Les modèles v1 conviennent-ils à la main (taille des interlignes, nombre de
+   portées) ? À voir sur les premières pages d'essai.

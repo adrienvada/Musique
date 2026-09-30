@@ -1,0 +1,122 @@
+{
+  "modele": "piano-standard",
+  "titre": "Piano, standard",
+  "version": 1,
+  "page": {
+    "largeur": 1404,
+    "hauteur": 1872,
+    "unite": "pixel de l'écran de la reMarkable 2 (226 ppp), origine en haut à gauche, y vers le bas"
+  },
+  "interligne": 28,
+  "ecart_entre_blocs": 78.5,
+  "x_debut": 80,
+  "x_fin": 1344,
+  "x_apres_cle": 170,
+  "systemes": [
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            189.2,
+            217.2,
+            245.2,
+            273.2,
+            301.2
+          ]
+        },
+        {
+          "cle": "fa",
+          "ligne_du_bas": "sol2",
+          "lignes": [
+            399.2,
+            427.2,
+            455.2,
+            483.2,
+            511.2
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            589.8,
+            617.8,
+            645.8,
+            673.8,
+            701.8
+          ]
+        },
+        {
+          "cle": "fa",
+          "ligne_du_bas": "sol2",
+          "lignes": [
+            799.8,
+            827.8,
+            855.8,
+            883.8,
+            911.8
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            990.2,
+            1018.2,
+            1046.2,
+            1074.2,
+            1102.2
+          ]
+        },
+        {
+          "cle": "fa",
+          "ligne_du_bas": "sol2",
+          "lignes": [
+            1200.2,
+            1228.2,
+            1256.2,
+            1284.2,
+            1312.2
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            1390.8,
+            1418.8,
+            1446.8,
+            1474.8,
+            1502.8
+          ]
+        },
+        {
+          "cle": "fa",
+          "ligne_du_bas": "sol2",
+          "lignes": [
+            1600.8,
+            1628.8,
+            1656.8,
+            1684.8,
+            1712.8
+          ]
+        }
+      ]
+    }
+  ],
+  "a_verifier": "Dans les fichiers .rm v6, l'abscisse des traits semble centrée sur la page (x_page = x_rm + 702). À confirmer sur la première page écrite."
+}
