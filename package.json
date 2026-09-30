@@ -1,0 +1,15 @@
+{
+  "name": "musique-portee",
+  "private": true,
+  "type": "module",
+  "description": "Portée : des partitions écrites sur la reMarkable à la partition jouée au piano.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "lire": "node outils/lire.mjs",
+    "vendre": "node outils/copier-bibliotheques.mjs"
+  },
+  "devDependencies": {
+    "abcjs": "6.7.1",
+    "pdfjs-dist": "6.3.289"
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "source": "https://smpldsnds.github.io/sfzinstruments-splendid-grand-piano/samples",
+  "licence": "Domaine public (échantillons Steinway publiés par AKAI, ~2000) — https://github.com/sfzinstruments/SplendidGrandPiano (README : « Public Domain samples by AKAI »)",
+  "velocite": "MF",
+  "echantillons": [
+    {
+      "midi": 23,
+      "fichier": "mf-023.mp3"
+    },
+    {
+      "midi": 27,
+      "fichier": "mf-027.mp3"
+    },
+    {
+      "midi": 29,
+      "fichier": "mf-029.mp3"
+    },
+    {
+      "midi": 33,
+      "fichier": "mf-033.mp3"
+    },
+    {
+      "midi": 35,
+      "fichier": "mf-035.mp3"
+    },
+    {
+      "midi": 38,
+      "fichier": "mf-038.mp3"
+    },
+    {
+      "midi": 41,
+      "fichier": "mf-041.mp3"
+    },
+    {
+      "midi": 45,
+      "fichier": "mf-045.mp3"
+    },
+    {
+      "midi": 48,
+      "fichier": "mf-048.mp3"
+    },
+    {
+      "midi": 50,
+      "fichier": "mf-050.mp3"
+    },
+    {
+      "midi": 53,
+      "fichier": "mf-053.mp3"
+    },
+    {
+      "midi": 57,
+      "fichier": "mf-057.mp3"
+    },
+    {
+      "midi": 60,
+      "fichier": "mf-060.mp3"
+    },
+    {
+      "midi": 62,
+      "fichier": "mf-062.mp3"
+    },
+    {
+      "midi": 65,
+      "fichier": "mf-065.mp3"
+    },
+    {
+      "midi": 69,
+      "fichier": "mf-069.mp3"
+    },
+    {
+      "midi": 72,
+      "fichier": "mf-072.mp3"
+    },
+    {
+      "midi": 74,
+      "fichier": "mf-074.mp3"
+    },
+    {
+      "midi": 77,
+      "fichier": "mf-077.mp3"
+    },
+    {
+      "midi": 81,
+      "fichier": "mf-081.mp3"
+    },
+    {
+      "midi": 83,
+      "fichier": "mf-083.mp3"
+    },
+    {
+      "midi": 87,
+      "fichier": "mf-087.mp3"
+    },
+    {
+      "midi": 90,
+      "fichier": "mf-090.mp3"
+    },
+    {
+      "midi": 93,
+      "fichier": "mf-093.mp3"
+    },
+    {
+      "midi": 96,
+      "fichier": "mf-096.mp3"
+    },
+    {
+      "midi": 99,
+      "fichier": "mf-099.mp3"
+    },
+    {
+      "midi": 102,
+      "fichier": "mf-102.mp3"
+    },
+    {
+      "midi": 105,
+      "fichier": "mf-105.mp3"
+    },
+    {
+      "midi": 108,
+      "fichier": "mf-108.mp3"
+    }
+  ]
+}
