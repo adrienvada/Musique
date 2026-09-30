@@ -1,6 +1,6 @@
 # Propositions — de la tablette au piano
 
-*Mis à jour le 30 septembre 2026 (après-midi), avec les réponses d'Adrien.*
+*Mis à jour le 30 septembre 2026 (soir), après les premières pages d'essai.*
 
 Version illustrée (schémas, maquettes jouables de l'interface) :
 https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
@@ -20,6 +20,35 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
   modèles v1 sont livrés dans `modeles/` : mélodie large, mélodie standard,
   piano large et piano standard. Ils sont générés par
   `outils/generer_modeles.py` au format exact de l'écran de la reMarkable 2.
+
+- **30/09 · Calibration vérifiée sur deux pages réelles.** Adrien a exporté
+  deux pages en PDF (`tests/pages/`). `outils/verifier_page.py` y repère les
+  55 têtes pleines. Chacune tombe sur sa ligne ou son interligne, avec un
+  écart maximal de 0,23 interligne pour une tolérance de 0,25. La gamme
+  ressort exacte : do4 ré4 mi4 fa4 sol4 la4 si4 do5.
+
+## Ce que les pages d'essai ont appris
+
+- **L'export PDF de la tablette garde les traits en vecteurs.** Chaque trait
+  devient un chemin noir de largeur 1,9 pt, ajouté au PDF d'origine dans le
+  repère de la page ; les lignes du modèle restent grises. Le sujet du PDF
+  (`portee:<modèle>:v1`) survit à l'export. La voie manuelle (formule C, et
+  secours des autres) marche donc sans `rmapi`. Le décalage d'abscisse des
+  fichiers `.rm` ne concerne plus que la voie `rmapi`.
+- **Une tête pleine peut être faite de plusieurs traits.** Sur la page de
+  piano, presque chaque tête est noircie en deux coups. Le vérificateur fusionne
+  les gribouillis dont les centres sont à moins de 0,6 interligne.
+- **Les têtes sont des gribouillis compacts** (0,6 à 0,8 interligne), tracés
+  bien plus longs que leur taille. C'est ce qui les distingue d'un accent,
+  d'un chiffre ou d'un bémol de même taille.
+- **Hampes, ligatures, crochets et lignes supplémentaires sont des traits
+  séparés.** Les ligatures peuvent être très obliques et traverser d'une
+  portée à l'autre (page de piano) : une note appartient à la portée de sa
+  tête, pas à celle de sa hampe.
+- **Écriture présente sur les pages**, à reconnaître aux étapes 2 et 4 :
+  - chiffrage 12/8, armure à trois bémols ;
+  - reprises `||:` et `:||`, accent `>` ;
+  - demi-soupir et soupir, lignes supplémentaires au-dessus et au-dessous.
 
 ## Le besoin
 
@@ -121,11 +150,10 @@ attendre l'étape 3.
 
 0. **Modèles de papier calibré** : *livrés le 30/09 (v1)*. Quatre PDF, leur
    calibration JSON et leurs aperçus SVG (voir `modeles/README.md`).
-1. **Récupération et pages d'essai.** Adrien écrit 3 à 5 pages sur les
-   modèles, dont une gamme en noires. `rmapi` + `rmscene` les téléchargent
-   (d'abord à la main, puis dans une tâche GitHub avec le jeton d'appareil en
-   secret). Première vérification : la correspondance entre les coordonnées
-   des traits et celles du JSON.
+1. **Récupération et pages d'essai.** *Calibration vérifiée le 30/09 sur
+   deux pages exportées en PDF.* Reste la récupération automatique :
+   `rmapi` + `rmscene` dans une tâche GitHub, avec le jeton d'appareil en
+   secret. Il faudra alors vérifier le décalage d'abscisse des fichiers `.rm`.
 2. **Lecture des notes.** On rattache chaque tête à sa portée et on en tire
    la hauteur, puis la durée à partir des têtes pleines ou vides, des hampes,
    des crochets et des ligatures. Les barres donnent les mesures. Sortie : de

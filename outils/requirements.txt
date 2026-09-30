@@ -2,3 +2,6 @@
 reportlab==4.4.4
 # Seulement pour refaire glyphes_bravura.py (extraire_glyphes.py).
 fonttools==4.60.1
+# Pour verifier_page.py : lire les traits des pages exportées en PDF.
+# Licence AGPL : sans conséquence pour un outil privé qui tourne chez nous.
+pymupdf==1.28.2
