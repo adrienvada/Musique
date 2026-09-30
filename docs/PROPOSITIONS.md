@@ -188,8 +188,9 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 ## Où en est chaque étape
 
 0. **Modèles de papier calibré** : *fait (v1)*.
-1. **Pages d'essai** : *fait*. Import depuis la reMarkable : *code fait et testé
-   sur un faux cloud*, **reste à brancher** (voir « Brancher la reMarkable »).
+1. **Pages d'essai** : *fait*. Import depuis la reMarkable : *code fait, connecteur
+   déployé le 30/09 dans le projet du site* (par GitHub Actions). **Reste** :
+   l'ajouter à claude.ai, relier la tablette, vérifier sur une vraie page.
 2. **Lecture des notes** : *fait (v1)*. Le lecteur reconnaît :
    - hauteurs, têtes pleines et vides, hampes, crochets et ligatures (niveaux compris) ;
    - points de durée, barres simples, doubles et reprises ;
