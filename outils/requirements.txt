@@ -1,0 +1,4 @@
+# Versions figées : un modèle regénéré doit être identique au pixel près.
+reportlab==4.4.4
+# Seulement pour refaire glyphes_bravura.py (extraire_glyphes.py).
+fonttools==4.60.1

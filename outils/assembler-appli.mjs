@@ -1,0 +1,54 @@
+/**
+ * ASSEMBLER L'APPLI DANS dist/
+ *
+ *   npm run appli            → dist/ prêt à publier sur claude.ai
+ *   npm run appli -- --autonome → dist/index.html complet (<!doctype>…),
+ *                                 pour un hébergement ordinaire (Cloudflare)
+ *
+ * L'appli a besoin, à côté de sa page : de ses modules (app/), du lecteur
+ * (lecteur/), des calibrations (modeles/*.json), du piano (app/piano/), de
+ * pdf.js (copié depuis node_modules, version figée par package.json) et des
+ * pages d'essai (tests/pages/), qu'on peut importer d'un clic.
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const dist = path.join(racine, "dist");
+const autonome = process.argv.includes("--autonome");
+
+fs.rmSync(dist, { recursive: true, force: true });
+const copier = (src, dst) => {
+  fs.mkdirSync(path.dirname(path.join(dist, dst)), { recursive: true });
+  fs.copyFileSync(path.join(racine, src), path.join(dist, dst));
+  return dst;
+};
+
+const fichiers = [];
+for (const f of ["app.js", "stockage.js", "piano.js", "zip.js", "manuscrit.js"]) fichiers.push(copier(`app/${f}`, f));
+for (const f of fs.readdirSync(path.join(racine, "lecteur"))) fichiers.push(copier(`lecteur/${f}`, `lecteur/${f}`));
+for (const f of fs.readdirSync(path.join(racine, "modeles")).filter((f) => f.endsWith(".json"))) fichiers.push(copier(`modeles/${f}`, `modeles/${f}`));
+for (const f of fs.readdirSync(path.join(racine, "app/piano")).filter((f) => /\.(mp3|json)$/.test(f))) fichiers.push(copier(`app/piano/${f}`, `piano/${f}`));
+for (const f of ["pdf.min.mjs", "pdf.worker.min.mjs"]) {
+  fichiers.push(copier(`node_modules/pdfjs-dist/legacy/build/${f}`, `vendor/pdfjs/${f}`));
+  // Le publieur de claude.ai refuse les caractères de contrôle bruts (ESC…)
+  // que pdf.js garde dans une table de données. Écrits \xNN, ils désignent
+  // exactement le même caractère : le code ne change pas.
+  const cible = path.join(dist, `vendor/pdfjs/${f}`);
+  const texte = fs.readFileSync(cible, "latin1").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, (c) => "\\x" + c.charCodeAt(0).toString(16).padStart(2, "0"));
+  fs.writeFileSync(cible, texte, "latin1");
+}
+for (const f of fs.readdirSync(path.join(racine, "tests/pages")).filter((f) => f.endsWith(".pdf"))) fichiers.push(copier(`tests/pages/${f}`, `exemples/${f}`));
+
+let page = fs.readFileSync(path.join(racine, "app/index.html"), "utf8");
+if (autonome) {
+  page = `<!doctype html>\n<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n</head><body>\n${page}\n</body></html>\n`;
+}
+fs.writeFileSync(path.join(dist, "index.html"), page);
+
+// La liste des fichiers, dans le format que l'outil de publication attend.
+const carte = Object.fromEntries(fichiers.map((f) => [f, path.join("dist", f)]));
+fs.writeFileSync(path.join(racine, "dist.fichiers.json"), JSON.stringify(carte, null, 2) + "\n");
+const taille = fichiers.reduce((a, f) => a + fs.statSync(path.join(dist, f)).size, 0);
+console.log(`dist/ : index.html + ${fichiers.length} fichiers, ${(taille / 1024 / 1024).toFixed(2)} Mo${autonome ? " (page autonome)" : ""}`);

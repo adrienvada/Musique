@@ -1,0 +1,287 @@
+<title>Portée</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Une appli à trois écrans : bibliothèque, atelier (relire), lecteur
+   (écouter). Papier gris de liseuse, encre, stylo bleu, surligneur jaune. */
+:root {
+  --papier: #EDEEEA; --feuille: #F8F8F5; --encre: #1C1E21; --gris: #5B5F66;
+  --trait: #CFD1CB; --trait-fort: #A9ACA5; --stylo: #2B48B0; --stylo-doux: #DDE3F6;
+  --surligneur: #F4DE4B; --surligneur-doux: #FBF1B0; --ok: #2F7A4D; --ok-doux: #DCEFE2;
+  --alerte: #9A5B00; --danger: #A5281B;
+  --f-titre: "Young Serif", "Iowan Old Style", Georgia, serif;
+  --f-texte: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-code: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --papier: #17181B; --feuille: #202226; --encre: #E6E6E1; --gris: #A3A7AE; --trait: #34373C;
+    --trait-fort: #50545A; --stylo: #93A8FF; --stylo-doux: #242C4A; --surligneur: #E6CB3A;
+    --surligneur-doux: #4A4214; --ok: #74C995; --ok-doux: #1D3527; --alerte: #E8B35A; --danger: #F0877A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --papier: #17181B; --feuille: #202226; --encre: #E6E6E1; --gris: #A3A7AE; --trait: #34373C;
+  --trait-fort: #50545A; --stylo: #93A8FF; --stylo-doux: #242C4A; --surligneur: #E6CB3A;
+  --surligneur-doux: #4A4214; --ok: #74C995; --ok-doux: #1D3527; --alerte: #E8B35A; --danger: #F0877A;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--papier); color: var(--encre); font-family: var(--f-texte); font-size: 15px; line-height: 1.55; margin: 0; }
+h1, h2, h3 { font-family: var(--f-titre); font-weight: 400; margin: 0; line-height: 1.2; text-wrap: balance; }
+p { margin: 0; }
+button, input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--stylo); outline-offset: 2px; }
+code, .mono { font-family: var(--f-code); font-size: 0.9em; }
+
+.barre-haut { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--papier); border-bottom: 1px solid var(--trait); }
+.barre-haut .dedans { max-width: 1240px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.logo { font-family: var(--f-titre); font-size: 1.3rem; display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; cursor: pointer; }
+.logo svg { width: 18px; height: 30px; color: var(--stylo); }
+.fil { display: flex; align-items: center; gap: 6px; color: var(--gris); font-size: 0.92rem; min-width: 0; }
+.fil b { color: var(--encre); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
+.onglets { display: flex; gap: 4px; }
+.onglets button { border: 1px solid transparent; background: transparent; color: var(--gris); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.onglets button[aria-selected="true"] { color: var(--encre); background: var(--feuille); border-color: var(--trait-fort); font-weight: 500; }
+.mode { margin-left: auto; font-size: 0.8rem; color: var(--gris); }
+
+main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex; flex-direction: column; gap: 18px; }
+.vue { display: flex; flex-direction: column; gap: 18px; }
+
+.btn { border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); padding: 7px 14px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 0.92rem; white-space: nowrap; }
+.btn:hover { border-color: var(--encre); }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.btn-plein { background: var(--stylo); border-color: var(--stylo); color: var(--feuille); }
+.btn-plein:hover { filter: brightness(1.08); border-color: var(--stylo); }
+.btn-danger { color: var(--danger); }
+.btn-petit { padding: 4px 10px; font-size: 0.85rem; }
+.rangee { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.pousse { margin-left: auto; }
+.remarque { font-size: 0.85rem; color: var(--gris); }
+.pastille { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
+.p-doute { background: var(--surligneur-doux); color: var(--encre); border-color: var(--surligneur); }
+.p-ok { background: var(--ok-doux); color: var(--ok); border-color: var(--ok); }
+.surtitre { font-size: 0.75rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--gris); font-weight: 500; }
+
+/* Bibliothèque */
+.entete-biblio { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; }
+.entete-biblio h1 { font-size: clamp(1.7rem, 4vw, 2.3rem); }
+.depot { border: 2px dashed var(--trait-fort); border-radius: 12px; padding: 18px; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; background: var(--feuille); }
+.depot.survol { border-color: var(--stylo); background: var(--stylo-doux); }
+.depot p { max-width: 70ch; }
+.outils { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.champ { border: 1px solid var(--trait-fort); background: var(--feuille); border-radius: 8px; padding: 7px 12px; min-width: 0; flex: 1 1 220px; }
+.puce { border: 1px solid var(--trait-fort); background: transparent; border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 0.88rem; }
+.puce[aria-pressed="true"] { background: var(--encre); color: var(--feuille); border-color: var(--encre); }
+.grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.carte { border: 1px solid var(--trait); background: var(--feuille); border-radius: 10px; overflow: hidden; text-align: left; padding: 0; cursor: pointer; display: flex; flex-direction: column; }
+.carte:hover { border-color: var(--stylo); }
+.carte svg { width: 100%; height: 120px; display: block; background: var(--feuille); border-bottom: 1px solid var(--trait); }
+.carte .infos { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.carte .titre { font-weight: 600; }
+.carte .meta { font-size: 0.8rem; color: var(--gris); font-variant-numeric: tabular-nums; }
+.carte .infos .pastille { align-self: flex-start; }
+.arbre { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow: auto; }
+.arbre details > summary { cursor: pointer; padding: 5px 6px; border-radius: 6px; font-weight: 500; list-style: none; display: flex; align-items: center; gap: 8px; }
+.arbre details > summary::before { content: "▸"; color: var(--gris); width: 1em; }
+.arbre details[open] > summary::before { content: "▾"; }
+.arbre details > summary:hover { background: var(--papier); }
+.arbre .enfants { padding-left: 18px; border-left: 1px solid var(--trait); margin-left: 12px; display: flex; flex-direction: column; gap: 2px; }
+.doc-rm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 5px 6px; border-radius: 6px; }
+.doc-rm:hover { background: var(--papier); }
+.doc-rm .nom { min-width: 0; overflow-wrap: anywhere; }
+.doc-rm .meta { font-size: 0.8rem; color: var(--gris); font-variant-numeric: tabular-nums; }
+.doc-rm .btn { margin-left: auto; }
+.aide-connecteur { border: 1px solid var(--surligneur); background: var(--surligneur-doux); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 0.92rem; }
+.aide-connecteur ol { margin: 0; padding-left: 1.2em; }
+.aide-connecteur p:empty { display: none; }
+.vide { border: 1px solid var(--trait); background: var(--feuille); border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 10px; max-width: 70ch; }
+.vide ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+
+/* Page redessinée */
+svg .papier line { stroke: var(--trait-fort); stroke-width: 2; }
+svg .encre polyline { fill: none; stroke: var(--encre); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+svg .surlignage rect { fill: var(--surligneur); opacity: 0.45; cursor: pointer; }
+svg .surlignage rect.actif { opacity: 0.85; stroke: var(--alerte); stroke-width: 3; }
+
+/* Atelier */
+.titre-edit { font-family: var(--f-titre); font-size: clamp(1.4rem, 3vw, 1.9rem); border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 2px 6px; margin-left: -6px; min-width: 0; flex: 1 1 260px; }
+.titre-edit:hover, .titre-edit:focus { border-color: var(--trait-fort); background: var(--feuille); }
+.deux { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.deux > * { min-width: 0; }
+.panneau { background: var(--feuille); border: 1px solid var(--trait); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.panneau > .surtitre { display: flex; align-items: center; gap: 8px; }
+.page-svg { width: 100%; height: auto; display: block; color: var(--encre); max-height: 70vh; }
+.gravure { color: var(--encre); min-height: 120px; }
+.gravure .abcjs-note.joue, .gravure .abcjs-note.joue * { fill: var(--stylo); color: var(--stylo); }
+textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55; min-height: 180px; resize: vertical; border: 1px solid var(--trait-fort); background: var(--papier); border-radius: 8px; padding: 10px 12px; width: 100%; }
+.etat { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.doutes { display: flex; flex-direction: column; gap: 8px; }
+.doute-item { border: 1px solid var(--surligneur); background: var(--surligneur-doux); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 0.92rem; }
+.doute-item.actif { outline: 2px solid var(--alerte); }
+.doute-item.leve { border-color: var(--ok); background: var(--ok-doux); }
+.pages-nav { display: flex; gap: 6px; align-items: center; }
+
+/* Lecteur */
+.transport { position: sticky; bottom: env(safe-area-inset-bottom, 0px); background: var(--feuille); border: 1px solid var(--trait-fort); border-radius: 12px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.transport label { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--gris); }
+.transport input[type="range"] { width: 140px; accent-color: var(--stylo); }
+.val { font-family: var(--f-code); font-size: 0.88rem; color: var(--encre); min-width: 4ch; font-variant-numeric: tabular-nums; }
+.bascule { display: inline-flex; gap: 6px; align-items: center; font-size: 0.88rem; }
+.bascule input { accent-color: var(--stylo); }
+
+.confirmer { border: 1px solid var(--danger); border-radius: 10px; padding: 12px; background: var(--feuille); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--encre); color: var(--feuille); padding: 10px 16px; border-radius: 10px; font-size: 0.92rem; max-width: min(92vw, 560px); z-index: 20; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+
+@media (max-width: 820px) {
+  .deux { grid-template-columns: 1fr; }
+  .mode { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="barre-haut">
+  <div class="dedans">
+    <button class="logo" id="aller-biblio" aria-label="Revenir à la bibliothèque">
+      <svg viewBox="-10 -1110 690 1780" aria-hidden="true"><path fill="currentColor" d="M376,-415C374,-427 376,-428 382,-434C398,-449 419,-470 438,-491C522,-583 572,-702 572,-815C572,-902 548,-988 507,-1048C492,-1070 466,-1098 455,-1098C441,-1098 410,-1072 390,-1050C316,-968 292,-843 292,-739C292,-681 299,-616 306,-575C308,-563 309,-561 297,-551C233,-498 164,-437 112,-373C43,-287 0,-194 0,-87C0,87 119,252 364,252C387,252 413,250 433,246C444,244 446,243 448,255C460,322 475,409 475,456C475,604 375,622 316,622C262,622 236,606 236,593C236,586 245,583 268,576C299,567 335,540 335,482C335,427 300,380 239,380C172,380 132,433 132,495C132,560 171,658 322,658C389,658 519,628 519,458C519,401 501,306 490,244C488,232 489,233 503,227C604,187 671,102 671,-11C671,-139 577,-252 430,-252C404,-252 404,-252 401,-270ZM470,-943C503,-943 530,-916 530,-861C530,-792 497,-728 419,-650C403,-634 379,-611 356,-591C349,-585 345,-586 343,-599C339,-625 337,-659 337,-691C337,-847 409,-943 470,-943ZM361,-262C364,-243 364,-244 346,-238C258,-208 201,-129 201,-44C201,46 248,110 316,133C324,136 336,139 343,139C351,139 355,134 355,128C355,121 347,118 340,115C298,97 268,54 268,8C268,-49 307,-92 368,-109C384,-113 386,-112 388,-101L438,197C440,208 439,208 424,211C408,214 388,216 368,216C193,216 80,119 80,-20C80,-79 90,-158 173,-252C233,-319 279,-356 326,-394C336,-402 338,-401 340,-390ZM430,-103C428,-115 429,-118 441,-117C522,-110 589,-42 589,46C589,109 551,160 495,188C483,194 481,194 479,182Z"/></svg>
+      Portée
+    </button>
+    <div class="fil" id="fil" hidden><span aria-hidden="true">/</span><b id="fil-titre"></b></div>
+    <div class="onglets" id="onglets" role="tablist" aria-label="Écrans de la partition" hidden>
+      <button role="tab" id="onglet-atelier" aria-selected="false">Atelier</button>
+      <button role="tab" id="onglet-lecteur" aria-selected="false">Lecteur</button>
+    </div>
+    <span class="mode" id="mode">Ouverture de ta bibliothèque…</span>
+  </div>
+</header>
+
+<main>
+  <!-- ===== Bibliothèque ===== -->
+  <section class="vue" id="vue-biblio">
+    <div class="entete-biblio">
+      <div>
+        <p class="surtitre">Tes partitions</p>
+        <h1>Bibliothèque</h1>
+      </div>
+      <div class="outils pousse">
+        <input class="champ" id="recherche" type="search" placeholder="Chercher un titre…" aria-label="Chercher une partition">
+        <button class="puce" data-filtre="tout" aria-pressed="true">Toutes</button>
+        <button class="puce" data-filtre="a-relire" aria-pressed="false">À relire</button>
+        <button class="puce" data-filtre="prete" aria-pressed="false">Prêtes</button>
+      </div>
+    </div>
+    <div class="depot" id="depot">
+      <p><strong>Ajoute une page écrite sur un modèle Portée.</strong> Va la chercher sur ta reMarkable, ou dépose ici son PDF (sur la tablette : <em>Partager → PDF</em>).</p>
+      <div class="rangee">
+        <button class="btn btn-plein" id="ouvrir-remarkable">Parcourir ma reMarkable</button>
+        <label class="btn" for="fichier">Choisir des PDF</label>
+      </div>
+      <input id="fichier" type="file" accept="application/pdf,.pdf" multiple hidden>
+    </div>
+    <div class="panneau" id="panneau-remarkable" hidden>
+      <div class="rangee">
+        <h2 style="font-size:1.3rem">Ma reMarkable</h2>
+        <input class="champ" id="recherche-rm" type="search" placeholder="Chercher un document…" aria-label="Chercher un document de la reMarkable" style="flex:0 1 260px">
+        <button class="btn btn-petit" id="actualiser-rm">Actualiser</button>
+        <button class="btn btn-petit pousse" id="fermer-rm">Fermer</button>
+      </div>
+      <div class="etat" id="etat-rm" role="status"></div>
+      <div class="arbre" id="arbre-rm"></div>
+    </div>
+    <div id="liste" class="grille" aria-live="polite"></div>
+    <div id="vide" class="vide" hidden>
+      <h2>Ta bibliothèque est vide</h2>
+      <ol>
+        <li>Sur la tablette, duplique un modèle Portée et écris ta partition dessus.</li>
+        <li>Importe-la avec « Parcourir ma reMarkable », ou dépose son PDF ci-dessus.</li>
+        <li>Relis ce que Portée a compris dans l'atelier, puis écoute-la.</li>
+      </ol>
+      <div class="rangee"><button class="btn" id="exemples">Essayer avec tes pages d'essai du 30 septembre</button></div>
+    </div>
+    <p class="remarque" id="aucun" hidden>Aucune partition ne correspond. Essaie un autre mot, ou le filtre « Toutes ».</p>
+  </section>
+
+  <!-- ===== Atelier ===== -->
+  <section class="vue" id="vue-atelier" hidden>
+    <div class="rangee">
+      <input class="titre-edit" id="titre" aria-label="Titre de la partition">
+      <span id="statut-atelier"></span>
+      <button class="btn btn-petit btn-danger" id="supprimer">Supprimer</button>
+    </div>
+    <div class="confirmer" id="confirmer" hidden>
+      <span>Supprimer cette partition et ses pages ? C'est définitif.</span>
+      <button class="btn btn-petit btn-danger" id="confirmer-oui">Supprimer</button>
+      <button class="btn btn-petit" id="confirmer-non">Garder</button>
+    </div>
+    <div class="deux">
+      <div class="panneau">
+        <div class="surtitre">Ta page <span class="pages-nav" id="pages-nav"></span></div>
+        <svg class="page-svg" id="page" role="img" aria-label="Ta page manuscrite"></svg>
+      </div>
+      <div class="panneau">
+        <div class="surtitre">Ce que Portée a lu</div>
+        <div class="gravure" id="gravure-atelier"></div>
+      </div>
+    </div>
+    <div class="deux">
+      <div class="panneau">
+        <label class="surtitre" for="abc">Texte ABC : corrige-le, la partition suit</label>
+        <textarea class="abc" id="abc" spellcheck="false"></textarea>
+        <p class="etat" id="etat-abc" role="status"></p>
+        <div class="rangee">
+          <button class="btn btn-petit" id="relire">Revenir à la lecture de Portée</button>
+          <span class="remarque" id="enregistre"></span>
+        </div>
+      </div>
+      <div class="panneau">
+        <div class="surtitre">À vérifier</div>
+        <div class="doutes" id="doutes"></div>
+        <div class="rangee">
+          <button class="btn" id="ecouter-atelier">▶ Écouter</button>
+          <button class="btn btn-plein" id="valider">Valider et ouvrir le lecteur</button>
+        </div>
+      </div>
+    </div>
+    <details class="remarque">
+      <summary>Écrire en ABC, l'essentiel</summary>
+      <p style="margin-top:8px">Une lettre = une note : <code>C D E F G A B</code> pour l'octave du do central, <code>c d e</code> une octave au-dessus, <code>C,</code> une octave en dessous. Le chiffre qui suit est la durée en croches : <code>C2</code> noire, <code>C</code> croche, <code>C/</code> double croche, <code>C3</code> noire pointée, <code>C4</code> blanche. <code>z</code> est un silence. <code>^C</code> dièse, <code>_B</code> bémol, <code>=F</code> bécarre. Des notes collées sont liées par une ligature. <code>|</code> barre de mesure, <code>|:</code> et <code>:|</code> reprises.</p>
+    </details>
+  </section>
+
+  <!-- ===== Lecteur ===== -->
+  <section class="vue" id="vue-lecteur" hidden>
+    <div class="rangee">
+      <div>
+        <h2 id="titre-lecteur" style="font-size:clamp(1.4rem,3vw,1.9rem)"></h2>
+        <p class="remarque mono" id="meta-lecteur"></p>
+      </div>
+      <div class="rangee pousse">
+        <button class="btn btn-petit" id="export-abc">Exporter l'ABC</button>
+        <button class="btn btn-petit" id="export-midi">Exporter le MIDI (.zip)</button>
+      </div>
+    </div>
+    <div class="panneau"><div class="gravure" id="gravure-lecteur"></div></div>
+    <div class="transport">
+      <button class="btn btn-plein" id="ecouter">▶ Écouter</button>
+      <label for="tempo">Tempo <input type="range" id="tempo" min="30" max="200" value="90"><span class="val" id="tempo-val">♩ = 90</span></label>
+      <span class="rangee" style="gap:6px"><span class="remarque">Transposer</span>
+        <button class="btn btn-petit" id="transp-moins" aria-label="Un demi-ton plus bas">−</button>
+        <span class="val" id="transp-val">0</span>
+        <button class="btn btn-petit" id="transp-plus" aria-label="Un demi-ton plus haut">+</button></span>
+      <span class="rangee" id="mains" hidden>
+        <label class="bascule"><input type="checkbox" id="main-droite" checked> Main droite</label>
+        <label class="bascule"><input type="checkbox" id="main-gauche" checked> Main gauche</label>
+      </span>
+      <span class="remarque" id="etat-son"></span>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.7.1/abcjs-basic-min.js"></script>
+<script type="module" src="app.js"></script>

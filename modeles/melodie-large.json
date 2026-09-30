@@ -1,0 +1,93 @@
+{
+  "modele": "melodie-large",
+  "titre": "Mélodie, large",
+  "version": 1,
+  "page": {
+    "largeur": 1404,
+    "hauteur": 1872,
+    "unite": "pixel de l'écran de la reMarkable 2 (226 ppp), origine en haut à gauche, y vers le bas"
+  },
+  "interligne": 40,
+  "ecart_entre_blocs": 160.4,
+  "x_debut": 80,
+  "x_fin": 1344,
+  "x_apres_cle": 208,
+  "systemes": [
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            230.2,
+            270.2,
+            310.2,
+            350.2,
+            390.2
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            550.6,
+            590.6,
+            630.6,
+            670.6,
+            710.6
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            871.0,
+            911.0,
+            951.0,
+            991.0,
+            1031.0
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            1191.4,
+            1231.4,
+            1271.4,
+            1311.4,
+            1351.4
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "cle": "sol",
+          "ligne_du_bas": "mi4",
+          "lignes": [
+            1511.8,
+            1551.8,
+            1591.8,
+            1631.8,
+            1671.8
+          ]
+        }
+      ]
+    }
+  ],
+  "a_verifier": "Dans les fichiers .rm v6, l'abscisse des traits semble centrée sur la page (x_page = x_rm + 702). À confirmer sur la première page écrite."
+}
