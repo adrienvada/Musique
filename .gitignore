@@ -4,3 +4,5 @@ __pycache__/
 tests/pages/*-verifie.png
 node_modules/
 tests/pages/*-controle-p*.svg
+dist/
+dist.fichiers.json

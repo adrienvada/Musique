@@ -1,6 +1,8 @@
 # Propositions — de la tablette au piano
 
-*Mis à jour le 30 septembre 2026 (soir), après les premières pages d'essai.*
+*Mis à jour le 30 septembre 2026 (nuit) : la version 1 est en ligne.*
+
+**L'appli : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj** (privée).
 
 Version illustrée (schémas, maquettes jouables de l'interface) :
 https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
@@ -22,10 +24,31 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
   `outils/generer_modeles.py` au format exact de l'écran de la reMarkable 2.
 
 - **30/09 · Calibration vérifiée sur deux pages réelles.** Adrien a exporté
-  deux pages en PDF (`tests/pages/`). `outils/verifier_page.py` y repère les
+  deux pages en PDF (`tests/pages/`). Le premier vérificateur (Python) y repère les
   55 têtes pleines. Chacune tombe sur sa ligne ou son interligne, avec un
   écart maximal de 0,23 interligne pour une tolérance de 0,25. La gamme
   ressort exacte : do4 ré4 mi4 fa4 sol4 la4 si4 do5.
+
+- **30/09 · Version 1 fonctionnelle, sur claude.ai.** Demandé par Adrien
+  (« continue jusqu'à ce que l'outil soit fonctionnel »). Son trajet est
+  celui de la formule C, sans aucune installation :
+  1. Adrien exporte la page en PDF depuis la tablette ;
+  2. il la dépose dans l'appli ;
+  3. le lecteur tourne dans le navigateur ;
+  4. Adrien relit dans l'atelier, puis écoute au piano.
+
+  Les partitions et leurs traits sont rangés dans la base de la page claude.ai
+  (capacité `db`) : ils suivent Adrien sur tous ses appareils, sans Supabase ni
+  hébergement. La synchronisation automatique (`rmapi`) reste à brancher :
+  voir « Suite ».
+
+  **Pourquoi ce choix plutôt que B tout de suite.** Supabase et Cloudflare
+  demandent des accès que la session n'a pas (clés, tableau de bord). Là,
+  l'appli marche dès maintenant. Le code est prêt pour un autre hébergement :
+  `npm run appli -- --autonome`, avec repli sur le stockage du navigateur.
+- **30/09 · Le lecteur est réécrit en JavaScript** (`lecteur/`). Le même code
+  sert au navigateur et aux tests Node. Le vérificateur Python
+  (`verifier_page.py`, PyMuPDF sous licence AGPL) est retiré.
 
 ## Ce que les pages d'essai ont appris
 
@@ -143,36 +166,62 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 - **GitHub Actions** donne 2 000 min/mois gratuites en privé. Une synchro toutes
   les 2 h en consomme quelques centaines.
 
-## Plan (formule B)
+## Où en est chaque étape
 
-Les étapes 0 à 3 sont communes aux trois formules. Le choix A/B/C peut donc
-attendre l'étape 3.
+0. **Modèles de papier calibré** : *fait (v1)*.
+1. **Pages d'essai** : *fait*. Récupération automatique : **à faire** (voir « Suite »).
+2. **Lecture des notes** : *fait (v1)*. Le lecteur reconnaît :
+   - hauteurs, têtes pleines et vides, hampes, crochets et ligatures (niveaux compris) ;
+   - points de durée, barres simples, doubles et reprises ;
+   - armure ;
+   - chiffrage, deviné d'après la durée des mesures (compte en croches, groupes de trois → x/8).
+3. **Lecteur** : *fait*. Gravure abcjs, piano Steinway échantillonné, curseur,
+   tempo, transposition, mains séparables, exports ABC et MIDI (en .zip).
+4. **Autres signes** : *en partie*.
+   - Reconnus : soupirs et demi-soupirs, bémols (un ou deux traits), dièses
+     (au moins trois traits), accents.
+   - Pas encore : pauses et demi-pauses, silences courts, liaisons de durée,
+     triolets, lecture des chiffres du chiffrage. Le classifieur HOMUS reste à faire.
+5. **Atelier** : *fait, sur claude.ai*. Ta page redessinée, les doutes
+   surlignés, l'ABC éditable (enregistré automatiquement), la validation.
+6. **Bouton « Synchroniser maintenant »** : à faire, avec la récupération automatique.
+7. *(option)* Second avis JAZZMUS. 8. *(option)* MusicXML et PDF.
+   9. *(option)* Passerelle Ableton : l'export MIDI (une piste par main) est déjà là.
 
-0. **Modèles de papier calibré** : *livrés le 30/09 (v1)*. Quatre PDF, leur
-   calibration JSON et leurs aperçus SVG (voir `modeles/README.md`).
-1. **Récupération et pages d'essai.** *Calibration vérifiée le 30/09 sur
-   deux pages exportées en PDF.* Reste la récupération automatique :
-   `rmapi` + `rmscene` dans une tâche GitHub, avec le jeton d'appareil en
-   secret. Il faudra alors vérifier le décalage d'abscisse des fichiers `.rm`.
-2. **Lecture des notes.** On rattache chaque tête à sa portée et on en tire
-   la hauteur, puis la durée à partir des têtes pleines ou vides, des hampes,
-   des crochets et des ligatures. Les barres donnent les mesures. Sortie : de
-   l'ABC plus la liste des doutes, et le contrôle des temps par mesure.
-3. **Lecteur** : appli web avec bibliothèque, gravure, piano, tempo,
-   transposition et export MIDI.
-4. **Les autres signes** : silences, altérations, points, liaisons, armure et
-   chiffrage, reconnus par un petit classifieur entraîné sur HOMUS et sur les
-   traits d'Adrien.
-5. **Atelier + Supabase** : connexion par lien magique et historique des versions.
-6. **Bouton « Synchroniser maintenant »** : une Edge Function lance le workflow.
-7. *(option)* **Second avis JAZZMUS** sur les mélodies.
-8. *(option)* **Exports MusicXML et PDF.**
-9. *(option)* **Passerelle Ableton** : dossier de `.mid` synchronisé et
-   version enregistrée suivie par le curseur. L'export MIDI simple arrive dès
-   l'étape 3.
+## Suite possible : la récupération automatique
+
+La base de la page claude.ai n'est pas joignable depuis une tâche GitHub.
+Pour que les pages arrivent seules, il faut choisir :
+- **Une routine Claude Code** (dans l'abonnement d'Adrien). Chaque jour, elle
+  lance `rmapi` sur le dossier « Partitions », lit les nouvelles pages et les
+  range dans l'appli (outil `ArtifactData`). Aucun nouveau service, mais elle
+  consomme de l'usage Claude.
+- **La formule B d'origine.** Une tâche GitHub avec `rmapi` écrit dans Supabase,
+  et l'appli lit Supabase. Tout est gratuit, mais il faut : les clés du projet
+  du site, un schéma `musique`, et l'hébergement de l'appli sur Cloudflare.
+
+Dans les deux cas, il faudra le code à 8 lettres de my.remarkable.com.
+
+## Pièges connus
+
+- **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, absent des
+  navigateurs de 2026 : il faut prendre la version `legacy/`.
+- **Le publieur de claude.ai refuse les caractères de contrôle bruts.** Le
+  worker de pdf.js en contient 719 dans une table de données.
+  `assembler-appli.mjs` les réécrit en `\xNN`, ce qui revient au même.
+- **Les téléchargements d'une page claude.ai suivent une liste fermée de
+  formats**, sans `.mid`. Le MIDI part donc dans un `.zip` (`app/zip.js`).
+- **Tête noircie en deux coups, hampe repassée, ligature tracée en deux
+  fois** : le lecteur fusionne, recolle et ignore ces retouches. Ne pas
+  retirer ces étapes sans relancer `npm test`.
+- **Seuils du lecteur** : ils sont exprimés en interlignes et réglés sur les
+  pages du 30/09. Tout réglage qui change une lecture doit mettre à jour
+  `tests/lecteur.test.mjs` dans le même commit.
 
 ## Questions ouvertes
 
-1. Formule A, B ou C ? B par défaut ; la décision peut attendre l'étape 3.
-2. Les modèles v1 conviennent-ils à la main (taille des interlignes, nombre de
-   portées) ? À voir sur les premières pages d'essai.
+1. Récupération automatique : routine Claude Code ou formule B (voir « Suite ») ?
+2. Tes pages d'essai du 30/09 : ce que tu voulais écrire. La 3ᵉ mesure de la
+   ligne 2 fait 11 croches au lieu de 12 : est-ce le petit trait au bout d'une
+   hampe, un crochet oublié ?
+3. Les modèles v1 conviennent-ils à la main (interlignes, nombre de portées) ?
