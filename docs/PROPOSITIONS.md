@@ -212,14 +212,16 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 
 ## Brancher la reMarkable (une fois)
 
-1. **Déployer le connecteur** dans le projet Supabase du site. Il faut un jeton
-   d'accès Supabase (supabase.com/dashboard/account/tokens, révocable juste
-   après) :
+1. **Déployer le connecteur** dans le projet Supabase du site. GitHub Actions
+   s'en charge (`.github/workflows/connecteur.yml`) : il suffit de ranger un
+   jeton d'accès Supabase (supabase.com/dashboard/account/tokens) dans les
+   secrets du dépôt, sous le nom `SUPABASE_ACCESS_TOKEN`. Le déploiement part
+   à chaque changement du connecteur. La première fois, l'URL du connecteur
+   s'affiche dans le résumé de l'exécution (dépôt privé).
+   Sans GitHub, depuis un terminal :
    ```bash
-   SUPABASE_ACCESS_TOKEN=sbp_… npm run connecteur              # liste les projets
-   SUPABASE_ACCESS_TOKEN=sbp_… npm run connecteur -- <ref>     # déploie
+   SUPABASE_ACCESS_TOKEN=sbp_… npm run connecteur -- <ref>
    ```
-   Le script tire la clé de l'adresse et affiche l'URL du connecteur.
 2. **L'ajouter à claude.ai** : Paramètres → Connecteurs → Ajouter un connecteur
    personnalisé. Nom : **Portée reMarkable**, exactement (l'appli l'appelle par
    ce nom). URL : celle du script.
@@ -256,12 +258,14 @@ ou supprimer la fonction dans Supabase.
   se note au déploiement. Perdue : `npm run connecteur -- <ref> --nouvelle-cle`,
   puis changer l'URL dans claude.ai.
 - **Code à 8 lettres** : il expire en quelques minutes et ne sert qu'une fois.
+- **Clé posée avant le déploiement.** La fonction lit `PORTEE_CLE` à son
+  démarrage : posée après, une instance déjà chaude répondrait 404. Si la
+  première mise en place échoue, le script retire la clé neuve, pour que
+  l'essai suivant en tire une autre et affiche l'adresse.
 
 ## Questions ouvertes
 
-1. Brancher la reMarkable : me confier un jeton d'accès Supabase (révoqué
-   ensuite), ou lancer `npm run connecteur` toi-même ?
-2. Tes pages d'essai du 30/09 : ce que tu voulais écrire. La 3ᵉ mesure de la
+1. Tes pages d'essai du 30/09 : ce que tu voulais écrire. La 3ᵉ mesure de la
    ligne 2 fait 11 croches au lieu de 12 : est-ce le petit trait au bout d'une
    hampe, un crochet oublié ?
-3. Les modèles v1 conviennent-ils à la main (interlignes, nombre de portées) ?
+2. Les modèles v1 conviennent-ils à la main (interlignes, nombre de portées) ?

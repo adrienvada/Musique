@@ -31,6 +31,9 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   ni recopier le jeton d'appareil : il vit dans le compartiment privé
   `portee-remarkable` du stockage Supabase. L'appli l'appelle par son nom,
   « Portée reMarkable » : le changer des deux côtés à la fois.
+  Tout changement poussé sur `main` dans ce dossier est déployé par
+  `.github/workflows/connecteur.yml` : lancer `npm test` et `deno check`
+  avant de pousser.
 
 ## Vérifier
 
