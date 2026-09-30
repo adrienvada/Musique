@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { lireLignes, traitsDePage } from "../supabase/functions/portee-remarkable/rm.js";
+import { lireLignes, traitsDePage, versPage } from "../supabase/functions/portee-remarkable/rm.js";
 import { CloudRemarkable } from "../supabase/functions/portee-remarkable/remarkable.js";
 import { coffreMemoire, coffreSupabase } from "../supabase/functions/portee-remarkable/coffre.js";
 import { traiter } from "../supabase/functions/portee-remarkable/mcp.js";
@@ -30,6 +30,24 @@ test("écrire puis relire une page .rm rend les mêmes traits", () => {
   const traits = [[[100, 200], [110.5, 210.25]], [[700, 900], [705, 950], [702, 1000]]];
   const relus = traitsDePage(new Uint8Array(ecrireRm(traits)));
   assert.deepEqual(relus.map((t) => t.map((p) => p.map((v) => Math.round(v * 100) / 100))), traits);
+});
+
+test("une vraie page de la tablette se lit comme son export PDF (227 unités par pouce)", async () => {
+  // Coordonnées brutes envoyées par la reMarkable d'Adrien pour sa page d'essai.
+  const { traits } = JSON.parse(fs.readFileSync("tests/fixtures/rm/melodie-standard-tablette.json", "utf8"));
+  const tablette = traits.map((t) => {
+    const pts = [];
+    for (let i = 0; i < t.length; i += 2) pts.push(versPage([t[i] / 2, t[i + 1] / 2]));
+    return pts;
+  });
+  const pdf = await lireFichier("tests/pages/2026-09-30-melodie-standard.pdf");
+  // Trait pour trait, les points tombent au même endroit que dans le PDF.
+  let ecart = 0;
+  tablette.forEach((t, i) => t.forEach((p, k) => { ecart = Math.max(ecart, Math.hypot(p[0] - pdf.pages[0].traits[i][k][0], p[1] - pdf.pages[0].traits[i][k][1])); }));
+  assert.ok(ecart < 0.5, `écart maximal ${ecart.toFixed(2)} px`);
+  // Et la lecture est la même, mesure pour mesure.
+  const res = lirePartition([tablette], pdf.cal, {});
+  assert.equal(corps(res.abc), corps(pdf.abc));
 });
 
 test("du faux cloud à l'ABC : même lecture que le PDF exporté", async () => {

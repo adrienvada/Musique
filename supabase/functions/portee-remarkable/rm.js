@@ -5,9 +5,14 @@
  * (« lignes »). Le fichier est une suite de blocs ; chaque bloc de type 5
  * décrit une ligne : outil, couleur, épaisseur, puis ses points.
  *
- * Les coordonnées de la tablette ont leur abscisse centrée sur la page
- * (de −702 à +702) et leur ordonnée partant du haut. On les ramène dans le
- * repère des modèles Portée : pixels de l'écran, origine en haut à gauche.
+ * Les coordonnées de la tablette ont leur abscisse centrée sur la page et
+ * leur ordonnée partant du haut. Sur un document PDF, elles comptent 227
+ * unités par pouce, pas 226 comme l'écran : mesuré le 30/09 sur les deux
+ * pages d'essai d'Adrien, trait pour trait contre leur export PDF (écart
+ * résiduel 0,2 px). Sans cette correction, le bas de la page glisse de
+ * 3 à 4 px, assez pour lire une note un cran trop bas. On les ramène dans
+ * le repère des modèles Portée : pixels de l'écran à 226 ppp, origine en
+ * haut à gauche.
  *
  * Le module est en JavaScript pur : le connecteur (Deno, Supabase) et les
  * tests (Node) l'utilisent tel quel.
@@ -19,6 +24,7 @@ const BLOC_LIGNE = 0x05;
 const GOMMES = new Set([6, 8]);
 const SURLIGNEURS = new Set([5, 18]);
 const DEMI_LARGEUR = 702;
+const ECHELLE = 226 / 227;
 
 class Flux {
   constructor(octets) {
@@ -114,6 +120,9 @@ export function lireLignes(octets) {
 }
 
 /** Traits d'une page, dans le repère des modèles Portée (pixels, origine en haut à gauche). */
+/** Un point de la tablette → le repère des modèles Portée. */
+export const versPage = ([x, y]) => [DEMI_LARGEUR + x * ECHELLE, y * ECHELLE];
+
 export function traitsDePage(octets) {
-  return lireLignes(octets).map((l) => l.points.map(([x, y]) => [x + DEMI_LARGEUR, y]));
+  return lireLignes(octets).map((l) => l.points.map(versPage));
 }

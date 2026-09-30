@@ -67,9 +67,9 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     `PORTEE_CLE`) ; sans elle, la fonction répond 404. Un connecteur OAuth
     serait disproportionné pour un seul utilisateur.
   - Le lecteur reçoit les traits des `.rm`, pas un PDF exporté. Le repère est
-    le même une fois l'abscisse décalée de 702 px. Les tests vérifient que la
-    lecture ne change pas, même en arrondissant les traits au demi-pixel pour
-    le transport.
+    le même une fois l'abscisse décentrée (+702) et l'échelle corrigée
+    (226/227, voir plus bas). Les tests vérifient que la lecture ne change
+    pas, même en arrondissant les traits au demi-pixel pour le transport.
 
 ## Ce que les pages d'essai ont appris
 
@@ -89,6 +89,13 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
   séparés.** Les ligatures peuvent être très obliques et traverser d'une
   portée à l'autre (page de piano) : une note appartient à la portée de sa
   tête, pas à celle de sa hampe.
+- **Sur un document PDF, la tablette compte 227 unités par pouce, pas 226.**
+  Vérifié le 30/09 sur les deux pages d'essai lues par le connecteur, trait
+  pour trait contre leur export PDF : l'écart vaut exactement 227/226
+  (0,44 %) en x comme en y ; corrigé, il reste 0,2 px. Sans correction, le bas
+  de la page glissait de 3 à 4 px : deux mesures de la mélodie étaient lues un
+  cran trop bas. `tests/fixtures/rm/melodie-standard-tablette.json` garde les
+  coordonnées brutes de cette page.
 - **Écriture présente sur les pages**, à reconnaître aux étapes 2 et 4 :
   - chiffrage 12/8, armure à trois bémols ;
   - reprises `||:` et `:||`, accent `>` ;
@@ -189,8 +196,9 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 
 0. **Modèles de papier calibré** : *fait (v1)*.
 1. **Pages d'essai** : *fait*. Import depuis la reMarkable : *code fait, connecteur
-   déployé le 30/09 dans le projet du site* (par GitHub Actions). **Reste** :
-   l'ajouter à claude.ai, relier la tablette, vérifier sur une vraie page.
+   déployé le 30/09 dans le projet du site* (par GitHub Actions), ajouté à
+   claude.ai, tablette reliée. Vérifié sur les deux vraies pages d'essai :
+   même lecture que leur PDF, après correction de l'échelle (227/226).
 2. **Lecture des notes** : *fait (v1)*. Le lecteur reconnaît :
    - hauteurs, têtes pleines et vides, hampes, crochets et ligatures (niveaux compris) ;
    - points de durée, barres simples, doubles et reprises ;

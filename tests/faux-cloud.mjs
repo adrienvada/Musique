@@ -24,8 +24,9 @@ export function ecrireRm(traits, outil = 4) {
   traits.forEach((pts, k) => {
     const points = Buffer.alloc(14 * pts.length);
     pts.forEach(([x, y], i) => {
-      points.writeFloatLE(x - 702, 14 * i);   // abscisse centrée, comme la tablette
-      points.writeFloatLE(y, 14 * i + 4);
+      // Abscisse centrée et 227 unités par pouce, comme la tablette (voir rm.js).
+      points.writeFloatLE((x - 702) * 227 / 226, 14 * i);
+      points.writeFloatLE(y * 227 / 226, 14 * i + 4);
     });
     const ligne = Buffer.concat([
       tag(1, 0x4), u32(outil), tag(2, 0x4), u32(0),
