@@ -1,7 +1,8 @@
 // ============================================================
 //  CONNECTEUR « PORTÉE REMARKABLE » — fonction Supabase (Deno)
 // ============================================================
-//  Un connecteur claude.ai que l'appli Portée appelle au clic :
+//  Un connecteur que l'appli Portée appelle au clic, depuis claude.ai
+//  ou directement depuis le site GitHub Pages (CORS, voir http.js) :
 //  « arborescence » puis « document ». Il lit le cloud reMarkable
 //  d'Adrien et n'y écrit jamais. « relier » sert une seule fois,
 //  quand Adrien tape dans l'appli le code à 8 lettres de
@@ -22,30 +23,21 @@
 //  clé anon de Supabase.
 // ============================================================
 import { coffreSupabase } from "./coffre.js";
-import { traiter } from "./mcp.js";
+import { ORIGINES, repondreHttp } from "./http.js";
 import { CloudRemarkable } from "./remarkable.js";
 
 const CLE = Deno.env.get("PORTEE_CLE") ?? "";
+// Origines supplémentaires autorisées à appeler depuis un navigateur
+// (séparées par des virgules), en plus du site GitHub Pages.
+const EN_PLUS = (Deno.env.get("PORTEE_ORIGINES") ?? "").split(",").map((o) => o.trim()).filter(Boolean);
 
 // Une instance chaude garde le jeton utilisateur et les métadonnées déjà lues.
 let cloud: CloudRemarkable | null = null;
 
-Deno.serve(async (req: Request) => {
-  const segments = new URL(req.url).pathname.split("/").filter(Boolean);
-  if (CLE.length < 24 || segments[segments.length - 1] !== CLE) {
-    return new Response("Introuvable", { status: 404 });
-  }
-  if (req.method !== "POST") {
-    return new Response("Ce connecteur ne répond qu'en POST.", { status: 405, headers: { allow: "POST" } });
-  }
-  let message: unknown;
-  try {
-    message = await req.json();
-  } catch {
-    return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON illisible" } }, { status: 400 });
-  }
-  cloud ??= new CloudRemarkable(coffreSupabase(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")));
-  const reponse = await traiter(message, cloud);
-  if (reponse === null) return new Response(null, { status: 202 });
-  return Response.json(reponse);
-});
+Deno.serve((req: Request) =>
+  repondreHttp(req, {
+    cle: CLE,
+    origines: [...ORIGINES, ...EN_PLUS],
+    cloud: () => (cloud ??= new CloudRemarkable(coffreSupabase(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")))),
+  })
+);

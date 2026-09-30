@@ -77,13 +77,23 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 .puce { border: 1px solid var(--trait-fort); background: transparent; border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 0.88rem; }
 .puce[aria-pressed="true"] { background: var(--encre); color: var(--feuille); border-color: var(--encre); }
 .grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
-.carte { border: 1px solid var(--trait); background: var(--feuille); border-radius: 10px; overflow: hidden; text-align: left; padding: 0; cursor: pointer; display: flex; flex-direction: column; }
-.carte:hover { border-color: var(--stylo); }
+.carte { border: 1px solid var(--trait); background: var(--feuille); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+.carte:hover, .carte:focus-within { border-color: var(--stylo); }
+.carte .ouvrir { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; display: flex; flex-direction: column; }
 .carte svg { width: 100%; height: 120px; display: block; background: var(--feuille); border-bottom: 1px solid var(--trait); }
-.carte .infos { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.carte .infos { padding: 10px 12px 4px; display: flex; flex-direction: column; gap: 6px; }
 .carte .titre { font-weight: 600; }
 .carte .meta { font-size: 0.8rem; color: var(--gris); font-variant-numeric: tabular-nums; }
 .carte .infos .pastille { align-self: flex-start; }
+.carte .actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 12px; }
+.modeles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.modele { border: 1px solid var(--trait); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--feuille); }
+.modele img { width: 100%; aspect-ratio: 3 / 4; object-fit: contain; background: #fff; border-radius: 6px; border: 1px solid var(--trait); }
+.modele .nom { font-weight: 600; }
+.pied-biblio { border-top: 1px solid var(--trait); padding-top: 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.etapes { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: etape; }
+.etapes li { border: 1px solid var(--trait); border-radius: 10px; padding: 14px; background: var(--papier); display: flex; flex-direction: column; gap: 8px; counter-increment: etape; }
+.etapes li::before { content: counter(etape); font-family: var(--f-titre); font-size: 1.5rem; color: var(--stylo); line-height: 1; }
 .arbre { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow: auto; }
 .arbre details > summary { cursor: pointer; padding: 5px 6px; border-radius: 6px; font-weight: 500; list-style: none; display: flex; align-items: center; gap: 8px; }
 .arbre details > summary::before { content: "▸"; color: var(--gris); width: 1em; }
@@ -98,8 +108,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 .aide-connecteur { border: 1px solid var(--surligneur); background: var(--surligneur-doux); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 0.92rem; }
 .aide-connecteur ol { margin: 0; padding-left: 1.2em; }
 .aide-connecteur p:empty { display: none; }
-.vide { border: 1px solid var(--trait); background: var(--feuille); border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 10px; max-width: 70ch; }
-.vide ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.vide { border: 1px solid var(--trait); background: var(--feuille); border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
 
 /* Page redessinée */
 svg .papier line { stroke: var(--trait-fort); stroke-width: 2; }
@@ -125,6 +134,17 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 .doute-item.leve { border-color: var(--ok); background: var(--ok-doux); }
 .pages-nav { display: flex; gap: 6px; align-items: center; }
 
+/* Corriger au toucher */
+.guide { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; border: 1px solid var(--stylo); background: var(--stylo-doux); border-radius: 10px; padding: 10px 14px; font-size: 0.92rem; }
+.outils-note { position: sticky; top: 58px; z-index: 3; background: var(--feuille); border: 1px solid var(--trait-fort); border-radius: 10px; padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.outils-note .groupe { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.outils-note .groupe + .groupe { border-left: 1px solid var(--trait); padding-left: 10px; }
+.outils-note .note-choisie { font-weight: 600; min-width: 12ch; }
+.outils-note button[aria-pressed="true"] { background: var(--encre); color: var(--feuille); border-color: var(--encre); }
+.gravure-edit svg { cursor: pointer; }
+.gravure-edit .abcjs-note:hover, .gravure-edit .abcjs-rest:hover { fill: var(--stylo); }
+kbd { font-family: var(--f-code); font-size: 0.78rem; border: 1px solid var(--trait-fort); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--feuille); }
+
 /* Lecteur */
 .transport { position: sticky; bottom: env(safe-area-inset-bottom, 0px); background: var(--feuille); border: 1px solid var(--trait-fort); border-radius: 12px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
 .transport label { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--gris); }
@@ -140,6 +160,14 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 @media (max-width: 820px) {
   .deux { grid-template-columns: 1fr; }
   .mode { margin-left: 0; width: 100%; }
+  .outils-note { top: 0; }
+  .outils-note .groupe + .groupe { border-left: 0; padding-left: 0; }
+}
+@media print {
+  body { background: #fff; }
+  .barre-haut, .transport, #vue-biblio, #vue-atelier, .exports, #toast, #meta-lecteur, .aide-export { display: none !important; }
+  main { padding: 0; }
+  #vue-lecteur .panneau { border: 0; padding: 0; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -152,10 +180,11 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
     </button>
     <div class="fil" id="fil" hidden><span aria-hidden="true">/</span><b id="fil-titre"></b></div>
     <div class="onglets" id="onglets" role="tablist" aria-label="Écrans de la partition" hidden>
-      <button role="tab" id="onglet-atelier" aria-selected="false">Atelier</button>
-      <button role="tab" id="onglet-lecteur" aria-selected="false">Lecteur</button>
+      <button role="tab" id="onglet-atelier" aria-selected="false">Corriger</button>
+      <button role="tab" id="onglet-lecteur" aria-selected="false">Écouter et exporter</button>
     </div>
     <span class="mode" id="mode">Ouverture de ta bibliothèque…</span>
+    <button class="btn btn-petit" id="installer" hidden>Installer l'appli</button>
   </div>
 </header>
 
@@ -175,18 +204,28 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
       </div>
     </div>
     <div class="depot" id="depot">
-      <p><strong>Ajoute une page écrite sur un modèle Portée.</strong> Va la chercher sur ta reMarkable, ou dépose ici son PDF (sur la tablette : <em>Partager → PDF</em>).</p>
       <div class="rangee">
-        <button class="btn btn-plein" id="ouvrir-remarkable">Parcourir ma reMarkable</button>
-        <label class="btn" for="fichier">Choisir des PDF</label>
+        <button class="btn btn-plein" id="ouvrir-remarkable">Importer de ma reMarkable</button>
+        <label class="btn" for="fichier">Importer un PDF</label>
+        <button class="btn" id="ouvrir-modeles">Modèles pour la tablette</button>
       </div>
+      <p class="remarque">Ou glisse ici le PDF d'une page écrite sur un modèle Portée (sur la tablette : <em>Partager → PDF</em>).</p>
       <input id="fichier" type="file" accept="application/pdf,.pdf" multiple hidden>
+    </div>
+    <div class="panneau" id="panneau-modeles" hidden>
+      <div class="rangee">
+        <h2 style="font-size:1.3rem">Modèles pour la tablette</h2>
+        <button class="btn btn-petit pousse" id="fermer-modeles">Fermer</button>
+      </div>
+      <p>Des portées placées au pixel près, pour que Portée sache où sont les lignes. Mets le PDF sur ta reMarkable (glisse-le sur <a href="https://my.remarkable.com" target="_blank" rel="noopener">my.remarkable.com</a> ou dans l'appli reMarkable de l'ordinateur). Ensuite, duplique-le pour chaque pièce et écris dessus.</p>
+      <div class="modeles" id="liste-modeles"></div>
     </div>
     <div class="panneau" id="panneau-remarkable" hidden>
       <div class="rangee">
         <h2 style="font-size:1.3rem">Ma reMarkable</h2>
         <input class="champ" id="recherche-rm" type="search" placeholder="Chercher un document…" aria-label="Chercher un document de la reMarkable" style="flex:0 1 260px">
         <button class="btn btn-petit" id="actualiser-rm">Actualiser</button>
+        <button class="btn btn-petit" id="changer-adresse" hidden>Changer l'adresse du connecteur</button>
         <button class="btn btn-petit pousse" id="fermer-rm">Fermer</button>
       </div>
       <div class="etat" id="etat-rm" role="status"></div>
@@ -194,15 +233,25 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
     </div>
     <div id="liste" class="grille" aria-live="polite"></div>
     <div id="vide" class="vide" hidden>
-      <h2>Ta bibliothèque est vide</h2>
-      <ol>
-        <li>Sur la tablette, duplique un modèle Portée et écris ta partition dessus.</li>
-        <li>Importe-la avec « Parcourir ma reMarkable », ou dépose son PDF ci-dessus.</li>
-        <li>Relis ce que Portée a compris dans l'atelier, puis écoute-la.</li>
+      <h2>Bienvenue dans Portée</h2>
+      <p>Tes partitions écrites à la main sur la reMarkable, lues, corrigées en quelques touches, jouées au piano et exportées en MIDI.</p>
+      <ol class="etapes">
+        <li><strong>Mets un modèle sur ta tablette</strong><span class="remarque">Des portées calibrées, pour une mélodie ou pour le piano.</span><button class="btn btn-petit" id="vide-modeles">Voir les modèles</button></li>
+        <li><strong>Écris ta pièce dessus</strong><span class="remarque">Duplique le modèle et donne à la copie le titre de la pièce.</span></li>
+        <li><strong>Importe-la ici</strong><span class="remarque">Depuis ta reMarkable, ou en déposant le PDF exporté.</span><button class="btn btn-petit btn-plein" id="vide-remarkable">Importer de ma reMarkable</button></li>
       </ol>
-      <div class="rangee"><button class="btn" id="exemples">Essayer avec tes pages d'essai du 30 septembre</button></div>
+      <div class="rangee"><button class="btn btn-petit" id="exemples">Essayer avec les pages d'essai</button></div>
     </div>
     <p class="remarque" id="aucun" hidden>Aucune partition ne correspond. Essaie un autre mot, ou le filtre « Toutes ».</p>
+    <div class="pied-biblio" id="pied-biblio">
+      <span class="remarque" id="mode-detail"></span>
+      <div class="rangee pousse">
+        <button class="btn btn-petit" id="tout-midi">Tout exporter en MIDI (.zip)</button>
+        <button class="btn btn-petit" id="sauvegarder">Sauvegarder ma bibliothèque</button>
+        <label class="btn btn-petit" for="restaurer">Restaurer une sauvegarde</label>
+        <input id="restaurer" type="file" accept="application/json,.json" hidden>
+      </div>
+    </div>
   </section>
 
   <!-- ===== Atelier ===== -->
@@ -217,38 +266,64 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
       <button class="btn btn-petit btn-danger" id="confirmer-oui">Supprimer</button>
       <button class="btn btn-petit" id="confirmer-non">Garder</button>
     </div>
+    <div class="guide" id="guide">
+      <span><strong>Touche une note</strong> de la partition pour la corriger, ou <strong>glisse-la</strong> vers le haut ou le bas.</span>
+      <span class="remarque">Au clavier : <kbd>↑</kbd> <kbd>↓</kbd> hauteur, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>.</kbd> point, <kbd>Suppr</kbd>, <kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler.</span>
+    </div>
     <div class="deux">
+      <div class="panneau">
+        <div class="surtitre">Ce que Portée a lu</div>
+        <div class="outils-note" id="outils-note">
+          <span class="note-choisie" id="note-choisie">Aucune note choisie</span>
+          <span class="groupe">
+            <button class="btn btn-petit" data-geste="haut" aria-label="Un degré plus haut">▲ Plus haut</button>
+            <button class="btn btn-petit" data-geste="bas" aria-label="Un degré plus bas">▼ Plus bas</button>
+          </span>
+          <span class="groupe" id="durees">
+            <button class="btn btn-petit" data-duree="0.5">double croche</button>
+            <button class="btn btn-petit" data-duree="1">croche</button>
+            <button class="btn btn-petit" data-duree="2">noire</button>
+            <button class="btn btn-petit" data-duree="4">blanche</button>
+            <button class="btn btn-petit" data-duree="8">ronde</button>
+            <button class="btn btn-petit" data-geste="point" aria-label="Note pointée">pointée</button>
+          </span>
+          <span class="groupe">
+            <button class="btn btn-petit" data-alteration="^" aria-label="Dièse">♯</button>
+            <button class="btn btn-petit" data-alteration="_" aria-label="Bémol">♭</button>
+            <button class="btn btn-petit" data-alteration="=" aria-label="Bécarre">♮</button>
+          </span>
+          <span class="groupe">
+            <button class="btn btn-petit" data-geste="silence" id="bouton-silence">en silence</button>
+            <button class="btn btn-petit" data-geste="dupliquer">+ une de plus</button>
+            <button class="btn btn-petit btn-danger" data-geste="supprimer">supprimer</button>
+          </span>
+        </div>
+        <div class="gravure gravure-edit" id="gravure-atelier"></div>
+        <p class="etat" id="etat-abc" role="status"></p>
+      </div>
       <div class="panneau">
         <div class="surtitre">Ta page <span class="pages-nav" id="pages-nav"></span></div>
         <svg class="page-svg" id="page" role="img" aria-label="Ta page manuscrite"></svg>
       </div>
-      <div class="panneau">
-        <div class="surtitre">Ce que Portée a lu</div>
-        <div class="gravure" id="gravure-atelier"></div>
+    </div>
+    <div class="panneau">
+      <div class="surtitre">À vérifier</div>
+      <div class="doutes" id="doutes"></div>
+      <div class="rangee">
+        <button class="btn" id="ecouter-atelier">▶ Écouter</button>
+        <button class="btn" id="annuler" disabled>↶ Annuler</button>
+        <span class="remarque" id="enregistre"></span>
+        <button class="btn btn-plein pousse" id="valider">C'est bon : écouter et exporter</button>
       </div>
     </div>
-    <div class="deux">
-      <div class="panneau">
-        <label class="surtitre" for="abc">Texte ABC : corrige-le, la partition suit</label>
-        <textarea class="abc" id="abc" spellcheck="false"></textarea>
-        <p class="etat" id="etat-abc" role="status"></p>
-        <div class="rangee">
-          <button class="btn btn-petit" id="relire">Revenir à la lecture de Portée</button>
-          <span class="remarque" id="enregistre"></span>
-        </div>
+    <details class="panneau">
+      <summary class="surtitre" style="cursor:pointer">Mode avancé : le texte ABC</summary>
+      <p class="remarque">La partition est écrite en ABC, une notation en texte. Tu n'as pas besoin d'y toucher : les boutons ci-dessus le réécrivent pour toi.</p>
+      <textarea class="abc" id="abc" spellcheck="false" aria-label="Texte ABC de la partition"></textarea>
+      <div class="rangee">
+        <button class="btn btn-petit" id="relire">Revenir à la lecture de Portée</button>
       </div>
-      <div class="panneau">
-        <div class="surtitre">À vérifier</div>
-        <div class="doutes" id="doutes"></div>
-        <div class="rangee">
-          <button class="btn" id="ecouter-atelier">▶ Écouter</button>
-          <button class="btn btn-plein" id="valider">Valider et ouvrir le lecteur</button>
-        </div>
-      </div>
-    </div>
-    <details class="remarque">
-      <summary>Écrire en ABC, l'essentiel</summary>
-      <p style="margin-top:8px">Une lettre = une note : <code>C D E F G A B</code> pour l'octave du do central, <code>c d e</code> une octave au-dessus, <code>C,</code> une octave en dessous. Le chiffre qui suit est la durée en croches : <code>C2</code> noire, <code>C</code> croche, <code>C/</code> double croche, <code>C3</code> noire pointée, <code>C4</code> blanche. <code>z</code> est un silence. <code>^C</code> dièse, <code>_B</code> bémol, <code>=F</code> bécarre. Des notes collées sont liées par une ligature. <code>|</code> barre de mesure, <code>|:</code> et <code>:|</code> reprises.</p>
+      <p class="remarque">Une lettre = une note : <code>C D E F G A B</code> pour l'octave du do central, <code>c d e</code> une octave au-dessus, <code>C,</code> une octave en dessous. Le chiffre qui suit est la durée en croches : <code>C2</code> noire, <code>C</code> croche, <code>C/</code> double croche, <code>C3</code> noire pointée, <code>C4</code> blanche. <code>z</code> est un silence. <code>^C</code> dièse, <code>_B</code> bémol, <code>=F</code> bécarre. Des notes collées sont liées par une ligature. <code>|</code> barre de mesure, <code>|:</code> et <code>:|</code> reprises.</p>
     </details>
   </section>
 
@@ -259,14 +334,15 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
         <h2 id="titre-lecteur" style="font-size:clamp(1.4rem,3vw,1.9rem)"></h2>
         <p class="remarque mono" id="meta-lecteur"></p>
       </div>
-      <div class="rangee pousse">
-        <button class="btn btn-petit" id="export-abc">Exporter l'ABC</button>
-        <button class="btn btn-petit" id="export-midi">Exporter le MIDI (.zip)</button>
+      <div class="rangee pousse exports">
+        <button class="btn btn-plein" id="export-midi">Télécharger le MIDI</button>
+        <button class="btn" id="imprimer">Imprimer ou PDF</button>
+        <button class="btn btn-petit" id="export-abc">Texte ABC</button>
       </div>
     </div>
     <div class="panneau"><div class="gravure" id="gravure-lecteur"></div></div>
     <div class="transport">
-      <button class="btn btn-plein" id="ecouter">▶ Écouter</button>
+      <button class="btn btn-plein" id="ecouter" title="Espace">▶ Écouter</button>
       <label for="tempo">Tempo <input type="range" id="tempo" min="30" max="200" value="90"><span class="val" id="tempo-val">♩ = 90</span></label>
       <span class="rangee" style="gap:6px"><span class="remarque">Transposer</span>
         <button class="btn btn-petit" id="transp-moins" aria-label="Un demi-ton plus bas">−</button>
@@ -278,6 +354,7 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
       </span>
       <span class="remarque" id="etat-son"></span>
     </div>
+    <p class="remarque aide-export">Le MIDI garde le tempo et la transposition choisis ici, avec une piste par main au piano : glisse-le dans Ableton, MuseScore ou GarageBand. <kbd>Espace</kbd> lance ou arrête l'écoute.</p>
   </section>
 </main>
 

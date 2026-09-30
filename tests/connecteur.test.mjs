@@ -127,3 +127,33 @@ test("un coffre refusé par Supabase donne une erreur d'outil, pas « non relié
     await stockage.fermer();
   }
 });
+
+test("HTTP : clé, CORS pour le site GitHub Pages seulement, préflight", async () => {
+  const { repondreHttp } = await import("../supabase/functions/portee-remarkable/http.js");
+  const cle = "k".repeat(32);
+  const cloud = () => new CloudRemarkable(coffreMemoire(null));
+  const appel = (chemin, { methode = "POST", origine, corps } = {}) => repondreHttp(new Request(`https://x.supabase.co/functions/v1/portee-remarkable/${chemin}`, {
+    method: methode,
+    headers: { "content-type": "application/json", ...(origine ? { origin: origine } : {}) },
+    body: corps ? JSON.stringify(corps) : undefined,
+  }), { cle, cloud });
+  const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+  // Mauvaise clé : 404, mais lisible par le site (pour dire « adresse incorrecte »).
+  const mauvaise = await appel("nimporte", { corps: ping, origine: "https://adrienvada.github.io" });
+  assert.equal(mauvaise.status, 404);
+  assert.equal(mauvaise.headers.get("access-control-allow-origin"), "https://adrienvada.github.io");
+  // Préflight du navigateur.
+  const pre = await appel(cle, { methode: "OPTIONS", origine: "https://adrienvada.github.io" });
+  assert.equal(pre.status, 204);
+  assert.match(pre.headers.get("access-control-allow-headers"), /content-type/);
+  // Appel du site : réponse et CORS.
+  const site = await appel(cle, { corps: ping, origine: "https://adrienvada.github.io" });
+  assert.equal(site.status, 200);
+  assert.deepEqual((await site.json()).result, {});
+  // Une autre origine n'a pas les en-têtes : le navigateur bloque la lecture.
+  const autre = await appel(cle, { corps: ping, origine: "https://ailleurs.example" });
+  assert.equal(autre.headers.get("access-control-allow-origin"), null);
+  // claude.ai (sans origine) : réponse normale ; GET refusé.
+  assert.equal((await appel(cle, { corps: ping })).status, 200);
+  assert.equal((await appel(cle, { methode: "GET" })).status, 405);
+});

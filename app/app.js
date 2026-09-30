@@ -1,17 +1,21 @@
 /**
  * PORTÉE — l'appli
  *
- * Trois écrans : la bibliothèque (tes partitions), l'atelier (ta page à
- * côté de ce que Portée a lu, pour corriger) et le lecteur (la partition
- * gravée, jouée au piano). Tout passe par le texte ABC de la partition :
- * le lecteur de traits l'écrit, tu le corriges, abcjs le grave et le joue.
+ * Trois écrans : la bibliothèque (tes partitions), « Corriger » (ta page à
+ * côté de ce que Portée a lu) et « Écouter et exporter » (la partition
+ * gravée, jouée au piano, exportée en MIDI). Tout passe par le texte ABC de
+ * la partition : le lecteur de traits l'écrit, abcjs le grave et le joue.
+ * Adrien ne l'écrit jamais lui-même : il touche une note et choisit un
+ * geste (plus haut, noire, dièse…), et edition.js réécrit l'ABC.
  */
 import { lireDocument } from "./lecteur/extraction.js";
 import { lirePartition } from "./lecteur/partition.js";
 import { dessinerPage } from "./manuscrit.js";
 import { Piano } from "./piano.js";
-import { decompacter, nouvelId, ouvrirStockage } from "./stockage.js";
+import { decompacter, nouvelId, ouvrirStockage, restaurer, sauvegarde } from "./stockage.js";
 import { zipper } from "./zip.js";
+import * as ed from "./edition.js";
+import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE } from "./connecteur.js";
 
 const VERSION_LECTEUR = 1;
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
@@ -19,8 +23,17 @@ const CONNECTEUR = "Portée reMarkable";
 const $ = (id) => document.getElementById(id);
 const ABCJS = () => window.ABCJS;
 // Pour la gravure seulement : la dernière ligne s'étire sur toute la largeur,
-// sinon une pièce d'une mesure s'affiche minuscule.
-const pourGravure = (abc) => "%%stretchlast 1\n" + abc;
+// sinon une pièce d'une mesure s'affiche minuscule. abcjs compte ses
+// positions (startChar) dans ce texte-là : on retranche le préfixe.
+const PREFIXE_GRAVURE = "%%stretchlast 1\n";
+const pourGravure = (abc) => PREFIXE_GRAVURE + abc;
+const dansClaude = () => !!(window.claude && typeof window.claude.use === "function");
+const MODELES = [
+  { id: "melodie-standard", nom: "Mélodie", detail: "7 portées, pour une ligne mélodique." },
+  { id: "melodie-large", nom: "Mélodie, large", detail: "5 portées aux interlignes plus grands." },
+  { id: "piano-standard", nom: "Piano", detail: "4 systèmes de deux portées, main droite et main gauche." },
+  { id: "piano-large", nom: "Piano, large", detail: "3 systèmes, plus de place pour écrire." },
+];
 
 const etat = {
   stockage: null,
@@ -32,6 +45,8 @@ const etat = {
   douteActif: -1,
   vue: "biblio",
   transposition: 0,
+  selection: null,    // début, dans l'ABC, de la note choisie dans « Corriger »
+  historique: [],     // les ABC d'avant chaque geste, pour « Annuler »
 };
 
 const piano = new Piano(new URL("./piano/", import.meta.url).href);
@@ -101,7 +116,9 @@ async function ouvrir(id, vue = "atelier") {
   etat.courante = p;
   etat.page = 0;
   etat.douteActif = -1;
-  etat.transposition = 0;
+  etat.transposition = p.transposition || 0;
+  etat.selection = null;
+  etat.historique = [];
   $("fil-titre").textContent = p.titre;
   etat.pages = await etat.stockage.pages(id, p.nbPages || 0).catch(() => []);
   montrer(vue);
@@ -119,14 +136,18 @@ function afficherBibliotheque() {
     (etat.filtre === "tout" || p.statut === etat.filtre) && (!q || (p.titre || "").toLowerCase().includes(q)));
   $("vide").hidden = etat.partitions.length > 0;
   $("aucun").hidden = !(etat.partitions.length > 0 && visibles.length === 0);
+  $("tout-midi").hidden = $("sauvegarder").hidden = etat.partitions.length === 0;
   for (const p of visibles) {
-    const carte = document.createElement("button");
+    const carte = document.createElement("article");
     carte.className = "carte";
-    carte.addEventListener("click", () => ouvrir(p.id, p.statut === "prete" ? "lecteur" : "atelier"));
+    const principal = document.createElement("button");
+    principal.className = "ouvrir";
+    principal.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
+    principal.addEventListener("click", () => ouvrir(p.id, p.statut === "prete" ? "lecteur" : "atelier"));
     const apercu = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     apercu.setAttribute("role", "img");
     apercu.setAttribute("aria-label", `Aperçu de ${p.titre}`);
-    carte.appendChild(apercu);
+    principal.appendChild(apercu);
     if (p.apercu && p.modele) {
       calibration(p.modele).then((cal) => dessinerPage(apercu, cal, p.apercu, { compact: true, limite: 9 * cal.interligne })).catch(() => {});
     }
@@ -137,8 +158,80 @@ function afficherBibliotheque() {
     const meta = document.createElement("span");
     meta.className = "meta"; meta.textContent = `${nomModele(p.modele)} · ${dateCourte(p.modifieLe)}`;
     infos.append(titre, meta, pastilleStatut(p));
-    carte.appendChild(infos);
+    principal.appendChild(infos);
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const bouton = (texte, f, plein = false) => {
+      const b = document.createElement("button");
+      b.className = "btn btn-petit" + (plein ? " btn-plein" : "");
+      b.textContent = texte;
+      b.addEventListener("click", f);
+      actions.appendChild(b);
+    };
+    bouton("Corriger", () => ouvrir(p.id, "atelier"), p.statut !== "prete");
+    bouton("Écouter", () => ouvrir(p.id, "lecteur"), p.statut === "prete");
+    bouton("MIDI", () => exporterMidi(p));
+    carte.append(principal, actions);
     liste.appendChild(carte);
+  }
+}
+
+// ------------------------------------------------------------------------
+// Modèles à mettre sur la tablette, sauvegarde de la bibliothèque
+// ------------------------------------------------------------------------
+
+function afficherModeles() {
+  $("panneau-modeles").hidden = false;
+  const zone = $("liste-modeles");
+  if (zone.childElementCount) return;
+  for (const m of MODELES) {
+    const bloc = document.createElement("div");
+    bloc.className = "modele";
+    const img = document.createElement("img");
+    img.src = new URL(`./modeles/apercu/${m.id}.svg`, import.meta.url).href;
+    img.alt = `Aperçu du modèle ${m.nom}`;
+    img.loading = "lazy";
+    const nom = document.createElement("span");
+    nom.className = "nom"; nom.textContent = m.nom;
+    const detail = document.createElement("span");
+    detail.className = "remarque"; detail.textContent = m.detail;
+    const b = document.createElement("button");
+    b.className = "btn btn-petit";
+    b.textContent = "Télécharger le PDF";
+    b.addEventListener("click", async () => {
+      try {
+        const r = await fetch(new URL(`./modeles/${m.id}.pdf`, import.meta.url));
+        await etat.stockage.enregistrerFichier(`Portée - ${m.nom}.pdf`, new Blob([await r.arrayBuffer()], { type: "application/pdf" }));
+      } catch (e) {
+        if (e && e.code === "declined") return;
+        toast("Le modèle n'a pas pu être téléchargé : " + (e.message || e.code || "erreur"));
+      }
+    });
+    bloc.append(img, nom, detail, b);
+    zone.appendChild(bloc);
+  }
+  $("panneau-modeles").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+async function sauvegarderBibliotheque() {
+  try {
+    const contenu = await sauvegarde(etat.stockage, etat.partitions);
+    const jour = new Date().toISOString().slice(0, 10);
+    await etat.stockage.enregistrerFichier(`Portée - sauvegarde ${jour}.json`, new Blob([JSON.stringify(contenu)], { type: "application/json" }));
+    toast(`${contenu.partitions.length} partition${contenu.partitions.length > 1 ? "s" : ""} sauvegardée${contenu.partitions.length > 1 ? "s" : ""}.`);
+  } catch (e) {
+    if (e && e.code === "declined") return;
+    toast("La sauvegarde n'a pas abouti : " + (e.message || e.code || "erreur"));
+  }
+}
+
+async function restaurerBibliotheque(fichier) {
+  try {
+    const contenu = JSON.parse(await fichier.text());
+    const { ajoutees, ignorees } = await restaurer(etat.stockage, contenu, new Set(etat.partitions.map((p) => p.id)));
+    toast(`${ajoutees} partition${ajoutees > 1 ? "s" : ""} ajoutée${ajoutees > 1 ? "s" : ""}` + (ignorees ? `, ${ignorees} déjà là.` : "."));
+  } catch (e) {
+    toast(e instanceof SyntaxError ? "Ce fichier n'est pas une sauvegarde de Portée." : (e.message || "La restauration n'a pas abouti."), 7000);
   }
 }
 
@@ -217,14 +310,19 @@ async function enregistrerLecture({ titre, modele, pages, source = null }) {
 // Ma reMarkable : parcourir la tablette et importer au clic
 // ------------------------------------------------------------------------
 //
-// La page ne peut joindre aucun serveur : elle passe par le connecteur
-// « Portée reMarkable » qu'Adrien a ajouté à claude.ai (voir
-// supabase/functions/portee-remarkable). Deux outils lisent la tablette,
-// « arborescence » et « document » ; « relier » sert une fois, avec le code
-// à 8 lettres de my.remarkable.com.
+// Sur claude.ai, la page ne peut joindre aucun serveur : elle passe par le
+// connecteur « Portée reMarkable » qu'Adrien a ajouté à claude.ai. Ailleurs
+// (GitHub Pages), elle appelle ce même connecteur directement, à l'adresse
+// qu'Adrien a collée une fois (connecteur.js). Deux outils lisent la
+// tablette, « arborescence » et « document » ; « relier » sert une fois,
+// avec le code à 8 lettres de my.remarkable.com.
 
 let mcpPromesse = null;
-const mcp = () => (mcpPromesse ??= (window.claude && window.claude.use ? window.claude.use("mcp").catch(() => null) : Promise.resolve(null)));
+const mcp = () => (mcpPromesse ??= (async () => {
+  if (dansClaude()) return window.claude.use("mcp").catch(() => null);
+  const adresse = adresseEnregistree();
+  return adresse ? connecteurDirect(adresse) : null;
+})());
 let noeudsRm = [];
 const ouverts = new Set();
 
@@ -247,7 +345,10 @@ function expliquerErreurRm(err) {
   const bloc = document.createElement("div");
   bloc.className = "aide-connecteur";
   const p = (t) => { const x = document.createElement("p"); x.textContent = t; bloc.appendChild(x); return x; };
-  if (code === "server_not_connected" || code === "server_not_found") {
+  if (code === "adresse_invalide") {
+    p("Cette adresse ne mène à aucun connecteur. Vérifie-la (elle finit par la clé), ou colle la nouvelle.");
+    bloc.appendChild(formulaireAdresse());
+  } else if (code === "server_not_connected" || code === "server_not_found") {
     p(`Le connecteur « ${CONNECTEUR} » n'est pas ajouté à ton compte claude.ai.`);
     p("Ajoute-le dans claude.ai → Paramètres → Connecteurs → Ajouter un connecteur personnalisé, avec exactement ce nom et l'adresse que Claude t'a donnée. Puis recharge cette page.");
   } else if (code === "needs_reauth") {
@@ -257,7 +358,7 @@ function expliquerErreurRm(err) {
   } else if (code === "selection_required") {
     p(`Plusieurs connecteurs s'appellent « ${CONNECTEUR} » : choisis le bon quand claude.ai te le demande, ou supprime le doublon.`);
   } else if (code === "server_unavailable" || code === "upstream_error") {
-    p("Le connecteur ne répond pas pour l'instant. Réessaie dans un moment.");
+    p("Le connecteur ne répond pas pour l'instant. Réessaie dans un moment : si ça dure, le projet Supabase s'est peut-être endormi (tableau de bord Supabase → relancer le projet).");
   } else if (code === "tool_error") {
     p(texteOutil(err) || "La reMarkable a refusé la demande.");
   } else if (code === "blocked_by_policy" || code === "approval_required") {
@@ -275,7 +376,13 @@ async function ouvrirRemarkable(rafraichir = false) {
   if (!m) {
     const bloc = document.createElement("div");
     bloc.className = "aide-connecteur";
-    bloc.textContent = "Ouvre Portée depuis claude.ai pour parcourir ta reMarkable : c'est là que vit son connecteur.";
+    if (dansClaude()) {
+      bloc.textContent = "La page n'a pas accès aux connecteurs de claude.ai : recharge-la et autorise « Portée reMarkable ».";
+    } else {
+      const p = document.createElement("p");
+      p.textContent = "Pour parcourir ta reMarkable depuis ce site, colle une fois l'adresse de ton connecteur « Portée reMarkable » (la même que dans claude.ai). Elle reste dans ce navigateur, nulle part ailleurs.";
+      bloc.append(p, formulaireAdresse());
+    }
     etatRm("", bloc);
     return;
   }
@@ -289,6 +396,13 @@ async function ouvrirRemarkable(rafraichir = false) {
   }
 }
 
+function oublierAdresse() {
+  enregistrerAdresse("");
+  mcpPromesse = null;
+  $("changer-adresse").hidden = true;
+  ouvrirRemarkable(false);
+}
+
 function recevoirArbre(reponse) {
   if (reponse && reponse.connectee === false) {
     noeudsRm = [];
@@ -300,6 +414,33 @@ function recevoirArbre(reponse) {
   const n = noeudsRm.filter((x) => x.type === "document").length;
   etatRm(n === 1 ? "1 document sur ta reMarkable." : `${n} documents sur ta reMarkable.`);
   dessinerArbre();
+}
+
+/** L'adresse du connecteur, pour appeler la tablette hors de claude.ai. */
+function formulaireAdresse() {
+  const form = document.createElement("form");
+  form.className = "rangee";
+  const champ = document.createElement("input");
+  Object.assign(champ, { className: "champ", type: "url", placeholder: "https://….supabase.co/functions/v1/portee-remarkable/…", autocomplete: "off", spellcheck: false, value: adresseEnregistree() });
+  champ.setAttribute("aria-label", "Adresse du connecteur Portée reMarkable");
+  const bouton = document.createElement("button");
+  bouton.className = "btn btn-plein"; bouton.type = "submit"; bouton.textContent = "Enregistrer";
+  const retour = document.createElement("p");
+  retour.className = "remarque"; retour.setAttribute("role", "alert");
+  form.append(champ, bouton, retour);
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const adresse = champ.value.trim();
+    if (!FORME_ADRESSE.test(adresse)) {
+      retour.textContent = "L'adresse ressemble à https://<projet>.supabase.co/functions/v1/portee-remarkable/<clé>.";
+      return;
+    }
+    enregistrerAdresse(adresse);
+    mcpPromesse = null;
+    $("changer-adresse").hidden = false;
+    ouvrirRemarkable(true);
+  });
+  return form;
 }
 
 /** Relier la tablette, une fois pour toutes : le code à 8 lettres de my.remarkable.com. */
@@ -478,8 +619,10 @@ async function afficherAtelier() {
   $("confirmer").hidden = true;
   $("statut-atelier").replaceChildren(pastilleStatut(p));
   $("enregistre").textContent = "";
+  $("annuler").disabled = etat.historique.length === 0;
   await dessinerManuscrit();
   graverAtelier();
+  majOutils();
   afficherDoutes();
 }
 
@@ -504,23 +647,168 @@ async function dessinerManuscrit() {
   });
 }
 
+const couleur = (nom, secours) => getComputedStyle(document.documentElement).getPropertyValue(nom).trim() || secours;
+
 function graverAtelier() {
   const lib = ABCJS();
   const zone = $("gravure-atelier");
   if (!lib) { zone.textContent = "La gravure n'a pas pu se charger (connexion ?)."; return; }
   const abc = $("abc").value;
-  const [objet] = lib.renderAbc(zone, pourGravure(abc), { responsive: "resize", add_classes: true, paddingtop: 0, paddingleft: 0, paddingright: 0 });
+  const [objet] = lib.renderAbc(zone, pourGravure(abc), {
+    responsive: "resize", add_classes: true, paddingtop: 0, paddingleft: 0, paddingright: 0,
+    // Toucher une note la choisit ; la glisser change sa hauteur.
+    clickListener: surClicNote, dragging: true, selectTypes: ["note"],
+    selectionColor: couleur("--stylo", "#2B48B0"), dragColor: couleur("--stylo", "#2B48B0"),
+  });
   objetAtelier = objet;
+  surligner();
+  // Un ABC que abcjs ne comprend pas (tapé à la main) : on le dit, sans jargon.
   const e = $("etat-abc");
   e.textContent = "";
   const avert = (objet && objet.warnings) || [];
-  const pastille = document.createElement("span");
   if (avert.length) {
-    pastille.className = "pastille p-doute"; pastille.textContent = "ABC à corriger";
+    const pastille = document.createElement("span");
+    pastille.className = "pastille p-doute"; pastille.textContent = "Texte ABC à revoir";
     e.append(pastille, " " + avert[0].replace(/<[^>]+>/g, ""));
-  } else {
-    pastille.className = "pastille p-ok"; pastille.textContent = "ABC valide";
-    e.append(pastille);
+  }
+}
+
+// ------------------------------------------------------------------------
+// Corriger au toucher
+// ------------------------------------------------------------------------
+
+const abcCourant = () => $("abc").value;
+const jetonChoisi = () => (etat.selection === null ? null : ed.lireJeton(abcCourant(), etat.selection));
+let derniereNote = { alteration: "", lettre: "C", octave: 5 };
+
+function surClicNote(abcelem, _numero, _classes, _analyse, glisse) {
+  if (!abcelem || abcelem.el_type !== "note") return;
+  const debut = abcelem.startChar - PREFIXE_GRAVURE.length;
+  const j = ed.lireJeton(abcCourant(), debut);
+  if (!j) return;
+  // abcjs compte les degrés vers le bas : un glissé vers le haut est négatif.
+  if (glisse && glisse.step) { appliquer(ed.deplacer(abcCourant(), j, -glisse.step), { entendre: true }); return; }
+  etat.selection = debut;
+  majOutils();
+  entendre(j);
+}
+
+/** Surligne la note choisie après chaque nouvelle gravure. */
+function surligner() {
+  const j = jetonChoisi();
+  if (!j || !objetAtelier || !objetAtelier.engraver) return;
+  try { objetAtelier.engraver.rangeHighlight(j.debut + PREFIXE_GRAVURE.length, j.fin + PREFIXE_GRAVURE.length); } catch { /* gravure en cours */ }
+}
+
+function majOutils() {
+  const j = jetonChoisi();
+  const barre = $("outils-note");
+  barre.querySelectorAll("button").forEach((b) => { b.disabled = !j; b.setAttribute("aria-pressed", "false"); });
+  if (!j) { $("note-choisie").textContent = "Aucune note choisie : touche une note de la partition."; return; }
+  if (j.notes.length) derniereNote = { ...j.notes[0], alteration: "" };
+  $("note-choisie").textContent = ed.decrire(j);
+  const base = ed.estPointee(j.croches) ? j.croches / 1.5 : j.croches;
+  barre.querySelectorAll("[data-duree]").forEach((b) => b.setAttribute("aria-pressed", String(Math.abs(Number(b.dataset.duree) - base) < 1e-9)));
+  barre.querySelector('[data-geste="point"]').setAttribute("aria-pressed", String(ed.estPointee(j.croches)));
+  barre.querySelectorAll("[data-alteration]").forEach((b) => {
+    b.disabled = j.type === "silence";
+    b.setAttribute("aria-pressed", String(j.notes.length > 0 && j.notes.every((n) => n.alteration === b.dataset.alteration)));
+  });
+  barre.querySelectorAll('[data-geste="haut"], [data-geste="bas"]').forEach((b) => { b.disabled = j.type === "silence"; });
+  $("bouton-silence").textContent = j.type === "silence" ? "en note" : "en silence";
+}
+
+/** Fait entendre la note choisie (ou l'accord), brièvement. */
+function entendre(j) {
+  if (!j || j.type === "silence") return;
+  const hauteurs = ed.hauteursMidi(j, ed.armureA(abcCourant(), j.debut));
+  piano.pret().then(() => hauteurs.forEach((h) => piano.note(h, 0.7, 80))).catch(() => {});
+}
+
+/** Applique un geste : mémorise l'état d'avant, regrave, enregistre. */
+function appliquer(res, { entendre: jouer = false } = {}) {
+  if (!res) return;
+  arreterLecture();
+  memoriser(abcCourant());
+  $("abc").value = res.abc;
+  etat.selection = res.fin > res.debut ? res.debut : prochaineNote(res.abc, res.debut);
+  graverAtelier();
+  majOutils();
+  planifierSauvegarde();
+  if (jouer) entendre(jetonChoisi());
+}
+
+function memoriser(abc) {
+  etat.historique.push(abc);
+  if (etat.historique.length > 200) etat.historique.shift();
+  $("annuler").disabled = false;
+}
+
+function annuler() {
+  const avant = etat.historique.pop();
+  if (avant === undefined) return;
+  arreterLecture();
+  $("abc").value = avant;
+  if (etat.selection !== null && !ed.lireJeton(avant, etat.selection)) etat.selection = null;
+  $("annuler").disabled = etat.historique.length === 0;
+  graverAtelier();
+  majOutils();
+  planifierSauvegarde();
+}
+
+function planifierSauvegarde() {
+  clearTimeout(minuterieSauvegarde);
+  $("enregistre").textContent = "…";
+  minuterieSauvegarde = setTimeout(() => sauver({ abc: abcCourant() }), 800);
+}
+
+/** Les débuts de toutes les notes et silences, dans l'ordre (d'après abcjs). */
+function positionsNotes() {
+  const positions = new Set();
+  for (const ligne of (objetAtelier && objetAtelier.lines) || []) {
+    for (const portee of ligne.staff || []) {
+      for (const voix of portee.voices || []) {
+        for (const el of voix) if (el.el_type === "note" && !el.rest?.type?.startsWith("invisible")) positions.add(el.startChar - PREFIXE_GRAVURE.length);
+      }
+    }
+  }
+  return [...positions].sort((a, b) => a - b);
+}
+
+function prochaineNote(abc, depuis) {
+  const suivante = positionsNotes().find((p) => p >= depuis && ed.lireJeton(abc, p));
+  if (suivante !== undefined) return suivante;
+  let pos = depuis;
+  while (pos < abc.length && !ed.lireJeton(abc, pos)) pos++;
+  return pos < abc.length ? pos : null;
+}
+
+function choisirVoisine(sens) {
+  const liste = positionsNotes();
+  if (!liste.length) return;
+  let i = etat.selection === null ? (sens > 0 ? 0 : liste.length - 1) : liste.findIndex((p) => p === etat.selection) + sens;
+  i = Math.max(0, Math.min(liste.length - 1, i));
+  etat.selection = liste[i];
+  surligner();
+  majOutils();
+  entendre(jetonChoisi());
+}
+
+/** Un geste de la barre d'outils ou du clavier. */
+function geste(nom, valeur) {
+  const j = jetonChoisi();
+  if (!j) { toast("Touche d'abord une note de la partition."); return; }
+  const abc = abcCourant();
+  switch (nom) {
+    case "haut": return appliquer(ed.deplacer(abc, j, valeur || 1), { entendre: true });
+    case "bas": return appliquer(ed.deplacer(abc, j, -(valeur || 1)), { entendre: true });
+    case "duree": return appliquer(ed.changerDuree(abc, j, valeur));
+    case "point": return appliquer(ed.basculerPoint(abc, j));
+    case "alteration": return appliquer(ed.alterer(abc, j, valeur), { entendre: true });
+    case "silence": return appliquer(ed.basculerSilence(abc, j, derniereNote), { entendre: true });
+    case "dupliquer": return appliquer(ed.dupliquer(abc, j), { entendre: true });
+    case "supprimer": return appliquer(ed.supprimer(abc, j));
+    default: return undefined;
   }
 }
 
@@ -566,6 +854,7 @@ async function leverDoute(i, leve) {
 }
 
 async function sauver(patch) {
+  if (!etat.courante) return;
   const p = etat.courante;
   const complet = { ...patch, modifieLe: new Date().toISOString() };
   Object.assign(p, complet);
@@ -658,7 +947,7 @@ function afficherLecteur() {
   $("meta-lecteur").textContent = `tonalité ${k} · mesure ${m} · ${nomModele(p.modele)}`;
   $("mains").hidden = !/^\[V:2\]/m.test(p.abc);
   graverLecteur();
-  const q = tempoInitial(objetLecteur);
+  const q = p.tempo || tempoInitial(objetLecteur);
   $("tempo").value = q;
   $("tempo-val").textContent = `♩ = ${q}`;
 }
@@ -671,20 +960,55 @@ function graverLecteur() {
   $("transp-val").textContent = (etat.transposition > 0 ? "+" : "") + etat.transposition;
 }
 
-async function exporter(type) {
-  const p = etat.courante;
-  const base = p.titre.replace(/[\\/:*?"<>|]+/g, " ").trim() || "partition";
+const nomDeFichier = (p) => (p.titre || "").replace(/[\\/:*?"<>|]+/g, " ").trim() || "partition";
+
+/** Le MIDI d'une partition : une piste par voix (par main au piano), tempo et transposition compris. */
+function midiDe(abc, { tempo, transposition = 0 } = {}) {
+  const options = { midiOutputType: "binary", midiTranspose: transposition };
+  if (tempo) options.qpm = tempo; // sinon, le tempo écrit dans l'ABC (Q:)
+  const [binaire] = ABCJS().synth.getMidiFile(abc, options);
+  return binaire instanceof Uint8Array ? binaire : new Uint8Array(binaire);
+}
+
+/** Télécharge le .mid (dans un .zip sur claude.ai, dont la liste des formats ignore .mid). */
+async function exporterMidi(p, reglages = {}) {
+  if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
+  const base = nomDeFichier(p);
   try {
-    if (type === "abc") {
-      await etat.stockage.enregistrerFichier(`${base}.txt`, p.abc);
-    } else {
-      const [binaire] = ABCJS().synth.getMidiFile(p.abc, { midiOutputType: "binary", qpm: Number($("tempo").value), midiTranspose: etat.transposition });
-      const octets = binaire instanceof Uint8Array ? binaire : new Uint8Array(binaire);
-      await etat.stockage.enregistrerFichier(`${base} (MIDI).zip`, zipper([{ nom: `${base}.mid`, donnees: octets }]));
-    }
+    const octets = midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0 });
+    if (etat.stockage.midiDirect) await etat.stockage.enregistrerFichier(`${base}.mid`, new Blob([octets], { type: "audio/midi" }));
+    else await etat.stockage.enregistrerFichier(`${base} (MIDI).zip`, zipper([{ nom: `${base}.mid`, donnees: octets }]));
   } catch (e) {
     if (e && e.code === "declined") return;
     console.error(e);
+    toast("L'export MIDI n'a pas abouti : " + (e.message || e.code || "erreur"));
+  }
+}
+
+/** Toutes les partitions en MIDI, dans un seul .zip. */
+async function toutEnMidi() {
+  if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
+  const pris = new Set();
+  const fichiers = etat.partitions.map((p) => {
+    let nom = nomDeFichier(p), n = 2;
+    while (pris.has(nom)) nom = `${nomDeFichier(p)} (${n++})`;
+    pris.add(nom);
+    return { nom: `${nom}.mid`, donnees: midiDe(p.abc, { tempo: p.tempo, transposition: p.transposition || 0 }) };
+  });
+  try {
+    await etat.stockage.enregistrerFichier("Portée - MIDI.zip", zipper(fichiers));
+  } catch (e) {
+    if (e && e.code === "declined") return;
+    toast("L'export n'a pas abouti : " + (e.message || e.code || "erreur"));
+  }
+}
+
+async function exporterAbc() {
+  const p = etat.courante;
+  try {
+    await etat.stockage.enregistrerFichier(`${nomDeFichier(p)}.txt`, p.abc);
+  } catch (e) {
+    if (e && e.code === "declined") return;
     toast("L'export n'a pas abouti : " + (e.message || e.code || "erreur"));
   }
 }
@@ -718,8 +1042,16 @@ function brancher() {
     importer(fichiers);
   });
 
-  // Ma reMarkable
+  // Ma reMarkable, modèles, bibliothèque
   $("ouvrir-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
+  $("vide-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
+  $("ouvrir-modeles").addEventListener("click", afficherModeles);
+  $("vide-modeles").addEventListener("click", afficherModeles);
+  $("fermer-modeles").addEventListener("click", () => { $("panneau-modeles").hidden = true; });
+  $("changer-adresse").addEventListener("click", oublierAdresse);
+  $("tout-midi").addEventListener("click", toutEnMidi);
+  $("sauvegarder").addEventListener("click", sauvegarderBibliotheque);
+  $("restaurer").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) restaurerBibliotheque(f); });
   $("actualiser-rm").addEventListener("click", () => ouvrirRemarkable(true));
   $("fermer-rm").addEventListener("click", () => { $("panneau-remarkable").hidden = true; });
   $("recherche-rm").addEventListener("input", dessinerArbre);
@@ -738,18 +1070,33 @@ function brancher() {
     $("fil-titre").textContent = t;
     sauver({ titre: t });
   });
+  // Saisie à la main (mode avancé) : un seul « Annuler » par salve de frappe.
+  let avantSaisie = null;
+  $("abc").addEventListener("focus", () => { avantSaisie = $("abc").value; });
   $("abc").addEventListener("input", () => {
     arreterLecture();
+    if (avantSaisie !== null) { memoriser(avantSaisie); avantSaisie = null; }
+    etat.selection = null;
     clearTimeout(minuterieGravure);
-    minuterieGravure = setTimeout(graverAtelier, 250);
-    clearTimeout(minuterieSauvegarde);
-    $("enregistre").textContent = "…";
-    minuterieSauvegarde = setTimeout(() => sauver({ abc: $("abc").value }), 1200);
+    minuterieGravure = setTimeout(() => { graverAtelier(); majOutils(); }, 250);
+    planifierSauvegarde();
   });
+  $("abc").addEventListener("blur", () => { avantSaisie = null; });
   $("relire").addEventListener("click", () => {
+    memoriser(abcCourant());
     $("abc").value = etat.courante.abcLu;
+    etat.selection = null;
     graverAtelier();
+    majOutils();
     sauver({ abc: etat.courante.abcLu });
+  });
+  $("annuler").addEventListener("click", annuler);
+  $("outils-note").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b || b.disabled) return;
+    if (b.dataset.duree) geste("duree", Number(b.dataset.duree));
+    else if (b.dataset.alteration) geste("alteration", b.dataset.alteration);
+    else geste(b.dataset.geste);
   });
   $("page").addEventListener("click", (e) => {
     const r = e.target.closest("[data-doute]");
@@ -765,6 +1112,7 @@ function brancher() {
     await sauver({ abc: $("abc").value, statut: "prete" });
     montrer("lecteur");
   });
+  document.addEventListener("keydown", clavier);
   $("supprimer").addEventListener("click", () => { $("confirmer").hidden = false; });
   $("confirmer-non").addEventListener("click", () => { $("confirmer").hidden = true; });
   $("confirmer-oui").addEventListener("click", async () => {
@@ -781,23 +1129,88 @@ function brancher() {
     objet: objetLecteur, abc: etat.courante.abc, zone: $("gravure-lecteur"), bouton: $("ecouter"),
     qpm: Number($("tempo").value), transposition: etat.transposition, voixMuettes: voixMuettes(),
   }));
-  $("tempo").addEventListener("input", () => { $("tempo-val").textContent = `♩ = ${$("tempo").value}`; arreterLecture(); });
-  const transposer = (d) => { etat.transposition = Math.max(-12, Math.min(12, etat.transposition + d)); arreterLecture(); graverLecteur(); };
+  let minuterieTempo = null;
+  $("tempo").addEventListener("input", () => {
+    $("tempo-val").textContent = `♩ = ${$("tempo").value}`;
+    arreterLecture();
+    clearTimeout(minuterieTempo);
+    minuterieTempo = setTimeout(() => sauver({ tempo: Number($("tempo").value) }), 600);
+  });
+  const transposer = (d) => {
+    etat.transposition = Math.max(-12, Math.min(12, etat.transposition + d));
+    arreterLecture();
+    graverLecteur();
+    sauver({ transposition: etat.transposition });
+  };
   $("transp-moins").addEventListener("click", () => transposer(-1));
   $("transp-plus").addEventListener("click", () => transposer(1));
   $("main-droite").addEventListener("change", arreterLecture);
   $("main-gauche").addEventListener("change", arreterLecture);
-  $("export-abc").addEventListener("click", () => exporter("abc"));
-  $("export-midi").addEventListener("click", () => exporter("midi"));
+  $("export-abc").addEventListener("click", exporterAbc);
+  $("export-midi").addEventListener("click", () => exporterMidi(etat.courante, { tempo: Number($("tempo").value), transposition: etat.transposition }));
+  $("imprimer").addEventListener("click", () => window.print());
+
+  // Appli installable (hors claude.ai) : le navigateur propose, on montre le bouton.
+  let invitation = null;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); invitation = e; $("installer").hidden = false; });
+  $("installer").addEventListener("click", async () => {
+    if (!invitation) return;
+    invitation.prompt();
+    await invitation.userChoice.catch(() => null);
+    invitation = null;
+    $("installer").hidden = true;
+  });
+}
+
+/** Raccourcis : Espace pour écouter ; dans « Corriger », les gestes sur la note choisie. */
+function clavier(e) {
+  const cible = e.target;
+  if (cible.closest && cible.closest("input, textarea, select, [contenteditable]")) return;
+  if (e.key === " " && etat.vue === "lecteur" && !cible.closest("button")) {
+    e.preventDefault();
+    $("ecouter").click();
+    return;
+  }
+  if (etat.vue !== "atelier") return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); annuler(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const durees = { 1: 0.5, 2: 1, 3: 2, 4: 4, 5: 8 };
+  const actions = {
+    ArrowUp: () => geste("haut", e.shiftKey ? 7 : 1),
+    ArrowDown: () => geste("bas", e.shiftKey ? 7 : 1),
+    ArrowLeft: () => choisirVoisine(-1),
+    ArrowRight: () => choisirVoisine(1),
+    ".": () => geste("point"),
+    "#": () => geste("alteration", "^"),
+    b: () => geste("alteration", "_"),
+    n: () => geste("alteration", "="),
+    z: () => geste("silence"),
+    "+": () => geste("dupliquer"),
+    Delete: () => geste("supprimer"),
+    Backspace: () => geste("supprimer"),
+    Escape: () => { etat.selection = null; graverAtelier(); majOutils(); },
+  };
+  if (durees[e.key]) { e.preventDefault(); geste("duree", durees[e.key]); return; }
+  if (actions[e.key] && (etat.selection !== null || e.key.startsWith("Arrow"))) {
+    e.preventDefault();
+    actions[e.key]();
+  }
 }
 
 async function demarrer() {
   brancher();
   afficherBibliotheque();
   etat.stockage = await ouvrirStockage();
-  $("mode").textContent = etat.stockage.mode === "claude"
-    ? "Enregistré sur claude.ai : tes partitions te suivent sur tes appareils"
-    : "Mode local : tes partitions restent dans ce navigateur";
+  const surClaude = etat.stockage.mode === "claude";
+  $("mode").textContent = surClaude ? "Enregistré sur claude.ai" : "Enregistré dans ce navigateur";
+  $("mode-detail").textContent = surClaude
+    ? "Tes partitions sont enregistrées sur claude.ai : elles te suivent sur tous tes appareils."
+    : "Tes partitions restent dans ce navigateur. Sauvegarde-les de temps en temps : c'est un simple fichier, qu'on restaure ailleurs.";
+  $("changer-adresse").hidden = dansClaude() || !adresseEnregistree();
+  // Hors ligne et installable, hors de claude.ai (sw.js n'existe que sur le site).
+  if (!dansClaude() && "serviceWorker" in navigator && location.protocol === "https:") {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
   etat.stockage.ecouter(
     (liste) => {
       etat.partitions = liste;
