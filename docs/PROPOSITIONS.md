@@ -99,6 +99,27 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
   coup. Tempo et transposition sont gardés avec la partition et repris par le
   MIDI.
 
+- **30/09 (nuit) · Bibliothèque synchronisée entre les appareils (site).**
+  Choisie par Adrien parmi les suggestions.
+  - Chaque appareil garde toute la bibliothèque dans son navigateur, hors
+    ligne compris, et note ce qu'il change dans une file d'envois
+    (IndexedDB v2).
+  - La référence commune vit dans le compartiment privé
+    `portee-remarkable` du stockage Supabase : `bibliotheque/<id>.json` et
+    `pages/<id>.json`. Pas de table dans la base du site, pas de compte à
+    créer.
+  - Le connecteur la tient avec trois outils : `bibliotheque_changements`,
+    `bibliotheque_pages` et `bibliotheque_ecrire`. L'adresse à coller sur
+    chaque appareil est donc la même que pour la reMarkable.
+  - Le plus récent gagne (`modifieLe`). Une suppression voyage comme une
+    « pierre tombale ». Le curseur « depuis » suit l'horloge du stockage, pas
+    celle des appareils.
+  - Pourquoi pas Supabase Auth et une table avec RLS : cela voulait dire un
+    compte, une migration dans la base du site et une clé anon dans le site
+    public, pour un seul utilisateur.
+  - La version claude.ai garde sa propre base. On passe de l'une à l'autre
+    par « Sauvegarder » puis « Restaurer ».
+
 ## Ce que les pages d'essai ont appris
 
 - **L'export PDF de la tablette garde les traits en vecteurs.** Chaque trait
@@ -249,7 +270,9 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
    l'étape 1.
 7. **Site GitHub Pages** : *fait*. Installable (manifeste, icônes), hors ligne
    (service worker), bibliothèque IndexedDB, sauvegarde et restauration,
-   modèles téléchargeables, accueil en trois étapes.
+   modèles téléchargeables, accueil en trois étapes. **Bibliothèque
+   synchronisée** entre les appareils : *fait et testé* (Node : deux
+   appareils, conflits, hors ligne ; Chromium : ordinateur et téléphone).
 8. *(option)* Second avis JAZZMUS. 9. *(option)* MusicXML.
    10. *(option)* Passerelle Ableton : le MIDI (une piste par main) y va déjà en un glisser.
 
@@ -309,6 +332,15 @@ ou supprimer la fonction dans Supabase.
   se note au déploiement. Perdue : `npm run connecteur -- <ref> --nouvelle-cle`,
   puis changer l'URL dans claude.ai.
 - **Code à 8 lettres** : il expire en quelques minutes et ne sert qu'une fois.
+- **Synchronisation et horloges** : un appareil dont l'horloge retarde
+  pourrait écrire un `modifieLe` plus ancien que la version qu'il vient de
+  recevoir, et la bibliothèque commune refuserait sa correction.
+  `stockage.modifier` rend donc chaque `modifieLe` strictement plus récent que
+  le précédent. Un envoi refusé applique aussitôt la version gagnante.
+- **IndexedDB `portee`, version 2** : magasins `partitions`, `pages`, `envois`
+  (file à synchroniser) et `meta` (curseur, adresse, « rejoint »). Changer
+  l'adresse du connecteur remet le curseur à zéro : une autre adresse, c'est
+  une autre bibliothèque commune.
 - **Préflight CORS** : la fonction y répond 204 même avec une mauvaise clé.
   Sinon, le navigateur bloque tout, et le site ne peut pas distinguer
   « adresse incorrecte » de « connecteur injoignable ».

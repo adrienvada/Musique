@@ -91,6 +91,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 .modele img { width: 100%; aspect-ratio: 3 / 4; object-fit: contain; background: #fff; border-radius: 6px; border: 1px solid var(--trait); }
 .modele .nom { font-weight: 600; }
 .pied-biblio { border-top: 1px solid var(--trait); padding-top: 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.pied-biblio .aide-connecteur { flex: 1 1 100%; }
 .etapes { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: etape; }
 .etapes li { border: 1px solid var(--trait); border-radius: 10px; padding: 14px; background: var(--papier); display: flex; flex-direction: column; gap: 8px; counter-increment: etape; }
 .etapes li::before { content: counter(etape); font-family: var(--f-titre); font-size: 1.5rem; color: var(--stylo); line-height: 1; }
@@ -246,6 +247,8 @@ kbd { font-family: var(--f-code); font-size: 0.78rem; border: 1px solid var(--tr
     <div class="pied-biblio" id="pied-biblio">
       <span class="remarque" id="mode-detail"></span>
       <div class="rangee pousse">
+        <button class="btn btn-petit btn-plein" id="activer-synchro" hidden>Synchroniser mes appareils</button>
+        <button class="btn btn-petit" id="synchroniser" hidden>Synchroniser maintenant</button>
         <button class="btn btn-petit" id="tout-midi">Tout exporter en MIDI (.zip)</button>
         <button class="btn btn-petit" id="sauvegarder">Sauvegarder ma bibliothèque</button>
         <label class="btn btn-petit" for="restaurer">Restaurer une sauvegarde</label>

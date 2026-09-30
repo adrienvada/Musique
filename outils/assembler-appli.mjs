@@ -29,7 +29,7 @@ const copier = (src, dst) => {
 };
 
 const fichiers = [];
-for (const f of ["app.js", "stockage.js", "piano.js", "zip.js", "manuscrit.js", "edition.js", "connecteur.js"]) fichiers.push(copier(`app/${f}`, f));
+for (const f of ["app.js", "stockage.js", "piano.js", "zip.js", "manuscrit.js", "edition.js", "connecteur.js", "synchro.js"]) fichiers.push(copier(`app/${f}`, f));
 for (const f of fs.readdirSync(path.join(racine, "lecteur"))) fichiers.push(copier(`lecteur/${f}`, `lecteur/${f}`));
 for (const f of fs.readdirSync(path.join(racine, "modeles")).filter((f) => /\.(json|pdf)$/.test(f))) fichiers.push(copier(`modeles/${f}`, `modeles/${f}`));
 for (const f of fs.readdirSync(path.join(racine, "modeles/apercu")).filter((f) => f.endsWith(".svg"))) fichiers.push(copier(`modeles/apercu/${f}`, `modeles/apercu/${f}`));

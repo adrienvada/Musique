@@ -30,10 +30,11 @@ function entetesCors(req, origines) {
 
 /**
  * @param {Request} req
- * @param {{ cle: string, cloud: () => object, origines?: string[] }} options
- *   `cloud` est appelé seulement quand il faut répondre (création paresseuse).
+ * @param {{ cle: string, cloud: () => object, bibliotheque?: () => object, origines?: string[] }} options
+ *   `cloud` et `bibliotheque` ne sont appelés que quand il faut répondre
+ *   (création paresseuse).
  */
-export async function repondreHttp(req, { cle, cloud, origines = ORIGINES }) {
+export async function repondreHttp(req, { cle, cloud, bibliotheque = () => null, origines = ORIGINES }) {
   const cors = entetesCors(req, origines);
   // Le préflight du navigateur passe quelle que soit la clé (il ne dit rien) :
   // sinon, une clé fausse ressemblerait à un connecteur injoignable, et le
@@ -52,7 +53,7 @@ export async function repondreHttp(req, { cle, cloud, origines = ORIGINES }) {
   } catch {
     return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON illisible" } }, { status: 400, headers: cors });
   }
-  const reponse = await traiter(message, cloud());
+  const reponse = await traiter(message, cloud(), bibliotheque());
   if (reponse === null) return new Response(null, { status: 202, headers: cors });
   return Response.json(reponse, { headers: cors });
 }

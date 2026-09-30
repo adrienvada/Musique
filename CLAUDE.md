@@ -55,8 +55,12 @@ C'est le premier réflexe quand une lecture est fausse.
 
 **Le site** (https://adrienvada.github.io/Musique/) se republie tout seul à
 chaque fusion sur `main` (`.github/workflows/site.yml`). Hors de claude.ai, la
-bibliothèque est dans IndexedDB : ne jamais changer le nom de la base
-(`portee`) ni ses magasins sans migration.
+bibliothèque est dans IndexedDB (`portee`, version 2 : `partitions`, `pages`,
+`envois`, `meta`) et se synchronise par le connecteur (`app/synchro.js`,
+`supabase/functions/portee-remarkable/bibliotheque.js`). Ne jamais changer la
+base ni ses magasins sans migration (`onupgradeneeded`). Tout ce qui écrit
+une partition doit passer par `stockage.creer/modifier/supprimer` : c'est ce
+qui la met dans la file d'envois.
 
 **La version claude.ai** est un artefact : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj
 

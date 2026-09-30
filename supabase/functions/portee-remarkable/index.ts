@@ -7,7 +7,10 @@
 //  d'Adrien et n'y écrit jamais. « relier » sert une seule fois,
 //  quand Adrien tape dans l'appli le code à 8 lettres de
 //  my.remarkable.com : le jeton obtenu va dans un compartiment
-//  privé du stockage Supabase (coffre.js).
+//  privé du stockage Supabase (coffre.js). Les outils
+//  « bibliotheque_* » tiennent la bibliothèque de partitions,
+//  synchronisée entre les appareils (bibliotheque.js), dans ce même
+//  compartiment.
 //
 //  SECRET (posé par outils/deployer-connecteur.mjs) :
 //    PORTEE_CLE  longue chaîne aléatoire, dernier segment de
@@ -22,8 +25,10 @@
 //  Déployée sans vérification de JWT : claude.ai n'envoie pas la
 //  clé anon de Supabase.
 // ============================================================
+import { Bibliotheque } from "./bibliotheque.js";
 import { coffreSupabase } from "./coffre.js";
 import { ORIGINES, repondreHttp } from "./http.js";
+import { objetsSupabase } from "./objets.js";
 import { CloudRemarkable } from "./remarkable.js";
 
 const CLE = Deno.env.get("PORTEE_CLE") ?? "";
@@ -31,13 +36,18 @@ const CLE = Deno.env.get("PORTEE_CLE") ?? "";
 // (séparées par des virgules), en plus du site GitHub Pages.
 const EN_PLUS = (Deno.env.get("PORTEE_ORIGINES") ?? "").split(",").map((o) => o.trim()).filter(Boolean);
 
+const URL_SUPABASE = Deno.env.get("SUPABASE_URL");
+const CLE_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
 // Une instance chaude garde le jeton utilisateur et les métadonnées déjà lues.
 let cloud: CloudRemarkable | null = null;
+let bibliotheque: Bibliotheque | null = null;
 
 Deno.serve((req: Request) =>
   repondreHttp(req, {
     cle: CLE,
     origines: [...ORIGINES, ...EN_PLUS],
-    cloud: () => (cloud ??= new CloudRemarkable(coffreSupabase(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")))),
+    cloud: () => (cloud ??= new CloudRemarkable(coffreSupabase(URL_SUPABASE, CLE_SERVICE))),
+    bibliotheque: () => (bibliotheque ??= new Bibliotheque(objetsSupabase(URL_SUPABASE, CLE_SERVICE))),
   })
 );

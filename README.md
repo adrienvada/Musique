@@ -24,11 +24,13 @@ enregistrée sur ton compte claude.ai).
    MIDI » (une piste par main, prête pour Ableton, MuseScore ou GarageBand).
    Aussi : imprimer ou PDF, tout exporter en MIDI d'un coup.
 
-Sur le site, ta bibliothèque reste dans le navigateur : « Sauvegarder ma
-bibliothèque » en fait un fichier, que « Restaurer une sauvegarde » remet
-ailleurs. Le bouton reMarkable passe par un connecteur personnel, à brancher
-une fois : voir [docs/PROPOSITIONS.md](docs/PROPOSITIONS.md), « Brancher la
-reMarkable ».
+Sur le site, ta bibliothèque se **synchronise entre tes appareils** :
+« Synchroniser mes appareils » en bas de la bibliothèque, puis colle
+l'adresse de ton connecteur (une fois par appareil). Elle marche aussi hors
+ligne : les changements partent au retour du réseau. « Sauvegarder ma
+bibliothèque » en fait en plus un fichier. Le connecteur (reMarkable et
+synchronisation) se branche une fois : voir
+[docs/PROPOSITIONS.md](docs/PROPOSITIONS.md), « Brancher la reMarkable ».
 
 ## Le dépôt
 

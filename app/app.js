@@ -16,6 +16,7 @@ import { decompacter, nouvelId, ouvrirStockage, restaurer, sauvegarde } from "./
 import { zipper } from "./zip.js";
 import * as ed from "./edition.js";
 import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE } from "./connecteur.js";
+import { creerSynchro } from "./synchro.js";
 
 const VERSION_LECTEUR = 1;
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
@@ -174,6 +175,115 @@ function afficherBibliotheque() {
     carte.append(principal, actions);
     liste.appendChild(carte);
   }
+}
+
+// ------------------------------------------------------------------------
+// Bibliothèque synchronisée (site seulement ; sur claude.ai, sa base suffit)
+// ------------------------------------------------------------------------
+//
+// Chaque appareil garde toute la bibliothèque ; synchro.js échange les
+// changements avec la bibliothèque commune, par le connecteur. Déclencheurs :
+// démarrage, retour sur l'onglet ou du réseau, quelques secondes après une
+// modification, et toutes les 90 s tant que la page est visible.
+
+let synchro = null, minuterieSynchro = null, battement = null, dernierEtat = null;
+
+async function appelerOutil(outil, args) {
+  const m = await mcp();
+  if (!m) throw { code: "sans_adresse", message: "Pas d'adresse de connecteur." };
+  const r = await m.callTool(CONNECTEUR, outil, args, { cache: false });
+  return r.payload;
+}
+
+function synchronisable() {
+  return !dansClaude() && etat.stockage && etat.stockage.synchronisable && !!adresseEnregistree();
+}
+
+async function demarrerSynchro() {
+  if (!synchronisable()) { afficherSynchro(null); return; }
+  // Une autre adresse, c'est une autre bibliothèque commune : on la rejoint depuis le début.
+  const adresse = adresseEnregistree();
+  if ((await etat.stockage.lireMeta("adresse")) !== adresse) {
+    await etat.stockage.ecrireMeta("curseur", null);
+    await etat.stockage.ecrireMeta("rejoint", false);
+    await etat.stockage.ecrireMeta("adresse", adresse);
+  }
+  synchro ??= creerSynchro({ local: etat.stockage, appeler: appelerOutil, surEtat: afficherSynchro });
+  etat.stockage.surChangement(() => { clearTimeout(minuterieSynchro); minuterieSynchro = setTimeout(synchroniser, 2500); });
+  clearInterval(battement);
+  battement = setInterval(() => { if (document.visibilityState === "visible") synchroniser(); }, 90000);
+  synchroniser();
+}
+
+function arreterSynchro() {
+  clearInterval(battement);
+  clearTimeout(minuterieSynchro);
+  if (etat.stockage && etat.stockage.surChangement) etat.stockage.surChangement(() => {});
+  synchro = null;
+  afficherSynchro(null);
+}
+
+async function synchroniser() {
+  if (!synchro || !synchronisable()) return;
+  try {
+    const { recues } = await synchro.synchroniser();
+    if (recues) await rafraichirOuverte();
+  } catch (e) {
+    console.warn("Synchronisation", e);
+  }
+}
+
+/** La partition ouverte a changé sur un autre appareil : on la recharge, ou on revient à la bibliothèque. */
+async function rafraichirOuverte() {
+  const p = etat.courante;
+  if (!p || etat.vue === "biblio") return;
+  const neuve = await etat.stockage.lire(p.id);
+  if (!neuve) {
+    toast(`« ${p.titre} » a été supprimée sur un autre appareil.`);
+    etat.courante = null;
+    montrer("biblio");
+    return;
+  }
+  if ((neuve.modifieLe || "") <= (p.modifieLe || "")) return;
+  // Une correction en cours ici garde la main : elle partira à son tour.
+  if ($("enregistre").textContent === "…") return;
+  toast(`« ${neuve.titre} » a été modifiée sur un autre appareil : mise à jour.`);
+  etat.courante = neuve;
+  etat.pages = await etat.stockage.pages(neuve.id, neuve.nbPages || 0).catch(() => etat.pages);
+  $("fil-titre").textContent = neuve.titre;
+  montrer(etat.vue);
+}
+
+const heure = (iso) => new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+function afficherSynchro(e) {
+  if (e) dernierEtat = e;
+  const actif = synchronisable();
+  $("synchroniser").hidden = !actif;
+  $("activer-synchro").hidden = actif || dansClaude() || !(etat.stockage && etat.stockage.synchronisable);
+  if (!etat.stockage || dansClaude() || etat.stockage.mode === "claude") return;
+  if (!actif) {
+    $("mode").textContent = "Enregistré dans ce navigateur";
+    $("mode-detail").textContent = "Tes partitions restent dans ce navigateur. Active la synchronisation pour les retrouver sur tous tes appareils, ou sauvegarde-les dans un fichier.";
+    return;
+  }
+  const d = dernierEtat || { etat: "encours" };
+  const attente = d.attente ? ` · ${d.attente} modification${d.attente > 1 ? "s" : ""} en attente` : "";
+  if (d.etat === "encours") $("mode").textContent = "Synchronisation…";
+  else if (d.etat === "ok") $("mode").textContent = `Synchronisé à ${heure(d.le)}` + attente;
+  else $("mode").textContent = (navigator.onLine === false ? "Hors ligne" : "Synchronisation impossible") + attente;
+  $("mode-detail").textContent = d.etat === "erreur"
+    ? `Tes partitions restent dans ce navigateur et partiront à la prochaine connexion. (${(d.erreur && (d.erreur.message || d.erreur.code)) || "erreur"})`
+    : "Ta bibliothèque est synchronisée : tu retrouves les mêmes partitions sur chaque appareil où tu as collé l'adresse du connecteur.";
+}
+
+function formulaireSynchro() {
+  const bloc = document.createElement("div");
+  bloc.className = "aide-connecteur";
+  const p = document.createElement("p");
+  p.textContent = "Colle l'adresse de ton connecteur « Portée reMarkable » (la même que dans claude.ai). Fais-le sur chaque appareil : ils partageront la même bibliothèque, et le bouton reMarkable marchera aussi.";
+  bloc.append(p, formulaireAdresse(() => { bloc.remove(); toast("Synchronisation activée."); }));
+  return bloc;
 }
 
 // ------------------------------------------------------------------------
@@ -401,6 +511,7 @@ function oublierAdresse() {
   enregistrerAdresse("");
   mcpPromesse = null;
   $("changer-adresse").hidden = true;
+  arreterSynchro();
   ouvrirRemarkable(false);
 }
 
@@ -418,7 +529,7 @@ function recevoirArbre(reponse) {
 }
 
 /** L'adresse du connecteur, pour appeler la tablette hors de claude.ai. */
-function formulaireAdresse() {
+function formulaireAdresse(apres = () => ouvrirRemarkable(true)) {
   const form = document.createElement("form");
   form.className = "rangee";
   const champ = document.createElement("input");
@@ -439,7 +550,8 @@ function formulaireAdresse() {
     enregistrerAdresse(adresse);
     mcpPromesse = null;
     $("changer-adresse").hidden = false;
-    ouvrirRemarkable(true);
+    demarrerSynchro();
+    apres();
   });
   return form;
 }
@@ -956,9 +1068,9 @@ function afficherLecteur() {
 function graverLecteur() {
   const lib = ABCJS();
   const zone = $("gravure-lecteur");
+  $("transp-val").textContent = (etat.transposition > 0 ? "+" : "") + etat.transposition;
   if (!lib) { zone.textContent = "La gravure n'a pas pu se charger (connexion ?)."; return; }
   [objetLecteur] = lib.renderAbc(zone, pourGravure(etat.courante.abc), { responsive: "resize", add_classes: true, visualTranspose: etat.transposition, paddingleft: 0, paddingright: 0 });
-  $("transp-val").textContent = (etat.transposition > 0 ? "+" : "") + etat.transposition;
 }
 
 const nomDeFichier = (p) => (p.titre || "").replace(/[\\/:*?"<>|]+/g, " ").trim() || "partition";
@@ -1051,6 +1163,13 @@ function brancher() {
   $("fermer-modeles").addEventListener("click", () => { $("panneau-modeles").hidden = true; });
   $("changer-adresse").addEventListener("click", oublierAdresse);
   $("tout-midi").addEventListener("click", toutEnMidi);
+  $("synchroniser").addEventListener("click", synchroniser);
+  $("activer-synchro").addEventListener("click", () => {
+    if (!document.querySelector("#pied-biblio .aide-connecteur")) $("pied-biblio").appendChild(formulaireSynchro());
+  });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") synchroniser(); });
+  window.addEventListener("online", synchroniser);
+  window.addEventListener("offline", () => afficherSynchro(dernierEtat && { ...dernierEtat, etat: "erreur", erreur: { message: "hors ligne" } }));
   $("sauvegarder").addEventListener("click", sauvegarderBibliotheque);
   $("restaurer").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) restaurerBibliotheque(f); });
   $("actualiser-rm").addEventListener("click", () => ouvrirRemarkable(true));
@@ -1203,10 +1322,12 @@ async function demarrer() {
   afficherBibliotheque();
   etat.stockage = await ouvrirStockage();
   const surClaude = etat.stockage.mode === "claude";
-  $("mode").textContent = surClaude ? "Enregistré sur claude.ai" : "Enregistré dans ce navigateur";
-  $("mode-detail").textContent = surClaude
-    ? "Tes partitions sont enregistrées sur claude.ai : elles te suivent sur tous tes appareils."
-    : "Tes partitions restent dans ce navigateur. Sauvegarde-les de temps en temps : c'est un simple fichier, qu'on restaure ailleurs.";
+  if (surClaude) {
+    $("mode").textContent = "Enregistré sur claude.ai";
+    $("mode-detail").textContent = "Tes partitions sont enregistrées sur claude.ai : elles te suivent sur tous tes appareils.";
+  }
+  afficherSynchro(null);
+  demarrerSynchro();
   $("changer-adresse").hidden = dansClaude() || !adresseEnregistree();
   // Hors ligne et installable, hors de claude.ai (sw.js n'existe que sur le site).
   if (!dansClaude() && "serviceWorker" in navigator && location.protocol === "https:") {
