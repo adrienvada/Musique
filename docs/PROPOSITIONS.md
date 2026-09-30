@@ -64,6 +64,16 @@ main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 - **Piano** : [smplr](https://github.com/danigb/smplr) `SplendidGrandPiano`,
   un Steinway sur 4 nuances en domaine public. Le Salamander (CC-BY) reste en
   réserve.
+- **Ableton Live 12 (licence d'Adrien) et ses VST**, en plus du navigateur.
+  - L'appli exporte un MIDI avec une piste par main et le tempo (vérifié :
+    `ABCJS.synth.getMidiFile` sort un format 1 avec une piste par voix).
+  - Glissé dans Live, il joue sur le piano de Live ou sur les VST, pour arranger.
+  - Plus tard : un dossier de `.mid` synchronisé, ajouté aux « Places » de Live.
+  - Plus tard : une « version enregistrée », c'est-à-dire le rendu audio de Live
+    rangé avec la partition. Le lecteur la suit avec le curseur (même tempo,
+    même départ).
+  - Ne pas extraire les sons des VST pour le piano du navigateur sans vérifier
+    leurs licences.
 
 ## Trois formules
 
@@ -104,6 +114,9 @@ attendre l'étape 3.
 6. *(option)* **Papier calibré et lecture hybride.** Passe en deuxième si le
    banc d'essai le désigne.
 7. *(option)* **Exports MusicXML et PDF.**
+8. *(option)* **Passerelle Ableton** : dossier de `.mid` synchronisé et
+   version enregistrée suivie par le curseur. L'export MIDI simple arrive dès
+   l'étape 3.
 
 ## Questions ouvertes
 
