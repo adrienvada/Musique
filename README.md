@@ -3,7 +3,7 @@
 Des partitions écrites à la main sur la reMarkable, lues, corrigées et
 jouées au piano. Gratuitement.
 
-**L'appli : https://adrienvada.github.io/Musique/**, sur l'ordinateur comme
+**L'appli : https://adrienvada.fr/Musique/**, sur l'ordinateur comme
 sur le téléphone. Elle s'installe comme une appli (bouton « Installer
 l'appli » du navigateur) et marche hors ligne. Une version privée existe aussi
 sur claude.ai : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj (bibliothèque

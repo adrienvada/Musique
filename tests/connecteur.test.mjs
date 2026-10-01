@@ -148,8 +148,9 @@ test("HTTP : clé, CORS pour le site GitHub Pages seulement, préflight", async 
   assert.match(pre.headers.get("access-control-allow-headers"), /content-type/);
   assert.equal((await appel("nimporte", { methode: "OPTIONS", origine: "https://adrienvada.github.io" })).status, 204);
   // Appel du site : réponse et CORS.
-  const site = await appel(cle, { corps: ping, origine: "https://adrienvada.github.io" });
+  const site = await appel(cle, { corps: ping, origine: "https://adrienvada.fr" });
   assert.equal(site.status, 200);
+  assert.equal(site.headers.get("access-control-allow-origin"), "https://adrienvada.fr");
   assert.deepEqual((await site.json()).result, {});
   // Une autre origine n'a pas les en-têtes : le navigateur bloque la lecture.
   const autre = await appel(cle, { corps: ping, origine: "https://ailleurs.example" });

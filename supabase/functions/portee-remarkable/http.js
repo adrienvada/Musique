@@ -14,7 +14,9 @@
  */
 import { traiter } from "./mcp.js";
 
-export const ORIGINES = ["https://adrienvada.github.io"];
+// Le site est publié par GitHub Pages sous le domaine d'Adrien : adrienvada.github.io
+// redirige vers adrienvada.fr, et c'est cette origine-là que le navigateur envoie.
+export const ORIGINES = ["https://adrienvada.fr", "https://www.adrienvada.fr", "https://adrienvada.github.io"];
 
 function entetesCors(req, origines) {
   const origine = req.headers.get("origin");
