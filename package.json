@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "abcjs": "6.7.1",
+    "fake-indexeddb": "6.2.5",
     "pdfjs-dist": "6.3.289"
   }
 }

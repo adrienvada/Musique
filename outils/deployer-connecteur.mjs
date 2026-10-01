@@ -10,10 +10,14 @@
  * par l'API de gestion de Supabase : ni Docker ni CLI à installer.
  *
  * Ce qu'il fait :
- *   1. au premier déploiement (ou avec --nouvelle-cle), tire une clé au
- *      hasard, la range dans le secret PORTEE_CLE et, à la fin, affiche
- *      l'adresse du connecteur à coller dans claude.ai. Supabase ne rend
- *      jamais la valeur d'un secret : note l'adresse, ou redemande une clé ;
+ *   1. pose la clé de l'adresse (secret Supabase PORTEE_CLE) :
+ *      - dans GitHub Actions, elle vient du secret GitHub PORTEE_CLE et n'est
+ *        jamais affichée : le dépôt est public, ses journaux aussi. Sans ce
+ *        secret, le connecteur est verrouillé par une clé tirée au hasard,
+ *        que personne ne connaît ;
+ *      - en local, au premier déploiement (ou avec --nouvelle-cle), il en
+ *        tire une au hasard et affiche l'adresse du connecteur. Supabase ne
+ *        rend jamais la valeur d'un secret : note l'adresse ;
  *   2. envoie supabase/functions/portee-remarkable/ comme fonction
  *      « portee-remarkable », sans vérification de JWT (claude.ai n'envoie
  *      pas la clé anon) ;
@@ -21,8 +25,7 @@
  *      coffre (le stockage Supabase) : l'arborescence doit répondre, même
  *      « pas encore reliée ».
  *
- * Il tourne aussi dans GitHub Actions (.github/workflows/connecteur.yml) :
- * l'adresse va alors dans le résumé du déploiement.
+ * Il tourne aussi dans GitHub Actions (.github/workflows/connecteur.yml).
  *
  * La tablette se relie ensuite depuis l'appli (code à 8 lettres) : son
  * jeton ne passe jamais par ici.
@@ -38,6 +41,8 @@ const DOSSIER = path.join(import.meta.dirname, "..", "supabase", "functions", NO
 const jeton = process.env.SUPABASE_ACCESS_TOKEN;
 const [ref] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const nouvelleCle = process.argv.includes("--nouvelle-cle");
+const enCI = !!process.env.GITHUB_ACTIONS;
+const cleFournie = process.env.PORTEE_CLE || "";
 
 async function api(chemin, options = {}) {
   const r = await fetch(`${API}${chemin}`, { ...options, headers: { authorization: `Bearer ${jeton}`, ...options.headers } });
@@ -62,15 +67,25 @@ if (!ref) {
 //    à son démarrage.
 const secrets = await api(`/projects/${ref}/secrets`);
 const existe = secrets.some((s) => s.name === "PORTEE_CLE");
-let cle = null;
-if (!existe || nouvelleCle) {
+let cle = null;          // la clé posée par ce passage
+let afficher = false;    // l'adresse peut-elle s'afficher ? (jamais en CI)
+if (cleFournie) {
+  if (cleFournie.length < 24) throw new Error("PORTEE_CLE doit faire au moins 24 caractères.");
+  cle = cleFournie;
+} else if (enCI) {
   cle = crypto.randomBytes(24).toString("base64url");
+  console.log("::warning::Pas de secret GitHub PORTEE_CLE : connecteur verrouillé (clé inconnue de tous). Voir docs/PROPOSITIONS.md, « Brancher la reMarkable ».");
+} else if (!existe || nouvelleCle) {
+  cle = crypto.randomBytes(24).toString("base64url");
+  afficher = true;
+}
+if (cle) {
   await api(`/projects/${ref}/secrets`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify([{ name: "PORTEE_CLE", value: cle }]),
   });
-  console.log(existe ? "Nouvelle clé posée : l'ancienne adresse ne répond plus." : "Clé posée.");
+  console.log(existe ? "Clé posée (elle remplace la précédente)." : "Clé posée.");
 } else {
   console.log("La clé existait déjà : l'adresse du connecteur ne change pas (--nouvelle-cle pour en changer).");
 }
@@ -116,23 +131,14 @@ try {
     if (!arbre || arbre.isError) throw new Error(`Le connecteur ne lit pas son coffre : ${arbre ? arbre.content[0].text : "pas de réponse"}`);
     console.log(arbre.structuredContent.connectee ? "La tablette est déjà reliée." : "Coffre lisible ; la tablette reste à relier depuis l'appli.");
 
-    console.log("\nAdresse du connecteur, à coller dans claude.ai → Paramètres → Connecteurs → Ajouter un connecteur personnalisé :");
-    console.log(`  nom : Portée reMarkable`);
-    console.log(`  URL : ${adresse}`);
-    if (process.env.GITHUB_STEP_SUMMARY) {
-      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
-        "## Connecteur « Portée reMarkable » déployé",
-        "",
-        "À ajouter dans claude.ai → Paramètres → Connecteurs → Ajouter un connecteur personnalisé :",
-        "",
-        "- **Nom** : `Portée reMarkable`",
-        `- **URL** : \`${adresse}\``,
-        "",
-      ].join("\n"));
+    if (afficher) {
+      console.log("\nAdresse du connecteur, à coller dans claude.ai → Paramètres → Connecteurs → Ajouter un connecteur personnalisé :");
+      console.log(`  nom : Portée reMarkable`);
+      console.log(`  URL : ${adresse}`);
     }
   }
 } catch (e) {
-  if (cle && !existe) {
+  if (afficher && !existe) {
     await api(`/projects/${ref}/secrets`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify(["PORTEE_CLE"]) });
     console.error("Clé retirée : relance le déploiement une fois le problème réglé.");
   }

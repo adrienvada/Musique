@@ -1,8 +1,10 @@
 # Propositions — de la tablette au piano
 
-*Mis à jour le 30 septembre 2026 (soir) : import à la demande depuis la reMarkable.*
+*Mis à jour le 30 septembre 2026 (nuit) : dépôt public, site GitHub Pages, correction au toucher.*
 
-**L'appli : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj** (privée).
+**L'appli** :
+- **https://adrienvada.github.io/Musique/** (site public, installable, bibliothèque dans le navigateur) ;
+- https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj (privée, bibliothèque sur claude.ai).
 
 Version illustrée (schémas, maquettes jouables de l'interface) :
 https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
@@ -70,6 +72,53 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     le même une fois l'abscisse décentrée (+702) et l'échelle corrigée
     (226/227, voir plus bas). Les tests vérifient que la lecture ne change
     pas, même en arrondissant les traits au demi-pixel pour le transport.
+
+- **30/09 (nuit) · Dépôt public, appli sur GitHub Pages.** Adrien a rendu le
+  dépôt public et demandé un site « beaucoup plus user friendly ».
+  - Le site (`.github/workflows/site.yml`) se republie à chaque fusion sur
+    `main`. Hors de claude.ai, la bibliothèque vit dans le navigateur
+    (IndexedDB). Une sauvegarde `.json` la passe d'un appareil à l'autre, et
+    aussi de claude.ai au site.
+  - Le bouton reMarkable y appelle le connecteur directement : CORS réservé à
+    `adrienvada.github.io`. L'adresse (avec sa clé) se colle une fois par
+    navigateur : elle ne peut pas vivre dans le code d'un site public.
+  - **Incident** : le premier déploiement avait écrit l'adresse du connecteur
+    dans les journaux d'Actions, devenus publics avec le dépôt. Les journaux
+    ont été supprimés et la clé changée. Désormais, la clé vient du secret
+    GitHub `PORTEE_CLE` et n'est jamais affichée ; sans ce secret, le
+    déploiement verrouille le connecteur par une clé que personne ne connaît.
+- **30/09 (nuit) · Corriger sans ABC.** Adrien ne comprend pas le texte ABC
+  (c'est normal). Dans « Corriger », on touche une note de la partition (ou on
+  la glisse) et on choisit un geste : plus haut, plus bas, durée, point,
+  altération, silence, une de plus, supprimer. Tout se fait aussi au clavier
+  et s'annule. `app/edition.js` réécrit l'ABC, qui reste la seule source de
+  vérité ; le texte passe en « mode avancé ».
+- **30/09 (nuit) · MIDI en un clic.** Sur le site, c'est un `.mid` direct ;
+  sur claude.ai, il reste zippé (liste des formats). Il est disponible depuis
+  chaque carte, depuis l'écran d'écoute, et pour toute la bibliothèque d'un
+  coup. Tempo et transposition sont gardés avec la partition et repris par le
+  MIDI.
+
+- **30/09 (nuit) · Bibliothèque synchronisée entre les appareils (site).**
+  Choisie par Adrien parmi les suggestions.
+  - Chaque appareil garde toute la bibliothèque dans son navigateur, hors
+    ligne compris, et note ce qu'il change dans une file d'envois
+    (IndexedDB v2).
+  - La référence commune vit dans le compartiment privé
+    `portee-remarkable` du stockage Supabase : `bibliotheque/<id>.json` et
+    `pages/<id>.json`. Pas de table dans la base du site, pas de compte à
+    créer.
+  - Le connecteur la tient avec trois outils : `bibliotheque_changements`,
+    `bibliotheque_pages` et `bibliotheque_ecrire`. L'adresse à coller sur
+    chaque appareil est donc la même que pour la reMarkable.
+  - Le plus récent gagne (`modifieLe`). Une suppression voyage comme une
+    « pierre tombale ». Le curseur « depuis » suit l'horloge du stockage, pas
+    celle des appareils.
+  - Pourquoi pas Supabase Auth et une table avec RLS : cela voulait dire un
+    compte, une migration dans la base du site et une clé anon dans le site
+    public, pour un seul utilisateur.
+  - La version claude.ai garde sa propre base. On passe de l'une à l'autre
+    par « Sauvegarder » puis « Restaurer ».
 
 ## Ce que les pages d'essai ont appris
 
@@ -187,10 +236,10 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 - **Supabase** : l'offre gratuite plafonne à 2 projets actifs. Le site
   (`adrienvada-site`) et Candela en occupent déjà deux. Musique irait donc dans
   le projet du site. Un projet s'endort après une semaine sans requête.
-- **GitHub Pages** n'est pas gratuit pour un dépôt privé. L'appli serait donc
-  servie par Cloudflare, comme les aperçus de branche du site.
-- **GitHub Actions** donne 2 000 min/mois gratuites en privé. Une synchro toutes
-  les 2 h en consomme quelques centaines.
+- **GitHub Pages** n'est gratuit que pour un dépôt public : c'est le cas
+  depuis le 30/09.
+- **Dépôt public** : tout ce qui s'écrit dans les journaux d'Actions est
+  public. Ne jamais y afficher de clé ni d'adresse secrète.
 
 ## Où en est chaque étape
 
@@ -204,39 +253,55 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
    - points de durée, barres simples, doubles et reprises ;
    - armure ;
    - chiffrage, deviné d'après la durée des mesures (compte en croches, groupes de trois → x/8).
-3. **Lecteur** : *fait*. Gravure abcjs, piano Steinway échantillonné, curseur,
-   tempo, transposition, mains séparables, exports ABC et MIDI (en .zip).
+3. **Écouter et exporter** : *fait*. Gravure abcjs, piano Steinway
+   échantillonné, curseur, tempo, transposition, mains séparables, raccourci
+   Espace. MIDI en un clic (tempo et transposition compris), impression ou
+   PDF, texte ABC.
 4. **Autres signes** : *en partie*.
    - Reconnus : soupirs et demi-soupirs, bémols (un ou deux traits), dièses
      (au moins trois traits), accents.
    - Pas encore : pauses et demi-pauses, silences courts, liaisons de durée,
      triolets, lecture des chiffres du chiffrage. Le classifieur HOMUS reste à faire.
-5. **Atelier** : *fait, sur claude.ai*. Ta page redessinée, les doutes
-   surlignés, l'ABC éditable (enregistré automatiquement), la validation.
+5. **Corriger** : *fait*. Correction au toucher (voir la décision du 30/09),
+   ta page redessinée à côté, les doutes surlignés, « Annuler », enregistrement
+   automatique. L'ABC reste accessible en mode avancé.
 6. **Bouton « Parcourir ma reMarkable »** : *fait*. Arborescence, recherche,
    import au clic, « Réimporter » pour une page complétée depuis. Même état que
    l'étape 1.
-7. *(option)* Second avis JAZZMUS. 8. *(option)* MusicXML et PDF.
-   9. *(option)* Passerelle Ableton : l'export MIDI (une piste par main) est déjà là.
+7. **Site GitHub Pages** : *fait*. Installable (manifeste, icônes), hors ligne
+   (service worker), bibliothèque IndexedDB, sauvegarde et restauration,
+   modèles téléchargeables, accueil en trois étapes. **Bibliothèque
+   synchronisée** entre les appareils : *fait et testé* (Node : deux
+   appareils, conflits, hors ligne ; Chromium : ordinateur et téléphone).
+8. *(option)* Second avis JAZZMUS. 9. *(option)* MusicXML.
+   10. *(option)* Passerelle Ableton : le MIDI (une piste par main) y va déjà en un glisser.
 
 ## Brancher la reMarkable (une fois)
 
 1. **Déployer le connecteur** dans le projet Supabase du site. GitHub Actions
-   s'en charge (`.github/workflows/connecteur.yml`) : il suffit de ranger un
-   jeton d'accès Supabase (supabase.com/dashboard/account/tokens) dans les
-   secrets du dépôt, sous le nom `SUPABASE_ACCESS_TOKEN`. Le déploiement part
-   à chaque changement du connecteur. La première fois, l'URL du connecteur
-   s'affiche dans le résumé de l'exécution (dépôt privé).
-   Sans GitHub, depuis un terminal :
-   ```bash
-   SUPABASE_ACCESS_TOKEN=sbp_… npm run connecteur -- <ref>
-   ```
+   s'en charge (`.github/workflows/connecteur.yml`) à chaque changement du
+   connecteur fusionné sur `main`. Il faut deux secrets du dépôt :
+   - `SUPABASE_ACCESS_TOKEN` : un jeton d'accès Supabase
+     (supabase.com/dashboard/account/tokens) ;
+   - `PORTEE_CLE` : la clé de l'adresse, au moins 24 caractères aléatoires.
+     Elle n'apparaît jamais dans les journaux, publics.
+
+   L'adresse du connecteur est
+   `https://omekkqjinvppadsoinvj.supabase.co/functions/v1/portee-remarkable/<PORTEE_CLE>`.
+   Sans GitHub, depuis un terminal : `SUPABASE_ACCESS_TOKEN=sbp_… npm run connecteur -- <ref>`.
 2. **L'ajouter à claude.ai** : Paramètres → Connecteurs → Ajouter un connecteur
    personnalisé. Nom : **Portée reMarkable**, exactement (l'appli l'appelle par
    ce nom). URL : celle du script.
-3. **Relier la tablette depuis Portée** : « Parcourir ma reMarkable ». claude.ai
-   demande d'autoriser la page. Ensuite, recopier le code à 8 lettres de
-   my.remarkable.com/device/desktop/connect, puis « Relier ».
+3. **Relier la tablette depuis Portée** : « Importer de ma reMarkable ».
+   claude.ai demande d'autoriser la page. Ensuite, recopier le code à 8
+   lettres de my.remarkable.com/device/desktop/connect, puis « Relier ».
+4. **Sur le site GitHub Pages**, coller une fois l'adresse du connecteur dans
+   chaque navigateur (« Importer de ma reMarkable » la demande). La tablette,
+   elle, reste reliée : c'est le même connecteur.
+
+Changer la clé : mettre la nouvelle valeur dans le secret `PORTEE_CLE`, relancer
+le workflow « Connecteur reMarkable » (Actions → Run workflow), puis mettre la
+nouvelle adresse dans claude.ai et sur le site.
 
 Pour couper l'accès : retirer l'appareil « desktop-linux » sur my.remarkable.com,
 ou supprimer la fonction dans Supabase.
@@ -267,6 +332,25 @@ ou supprimer la fonction dans Supabase.
   se note au déploiement. Perdue : `npm run connecteur -- <ref> --nouvelle-cle`,
   puis changer l'URL dans claude.ai.
 - **Code à 8 lettres** : il expire en quelques minutes et ne sert qu'une fois.
+- **Synchronisation et horloges** : un appareil dont l'horloge retarde
+  pourrait écrire un `modifieLe` plus ancien que la version qu'il vient de
+  recevoir, et la bibliothèque commune refuserait sa correction.
+  `stockage.modifier` rend donc chaque `modifieLe` strictement plus récent que
+  le précédent. Un envoi refusé applique aussitôt la version gagnante.
+- **IndexedDB `portee`, version 2** : magasins `partitions`, `pages`, `envois`
+  (file à synchroniser) et `meta` (curseur, adresse, « rejoint »). Changer
+  l'adresse du connecteur remet le curseur à zéro : une autre adresse, c'est
+  une autre bibliothèque commune.
+- **Préflight CORS** : la fonction y répond 204 même avec une mauvaise clé.
+  Sinon, le navigateur bloque tout, et le site ne peut pas distinguer
+  « adresse incorrecte » de « connecteur injoignable ».
+- **abcjs capte les clics sur toute la partition** et retrouve la note la
+  plus proche : dans les tests Playwright, cliquer aux coordonnées de la note
+  (`page.mouse.click`), pas sur l'élément. Un glissé compte les degrés vers
+  le bas (`drag.step` positif = plus grave).
+- **Noms de fichiers accentués** : sans locale UTF-8, le Chromium des tests
+  les télécharge sous le nom « download ». Il faut lancer Chromium avec
+  `LANG=C.UTF-8`. Les vrais navigateurs gardent les accents.
 - **Clé posée avant le déploiement.** La fonction lit `PORTEE_CLE` à son
   démarrage : posée après, une instance déjà chaude répondrait 404. Si la
   première mise en place échoue, le script retire la clé neuve, pour que

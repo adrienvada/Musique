@@ -1,8 +1,8 @@
 # Déploie le connecteur « Portée reMarkable » (fonction Supabase) dès que
-# son code change. Le jeton d'accès Supabase vit dans les secrets du dépôt
-# (SUPABASE_ACCESS_TOKEN) : il ne passe ni par la conversation ni par un
-# terminal. Au premier déploiement, l'adresse du connecteur apparaît dans le
-# résumé de l'exécution (dépôt privé : toi seul la vois).
+# son code change. Deux secrets du dépôt : SUPABASE_ACCESS_TOKEN (le jeton
+# d'accès Supabase) et PORTEE_CLE (la clé de l'adresse du connecteur). Le
+# dépôt est public, ses journaux aussi : la clé n'y apparaît jamais, et sans
+# elle le connecteur est verrouillé.
 name: Connecteur reMarkable
 
 on:
@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PORTEE_CLE: ${{ secrets.PORTEE_CLE }}
       # Le projet du site (décision : Musique vit dans le projet du site).
       SUPABASE_PROJET: ${{ vars.SUPABASE_PROJET || 'omekkqjinvppadsoinvj' }}
     steps:
@@ -37,5 +38,4 @@ jobs:
             echo "::notice::Pas de secret SUPABASE_ACCESS_TOKEN : rien à déployer (docs/PROPOSITIONS.md, « Brancher la reMarkable »)."
             exit 0
           fi
-          npm run connecteur
           npm run connecteur -- "$SUPABASE_PROJET"

@@ -108,11 +108,14 @@ const lireCorps = (req) => new Promise((ok) => {
 });
 
 /**
- * Un faux stockage Supabase : de quoi créer un compartiment et y ranger ou
- * relire un objet, avec les réponses du vrai (400 « introuvable », 409…).
+ * Un faux stockage Supabase : créer un compartiment, y ranger, relire,
+ * supprimer et lister des objets, avec les réponses du vrai (400
+ * « introuvable », 409…) et une date d'écriture par objet (updated_at).
  */
 export async function demarrerFauxStockage(cle = "cle-de-service-de-test") {
   const compartiments = new Map();
+  let derniere = 0;
+  const maintenant = () => { derniere = Math.max(Date.now(), derniere + 1); return new Date(derniere).toISOString(); };
   const serveur = http.createServer(async (req, res) => {
     const json = (statut, corps) => { res.writeHead(statut, { "content-type": "application/json" }); res.end(JSON.stringify(corps)); };
     if (req.headers.apikey !== cle || req.headers.authorization !== `Bearer ${cle}`) return json(403, { statusCode: "403", error: "Unauthorized" });
@@ -123,20 +126,43 @@ export async function demarrerFauxStockage(cle = "cle-de-service-de-test") {
       compartiments.set(id, { publique, objets: new Map() });
       return json(200, { name: id });
     }
+    const liste = req.url.match(/^\/storage\/v1\/object\/list\/([^/]+)$/);
+    if (liste && req.method === "POST") {
+      const c = compartiments.get(liste[1]);
+      if (!c) return json(400, { statusCode: "404", error: "Bucket not found", message: "Bucket not found" });
+      const { prefix = "", limit = 100, offset = 0 } = JSON.parse(corps);
+      const dossier = prefix ? prefix.replace(/\/$/, "") + "/" : "";
+      const vus = new Map();
+      for (const [chemin, o] of c.objets) {
+        if (!chemin.startsWith(dossier)) continue;
+        const reste = chemin.slice(dossier.length);
+        const i = reste.indexOf("/");
+        if (i >= 0) vus.set(reste.slice(0, i), { name: reste.slice(0, i), id: null, updated_at: null, metadata: null });
+        else vus.set(reste, { name: reste, id: `id-${chemin}`, updated_at: o.maj, created_at: o.cree, metadata: { size: o.corps.length } });
+      }
+      return json(200, [...vus.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(offset, offset + limit));
+    }
     const m = req.url.match(/^\/storage\/v1\/object\/([^/]+)\/(.+)$/);
     const c = m && compartiments.get(m[1]);
     if (!c) return json(400, { statusCode: "404", error: "Bucket not found", message: "Bucket not found" });
     if (req.method === "POST") {
       if (c.objets.has(m[2]) && req.headers["x-upsert"] !== "true") return json(400, { statusCode: "409", error: "Duplicate" });
-      c.objets.set(m[2], corps);
+      const avant = c.objets.get(m[2]);
+      c.objets.set(m[2], { corps, maj: maintenant(), cree: avant ? avant.cree : new Date(derniere).toISOString() });
       return json(200, { Key: `${m[1]}/${m[2]}` });
     }
+    if (req.method === "DELETE") {
+      if (!c.objets.delete(m[2])) return json(400, { statusCode: "404", error: "not_found", message: "Object not found" });
+      return json(200, { message: "Successfully deleted" });
+    }
     if (!c.objets.has(m[2])) return json(400, { statusCode: "404", error: "not_found", message: "Object not found" });
-    res.end(c.objets.get(m[2]));
+    res.end(c.objets.get(m[2]).corps);
   });
   await new Promise((r) => serveur.listen(0, "127.0.0.1", r));
   return {
     url: `http://127.0.0.1:${serveur.address().port}`, cle, compartiments,
+    // Pour les tests : le contenu brut d'un objet (texte), ou undefined.
+    objet: (compartiment, chemin) => compartiments.get(compartiment)?.objets.get(chemin)?.corps,
     fermer: () => new Promise((r) => serveur.close(r)),
   };
 }

@@ -66,7 +66,7 @@ test("du faux cloud à l'ABC : même lecture que le PDF exporté", async () => {
     assert.equal(init.result.serverInfo.name, "portee-remarkable");
     assert.equal(await traiter({ jsonrpc: "2.0", method: "notifications/initialized" }, c), null);
     const liste = await traiter({ jsonrpc: "2.0", id: 2, method: "tools/list" }, c);
-    assert.deepEqual(liste.result.tools.map((t) => t.name), ["arborescence", "document", "relier"]);
+    assert.deepEqual(liste.result.tools.map((t) => t.name), ["arborescence", "document", "relier", "bibliotheque_changements", "bibliotheque_pages", "bibliotheque_ecrire"]);
     const r = await traiter({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "document", arguments: { id: "doc-piano" } } }, c);
     const doc = r.result.structuredContent;
     assert.equal(doc.modele, "piano-standard");
@@ -99,7 +99,7 @@ test("relier la tablette depuis l'appli : code, coffre, puis arborescence", asyn
     assert.deepEqual(r.structuredContent.noeuds.map((n) => n.nom).sort(), ["Essai", "Partitions"]);
     const compartiment = stockage.compartiments.get("portee-remarkable");
     assert.equal(compartiment.publique, false);
-    assert.equal(compartiment.objets.get("jeton-appareil"), "jeton-appareil-de-test");
+    assert.equal(compartiment.objets.get("jeton-appareil").corps, "jeton-appareil-de-test");
     // Une instance neuve (fonction redémarrée) relit le jeton au coffre.
     assert.equal((await appel(neuf(), "arborescence")).structuredContent.connectee, true);
     // Relier une seconde fois remplace le jeton sans erreur.
@@ -126,4 +126,35 @@ test("un coffre refusé par Supabase donne une erreur d'outil, pas « non relié
   } finally {
     await stockage.fermer();
   }
+});
+
+test("HTTP : clé, CORS pour le site GitHub Pages seulement, préflight", async () => {
+  const { repondreHttp } = await import("../supabase/functions/portee-remarkable/http.js");
+  const cle = "k".repeat(32);
+  const cloud = () => new CloudRemarkable(coffreMemoire(null));
+  const appel = (chemin, { methode = "POST", origine, corps } = {}) => repondreHttp(new Request(`https://x.supabase.co/functions/v1/portee-remarkable/${chemin}`, {
+    method: methode,
+    headers: { "content-type": "application/json", ...(origine ? { origin: origine } : {}) },
+    body: corps ? JSON.stringify(corps) : undefined,
+  }), { cle, cloud });
+  const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+  // Mauvaise clé : 404, mais lisible par le site (pour dire « adresse incorrecte »).
+  const mauvaise = await appel("nimporte", { corps: ping, origine: "https://adrienvada.github.io" });
+  assert.equal(mauvaise.status, 404);
+  assert.equal(mauvaise.headers.get("access-control-allow-origin"), "https://adrienvada.github.io");
+  // Préflight du navigateur, même avec une clé fausse (la vraie requête dira 404).
+  const pre = await appel(cle, { methode: "OPTIONS", origine: "https://adrienvada.github.io" });
+  assert.equal(pre.status, 204);
+  assert.match(pre.headers.get("access-control-allow-headers"), /content-type/);
+  assert.equal((await appel("nimporte", { methode: "OPTIONS", origine: "https://adrienvada.github.io" })).status, 204);
+  // Appel du site : réponse et CORS.
+  const site = await appel(cle, { corps: ping, origine: "https://adrienvada.github.io" });
+  assert.equal(site.status, 200);
+  assert.deepEqual((await site.json()).result, {});
+  // Une autre origine n'a pas les en-têtes : le navigateur bloque la lecture.
+  const autre = await appel(cle, { corps: ping, origine: "https://ailleurs.example" });
+  assert.equal(autre.headers.get("access-control-allow-origin"), null);
+  // claude.ai (sans origine) : réponse normale ; GET refusé.
+  assert.equal((await appel(cle, { corps: ping })).status, 200);
+  assert.equal((await appel(cle, { methode: "GET" })).status, 405);
 });
