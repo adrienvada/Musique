@@ -23,6 +23,7 @@ import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
 import { creerVueMorceau, dessinerApercuMorceau } from "./vue-morceau.js";
 import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
+import { ecrireMusicXml } from "./musicxml.js";
 
 const VERSION_LECTEUR = 1;
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
@@ -46,6 +47,7 @@ const etat = {
   stockage: null,
   partitions: [],
   filtre: "tout",
+  etiquette: null,    // filtre par étiquette (carnet)
   courante: null,     // la partition ouverte (document)
   pages: [],          // ses traits, page par page
   page: 0,            // page affichée dans l'atelier
@@ -167,22 +169,58 @@ function ouvrirIdee(p = null, options = {}) {
 // ------------------------------------------------------------------------
 
 function correspondFiltre(p) {
+  if (etat.etiquette && !(p.etiquettes || []).includes(etat.etiquette)) return false;
   if (etat.filtre === "tout") return true;
+  if (etat.filtre === "favori") return !!p.favori;
   if (etat.filtre === "idee" || etat.filtre === "morceau") return p.type === etat.filtre;
   return !p.type && p.statut === etat.filtre;
+}
+
+/** Ce que la recherche regarde : le titre, les étiquettes, la note. */
+const texteDe = (p) => [p.titre, ...(p.etiquettes || []), p.note || ""].join(" ").toLowerCase();
+
+/** Toutes les étiquettes de la bibliothèque, les plus employées d'abord. */
+function toutesEtiquettes() {
+  const compte = new Map();
+  for (const p of etat.partitions) for (const t of p.etiquettes || []) compte.set(t, (compte.get(t) || 0) + 1);
+  return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
+}
+
+/** « Aujourd'hui », « Cette semaine »… : le carnet se lit par date. */
+function periode(iso) {
+  const d = new Date(iso || 0), maintenant = new Date();
+  const jours = (new Date(maintenant.toDateString()) - new Date(d.toDateString())) / 86400000;
+  if (jours <= 0) return "Aujourd'hui";
+  if (jours === 1) return "Hier";
+  if (jours < 7) return "Cette semaine";
+  if (jours < 31) return "Ce mois-ci";
+  return "Plus ancien";
 }
 
 function afficherBibliotheque() {
   const q = $("recherche").value.trim().toLowerCase();
   const liste = $("liste");
   liste.textContent = "";
-  const visibles = etat.partitions.filter((p) =>
-    correspondFiltre(p) && (!q || (p.titre || "").toLowerCase().includes(q)));
+  const visibles = etat.partitions.filter((p) => correspondFiltre(p) && (!q || texteDe(p).includes(q)));
+  // Les étiquettes, en filtres d'un toucher.
+  const etiquettes = toutesEtiquettes();
+  if (etat.etiquette && !etiquettes.includes(etat.etiquette)) etat.etiquette = null;
+  $("filtres-etiquettes").innerHTML = etiquettes.map((t) => `<button class="puce" data-etiquette="${t.replace(/"/g, "&quot;")}" aria-pressed="${t === etat.etiquette}"># ${t.replace(/</g, "&lt;")}</button>`).join("");
+  let periodeAvant = null;
   $("vide").hidden = etat.partitions.length > 0;
   $("capture").hidden = etat.partitions.length === 0; // l'accueil a déjà son bouton
   $("aucun").hidden = !(etat.partitions.length > 0 && visibles.length === 0);
   $("tout-midi").hidden = $("sauvegarder").hidden = etat.partitions.length === 0;
   for (const p of visibles) {
+    // Sans recherche, le carnet se découpe par date (il est trié du plus récent au plus ancien).
+    const per = periode(p.modifieLe);
+    if (!q && per !== periodeAvant) {
+      const h = document.createElement("p");
+      h.className = "surtitre groupe-date";
+      h.textContent = per;
+      liste.appendChild(h);
+      periodeAvant = per;
+    }
     const carte = document.createElement("article");
     carte.className = "carte";
     const principal = document.createElement("button");
@@ -208,7 +246,25 @@ function afficherBibliotheque() {
       : p.type === "morceau" ? `${(p.blocs || []).map((b) => b.nom).join(", ")} · ${dateCourte(p.modifieLe)}`
       : `${nomModele(p.modele)} · ${dateCourte(p.modifieLe)}`;
     infos.append(titre, meta, pastilleStatut(p));
+    if ((p.etiquettes || []).length || p.memo || p.note) {
+      const ligne = document.createElement("span");
+      ligne.className = "etiquettes";
+      if (p.memo) { const m = document.createElement("span"); m.className = "etiquette"; m.textContent = `🎙 ${p.memo.duree} s`; ligne.appendChild(m); }
+      for (const t of p.etiquettes || []) { const e = document.createElement("span"); e.className = "etiquette"; e.textContent = "# " + t; ligne.appendChild(e); }
+      if (p.note) { const n = document.createElement("span"); n.className = "remarque"; n.textContent = p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note; ligne.appendChild(n); }
+      infos.appendChild(ligne);
+    }
     principal.appendChild(infos);
+    if (p.type) {
+      // Une étoile, d'un toucher, sans ouvrir.
+      const etoile = document.createElement("button");
+      etoile.className = "favori";
+      etoile.setAttribute("aria-pressed", String(!!p.favori));
+      etoile.setAttribute("aria-label", p.favori ? "Retirer des favoris" : "Mettre en favori");
+      etoile.textContent = p.favori ? "★" : "☆";
+      etoile.addEventListener("click", () => etat.stockage.modifier(p.id, { favori: !p.favori, modifieLe: new Date().toISOString() }));
+      carte.appendChild(etoile);
+    }
     const actions = document.createElement("div");
     actions.className = "actions";
     const bouton = (texte, f, plein = false) => {
@@ -1243,6 +1299,30 @@ function resumeIdee(seq) {
   return `${notes} note${notes > 1 ? "s" : ""} · ♩ ${seq.tempo}`;
 }
 
+/**
+ * Le MusicXML (MuseScore) : une idée part de ses notes, une page lue de son
+ * ABC joué en notes. Sur claude.ai, dans un .zip (liste fermée des formats).
+ */
+async function exporterMusicXml(p) {
+  try {
+    let seq, voix;
+    if (p.type === "idee") { seq = p.sequence; voix = voixCompletes(seq); }
+    else {
+      if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
+      seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
+      voix = seq.pistes;
+    }
+    const nom = `${nomDeFichier(p)}.musicxml`;
+    const octets = new TextEncoder().encode(ecrireMusicXml(seq, { voix, titre: p.titre }));
+    if (etat.stockage.midiDirect) await etat.stockage.enregistrerFichier(nom, new Blob([octets], { type: "application/vnd.recordare.musicxml+xml" }));
+    else await etat.stockage.enregistrerFichier(`${nomDeFichier(p)} (MusicXML).zip`, zipper([{ nom, donnees: octets }]));
+  } catch (e) {
+    if (e && e.code === "declined") return;
+    console.error(e);
+    toast("L'export MusicXML n'a pas abouti : " + (e.message || e.code || "erreur"));
+  }
+}
+
 async function exporterAbc() {
   const p = etat.courante;
   try {
@@ -1286,6 +1366,8 @@ function brancher() {
   $("nouvelle-idee").addEventListener("click", () => ouvrirIdee(null));
   $("vide-idee").addEventListener("click", () => ouvrirIdee(null));
   $("nouveau-morceau").addEventListener("click", () => ouvrirMorceau(null));
+  // Fredonner tout de suite : une idée neuve, le mémo qui enregistre déjà.
+  $("nouveau-memo").addEventListener("click", () => ouvrirIdee(null, { memo: true }));
 
   // Ma reMarkable, modèles, bibliothèque
   $("ouvrir-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
@@ -1310,6 +1392,12 @@ function brancher() {
 
   // Bibliothèque
   $("recherche").addEventListener("input", afficherBibliotheque);
+  $("filtres-etiquettes").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-etiquette]");
+    if (!b) return;
+    etat.etiquette = etat.etiquette === b.dataset.etiquette ? null : b.dataset.etiquette;
+    afficherBibliotheque();
+  });
   document.querySelectorAll("[data-filtre]").forEach((b) => b.addEventListener("click", () => {
     etat.filtre = b.dataset.filtre;
     document.querySelectorAll("[data-filtre]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
@@ -1400,6 +1488,7 @@ function brancher() {
   $("main-droite").addEventListener("change", arreterLecture);
   $("main-gauche").addEventListener("change", arreterLecture);
   $("export-abc").addEventListener("click", exporterAbc);
+  $("export-musicxml").addEventListener("click", () => exporterMusicXml(etat.courante));
   // Une page lue devient une idée : on la prolonge au clavier, en direct, avec des accords.
   $("continuer-idee").addEventListener("click", () => {
     const p = etat.courante;
@@ -1488,6 +1577,7 @@ async function actionIdee(action, p) {
       return montrer("biblio");
     }
     case "morceau": return choisirMorceau(p);
+    case "musicxml": return exporterMusicXml(p);
     default:
       toast("Bientôt.");
       return undefined;
@@ -1552,6 +1642,7 @@ function creerEditeur() {
     partager: partagerMidi,
     menu: actionIdee,
     titreChange: (t) => { $("fil-titre").textContent = t; },
+    etiquettes: toutesEtiquettes,
     nouvelleDepuis: (seq) => ouvrirIdee(null, { seq, titre: "Idée tirée d'une phrase" }),
   });
 }

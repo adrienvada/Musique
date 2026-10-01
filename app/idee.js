@@ -24,6 +24,7 @@ import { voixCompletes, transposerIdee, STYLES, suggerer, harmoniser, accordsDeL
 import { creerClavier } from "./clavier.js";
 import { creerGrille } from "./grille.js";
 import { Micro } from "./micro.js";
+import { creerMenuRadial } from "./menu-radial.js";
 
 const $ = (id) => document.getElementById(id);
 const DUREES = [
@@ -90,6 +91,7 @@ export function creerEditeurIdee(deps) {
   const { piano, transport, toast } = deps;
   const e = {
     id: null, creeLe: null, titre: "", seq: null, piste: 0,
+    note: "", etiquettes: [], favori: false, memo: null,
     selection: new Set(), curseur: 0,
     duree: 4, pointee: false,
     affichage: localStorage.getItem("portee:affichage-idee") || "grille",
@@ -117,7 +119,25 @@ export function creerEditeurIdee(deps) {
     curseur: (pas) => { e.selection.clear(); e.curseur = pas; rafraichir(); },
     ecouter: (h) => entendre([h]),
     accord: (m, pas) => ouvrirAccords(m, pas),
-    menu: (id, x, y) => { if (!e.selection.has(id)) choisir([id]); if (deps.menuRadial) deps.menuRadial.ouvrir(x, y); },
+    menu: (id, x, y) => { if (!e.selection.has(id)) choisir([id]); menuRadial.ouvrir(x, y, { glisser: true }); },
+  });
+  // Les gestes sur la sélection, en cercle autour du doigt (appui long sur une note).
+  const menuRadial = creerMenuRadial({
+    actions: [
+      { id: "monter", icone: "▲", libelle: "½ ton", aide: "Un demi-ton plus haut" },
+      { id: "octave-haut", icone: "⇈", libelle: "octave", aide: "Une octave plus haut" },
+      { id: "doubler", icone: "×2", libelle: "plus lent", aide: "Durées doublées" },
+      { id: "dupliquer", icone: "⧉", libelle: "répéter", aide: "Recopier juste après" },
+      { id: "retrograder", icone: "⇄", libelle: "à l'envers", aide: "La dernière note devient la première" },
+      { id: "recaler", icone: "⌗", libelle: "recaler", aide: "Recaler sur la grille" },
+      { id: "effacer", icone: "⌫", libelle: "effacer", aide: "Effacer" },
+      { id: "nouvelle", icone: "✚", libelle: "idée à part", aide: "En faire une nouvelle idée" },
+      { id: "renverser", icone: "⇅", libelle: "miroir", aide: "Ce qui montait descend" },
+      { id: "diviser", icone: "÷2", libelle: "plus vite", aide: "Durées divisées par deux" },
+      { id: "octave-bas", icone: "⇊", libelle: "octave", aide: "Une octave plus bas" },
+      { id: "descendre", icone: "▼", libelle: "½ ton", aide: "Un demi-ton plus bas" },
+    ],
+    surChoix: (id) => transformer(id),
   });
 
   $("idee-durees").querySelectorAll("[data-pas]").forEach((b) => { b.innerHTML = iconeDuree(Number(b.dataset.pas)); });
@@ -128,11 +148,15 @@ export function creerEditeurIdee(deps) {
   // --- Ouvrir, fermer ---------------------------------------------------------
 
   /** Ouvre une idée enregistrée, ou une nouvelle (null) qui ne s'enregistre qu'à la première note. */
-  function ouvrir(p = null, { seq = null, titre = null } = {}) {
+  function ouvrir(p = null, { seq = null, titre = null, memo = false } = {}) {
     e.ouverte = true;
     e.id = p ? p.id : null;
     e.creeLe = p ? p.creeLe : null;
     e.titre = p ? p.titre : titre || titreDuJour();
+    e.note = (p && p.note) || "";
+    e.etiquettes = (p && p.etiquettes) || [];
+    e.favori = !!(p && p.favori);
+    e.memo = (p && p.memo) || null;
     e.seq = p ? sq.cloner(p.sequence) : seq ? sq.cloner(seq) : sq.nouvelleSequence(defauts());
     e.piste = 0;
     e.selection = new Set();
@@ -144,8 +168,12 @@ export function creerEditeurIdee(deps) {
     $("idee-titre").value = e.titre;
     $("idee-reglages").hidden = true;
     $("idee-menu").hidden = true;
+    $("feuille-accords").hidden = true;
+    $("idee-infos").hidden = !memo;
     afficherAffichage();
     rafraichir();
+    afficherInfos();
+    if (memo) memoEnregistrer();
     requestAnimationFrame(() => grille.centrer());
     const notes = e.seq.pistes[0].notes;
     clavier.amener(notes.length ? notes[notes.length - 1].h : 60);
@@ -159,6 +187,8 @@ export function creerEditeurIdee(deps) {
     if (e.enregistrement) arreterEnregistrement();
     transport.arreter();
     arreterMicro();
+    if (enregistreur) enregistreur.stop();
+    if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; }
     for (const h of [...tenues.keys()]) relever(h);
     if (e.minuterie) { clearTimeout(e.minuterie); e.minuterie = null; sauver(); }
     await e.sauvegarde;
@@ -169,6 +199,8 @@ export function creerEditeurIdee(deps) {
     if (!e.ouverte || p.id !== e.id || e.minuterie || e.enregistrement) return false;
     e.titre = p.titre;
     e.seq = sq.cloner(p.sequence);
+    e.note = p.note || ""; e.etiquettes = p.etiquettes || []; e.favori = !!p.favori; e.memo = p.memo || null;
+    afficherInfos();
     e.selection = new Set([...e.selection].filter((id) => e.seq.pistes[e.piste]?.notes.some((n) => n.id === id)));
     if (!e.seq.pistes[e.piste]) e.piste = 0;
     e.version++;
@@ -214,11 +246,15 @@ export function creerEditeurIdee(deps) {
     e.minuterie = setTimeout(() => { e.minuterie = null; sauver(); }, delai);
   }
 
-  const vide = () => e.seq.pistes.every((p) => !p.notes.length) && !(e.seq.accords || []).length;
+  // Une idée sans note, sans accord, sans mot ni mémo ne s'enregistre pas.
+  const vide = () => e.seq.pistes.every((p) => !p.notes.length) && !(e.seq.accords || []).length && !e.memo && !e.note && !e.etiquettes.length;
 
   function donnees() {
     const { abc } = sq.ecrireAbc(e.seq, { voix: voixCompletes(e.seq), titre: e.titre });
-    return { type: "idee", titre: e.titre, sequence: sq.cloner(e.seq), abc, statut: "idee", nbPages: 0, modele: null, tempo: e.seq.tempo };
+    return {
+      type: "idee", titre: e.titre, sequence: sq.cloner(e.seq), abc, statut: "idee", nbPages: 0, modele: null, tempo: e.seq.tempo,
+      note: e.note, etiquettes: e.etiquettes, favori: e.favori, memo: e.memo,
+    };
   }
 
   /** Enregistre (les écritures se suivent, jamais deux à la fois). */
@@ -346,8 +382,10 @@ export function creerEditeurIdee(deps) {
   // --- Sélection ----------------------------------------------------------------
 
   function choisir(ids, ajouter = false) {
-    if (ajouter) for (const id of ids) (e.selection.has(id) ? e.selection.delete(id) : e.selection.add(id));
-    else e.selection = new Set(ids);
+    if (ajouter) {
+      const tous = ids.every((id) => e.selection.has(id));
+      for (const id of ids) (tous ? e.selection.delete(id) : e.selection.add(id));
+    } else e.selection = new Set(ids);
     const sel = choisies();
     if (sel.length) {
       e.curseur = Math.max(...sel.map((n) => n.d + n.l));
@@ -376,6 +414,18 @@ export function creerEditeurIdee(deps) {
     }
     if (cible === undefined) return;
     choisir(notes.filter((n) => n.d === cible).map((n) => n.id));
+  }
+
+  /** Ajoute à la sélection la note (ou l'accord) qui suit. */
+  function etendre() {
+    const notes = notesPiste();
+    const sel = choisies();
+    if (!sel.length) { voisine(1); return; }
+    const fin = Math.max(...sel.map((n) => n.d));
+    const suivant = notes.filter((n) => n.d > fin);
+    if (!suivant.length) return;
+    const d = Math.min(...suivant.map((n) => n.d));
+    choisir(notes.filter((n) => n.d === d).map((n) => n.id), true);
   }
 
   function transformer(nom) {
@@ -626,6 +676,120 @@ export function creerEditeurIdee(deps) {
     toast(`${e.seq.accords.length} accord${e.seq.accords.length > 1 ? "s" : ""} proposé${e.seq.accords.length > 1 ? "s" : ""} : écoute, puis change ceux qui ne te plaisent pas.`, 6000);
   });
 
+  // --- Le carnet : note, étiquettes, favori, mémo vocal ---------------------------
+
+  function afficherInfos() {
+    $("info-note").value = e.note;
+    $("info-favori").setAttribute("aria-pressed", String(e.favori));
+    $("info-favori").textContent = e.favori ? "★ Favori" : "☆ Favori";
+    const zone = $("info-etiquettes");
+    zone.textContent = "";
+    for (const t of e.etiquettes) {
+      const span = document.createElement("span");
+      span.className = "etiquette";
+      span.textContent = t;
+      const x = document.createElement("button");
+      x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", `Retirer l'étiquette ${t}`);
+      x.addEventListener("click", () => { e.etiquettes = e.etiquettes.filter((y) => y !== t); afficherInfos(); planifierSauvegarde(0); });
+      span.appendChild(x);
+      zone.appendChild(span);
+    }
+    const connues = deps.etiquettes ? deps.etiquettes().filter((t) => !e.etiquettes.includes(t)) : [];
+    $("info-etiquettes-connues").innerHTML = connues.map((t) => `<option value="${t.replace(/"/g, "&quot;")}">`).join("");
+    $("memo-ecouter").hidden = $("memo-effacer").hidden = !e.memo || !!enregistreur;
+    if (!enregistreur) {
+      $("memo-enregistrer-texte").textContent = e.memo ? "Refaire le mémo" : "Enregistrer un mémo";
+      $("memo-etat").textContent = e.memo ? `${e.memo.duree} s` : "";
+    }
+  }
+
+  let enregistreur = null, lecteurMemo = null;
+
+  const enBase64 = (blob) => new Promise((ok, ko) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(",")[1] || "");
+    r.onerror = () => ko(r.error);
+    r.readAsDataURL(blob);
+  });
+  const depuisBase64 = (memo) => {
+    const octets = Uint8Array.from(atob(memo.base64), (c) => c.charCodeAt(0));
+    return new Blob([octets], { type: memo.type || "audio/mp4" });
+  };
+
+  async function memoEnregistrer() {
+    if (enregistreur) { enregistreur.stop(); return; }
+    if (!window.MediaRecorder || !navigator.mediaDevices) { toast("Ce navigateur ne sait pas enregistrer de son."); return; }
+    transport.arreter();
+    if (micro.actif) arreterMicro();
+    let flux;
+    try {
+      flux = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      toast(err && err.name === "NotAllowedError" ? "Portée n'a pas accès au micro : autorise-le dans les réglages du navigateur." : "Le micro n'a pas pu s'ouvrir.", 8000);
+      return;
+    }
+    // Le format que lisent tous les appareils d'abord (Safari enregistre en MP4).
+    const type = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find((t) => MediaRecorder.isTypeSupported(t));
+    const rec = new MediaRecorder(flux, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 });
+    const bouts = [];
+    const debut = Date.now();
+    rec.ondataavailable = (ev) => { if (ev.data && ev.data.size) bouts.push(ev.data); };
+    const montre = setInterval(() => {
+      const s = Math.round((Date.now() - debut) / 1000);
+      $("memo-etat").textContent = `0:${String(s).padStart(2, "0")} / 1:00`;
+      if (s >= 60) rec.stop();
+    }, 250);
+    rec.onstop = async () => {
+      clearInterval(montre);
+      for (const piste of flux.getTracks()) piste.stop();
+      enregistreur = null;
+      $("memo-enregistrer").setAttribute("aria-pressed", "false");
+      const blob = new Blob(bouts, { type: rec.mimeType || type || "audio/webm" });
+      const duree = Math.max(1, Math.round((Date.now() - debut) / 1000));
+      if (!blob.size) { afficherInfos(); return; }
+      await garderMemo({ type: blob.type, base64: await enBase64(blob), duree });
+      toast("Mémo gardé avec l'idée.");
+    };
+    rec.start(1000);
+    enregistreur = rec;
+    $("memo-enregistrer").setAttribute("aria-pressed", "true");
+    $("memo-enregistrer-texte").textContent = "Arrêter le mémo";
+    $("memo-ecouter").hidden = $("memo-effacer").hidden = true;
+  }
+
+  /** Garde le mémo (ou l'efface, avec null) : la fiche d'abord, puis le son. */
+  async function garderMemo(memo) {
+    e.memo = memo ? { duree: memo.duree, type: memo.type } : null;
+    clearTimeout(e.minuterie); e.minuterie = null;
+    await sauver();
+    if (e.id) await deps.stockage().ecrireMemo(e.id, memo).catch((err) => toast("Le mémo n'a pas pu être gardé : " + (err.message || err)));
+    afficherInfos();
+  }
+
+  async function memoEcouter() {
+    if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; $("memo-ecouter").textContent = "▶ Écouter"; return; }
+    const memo = e.id ? await deps.stockage().lireMemo(e.id).catch(() => null) : null;
+    if (!memo) { toast("Le son de ce mémo n'est pas encore arrivé sur cet appareil (synchronisation)."); return; }
+    lecteurMemo = new Audio(URL.createObjectURL(depuisBase64(memo)));
+    $("memo-ecouter").textContent = "■ Arrêter";
+    lecteurMemo.onended = () => { lecteurMemo = null; $("memo-ecouter").textContent = "▶ Écouter"; };
+    lecteurMemo.play().catch(() => { lecteurMemo = null; $("memo-ecouter").textContent = "▶ Écouter"; toast("Ce navigateur ne sait pas lire ce mémo."); });
+  }
+
+  $("info-fermer").addEventListener("click", () => { $("idee-infos").hidden = true; });
+  $("info-favori").addEventListener("click", () => { e.favori = !e.favori; afficherInfos(); planifierSauvegarde(0); });
+  $("info-note").addEventListener("input", () => { e.note = $("info-note").value; planifierSauvegarde(); });
+  $("info-etiquette-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const t = $("info-etiquette").value.trim().toLowerCase();
+    if (t && !e.etiquettes.includes(t)) { e.etiquettes = [...e.etiquettes, t]; planifierSauvegarde(0); }
+    $("info-etiquette").value = "";
+    afficherInfos();
+  });
+  $("memo-enregistrer").addEventListener("click", memoEnregistrer);
+  $("memo-ecouter").addEventListener("click", memoEcouter);
+  $("memo-effacer").addEventListener("click", () => { if (window.confirm("Effacer le mémo vocal ?")) garderMemo(null); });
+
   // --- Chanter une note -----------------------------------------------------------
 
   let minuterieSilence = null;
@@ -854,6 +1018,7 @@ export function creerEditeurIdee(deps) {
     const b = ev.target.closest("[data-menu]");
     if (!b) return;
     $("idee-menu").hidden = true;
+    if (b.dataset.menu === "infos") { afficherInfos(); $("idee-infos").hidden = false; return; }
     await sauverMaintenant();
     const p = partitionCourante();
     if (!p) { toast("L'idée est vide : joue au moins une note."); return; }
@@ -926,7 +1091,9 @@ export function creerEditeurIdee(deps) {
     if (a === "precedente") voisine(-1);
     else if (a === "suivante") voisine(1);
     else if (a === "deselectionner") { e.selection.clear(); rafraichir(); }
-    else if (a === "plus") { if (deps.menuRadial) { const r = b.getBoundingClientRect(); deps.menuRadial.ouvrir(r.left + r.width / 2, r.top); } }
+    else if (a === "plus") { const r = b.getBoundingClientRect(); menuRadial.ouvrir(r.left + r.width / 2, r.top - 20); }
+    else if (a === "etendre") etendre();
+    else if (a === "tout") choisir(notesPiste().map((n) => n.id));
     else transformer(a);
   });
 
@@ -952,7 +1119,7 @@ export function creerEditeurIdee(deps) {
   new ResizeObserver(() => { if (e.ouverte && e.affichage === "partition") rafraichir(); }).observe($("idee-partition"));
   // Un volet ouvert (réglages, menu) se referme quand on touche ailleurs.
   document.addEventListener("pointerdown", (ev) => {
-    for (const [volet, bouton] of [["idee-reglages", "idee-reglages-bouton"], ["idee-menu", "idee-plus"], ["feuille-accords", "idee-grille .g-regle"]]) {
+    for (const [volet, bouton] of [["idee-reglages", "idee-reglages-bouton"], ["idee-menu", "idee-plus"], ["feuille-accords", "idee-grille .g-regle"], ["idee-infos", "idee-plus"]]) {
       if ($(volet).hidden || ev.target.closest(`#${volet}, #${bouton}`)) continue;
       $(volet).hidden = true;
       document.querySelector(`#${bouton}`).setAttribute("aria-expanded", "false");
@@ -982,6 +1149,8 @@ export function creerEditeurIdee(deps) {
     if (ev.repeat && TOUCHES_ORDI[ev.code] !== undefined) return true; // touche tenue : rien de plus
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z") { revenir(ev.shiftKey ? e.refaire : e.annuler, ev.shiftKey ? e.annuler : e.refaire); return true; }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y") { revenir(e.refaire, e.annuler); return true; }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "a") { choisir(notesPiste().map((n) => n.id)); return true; }
+    if (ev.shiftKey && ev.code === "ArrowRight") { etendre(); return true; }
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
     if (TOUCHES_ORDI[ev.code] !== undefined) { enfoncer(octaveOrdi + TOUCHES_ORDI[ev.code]); return true; }
     const actions = {

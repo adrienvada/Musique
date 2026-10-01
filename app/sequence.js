@@ -217,6 +217,53 @@ function cleDe(voix, rang) {
 }
 
 /**
+ * L'idée mise en mesures, commune à la partition (ABC) et au MusicXML :
+ * pour chaque voix, ses couches, mesure par mesure, en jetons notables.
+ * Chaque note porte son épellation (`e`) et l'altération à écrire
+ * (`signe`, null si l'armure ou la mesure la donnent déjà).
+ */
+export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0 } = {}) {
+  const k = lireTonalite(seq.tonalite);
+  const mesure = pasParMesure(seq), temps = pasParTemps(seq);
+  const total = (nbMesures(seq) + mesuresEnPlus) * mesure;
+  const nb = Math.round(total / mesure);
+  const accords = new Map((seq.accords || []).filter((a) => a.d < total).map((a) => [a.d, a.nom]));
+  const coupures = [...accords.keys()];
+  const epellations = new Map();
+  const epeler1 = (h) => { if (!epellations.has(h)) epellations.set(h, epeler(h, seq.tonalite)); return epellations.get(h); };
+  // Les changements d'accord ne coupent que la couche qui porte leurs symboles.
+  const parVoix = voix.map((v, iv) => couches(v.notes).map((c, ic) => decouperCouche(c, { mesure, temps, total, coupures: iv === 0 && ic === 0 ? coupures : [] })));
+  for (const lesCouches of parVoix) {
+    for (let m = 0; m < nb; m++) {
+      // Une altération vaut jusqu'à la barre, pour la même note à la même
+      // octave. abcjs l'oublie d'une couche à l'autre : une note déjà
+      // altérée dans une autre couche redit la sienne.
+      const dejaAlterees = new Set();
+      for (const mesures of lesCouches) {
+        const ecrites = new Map([...dejaAlterees].map((cle) => [cle, NaN]));
+        for (const t of mesures[m]) {
+          for (const n of t.notes) {
+            n.e = epeler1(n.h);
+            const cle = n.e.lettre + n.e.octave;
+            n.signe = null;
+            if (n.suite) {
+              // Une note liée garde sa hauteur sans redire l'altération. Après
+              // la barre, la même note non liée redira la sienne.
+              if (!ecrites.has(cle)) ecrites.set(cle, NaN);
+            } else {
+              const enVigueur = ecrites.has(cle) ? ecrites.get(cle) : (k.armure[n.e.lettre] || 0);
+              if (enVigueur !== n.e.alt) { n.signe = n.e.alt; ecrites.set(cle, n.e.alt); }
+            }
+          }
+        }
+        for (const [cle, alt] of ecrites) if (!Number.isNaN(alt)) dejaAlterees.add(cle);
+      }
+    }
+  }
+  return { k, mesure, temps, total, nb, accords, cles: voix.map((v, i) => cleDe(v, i)), parVoix };
+}
+
+/**
  * L'ABC d'une idée, et la carte de ses jetons : { abc, jetons: [{ debut,
  * fin, voix, a, l, ids, silence }] } (debut, fin : positions dans l'ABC).
  *
@@ -225,41 +272,25 @@ function cleDe(voix, rang) {
  * première voix.
  */
 export function ecrireAbc(seq, { voix = seq.pistes, titre = "", mesuresParLigne = 4, mesuresEnPlus = 0 } = {}) {
-  const k = lireTonalite(seq.tonalite);
-  const mesure = pasParMesure(seq), temps = pasParTemps(seq);
-  const total = (nbMesures(seq) + mesuresEnPlus) * mesure;
-  const accords = new Map((seq.accords || []).filter((a) => a.d < total).map((a) => [a.d, a.nom]));
-  const coupures = [...accords.keys()];
-  const epellations = new Map();
-  const epeler1 = (h) => { if (!epellations.has(h)) epellations.set(h, epeler(h, seq.tonalite)); return epellations.get(h); };
-
+  const { mesure, temps, nb, accords, cles, parVoix } = mettreEnMesures(seq, { voix, mesuresEnPlus });
   const entete = ["X:1"];
   if (titre) entete.push("T:" + titre.replace(/\n/g, " "));
   entete.push(`M:${seq.mesure[0]}/${seq.mesure[1]}`, "L:1/8", `Q:1/4=${seq.tempo}`, `K:${seq.tonalite}`);
-  const cles = voix.map((v, i) => cleDe(v, i));
   const avecVoix = voix.length > 1 || cles[0] !== "sol";
   if (avecVoix) voix.forEach((v, i) => entete.push(`V:${i + 1} clef=${cles[i] === "fa" ? "bass" : "treble"}`));
   let abc = entete.join("\n") + "\n";
   const jetons = [];
 
-  // Les changements d'accord ne coupent que la couche qui porte leurs symboles.
-  const parVoix = voix.map((v, iv) => couches(v.notes).map((c, ic) => decouperCouche(c, { mesure, temps, total, coupures: iv === 0 && ic === 0 ? coupures : [] })));
-  const nb = Math.round(total / mesure);
   for (let m0 = 0; m0 < nb; m0 += mesuresParLigne) {
     parVoix.forEach((lesCouches, iv) => {
       // Le premier élément d'une ligne commence, pour abcjs, dans « [V:1] ».
       let debutLigne = abc.length;
       if (avecVoix) abc += `[V:${iv + 1}] `;
       for (let m = m0; m < Math.min(nb, m0 + mesuresParLigne); m++) {
-        // Altérations écrites : elles valent jusqu'à la barre, pour la même
-        // note à la même octave. abcjs les oublie d'une couche à l'autre :
-        // une note déjà altérée dans une autre couche redit la sienne.
-        const dejaAlterees = new Set();
         lesCouches.forEach((mesures, ic) => {
           // Une couche s'écrit dans toutes les mesures, même vide : sinon
           // abcjs y invente un silence qui ne renvoie à rien.
           if (ic > 0) abc += " &";
-          const ecrites = new Map([...dejaAlterees].map((cle) => [cle, NaN]));
           let precedent = null;
           for (const t of mesures[m]) {
             const dedans = t.a - m * mesure;
@@ -271,11 +302,10 @@ export function ecrireAbc(seq, { voix = seq.pistes, titre = "", mesuresParLigne 
             if (!ligature && !/[\n ]$/.test(abc)) abc += " ";
             if (iv === 0 && ic === 0 && accords.has(t.a)) abc += `"${accords.get(t.a)}"`;
             const debut = abc.length;
-            abc += texteJeton(t, ecrites, k, epeler1, ic > 0);
+            abc += texteJeton(t, ic > 0);
             jetons.push({ avant, debut, fin: abc.length, voix: iv, couche: ic, a: t.a, l: t.l, ids: t.notes.map((n) => n.id), silence: t.silence });
             precedent = t;
           }
-          for (const [cle, alt] of ecrites) if (!Number.isNaN(alt)) dejaAlterees.add(cle);
         });
         abc += m === nb - 1 ? " |]" : " |";
       }
@@ -285,24 +315,11 @@ export function ecrireAbc(seq, { voix = seq.pistes, titre = "", mesuresParLigne 
   return { abc, jetons };
 }
 
-function texteJeton(t, ecrites, k, epeler1, invisible) {
+function texteJeton(t, invisible) {
   const duree = dureeABC(t.l / 2); // L:1/8 : une croche = deux pas
   // Dans une couche du dessous, les silences ne s'affichent pas (« x »).
   if (t.silence) return (invisible ? "x" : "z") + duree;
-  const notes = t.notes.map((n) => {
-    const e = epeler1(n.h);
-    const cle = e.lettre + e.octave;
-    let signe = "";
-    if (n.suite) {
-      // Une note liée garde sa hauteur sans redire l'altération. Après la
-      // barre, la même note non liée redira la sienne, quelle qu'elle soit.
-      if (!ecrites.has(cle)) ecrites.set(cle, NaN);
-    } else {
-      const enVigueur = ecrites.has(cle) ? ecrites.get(cle) : (k.armure[e.lettre] || 0);
-      if (enVigueur !== e.alt) { signe = ALT_ABC[e.alt]; ecrites.set(cle, e.alt); }
-    }
-    return signe + lettreAbc(e);
-  });
+  const notes = t.notes.map((n) => (n.signe === null ? "" : ALT_ABC[n.signe]) + lettreAbc(n.e));
   // La liaison suit la durée et vaut pour tout l'accord : « F4- », « [CEG]2- ».
   return (notes.length > 1 ? "[" + notes.join("") + "]" : notes[0]) + duree + (t.lie ? "-" : "");
 }

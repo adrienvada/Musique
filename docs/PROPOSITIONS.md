@@ -121,6 +121,13 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
   - La version claude.ai garde sa propre base. On passe de l'une à l'autre
     par « Sauvegarder » puis « Restaurer ».
 
+- **01/10 · Le mémo vocal voyage avec les « pages ».** Une idée n'a pas de
+  traits : son contenu lourd (le magasin `pages`, envoyé à part et seulement
+  quand il change, `pagesLe`) porte son mémo, en base64. La synchronisation
+  et le connecteur n'y voient que des pages : rien à redéployer. Sur
+  claude.ai, il va dans `partitions/<id>/memo/audio`. Une minute au plus,
+  32 kbit/s : environ 300 Ko en base64. Enregistré en MP4 quand le
+  navigateur sait le faire (Safari le lit partout), sinon en WebM.
 - **01/10 · Morceaux : des renvois, pas des copies.** Un bloc de morceau
   renvoie à une idée de la bibliothèque (avec un nom de section et un nombre
   de fois) : corriger l'idée corrige le morceau. Chaque bloc dure un nombre
@@ -357,7 +364,13 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
       basse et accords, arpège), boucle, métronome, tempo tapé, morceaux en
       blocs : *faits et testés* (Node : suggestions, accompagnement,
       assemblage ; Chromium : accords sur ordinateur, morceau au téléphone).
-      Le reste : *en cours*.
+      Carnet (note, étiquettes, favori, mémo vocal d'une minute, recherche,
+      filtres, groupes par date, « Mémo vocal » d'un toucher), menu en
+      cercle (appui long sur une note, ou « Transformer… »), choix d'une
+      phrase au doigt (« + suivante », « Tout »), MusicXML (idées et pages
+      lues) : *faits et testés* (Node : MusicXML relu, mémo synchronisé
+      entre deux appareils ; Chromium : carnet, mémo au faux micro, menu en
+      cercle, MusicXML).
    10. *(option)* Passerelle Ableton : le MIDI (une piste par main) y va déjà en un glisser.
 
 ## Brancher la reMarkable (une fois)

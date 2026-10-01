@@ -25,7 +25,13 @@ enregistrée sur ton compte claude.ai).
    sur la partition. Une note choisie prend la hauteur de la touche que tu
    joues. Tout s'annule (↶).
 5. **Envoie le MIDI** : AirDrop, Fichiers, mail… ou un téléchargement. Une
-   piste par voix, au tempo de l'idée.
+   piste par voix, au tempo de l'idée. Aussi en MusicXML pour MuseScore.
+
+Et pour aller plus loin : des **accords** au-dessus de la grille (Portée
+propose ceux qui vont avec ta mélodie) et un accompagnement qui les joue ;
+des **morceaux** faits d'idées bout à bout (intro, couplet, refrain…) ; un
+**carnet** (note, étiquettes, favoris, mémo vocal) ; un **menu en cercle**
+(appui long sur une note) pour transposer, ralentir, retourner une phrase.
 
 ## Une page écrite sur la reMarkable
 
@@ -55,7 +61,7 @@ synchronisation) se branche une fois : voir
 | Dossier | Contenu |
 |---|---|
 | `lecteur/` | Le lecteur de traits (JavaScript, sans dépendance) : PDF → traits → notes → ABC |
-| `app/` | L'appli : bibliothèque, éditeur d'idée (`idee.js`, `sequence.js`, `grille.js`, `clavier.js`, `micro.js`, `transport.js`, `midi.js`, `harmonie.js`), correction au toucher (`edition.js`), écoute et exports, piano échantillonné, site installable |
+| `app/` | L'appli : bibliothèque, éditeur d'idée (`idee.js`, `sequence.js`, `grille.js`, `clavier.js`, `micro.js`, `transport.js`, `midi.js`, `musicxml.js`, `harmonie.js`, `menu-radial.js`), morceaux (`morceau.js`, `vue-morceau.js`), correction au toucher (`edition.js`), écoute et exports, piano échantillonné, site installable |
 | `supabase/functions/portee-remarkable/` | Le connecteur « Portée reMarkable » : lit le cloud reMarkable au clic (fonction Supabase) |
 | `modeles/` | Les modèles de papier calibré (PDF, calibration JSON, aperçus) |
 | `outils/` | Générateur de modèles (Python), lecture en ligne de commande, assemblage de l'appli, déploiement du connecteur |
