@@ -1,4 +1,5 @@
-# Publie Portée sur GitHub Pages (https://adrienvada.github.io/Musique/) à
+# Publie Portée sur GitHub Pages (https://adrienvada.fr/Musique/, le domaine du
+# site d'Adrien ; adrienvada.github.io/Musique/ y redirige) à
 # chaque changement sur main : tests, assemblage de la version autonome
 # (npm run appli -- --autonome), puis mise en ligne. Sur une PR, on vérifie
 # seulement que le site s'assemble.

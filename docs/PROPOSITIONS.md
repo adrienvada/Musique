@@ -3,7 +3,7 @@
 *Mis à jour le 30 septembre 2026 (nuit) : dépôt public, site GitHub Pages, correction au toucher.*
 
 **L'appli** :
-- **https://adrienvada.github.io/Musique/** (site public, installable, bibliothèque dans le navigateur) ;
+- **https://adrienvada.fr/Musique/** (site public sur GitHub Pages, installable, bibliothèque synchronisée) ;
 - https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj (privée, bibliothèque sur claude.ai).
 
 Version illustrée (schémas, maquettes jouables de l'interface) :
@@ -80,7 +80,8 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     (IndexedDB). Une sauvegarde `.json` la passe d'un appareil à l'autre, et
     aussi de claude.ai au site.
   - Le bouton reMarkable y appelle le connecteur directement : CORS réservé à
-    `adrienvada.github.io`. L'adresse (avec sa clé) se colle une fois par
+    `adrienvada.fr` (le domaine d'Adrien, vers lequel GitHub Pages redirige
+    `adrienvada.github.io`). L'adresse (avec sa clé) se colle une fois par
     navigateur : elle ne peut pas vivre dans le code d'un site public.
   - **Incident** : le premier déploiement avait écrit l'adresse du connecteur
     dans les journaux d'Actions, devenus publics avec le dépôt. Les journaux
@@ -341,6 +342,10 @@ ou supprimer la fonction dans Supabase.
   (file à synchroniser) et `meta` (curseur, adresse, « rejoint »). Changer
   l'adresse du connecteur remet le curseur à zéro : une autre adresse, c'est
   une autre bibliothèque commune.
+- **Domaine du site** : GitHub Pages sert le site sous le domaine personnalisé
+  d'Adrien (`adrienvada.fr/Musique/`). Le navigateur envoie donc l'origine
+  `https://adrienvada.fr`, qui doit figurer dans `ORIGINES` (`http.js`).
+  Sinon, il bloque les appels au connecteur (reMarkable et synchronisation).
 - **Préflight CORS** : la fonction y répond 204 même avec une mauvaise clé.
   Sinon, le navigateur bloque tout, et le site ne peut pas distinguer
   « adresse incorrecte » de « connecteur injoignable ».

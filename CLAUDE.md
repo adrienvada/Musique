@@ -53,7 +53,7 @@ C'est le premier réflexe quand une lecture est fausse.
 
 ## Republier l'appli
 
-**Le site** (https://adrienvada.github.io/Musique/) se republie tout seul à
+**Le site** (https://adrienvada.fr/Musique/, servi par GitHub Pages) se republie tout seul à
 chaque fusion sur `main` (`.github/workflows/site.yml`). Hors de claude.ai, la
 bibliothèque est dans IndexedDB (`portee`, version 2 : `partitions`, `pages`,
 `envois`, `meta`) et se synchronise par le connecteur (`app/synchro.js`,
