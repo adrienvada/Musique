@@ -125,3 +125,31 @@ test("la bibliothèque commune refuse un identifiant ou une écriture incomplèt
     await stockage.fermer();
   }
 });
+
+test("une idée et son mémo vocal voyagent d'un appareil à l'autre", async () => {
+  const { stockage, appareil } = await monde();
+  try {
+    const tel = await appareil(), ordi = await appareil();
+    const sequence = { version: 1, tempo: 100, mesure: [4, 4], tonalite: "C", pistes: [{ nom: "Mélodie", notes: [{ id: 1, d: 0, l: 4, h: 60 }] }], accords: [], accompagnement: "aucun", suivant: 2 };
+    const idee = { type: "idee", titre: "Idée du métro", sequence, abc: "X:1\nK:C\nC2|", statut: "idee", nbPages: 0, modele: null, creeLe: "2026-10-01T08:00:00.000Z", modifieLe: "2026-10-01T08:00:00.000Z" };
+    await tel.local.creer("i1", idee, []);
+    // Le mémo s'ajoute après coup : la fiche change, le contenu lourd aussi.
+    await tel.local.modifier("i1", { memo: { duree: 3, type: "audio/mp4" }, modifieLe: "2026-10-01T08:01:00.000Z" });
+    await tel.local.ecrireMemo("i1", { type: "audio/mp4", base64: "AAAAGGZ0eXBNNEEg", duree: 3 });
+    await tel.synchro.synchroniser();
+    assert.deepEqual(await ordi.synchro.synchroniser(), { envoyees: 0, recues: 1 });
+    const recue = await ordi.local.lire("i1");
+    assert.equal(recue.titre, "Idée du métro");
+    assert.deepEqual(recue.sequence.pistes[0].notes, sequence.pistes[0].notes);
+    assert.deepEqual(await ordi.local.lireMemo("i1"), { type: "audio/mp4", base64: "AAAAGGZ0eXBNNEEg", duree: 3 });
+    // Le mémo effacé sur l'ordinateur disparaît aussi du téléphone.
+    await ordi.local.modifier("i1", { memo: null, modifieLe: "2026-10-01T09:00:00.000Z" });
+    await ordi.local.ecrireMemo("i1", null);
+    await ordi.synchro.synchroniser();
+    await tel.synchro.synchroniser();
+    assert.equal(await tel.local.lireMemo("i1"), null);
+    assert.equal(JSON.parse(stockage.objet("portee-remarkable", "pages/i1.json")).length, 0);
+  } finally {
+    await stockage.fermer();
+  }
+});

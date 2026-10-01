@@ -121,6 +121,15 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
   - La version claude.ai garde sa propre base. On passe de l'une à l'autre
     par « Sauvegarder » puis « Restaurer ».
 
+- **01/10 · Morceaux : des renvois, pas des copies.** Un bloc de morceau
+  renvoie à une idée de la bibliothèque (avec un nom de section et un nombre
+  de fois) : corriger l'idée corrige le morceau. Chaque bloc dure un nombre
+  entier de mesures de son idée ; le tempo est celui du morceau. Un bloc dont
+  l'idée a été supprimée est sauté, et le dit.
+- **01/10 · L'accompagnement est calculé, pas écrit.** Il se déduit des
+  accords et du style (plaqués, basse et accords, arpège) à chaque lecture,
+  gravure ou export : on change l'accord, pas les notes. Le premier accord
+  posé met les accords plaqués en route, pour qu'on les entende.
 - **01/10 · Portée devient un carnet MIDI de poche.** Demandé par Adrien :
   « un véritable éditeur MIDI on the go pour la prise de notes de mélodies,
   de phrases musicales et de structures. Priorité : la praticité et
@@ -343,7 +352,12 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
       saisie, sélection, annuler, partition, écoute, rechargement) ;
     - étape 2 (chanter une note) : *fait et testé* (Node : sons fabriqués ;
       Chromium : un « chanteur » de synthèse dans un faux micro) ;
-    - étape 3 : *en cours*.
+    - étape 3 : accords (proposés d'après la mélodie, feuille au-dessus de
+      la grille, « Proposer pour toute l'idée »), accompagnement (plaqués,
+      basse et accords, arpège), boucle, métronome, tempo tapé, morceaux en
+      blocs : *faits et testés* (Node : suggestions, accompagnement,
+      assemblage ; Chromium : accords sur ordinateur, morceau au téléphone).
+      Le reste : *en cours*.
    10. *(option)* Passerelle Ableton : le MIDI (une piste par main) y va déjà en un glisser.
 
 ## Brancher la reMarkable (une fois)

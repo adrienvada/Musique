@@ -20,7 +20,7 @@
  */
 import * as sq from "./sequence.js";
 import { fichierMidi } from "./midi.js";
-import { voixCompletes, transposerIdee, STYLES } from "./harmonie.js";
+import { voixCompletes, transposerIdee, STYLES, suggerer, harmoniser, accordsDeLaTonalite, lireAccord, nomRacine, joliAccord, QUALITES } from "./harmonie.js";
 import { creerClavier } from "./clavier.js";
 import { creerGrille } from "./grille.js";
 import { Micro } from "./micro.js";
@@ -116,7 +116,7 @@ export function creerEditeurIdee(deps) {
     effacer: (id) => modifier(() => { sq.effacer(e.seq, e.piste, [id], { decaler: false }); e.selection.delete(id); }),
     curseur: (pas) => { e.selection.clear(); e.curseur = pas; rafraichir(); },
     ecouter: (h) => entendre([h]),
-    accord: (m) => deps.accords && deps.accords.ouvrir(m),
+    accord: (m, pas) => ouvrirAccords(m, pas),
     menu: (id, x, y) => { if (!e.selection.has(id)) choisir([id]); if (deps.menuRadial) deps.menuRadial.ouvrir(x, y); },
   });
 
@@ -527,6 +527,105 @@ export function creerEditeurIdee(deps) {
     toast(`${notes.length} note${notes.length > 1 ? "s" : ""} enregistrée${notes.length > 1 ? "s" : ""}. Touche « Annuler » pour recommencer.`);
   }
 
+  // --- Les accords ------------------------------------------------------------------
+  //
+  // On touche la ligne des accords, au-dessus d'une mesure : Portée propose
+  // ceux qui vont avec les notes de la mesure (de la tonalité d'abord). On
+  // les essaie (ils sonnent), on passe à la mesure suivante. Le premier
+  // accord posé met l'accompagnement en route, pour qu'on les entende.
+
+  const accordsOuverts = { d: 0 };
+  let racineChoisie = null;
+
+  function ouvrirAccords(m, pas = 0) {
+    const mesure = sq.pasParMesure(e.seq);
+    const moitie = Math.floor(mesure / 2);
+    // Un accord à mi-mesure, s'il y en a un et qu'on touche la seconde moitié.
+    const milieu = pas - m * mesure >= moitie && e.seq.accords.some((a) => a.d === m * mesure + moitie);
+    accordsOuverts.d = m * mesure + (milieu ? moitie : 0);
+    $("idee-reglages").hidden = true;
+    $("idee-menu").hidden = true;
+    $("feuille-accords").hidden = false;
+    afficherAccords();
+  }
+
+  function afficherAccords() {
+    if ($("feuille-accords").hidden) return;
+    const mesure = sq.pasParMesure(e.seq);
+    const d = accordsOuverts.d;
+    const m = Math.floor(d / mesure);
+    const moitie = Math.floor(mesure / 2);
+    const fin = (e.seq.accords || []).filter((a) => a.d > d).reduce((x, a) => Math.min(x, a.d), (m + 1) * mesure);
+    const actuel = (e.seq.accords || []).find((a) => a.d === d);
+    $("accords-ou").textContent = `Mesure ${m + 1}${d % mesure ? ", 2ᵉ moitié" : ""}`;
+    const degres = new Map(accordsDeLaTonalite(e.seq.tonalite).map((a) => [a.nom, a.degre]));
+    const proposes = suggerer(e.seq, d, fin, 8);
+    if (actuel && !proposes.includes(actuel.nom)) proposes.unshift(actuel.nom);
+    $("accords-proposes").innerHTML = proposes.map((nom) => `<button class="btn" data-accord="${nom}" aria-pressed="${actuel && actuel.nom === nom}">${joliAccord(nom)}${degres.has(nom) ? ` <span class="degre">${degres.get(nom)}</span>` : ""}</button>`).join("");
+    const k = sq.lireTonalite(e.seq.tonalite);
+    const racines = Array.from({ length: 12 }, (_, i) => nomRacine(k.pc + i, e.seq.tonalite));
+    const lu = actuel ? lireAccord(actuel.nom) : null;
+    racineChoisie = racineChoisie ?? (lu ? nomRacine(lu.racine, e.seq.tonalite) : racines[0]);
+    $("accords-racines").innerHTML = racines.map((r) => `<button class="btn" data-racine="${r}" aria-pressed="${r === racineChoisie}">${joliAccord(r)}</button>`).join("");
+    $("accords-qualites").innerHTML = Object.keys(QUALITES).map((q) => `<button class="btn" data-accord="${racineChoisie}${q}" aria-pressed="${actuel && actuel.nom === racineChoisie + q}">${joliAccord(racineChoisie + q)}</button>`).join("");
+    $("accord-retirer").disabled = !actuel;
+    const aMilieu = (e.seq.accords || []).some((a) => a.d === m * mesure + moitie);
+    $("accord-milieu").textContent = d % mesure ? "Revenir au début de la mesure" : aMilieu ? "Accord du milieu de la mesure" : "Changer au milieu de la mesure";
+    $("accord-avant").disabled = d === 0;
+  }
+
+  /** Fait entendre un accord, comme l'accompagnement le jouera. */
+  function entendreAccord(nom) {
+    const a = lireAccord(nom);
+    if (!a) return;
+    entendre([36 + (a.basse ?? a.racine), ...a.intervalles.map((i) => 48 + a.racine + i)], 1.2);
+  }
+
+  function poserAccord(nom) {
+    const d = accordsOuverts.d;
+    const premier = !(e.seq.accords || []).length;
+    modifier(() => {
+      e.seq.accords = (e.seq.accords || []).filter((a) => a.d !== d);
+      e.seq.accords.push({ d, nom });
+      e.seq.accords.sort((a, b) => a.d - b.d);
+      if (premier && (!e.seq.accompagnement || e.seq.accompagnement === "aucun")) e.seq.accompagnement = "plaque";
+    });
+    entendreAccord(nom);
+    if (premier) toast("Les accords s'entendent en accords plaqués ; un autre style dans les réglages (♩).", 6000);
+    afficherAccords();
+  }
+
+  $("feuille-accords").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.dataset.accord) { poserAccord(b.dataset.accord); return; }
+    if (b.dataset.racine) { racineChoisie = b.dataset.racine; afficherAccords(); }
+  });
+  $("accords-fermer").addEventListener("click", () => { $("feuille-accords").hidden = true; });
+  $("accord-avant").addEventListener("click", () => { const mesure = sq.pasParMesure(e.seq); accordsOuverts.d = Math.max(0, (Math.ceil(accordsOuverts.d / mesure) - 1) * mesure); racineChoisie = null; afficherAccords(); });
+  $("accord-apres").addEventListener("click", () => { const mesure = sq.pasParMesure(e.seq); accordsOuverts.d = (Math.floor(accordsOuverts.d / mesure) + 1) * mesure; racineChoisie = null; afficherAccords(); });
+  $("accord-milieu").addEventListener("click", () => {
+    const mesure = sq.pasParMesure(e.seq);
+    const debut = Math.floor(accordsOuverts.d / mesure) * mesure;
+    accordsOuverts.d = accordsOuverts.d % mesure ? debut : debut + Math.floor(mesure / 2);
+    racineChoisie = null;
+    afficherAccords();
+  });
+  $("accord-retirer").addEventListener("click", () => {
+    const d = accordsOuverts.d;
+    modifier(() => { e.seq.accords = (e.seq.accords || []).filter((a) => a.d !== d); });
+    afficherAccords();
+  });
+  $("accords-tout").addEventListener("click", () => {
+    if (!notesPiste().length && e.piste === 0) { toast("Écris d'abord une mélodie : les accords se proposent d'après ses notes."); return; }
+    modifier(() => {
+      e.seq.accords = harmoniser(e.seq);
+      if (!e.seq.accompagnement || e.seq.accompagnement === "aucun") e.seq.accompagnement = "plaque";
+    });
+    afficherAccords();
+    toast(`${e.seq.accords.length} accord${e.seq.accords.length > 1 ? "s" : ""} proposé${e.seq.accords.length > 1 ? "s" : ""} : écoute, puis change ceux qui ne te plaisent pas.`, 6000);
+  });
+
   // --- Chanter une note -----------------------------------------------------------
 
   let minuterieSilence = null;
@@ -665,6 +764,7 @@ export function creerEditeurIdee(deps) {
       $("idee-mode").textContent = avant ? `Le clavier écrit après ${sq.nomNote(avant.h, k.tonalite)}` : "Le clavier écrit au début";
     }
     clavier.marquer(sel.map((n) => n.h));
+    afficherAccords();
   }
 
   // --- La partition (gravée par abcjs) ----------------------------------------------
@@ -852,10 +952,10 @@ export function creerEditeurIdee(deps) {
   new ResizeObserver(() => { if (e.ouverte && e.affichage === "partition") rafraichir(); }).observe($("idee-partition"));
   // Un volet ouvert (réglages, menu) se referme quand on touche ailleurs.
   document.addEventListener("pointerdown", (ev) => {
-    for (const [volet, bouton] of [["idee-reglages", "idee-reglages-bouton"], ["idee-menu", "idee-plus"]]) {
+    for (const [volet, bouton] of [["idee-reglages", "idee-reglages-bouton"], ["idee-menu", "idee-plus"], ["feuille-accords", "idee-grille .g-regle"]]) {
       if ($(volet).hidden || ev.target.closest(`#${volet}, #${bouton}`)) continue;
       $(volet).hidden = true;
-      $(bouton).setAttribute("aria-expanded", "false");
+      document.querySelector(`#${bouton}`).setAttribute("aria-expanded", "false");
     }
   });
 

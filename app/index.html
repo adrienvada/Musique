@@ -213,6 +213,44 @@ body.plein .barre-haut .dedans { padding-top: 6px; padding-bottom: 6px; }
 .idee-durees .btn { height: 40px; }
 .idee-infos { flex-direction: column; align-items: stretch; }
 
+/* Morceaux */
+.blocs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bloc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px 8px 8px; background: var(--feuille); border: 1px solid var(--trait); border-left: 6px solid var(--section, var(--stylo)); border-radius: 10px; }
+.bloc.joue { outline: 2px solid var(--alerte); }
+.bloc.glisse { position: relative; z-index: 2; box-shadow: 0 10px 30px rgba(0,0,0,.2); opacity: 0.95; }
+.poignee { cursor: grab; touch-action: none; user-select: none; font-size: 1.3rem; color: var(--gris); padding: 4px 6px; }
+.bloc-apercu { width: 96px; height: 40px; background: var(--papier); border-radius: 6px; flex: 0 0 auto; }
+.bloc-apercu .apercu-note, .choix-idee svg .apercu-note { fill: var(--stylo); }
+.bloc-infos { display: flex; flex-direction: column; gap: 2px; flex: 1 1 160px; min-width: 0; }
+.bloc-nom { font-weight: 600; font-size: 1rem; border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 2px 4px; margin-left: -4px; width: 100%; max-width: 220px; }
+.bloc-nom:hover, .bloc-nom:focus { border-color: var(--trait-fort); background: var(--papier); }
+.bloc-idee { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bloc-fois, .bloc-actions { display: inline-flex; align-items: center; gap: 4px; }
+.choix-idees { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.choix-idee { display: flex; flex-direction: column; gap: 4px; align-items: stretch; text-align: left; border: 1px solid var(--trait); background: var(--feuille); border-radius: 8px; padding: 6px; cursor: pointer; }
+.choix-idee:hover { border-color: var(--stylo); }
+.choix-idee svg { width: 100%; height: 40px; background: var(--papier); border-radius: 4px; }
+.choix-idee .titre { font-size: 0.85rem; font-weight: 500; }
+.pastille.p-morceau { background: var(--ok-doux); color: var(--ok); border-color: var(--ok); }
+.dialogue { border: 1px solid var(--trait-fort); border-radius: 14px; background: var(--feuille); color: var(--encre); padding: 0; width: min(420px, calc(100vw - 32px)); box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+.dialogue::backdrop { background: rgba(0,0,0,.3); }
+.dialogue-dedans { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.dialogue-dedans h2 { font-size: 1.25rem; }
+.dialogue-dedans .liste-choix { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
+.dialogue-dedans .liste-choix .btn { justify-content: flex-start; white-space: normal; text-align: left; }
+
+/* Accords */
+.feuille-accords { flex-direction: column; align-items: stretch; gap: 10px; top: 50px; max-height: calc(100% - 58px); }
+.accords-tete { flex-wrap: nowrap; }
+.accords-choix { display: flex; flex-wrap: wrap; gap: 6px; }
+.accords-choix .btn { min-width: 3.6em; justify-content: center; font-weight: 600; font-size: 1rem; }
+.accords-choix .btn[aria-pressed="true"] { background: var(--stylo); color: var(--feuille); border-color: var(--stylo); }
+.accords-choix .degre { font-weight: 400; font-size: 0.72rem; color: var(--gris); }
+.accords-choix .btn[aria-pressed="true"] .degre { color: var(--stylo-doux); }
+.accords-choix.petits .btn { min-width: 2.8em; font-size: 0.88rem; font-weight: 500; }
+.accords-autres summary { cursor: pointer; color: var(--gris); font-size: 0.88rem; }
+.accords-autres[open] { display: flex; flex-direction: column; gap: 8px; }
+
 /* Chanter une note */
 .micro-panneau { position: absolute; z-index: 5; top: 50px; right: 8px; width: min(250px, calc(100% - 60px)); background: color-mix(in srgb, var(--feuille) 94%, transparent); border: 1px solid var(--stylo); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.16); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .micro-panneau .remarque { font-size: 0.78rem; line-height: 1.35; }
@@ -324,6 +362,7 @@ body.plein .barre-haut .dedans { padding-top: 6px; padding-bottom: 6px; }
     </div>
     <div class="capture" id="capture">
       <button class="btn btn-plein btn-idee" id="nouvelle-idee"><span aria-hidden="true">＋</span> Nouvelle idée</button>
+      <button class="btn" id="nouveau-morceau">Nouveau morceau</button>
       <p class="remarque">Note une mélodie qui te vient : au clavier, en la chantant, ou en direct avec le métronome. Elle s'enregistre toute seule.</p>
     </div>
     <div id="liste" class="grille" aria-live="polite"></div>
@@ -483,6 +522,34 @@ body.plein .barre-haut .dedans { padding-top: 6px; padding-bottom: 6px; }
     </div>
     <p class="remarque aide-export">Le MIDI garde le tempo et la transposition choisis ici, avec une piste par main au piano : glisse-le dans Ableton, MuseScore ou GarageBand. <kbd>Espace</kbd> lance ou arrête l'écoute.</p>
   </section>
+  <!-- ===== Morceau ===== -->
+  <section class="vue vue-morceau" id="vue-morceau" hidden>
+    <div class="rangee">
+      <input class="titre-edit" id="morceau-titre" aria-label="Titre du morceau">
+      <span class="remarque" id="morceau-etat" role="status"></span>
+      <button class="btn btn-petit btn-plein" id="morceau-midi">Envoyer le MIDI</button>
+      <button class="btn btn-petit btn-danger" id="morceau-supprimer">Supprimer</button>
+    </div>
+    <p class="remarque">Tes idées bout à bout : une intro, un couplet, un refrain… Glisse un bloc par sa poignée (⠿) pour le déplacer, « + » pour le répéter. Corriger une idée corrige le morceau.</p>
+    <datalist id="morceau-sections"></datalist>
+    <ol class="blocs" id="morceau-blocs"></ol>
+    <p class="remarque" id="morceau-vide" hidden>Le morceau est vide : ajoute une première idée.</p>
+    <div class="rangee"><button class="btn btn-plein" id="morceau-ajouter">+ Ajouter une idée</button></div>
+    <div class="panneau" id="morceau-choix" hidden>
+      <div class="rangee">
+        <strong>Quelle idée ajouter ?</strong>
+        <input class="champ" type="search" id="morceau-cherche" placeholder="Chercher une idée…" aria-label="Chercher une idée" style="flex:0 1 240px">
+        <button class="btn btn-petit pousse" id="morceau-choix-fermer">Fermer</button>
+      </div>
+      <div class="choix-idees" id="morceau-idees"></div>
+    </div>
+    <div class="transport">
+      <button class="btn btn-plein" id="morceau-ecouter">▶ Écouter l'enchaînement</button>
+      <label for="morceau-tempo">Tempo <input type="range" id="morceau-tempo" min="40" max="240"><span class="val" id="morceau-tempo-val"></span></label>
+      <span class="remarque" id="morceau-duree"></span>
+    </div>
+  </section>
+
   <!-- ===== Idée ===== -->
   <section class="vue vue-idee" id="vue-idee" hidden>
     <div class="idee-tete">
@@ -527,6 +594,26 @@ body.plein .barre-haut .dedans { padding-top: 6px; padding-bottom: 6px; }
         <button class="btn btn-petit btn-danger" data-menu="supprimer">Supprimer l'idée</button>
       </div>
       <div class="idee-infos" id="idee-infos" hidden></div>
+      <div class="idee-volet feuille-accords" id="feuille-accords" hidden>
+        <div class="rangee accords-tete">
+          <button class="btn btn-petit" id="accord-avant" aria-label="Mesure précédente">◀</button>
+          <strong id="accords-ou"></strong>
+          <button class="btn btn-petit" id="accord-apres" aria-label="Mesure suivante">▶</button>
+          <button class="btn btn-petit pousse" id="accords-fermer" aria-label="Fermer">✕</button>
+        </div>
+        <p class="remarque" id="accords-aide">Ceux qui vont avec ta mélodie, du plus probable au moins probable. Touche pour entendre et poser.</p>
+        <div class="accords-choix" id="accords-proposes"></div>
+        <details class="accords-autres">
+          <summary>Un autre accord</summary>
+          <div class="accords-choix petits" id="accords-racines"></div>
+          <div class="accords-choix petits" id="accords-qualites"></div>
+        </details>
+        <div class="rangee">
+          <button class="btn btn-petit" id="accord-milieu">Changer au milieu de la mesure</button>
+          <button class="btn btn-petit btn-danger" id="accord-retirer">Retirer</button>
+          <button class="btn btn-petit pousse" id="accords-tout">Proposer pour toute l'idée</button>
+        </div>
+      </div>
       <div id="idee-grille"></div>
       <div class="idee-partition" id="idee-partition" hidden>
         <div class="gravure" id="idee-gravure"></div>
@@ -588,6 +675,7 @@ body.plein .barre-haut .dedans { padding-top: 6px; padding-bottom: 6px; }
 </main>
 
 <div class="toast" id="toast" role="status" hidden></div>
+<dialog class="dialogue" id="dialogue"><form method="dialog" class="dialogue-dedans" id="dialogue-dedans"></form></dialog>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.7.1/abcjs-basic-min.js"></script>
 <script type="module" src="app.js"></script>

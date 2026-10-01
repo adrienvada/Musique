@@ -21,6 +21,8 @@ import { creerEditeurIdee, dessinerApercu, midiDeLIdee } from "./idee.js";
 import { Transport } from "./transport.js";
 import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
+import { creerVueMorceau, dessinerApercuMorceau } from "./vue-morceau.js";
+import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
 
 const VERSION_LECTEUR = 1;
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
@@ -58,6 +60,7 @@ const piano = new Piano(new URL("./piano/", import.meta.url).href);
 const transport = new Transport(piano);
 const calibrations = new Map();
 let editeur = null; // l'éditeur d'idée (idee.js), créé au démarrage
+let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
 
 async function calibration(modele) {
   if (!calibrations.has(modele)) {
@@ -91,6 +94,7 @@ function pastilleStatut(p) {
   const restants = (p.doutes || []).filter((d) => !d.leve).length;
   const span = document.createElement("span");
   if (p.type === "idee") { span.className = "pastille p-idee"; span.textContent = "Idée"; }
+  else if (p.type === "morceau") { span.className = "pastille p-morceau"; span.textContent = "Morceau"; }
   else if (p.statut === "prete") { span.className = "pastille p-ok"; span.textContent = "Prête"; }
   else { span.className = "pastille p-doute"; span.textContent = restants ? `À relire · ${restants} doute${restants > 1 ? "s" : ""}` : "À relire"; }
   return span;
@@ -106,14 +110,15 @@ function titreDepuisFichier(nom) {
 
 function montrer(vue) {
   if (etat.vue === "idee" && vue !== "idee" && editeur) editeur.fermer();
+  if (etat.vue === "morceau" && vue !== "morceau" && vueMorceau) vueMorceau.fermer();
   transport.arreter();
   etat.vue = vue;
-  for (const v of ["biblio", "atelier", "lecteur", "idee"]) $(`vue-${v}`).hidden = v !== vue;
+  for (const v of ["biblio", "atelier", "lecteur", "idee", "morceau"]) $(`vue-${v}`).hidden = v !== vue;
   const dansPartition = vue !== "biblio";
   // L'écran Idée prend toute la hauteur : le clavier sous le pouce.
   document.body.classList.toggle("plein", vue === "idee");
-  $("fil").hidden = !dansPartition || vue === "idee";
-  $("onglets").hidden = !dansPartition || vue === "idee";
+  $("fil").hidden = !dansPartition || vue === "idee" || vue === "morceau";
+  $("onglets").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglet-atelier").setAttribute("aria-selected", String(vue === "atelier"));
   $("onglet-lecteur").setAttribute("aria-selected", String(vue === "lecteur"));
   arreterLecture();
@@ -127,6 +132,7 @@ async function ouvrir(id, vue = "atelier") {
   const p = await etat.stockage.lire(id);
   if (!p) { toast("Cette partition n'existe plus."); return; }
   if (p.type === "idee") { ouvrirIdee(p); return; }
+  if (p.type === "morceau") { ouvrirMorceau(p); return; }
   etat.courante = p;
   etat.page = 0;
   etat.douteActif = -1;
@@ -137,6 +143,16 @@ async function ouvrir(id, vue = "atelier") {
   etat.pages = await etat.stockage.pages(id, p.nbPages || 0).catch(() => []);
   montrer(vue);
 }
+
+/** Ouvre un morceau ; sans partition, un nouveau, qui ne s'enregistre qu'au premier bloc. */
+function ouvrirMorceau(p = null) {
+  etat.courante = p;
+  if (etat.vue === "morceau") vueMorceau.fermer();
+  montrer("morceau");
+  vueMorceau.ouvrir(p);
+}
+
+const ideesParId = () => new Map(etat.partitions.filter((x) => x.type === "idee").map((x) => [x.id, x]));
 
 /** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */
 function ouvrirIdee(p = null, options = {}) {
@@ -178,6 +194,7 @@ function afficherBibliotheque() {
     apercu.setAttribute("aria-label", `Aperçu de ${p.titre}`);
     principal.appendChild(apercu);
     if (p.type === "idee") dessinerApercu(apercu, p.sequence);
+    else if (p.type === "morceau") dessinerApercuMorceau(apercu, p, ideesParId());
     else if (p.apercu && p.modele) {
       calibration(p.modele).then((cal) => dessinerPage(apercu, cal, p.apercu, { compact: true, limite: 9 * cal.interligne })).catch(() => {});
     }
@@ -187,7 +204,9 @@ function afficherBibliotheque() {
     titre.className = "titre"; titre.textContent = p.titre;
     const meta = document.createElement("span");
     meta.className = "meta";
-    meta.textContent = p.type === "idee" ? `${resumeIdee(p.sequence)} · ${dateCourte(p.modifieLe)}` : `${nomModele(p.modele)} · ${dateCourte(p.modifieLe)}`;
+    meta.textContent = p.type === "idee" ? `${resumeIdee(p.sequence)} · ${dateCourte(p.modifieLe)}`
+      : p.type === "morceau" ? `${(p.blocs || []).map((b) => b.nom).join(", ")} · ${dateCourte(p.modifieLe)}`
+      : `${nomModele(p.modele)} · ${dateCourte(p.modifieLe)}`;
     infos.append(titre, meta, pastilleStatut(p));
     principal.appendChild(infos);
     const actions = document.createElement("div");
@@ -199,7 +218,7 @@ function afficherBibliotheque() {
       b.addEventListener("click", f);
       actions.appendChild(b);
     };
-    if (p.type === "idee") {
+    if (p.type === "idee" || p.type === "morceau") {
       bouton("Ouvrir", () => ouvrir(p.id), true);
       bouton("▶ Écouter", (ev) => ecouterIdee(p, ev.currentTarget));
       bouton("Envoyer le MIDI", () => partagerMidi(p));
@@ -271,6 +290,13 @@ async function synchroniser() {
 
 /** La partition ouverte a changé sur un autre appareil : on la recharge, ou on revient à la bibliothèque. */
 async function rafraichirOuverte() {
+  if (etat.vue === "morceau") {
+    if (!vueMorceau.id) return;
+    const neuf = await etat.stockage.lire(vueMorceau.id);
+    if (!neuf) { toast("Ce morceau a été supprimé sur un autre appareil."); montrer("biblio"); return; }
+    vueMorceau.recharger(neuf);
+    return;
+  }
   if (etat.vue === "idee") {
     if (!editeur.id) return;
     const neuve = await etat.stockage.lire(editeur.id);
@@ -1129,12 +1155,13 @@ function midiDe(abc, { tempo, transposition = 0 } = {}) {
 /** Le MIDI de n'importe quelle partition : une idée part de ses notes, une page lue, de son ABC. */
 function midiDePartition(p, reglages = {}) {
   if (p.type === "idee") return midiDeLIdee(p);
+  if (p.type === "morceau") return midiDuMorceau(p, ideesParId());
   return midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0 });
 }
 
 /** Télécharge le .mid (dans un .zip sur claude.ai, dont la liste des formats ignore .mid). */
 async function exporterMidi(p, reglages = {}) {
-  if (p.type !== "idee" && !ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
+  if (!p.type && !ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
   const base = nomDeFichier(p);
   try {
     const octets = midiDePartition(p, reglages);
@@ -1149,7 +1176,7 @@ async function exporterMidi(p, reglages = {}) {
 
 /** Toutes les partitions en MIDI, dans un seul .zip. */
 async function toutEnMidi() {
-  if (!ABCJS() && etat.partitions.some((p) => p.type !== "idee")) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
+  if (!ABCJS() && etat.partitions.some((p) => !p.type)) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
   const pris = new Set();
   const fichiers = etat.partitions.map((p) => {
     let nom = nomDeFichier(p), n = 2;
@@ -1187,15 +1214,20 @@ async function partagerMidi(p) {
 async function ecouterIdee(p, bouton) {
   if (transport.actif && transport.carte === bouton) { transport.arreter(); return; }
   transport.arreter();
-  const seq = p.sequence;
-  const parPas = new Map();
-  let fin = 0;
-  for (const v of voixCompletes(seq)) for (const n of v.notes) { if (!parPas.has(n.d)) parPas.set(n.d, []); parPas.get(n.d).push(n); fin = Math.max(fin, n.d + n.l); }
+  let source;
+  if (p.type === "morceau") source = sourceDuMorceau(assembler(p, ideesParId()));
+  else {
+    const seq = p.sequence;
+    const parPas = new Map();
+    let fin = 0;
+    for (const v of voixCompletes(seq)) for (const n of v.notes) { if (!parPas.has(n.d)) parPas.set(n.d, []); parPas.get(n.d).push(n); fin = Math.max(fin, n.d + n.l); }
+    source = () => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA: (x) => parPas.get(x) || [] });
+  }
   const libelle = bouton.textContent;
   bouton.textContent = "■ Arrêter";
   transport.carte = bouton;
   try {
-    await transport.jouer(() => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA: (x) => parPas.get(x) || [] }), {
+    await transport.jouer(source, {
       surFin: () => { bouton.textContent = libelle; transport.carte = null; },
     });
   } catch (e) {
@@ -1253,6 +1285,7 @@ function brancher() {
   // Nouvelle idée
   $("nouvelle-idee").addEventListener("click", () => ouvrirIdee(null));
   $("vide-idee").addEventListener("click", () => ouvrirIdee(null));
+  $("nouveau-morceau").addEventListener("click", () => ouvrirMorceau(null));
 
   // Ma reMarkable, modèles, bibliothèque
   $("ouvrir-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
@@ -1454,10 +1487,61 @@ async function actionIdee(action, p) {
       toast(`« ${p.titre} » est supprimée.`);
       return montrer("biblio");
     }
+    case "morceau": return choisirMorceau(p);
     default:
       toast("Bientôt.");
       return undefined;
   }
+}
+
+/** Une petite fenêtre : un titre, des boutons ; rend la valeur du bouton choisi (ou null). */
+function dialogue(titre, texte, choix) {
+  const d = $("dialogue");
+  const f = $("dialogue-dedans");
+  f.textContent = "";
+  const h = document.createElement("h2"); h.textContent = titre;
+  const p = document.createElement("p"); p.className = "remarque"; p.textContent = texte;
+  const liste = document.createElement("div"); liste.className = "liste-choix";
+  for (const c of choix) {
+    const b = document.createElement("button");
+    b.className = "btn" + (c.plein ? " btn-plein" : "");
+    b.value = c.valeur; b.textContent = c.texte;
+    liste.appendChild(b);
+  }
+  const annuler = document.createElement("button");
+  annuler.className = "btn btn-petit"; annuler.value = ""; annuler.textContent = "Annuler";
+  f.append(h, p, liste, annuler);
+  return new Promise((ok) => {
+    d.addEventListener("close", () => ok(d.returnValue || null), { once: true });
+    d.returnValue = "";
+    d.showModal();
+  });
+}
+
+/** « Ajouter à un morceau » : un morceau existant, ou un nouveau. */
+async function choisirMorceau(p) {
+  const morceaux = etat.partitions.filter((x) => x.type === "morceau");
+  const choix = await dialogue("Ajouter à un morceau", `« ${p.titre} » devient un bloc du morceau choisi.`, [
+    { valeur: "nouveau", texte: "+ Un nouveau morceau", plein: true },
+    ...morceaux.map((x) => ({ valeur: x.id, texte: `${x.titre} (${(x.blocs || []).length} bloc${(x.blocs || []).length > 1 ? "s" : ""})` })),
+  ]);
+  if (!choix) return;
+  await editeur.fermer();
+  if (choix === "nouveau") ouvrirMorceau(null);
+  else ouvrirMorceau(await etat.stockage.lire(choix));
+  vueMorceau.ajouter(p.id);
+  $("morceau-choix").hidden = true;
+}
+
+function creerVueDuMorceau() {
+  vueMorceau = creerVueMorceau({
+    transport, toast, nouvelId,
+    stockage: () => etat.stockage,
+    partitions: () => etat.partitions,
+    partager: partagerMidi,
+    ouvrirIdee: (id) => ouvrir(id),
+    quitter: () => montrer("biblio"),
+  });
 }
 
 function creerEditeur() {
@@ -1475,6 +1559,7 @@ function creerEditeur() {
 async function demarrer() {
   brancher();
   creerEditeur();
+  creerVueDuMorceau();
   afficherBibliotheque();
   etat.stockage = await ouvrirStockage();
   // Raccourci de l'appli installée (« Nouvelle idée ») : on y va tout droit.
@@ -1495,6 +1580,7 @@ async function demarrer() {
     (liste) => {
       etat.partitions = liste;
       if (etat.vue === "biblio") afficherBibliotheque();
+      if (etat.vue === "morceau") vueMorceau.rafraichir();
     },
     (e) => toast("La bibliothèque ne répond plus : recharge la page. (" + (e.code || e.message) + ")", 9000),
   );

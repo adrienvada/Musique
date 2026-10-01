@@ -243,9 +243,9 @@ export function creerGrille(conteneur, rappels) {
 
   conteneur.querySelector(".g-regle").addEventListener("pointerdown", (e) => {
     if (!etat) return;
-    const accords = e.target.closest(".g-accords");
-    if (accords) { rappels.accord(Number(accords.dataset.mesure)); return; }
     const r = regle.getBoundingClientRect();
+    const accords = e.target.closest(".g-accords");
+    if (accords) { rappels.accord(Number(accords.dataset.mesure), (e.clientX - r.left) / px); return; }
     rappels.curseur(Math.max(0, Math.round((e.clientX - r.left) / px / pasParTemps(etat.seq)) * pasParTemps(etat.seq)));
   });
   touches.addEventListener("pointerdown", (e) => {
