@@ -43,25 +43,41 @@ export class Piano {
     );
   }
 
-  /** Joue une note : hauteur MIDI, durée en secondes, force 0-127. */
-  note(midi, duree, force = 90) {
-    if (!this.echantillons) return;
+  /**
+   * Joue une note : hauteur MIDI, durée en secondes, force 0-127, et
+   * l'instant (horloge audio) où elle part : tout de suite par défaut.
+   */
+  note(midi, duree, force = 90, quand = null) {
+    const entree = this.debut(midi, force, quand);
+    if (entree) this.fin(entree, entree.t + Math.max(duree, 0.1));
+  }
+
+  /** Enfonce une touche : la note sonne jusqu'à fin() (le doigt se lève). */
+  debut(midi, force = 90, quand = null) {
+    if (!this.echantillons) return null;
     let e = this.echantillons[0];
     for (const x of this.echantillons) if (Math.abs(x.midi - midi) < Math.abs(e.midi - midi)) e = x;
-    const t = this.ctx.currentTime + 0.01;
+    const t = Math.max(quand ?? 0, this.ctx.currentTime + 0.01);
     const src = this.ctx.createBufferSource();
     src.buffer = e.buffer;
     src.playbackRate.value = Math.pow(2, (midi - e.midi) / 12);
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(0.75 * Math.pow(force / 127, 1.4), t);
-    const fin = t + Math.max(duree, 0.1);
-    g.gain.setTargetAtTime(0, fin, 0.1); // l'étouffoir retombe
     src.connect(g).connect(this.sortie);
     src.start(t);
-    src.stop(fin + 1);
-    const entree = { src, g };
+    src.stop(t + e.buffer.duration / src.playbackRate.value + 0.1);
+    const entree = { src, g, t };
     this.actives.add(entree);
     src.onended = () => this.actives.delete(entree);
+    return entree;
+  }
+
+  /** L'étouffoir retombe, maintenant ou à l'instant donné. */
+  fin(entree, quand = null) {
+    if (!entree || !this.ctx) return;
+    const t = Math.max(quand ?? 0, this.ctx.currentTime);
+    entree.g.gain.setTargetAtTime(0, t, 0.1);
+    try { entree.src.stop(t + 1); } catch { /* déjà arrêtée */ }
   }
 
   silence() {

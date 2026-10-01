@@ -1,6 +1,6 @@
 # Propositions — de la tablette au piano
 
-*Mis à jour le 30 septembre 2026 (nuit) : dépôt public, site GitHub Pages, correction au toucher.*
+*Mis à jour le 1er octobre 2026 : Portée devient un carnet MIDI de poche (idées notées au clavier, au chant ou en direct).*
 
 **L'appli** :
 - **https://adrienvada.fr/Musique/** (site public sur GitHub Pages, installable, bibliothèque synchronisée) ;
@@ -120,6 +120,66 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     public, pour un seul utilisateur.
   - La version claude.ai garde sa propre base. On passe de l'une à l'autre
     par « Sauvegarder » puis « Restaurer ».
+
+- **01/10 · Portée devient un carnet MIDI de poche.** Demandé par Adrien :
+  « un véritable éditeur MIDI on the go pour la prise de notes de mélodies,
+  de phrases musicales et de structures. Priorité : la praticité et
+  l'intuitivité ». Il a validé le plan en trois étapes ci-dessous et demandé,
+  pour le chant, « juste de pouvoir rentrer une note en la chantant » : pas
+  de transcription d'une mélodie entière, trop fragile sur le rythme.
+  - **Une idée vit en notes, pas en ABC.** Les pages lues sur la tablette
+    restent en ABC (le lecteur l'écrit, l'atelier le corrige). Une idée
+    notée dans l'appli est une liste de notes { début, durée, hauteur MIDI },
+    comme dans Ableton (`app/sequence.js`). La grille, le clavier, le micro
+    et l'enregistrement la manipulent sans se soucier de notation. La
+    partition n'en est qu'une traduction en ABC, refaite à chaque changement,
+    avec la carte de ses jetons pour retrouver la note touchée. Le MIDI part
+    des notes (`app/midi.js`), une piste nommée par voix.
+  - Pourquoi pas l'ABC pour tout : écrire au clavier ou poser une note dans
+    la grille obligerait à recalculer barres, liaisons et altérations dans le
+    texte à chaque geste. En notes, c'est trivial, et l'ABC se régénère.
+  - Le temps se compte en **pas** (double croche) ; le jeu en direct est
+    recalé sur une grille (croche par défaut).
+  - Dans la bibliothèque, une idée est un document comme les autres
+    (`type: "idee"`, `sequence`, et un `abc` régénéré pour les exports) : la
+    synchronisation et la sauvegarde la prennent sans changement.
+  - Une page lue peut **continuer en idée** (« Écouter et exporter ») :
+    abcjs la joue en notes (reprises dépliées), la page d'origine ne change pas.
+
+## Carnet MIDI de poche : le plan (01/10)
+
+Étape 1, le cœur : noter vite, corriger au doigt, envoyer vers Ableton.
+1. **« Nouvelle idée »** : un bouton en tête de la bibliothèque, et le
+   raccourci de l'appli installée (Android : appui long sur l'icône). L'idée
+   s'enregistre toute seule dès la première note ; vide, elle ne laisse rien.
+2. **Le clavier** : à l'écran (plusieurs doigts pour un accord, ‹ › pour
+   l'octave), de l'ordinateur (disposition d'Ableton : rangée A S D F… et
+   W E T Y U, Z X pour l'octave) ou MIDI (Chrome et Edge ; Safari ne sait
+   pas). Sans note choisie, une touche écrit à la suite, de la durée choisie,
+   comme dans un texte ; avec une note choisie, elle lui donne sa hauteur.
+   « Jouer en direct » : un décompte, le métronome, et les notes se recalent.
+3. **La grille** au doigt : toucher une case vide pose une note, toucher une
+   note la choisit, deux fois l'efface, la glisser la déplace, tirer son bord
+   l'allonge. La **partition** se touche aussi. Tout s'annule et se refait.
+4. **Envoyer le MIDI** : le partage du téléphone (AirDrop, Fichiers, mail),
+   sinon un téléchargement. Une piste par voix, tempo, mesure et armure.
+
+Étape 2 : **chanter une note**. Le micro reconnaît la note tenue un quart de
+seconde (algorithme YIN) et l'écrit comme une touche du clavier. Une même
+note redite s'écrit après une respiration. Le son ne quitte pas l'appareil.
+
+Étape 3 : construire et ranger.
+5. **Accords** sous la mélodie (proposés d'après les notes de la mesure) et
+   un **accompagnement** calculé : plaqués, basse et accords, ou arpège.
+6. **Boucle, métronome, tempo tapé** ; on peut modifier l'idée pendant
+   qu'elle tourne.
+7. **Morceaux** : des idées en blocs (intro, couplet, refrain…) qu'on
+   réordonne et qu'on répète ; l'enchaînement s'écoute et part en MIDI.
+8. **Carnet** : étiquettes, favoris, une note de contexte et un mémo vocal
+   par idée ; recherche.
+9. **Transformer une phrase** (menu en cercle sous le doigt) : transposer,
+   doubler ou diviser les durées, à l'envers, en miroir, recaler, répéter.
+10. **MusicXML** pour MuseScore.
 
 ## Ce que les pages d'essai ont appris
 
@@ -275,6 +335,15 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
    synchronisée** entre les appareils : *fait et testé* (Node : deux
    appareils, conflits, hors ligne ; Chromium : ordinateur et téléphone).
 8. *(option)* Second avis JAZZMUS. 9. *(option)* MusicXML.
+11. **Carnet MIDI de poche** (plan du 01/10, plus haut) :
+    - étape 1 (« Nouvelle idée », clavier à l'écran, de l'ordinateur et
+      MIDI, jeu en direct, grille, partition touchable, envoi du MIDI) :
+      *fait et testé* (Node : écriture ABC relue par abcjs sur mille idées
+      au hasard, MIDI relu octet par octet ; Chromium au format téléphone :
+      saisie, sélection, annuler, partition, écoute, rechargement) ;
+    - étape 2 (chanter une note) : *fait et testé* (Node : sons fabriqués ;
+      Chromium : un « chanteur » de synthèse dans un faux micro) ;
+    - étape 3 : *en cours*.
    10. *(option)* Passerelle Ableton : le MIDI (une piste par main) y va déjà en un glisser.
 
 ## Brancher la reMarkable (une fois)
@@ -360,6 +429,24 @@ ou supprimer la fonction dans Supabase.
   démarrage : posée après, une instance déjà chaude répondrait 404. Si la
   première mise en place échoue, le script retire la clé neuve, pour que
   l'essai suivant en tire une autre et affiche l'adresse.
+
+- **abcjs et les liaisons dans les accords.** abcjs ne lie, d'un accord au
+  suivant, que l'accord entier, ou la note de même rang (ce qui casse dès
+  qu'une note s'ajoute ou part). `sequence.js` range donc les notes d'une voix
+  en couches (« & » en ABC) où chaque accord est homogène, et écrit chaque
+  couche dans toutes les mesures, même vide (sinon abcjs y invente un
+  silence). abcjs oublie aussi les altérations d'une couche à l'autre : une
+  note altérée ailleurs dans la mesure redit la sienne.
+- **Noms de classes CSS.** `.vide` et `.grille` existaient déjà (accueil,
+  cartes de la bibliothèque) : la grille de notes s'appelle `.grille-notes`,
+  ses éléments `g-…`.
+- **Écran Idée en pleine hauteur** (`body.plein`) : `main` y perd sa marge
+  automatique, sinon un élément trop large (la barre de sélection) élargit
+  toute la page sur téléphone.
+- **Micro et clavier MIDI** : ni l'un ni l'autre dans la page claude.ai
+  (cadre sans ces permissions) ; Safari (iPhone, iPad) ne lit pas les
+  claviers MIDI. Le micro et le son ne marchent pas en même temps : on coupe
+  l'un pour l'autre (sinon le piano repasse dans le micro).
 
 ## Questions ouvertes
 
