@@ -193,6 +193,12 @@ test("jouer en direct : les notes se recalent sur la grille", () => {
     { h: 69, debut: 12.1, fin: 13.9 },
   ], { grille: 2, origine: 16 });
   assert.deepEqual(notes.map((n) => [n.d, n.l, n.h]), [[16, 2, 60], [18, 2, 62], [20, 4, 64], [24, 2, 64], [26, 2, 67], [28, 2, 69]]);
+  // Des noires jouées un peu détachées (relâchées une croche trop tôt) restent des noires ;
+  // un vrai silence (plus d'une croche) reste un silence.
+  const detachees = sq.quantifier([
+    { h: 60, debut: 0, fin: 2.9 }, { h: 62, debut: 4, fin: 6.2 }, { h: 64, debut: 8, fin: 9 }, { h: 65, debut: 13, fin: 15 },
+  ], { grille: 2 });
+  assert.deepEqual(detachees.map((n) => [n.d, n.l, n.h]), [[0, 4, 60], [4, 4, 62], [8, 2, 64], [14, 2, 65]]);
   // Un accord tenu sous la mélodie, lui, reste tenu.
   const tenu = sq.quantifier([{ h: 48, debut: 0, fin: 8 }, { h: 72, debut: 2, fin: 4 }], { grille: 2 });
   assert.deepEqual(tenu.map((n) => [n.d, n.l, n.h]), [[0, 8, 48], [2, 2, 72]]);

@@ -572,9 +572,10 @@ export function recaler(seq, p, ids, grille) {
 /**
  * Des notes jouées en direct (début et fin en pas, fractionnaires, depuis
  * le premier temps) → des notes recalées sur la grille (en pas). Une note
- * trop courte prend un pas de grille. Une note qui déborde à peine sur la
- * suivante (jeu lié) s'arrête où l'autre commence ; deux fois la même
- * hauteur ne se chevauchent jamais.
+ * trop courte prend un pas de grille. Jeu lié : une note relâchée un pas
+ * de grille au plus avant la suivante tient jusqu'à elle, une note qui
+ * déborde à peine sur la suivante s'arrête où l'autre commence. Deux fois
+ * la même hauteur ne se chevauchent jamais.
  */
 export function quantifier(evenements, { grille = 2, origine = 0 } = {}) {
   const notes = [];
@@ -588,6 +589,14 @@ export function quantifier(evenements, { grille = 2, origine = 0 } = {}) {
   for (const n of notes) {
     const suivante = notes.find((m) => m !== n && m.d > n.d && m.d < n.d + n.l && (m.h === n.h || n.d + n.l - m.d <= grille));
     if (suivante) n.l = suivante.d - n.d;
+  }
+  for (const n of notes) {
+    // La note qui suit de plus près (celles qui commencent ensemble forment un accord).
+    const apres = notes.filter((m) => m.d > n.d);
+    if (!apres.length) continue;
+    const prochaine = Math.min(...apres.map((m) => m.d));
+    const ecart = prochaine - (n.d + n.l);
+    if (ecart > 0 && ecart <= grille) n.l += ecart;
   }
   return notes;
 }

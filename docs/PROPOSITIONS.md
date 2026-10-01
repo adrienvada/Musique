@@ -155,7 +155,10 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     la grille obligerait à recalculer barres, liaisons et altérations dans le
     texte à chaque geste. En notes, c'est trivial, et l'ABC se régénère.
   - Le temps se compte en **pas** (double croche) ; le jeu en direct est
-    recalé sur une grille (croche par défaut).
+    recalé sur une grille (croche par défaut). Jeu lié : une note relâchée
+    au plus un pas de grille avant la suivante tient jusqu'à elle (des
+    noires jouées un peu détachées restent des noires) ; au-delà, c'est un
+    silence.
   - Dans la bibliothèque, une idée est un document comme les autres
     (`type: "idee"`, `sequence`, et un `abc` régénéré pour les exports) : la
     synchronisation et la sauvegarde la prennent sans changement.
@@ -350,7 +353,8 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
    modèles téléchargeables, accueil en trois étapes. **Bibliothèque
    synchronisée** entre les appareils : *fait et testé* (Node : deux
    appareils, conflits, hors ligne ; Chromium : ordinateur et téléphone).
-8. *(option)* Second avis JAZZMUS. 9. *(option)* MusicXML.
+8. *(option)* Second avis JAZZMUS. 9. **MusicXML** : *fait* (le 01/10, avec le carnet ; pages lues comprises).
+   10. *(option)* Passerelle Ableton : le MIDI (une piste par main) y va déjà en un glisser.
 11. **Carnet MIDI de poche** (plan du 01/10, plus haut) :
     - étape 1 (« Nouvelle idée », clavier à l'écran, de l'ordinateur et
       MIDI, jeu en direct, grille, partition touchable, envoi du MIDI) :
@@ -370,8 +374,13 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
       phrase au doigt (« + suivante », « Tout »), MusicXML (idées et pages
       lues) : *faits et testés* (Node : MusicXML relu, mémo synchronisé
       entre deux appareils ; Chromium : carnet, mémo au faux micro, menu en
-      cercle, MusicXML).
-   10. *(option)* Passerelle Ableton : le MIDI (une piste par main) y va déjà en un glisser.
+      cercle, MusicXML) ;
+    - partout : deux navigateurs synchronisés par le vrai code du connecteur
+      (une idée, son étiquette et son mémo passent du téléphone à
+      l'ordinateur ; la note ajoutée sur l'ordinateur arrive dans l'idée
+      ouverte sur le téléphone) ; la version claude.ai essayée avec une
+      fausse base et localStorage refusé ; les anciens écrans (import,
+      correction au toucher, écoute, MIDI) inchangés.
 
 ## Brancher la reMarkable (une fois)
 
@@ -470,6 +479,14 @@ ou supprimer la fonction dans Supabase.
 - **Écran Idée en pleine hauteur** (`body.plein`) : `main` y perd sa marge
   automatique, sinon un élément trop large (la barre de sélection) élargit
   toute la page sur téléphone.
+- **localStorage dans la page claude.ai** : il peut être refusé (cadre
+  isolé). Les préférences de l'éditeur (affichage, tempo par défaut, clavier
+  MIDI) passent par `lirePref` / `ecrirePref`, qui font sans.
+- **Essais Chromium derrière le proxy** : sans `ignoreHTTPSErrors`, abcjs
+  (cdnjs) ne se charge pas et la partition reste vide ; le proxy laisse
+  aussi parfois tomber les polices (`ERR_TOO_MANY_RETRIES`). Ce n'est pas
+  l'appli. Un faux micro : `--use-fake-device-for-media-stream
+  --use-file-for-fake-audio-capture=chant.wav` (un chanteur de synthèse).
 - **Micro et clavier MIDI** : ni l'un ni l'autre dans la page claude.ai
   (cadre sans ces permissions) ; Safari (iPhone, iPad) ne lit pas les
   claviers MIDI. Le micro et le son ne marchent pas en même temps : on coupe

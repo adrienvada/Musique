@@ -40,6 +40,10 @@ const TOUCHES_ORDI = {
   KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13, KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17,
 };
 const CLE_DEFAUTS = "portee:idee-defauts";
+// Les préférences de cet appareil. Dans la page claude.ai, localStorage peut
+// être refusé : on fait alors sans.
+const lirePref = (cle) => { try { return localStorage.getItem(cle); } catch { return null; } };
+const ecrirePref = (cle, valeur) => { try { localStorage.setItem(cle, valeur); } catch { /* facultatif */ } };
 
 /** Une petite note dessinée, pour les boutons de durée. */
 export function iconeDuree(pas) {
@@ -75,7 +79,7 @@ const titreDuJour = () => {
 };
 
 function defauts() {
-  try { return { tempo: 90, mesure: [4, 4], tonalite: "C", ...JSON.parse(localStorage.getItem(CLE_DEFAUTS) || "{}") }; } catch { return { tempo: 90, mesure: [4, 4], tonalite: "C" }; }
+  try { return { tempo: 90, mesure: [4, 4], tonalite: "C", ...JSON.parse(lirePref(CLE_DEFAUTS) || "{}") }; } catch { return { tempo: 90, mesure: [4, 4], tonalite: "C" }; }
 }
 
 /**
@@ -94,7 +98,7 @@ export function creerEditeurIdee(deps) {
     note: "", etiquettes: [], favori: false, memo: null,
     selection: new Set(), curseur: 0,
     duree: 4, pointee: false,
-    affichage: localStorage.getItem("portee:affichage-idee") || "grille",
+    affichage: lirePref("portee:affichage-idee") || "grille",
     boucle: false, metronome: false, recalage: 2,
     annuler: [], refaire: [],
     version: 0, enregistrement: null, accordEnCours: null,
@@ -177,7 +181,7 @@ export function creerEditeurIdee(deps) {
     requestAnimationFrame(() => grille.centrer());
     const notes = e.seq.pistes[0].notes;
     clavier.amener(notes.length ? notes[notes.length - 1].h : 60);
-    if (localStorage.getItem("portee:midi") === "1") brancherMidi(false);
+    if (lirePref("portee:midi") === "1") brancherMidi(false);
   }
 
   /** Quitte l'éditeur : arrête le son, enregistre ce qui reste. */
@@ -676,6 +680,15 @@ export function creerEditeurIdee(deps) {
     toast(`${e.seq.accords.length} accord${e.seq.accords.length > 1 ? "s" : ""} proposé${e.seq.accords.length > 1 ? "s" : ""} : écoute, puis change ceux qui ne te plaisent pas.`, 6000);
   });
 
+  /** Ce qui empêche d'ouvrir le micro, dit simplement. */
+  function messageMicro(err) {
+    const nom = err && err.name;
+    if (nom === "NotAllowedError" || nom === "SecurityError") return "Portée n'a pas accès au micro : autorise-le dans les réglages du navigateur. (Dans la page claude.ai, il n'y a pas droit : ouvre Portée sur adrienvada.fr/Musique.)";
+    if (nom === "NotFoundError" || nom === "OverconstrainedError") return "Aucun micro trouvé sur cet appareil.";
+    if (nom === "NotReadableError") return "Le micro est déjà pris par une autre appli.";
+    return (err && err.message) || "Le micro n'a pas pu s'ouvrir.";
+  }
+
   // --- Le carnet : note, étiquettes, favori, mémo vocal ---------------------------
 
   function afficherInfos() {
@@ -725,7 +738,7 @@ export function creerEditeurIdee(deps) {
     try {
       flux = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
-      toast(err && err.name === "NotAllowedError" ? "Portée n'a pas accès au micro : autorise-le dans les réglages du navigateur." : "Le micro n'a pas pu s'ouvrir.", 8000);
+      toast(messageMicro(err), 9000);
       return;
     }
     // Le format que lisent tous les appareils d'abord (Safari enregistre en MP4).
@@ -826,8 +839,7 @@ export function creerEditeurIdee(deps) {
       minuterieSilence = setTimeout(() => { if (micro.actif) arreterMicro("Plus rien depuis 30 secondes : micro coupé."); }, 30000);
     } catch (err) {
       $("micro-panneau").hidden = true;
-      const refus = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
-      toast(refus ? "Portée n'a pas accès au micro. Autorise-le dans les réglages du navigateur (sur claude.ai, la page n'y a pas droit : ouvre Portée sur adrienvada.fr/Musique)." : (err.message || "Le micro n'a pas pu s'ouvrir."), 9000);
+      toast(messageMicro(err), 9000);
     }
   }
 
@@ -856,7 +868,7 @@ export function creerEditeurIdee(deps) {
       };
       accesMidi.onstatechange = brancher;
       brancher();
-      localStorage.setItem("portee:midi", "1");
+      ecrirePref("portee:midi", "1");
     } catch {
       if (demande) toast("Portée n'a pas eu accès au clavier MIDI.");
     }
@@ -997,7 +1009,7 @@ export function creerEditeurIdee(deps) {
   });
   document.querySelectorAll("[data-affichage]").forEach((b) => b.addEventListener("click", () => {
     e.affichage = b.dataset.affichage;
-    try { localStorage.setItem("portee:affichage-idee", e.affichage); } catch { /* facultatif */ }
+    ecrirePref("portee:affichage-idee", e.affichage);
     transport.arreter();
     afficherAffichage();
     rafraichir();
@@ -1127,7 +1139,7 @@ export function creerEditeurIdee(deps) {
   });
 
   function memoriserDefauts() {
-    try { localStorage.setItem(CLE_DEFAUTS, JSON.stringify({ tempo: e.seq.tempo, mesure: e.seq.mesure, tonalite: e.seq.tonalite })); } catch { /* facultatif */ }
+    ecrirePref(CLE_DEFAUTS, JSON.stringify({ tempo: e.seq.tempo, mesure: e.seq.mesure, tonalite: e.seq.tonalite }));
   }
 
   async function sauverMaintenant() {

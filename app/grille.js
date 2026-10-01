@@ -125,7 +125,10 @@ export function creerGrille(conteneur, rappels) {
   function afficher(e) {
     const premiere = !etat;
     etat = e;
-    const total = (nbMesures(e.seq) + 4) * pasParMesure(e.seq);
+    // Quatre mesures libres après la dernière note, et au moins toute la largeur visible.
+    const mesure = pasParMesure(e.seq);
+    const visibles = Math.ceil((defil.clientWidth || 0) / (px * mesure));
+    const total = Math.max(nbMesures(e.seq) + 4, visibles + 1) * mesure;
     dessinerFond(e.seq, total);
     dessinerRegle(e.seq, total);
     dessinerNotes();
