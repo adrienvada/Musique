@@ -1,7 +1,9 @@
 # Portée
 
-Des partitions écrites à la main sur la reMarkable, lues, corrigées et
-jouées au piano. Gratuitement.
+Un carnet de musique de poche : note une mélodie dès qu'elle te vient (au
+clavier, en chantant, en direct avec le métronome), écoute-la au piano,
+ajoute des accords, envoie-la en MIDI dans Ableton. Tes partitions écrites à
+la main sur la reMarkable y entrent aussi, lues et corrigées. Gratuitement.
 
 **L'appli : https://adrienvada.fr/Musique/**, sur l'ordinateur comme
 sur le téléphone. Elle s'installe comme une appli (bouton « Installer
@@ -9,7 +11,29 @@ l'appli » du navigateur) et marche hors ligne. Une version privée existe aussi
 sur claude.ai : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj (bibliothèque
 enregistrée sur ton compte claude.ai).
 
-## S'en servir
+## Noter une idée
+
+1. **« Nouvelle idée »**, en tête de la bibliothèque (sur Android, aussi par
+   un appui long sur l'icône de l'appli installée).
+2. **Joue** sur le clavier à l'écran : chaque touche écrit une note de la
+   durée choisie, à la suite. Plusieurs doigts font un accord. Sur
+   l'ordinateur, le clavier joue comme dans Ableton (A W S E D F…, Z X pour
+   l'octave), et un clavier MIDI branché aussi (Chrome, Edge).
+3. Ou **chante** (🎤) : chaque note tenue s'écrit. Ou **joue en direct** (●) :
+   un décompte, le métronome, et les notes se recalent sur la grille.
+4. **Corrige au doigt** dans la grille (toucher, glisser, tirer le bord) ou
+   sur la partition. Une note choisie prend la hauteur de la touche que tu
+   joues. Tout s'annule (↶).
+5. **Envoie le MIDI** : AirDrop, Fichiers, mail… ou un téléchargement. Une
+   piste par voix, au tempo de l'idée. Aussi en MusicXML pour MuseScore.
+
+Et pour aller plus loin : des **accords** au-dessus de la grille (Portée
+propose ceux qui vont avec ta mélodie) et un accompagnement qui les joue ;
+des **morceaux** faits d'idées bout à bout (intro, couplet, refrain…) ; un
+**carnet** (note, étiquettes, favoris, mémo vocal) ; un **menu en cercle**
+(appui long sur une note) pour transposer, ralentir, retourner une phrase.
+
+## Une page écrite sur la reMarkable
 
 1. **Une fois** : « Modèles pour la tablette » → télécharge un modèle et mets-le
    sur ta reMarkable (my.remarkable.com ou l'appli de l'ordinateur).
@@ -37,11 +61,11 @@ synchronisation) se branche une fois : voir
 | Dossier | Contenu |
 |---|---|
 | `lecteur/` | Le lecteur de traits (JavaScript, sans dépendance) : PDF → traits → notes → ABC |
-| `app/` | L'appli : bibliothèque, correction au toucher (`edition.js`), écoute et exports, piano échantillonné, site installable |
+| `app/` | L'appli : bibliothèque, éditeur d'idée (`idee.js`, `sequence.js`, `grille.js`, `clavier.js`, `micro.js`, `transport.js`, `midi.js`, `musicxml.js`, `harmonie.js`, `menu-radial.js`), morceaux (`morceau.js`, `vue-morceau.js`), correction au toucher (`edition.js`), écoute et exports, piano échantillonné, site installable |
 | `supabase/functions/portee-remarkable/` | Le connecteur « Portée reMarkable » : lit le cloud reMarkable au clic (fonction Supabase) |
 | `modeles/` | Les modèles de papier calibré (PDF, calibration JSON, aperçus) |
 | `outils/` | Générateur de modèles (Python), lecture en ligne de commande, assemblage de l'appli, déploiement du connecteur |
-| `tests/` | Les pages d'essai d'Adrien et les tests qui figent leur lecture |
+| `tests/` | Les pages d'essai d'Adrien et les tests qui figent leur lecture ; ceux de l'éditeur d'idée (notation, MIDI, accords, micro) |
 | `docs/PROPOSITIONS.md` | Le plan, les décisions, l'état de chaque étape, les pièges connus |
 
 ```bash

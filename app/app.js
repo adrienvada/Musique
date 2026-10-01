@@ -17,6 +17,13 @@ import { zipper } from "./zip.js";
 import * as ed from "./edition.js";
 import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE } from "./connecteur.js";
 import { creerSynchro } from "./synchro.js";
+import { creerEditeurIdee, dessinerApercu, midiDeLIdee } from "./idee.js";
+import { Transport } from "./transport.js";
+import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
+import { voixCompletes } from "./harmonie.js";
+import { creerVueMorceau, dessinerApercuMorceau } from "./vue-morceau.js";
+import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
+import { ecrireMusicXml } from "./musicxml.js";
 
 const VERSION_LECTEUR = 1;
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
@@ -40,6 +47,7 @@ const etat = {
   stockage: null,
   partitions: [],
   filtre: "tout",
+  etiquette: null,    // filtre par étiquette (carnet)
   courante: null,     // la partition ouverte (document)
   pages: [],          // ses traits, page par page
   page: 0,            // page affichée dans l'atelier
@@ -51,7 +59,10 @@ const etat = {
 };
 
 const piano = new Piano(new URL("./piano/", import.meta.url).href);
+const transport = new Transport(piano);
 const calibrations = new Map();
+let editeur = null; // l'éditeur d'idée (idee.js), créé au démarrage
+let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
 
 async function calibration(modele) {
   if (!calibrations.has(modele)) {
@@ -84,7 +95,9 @@ function dateCourte(iso) {
 function pastilleStatut(p) {
   const restants = (p.doutes || []).filter((d) => !d.leve).length;
   const span = document.createElement("span");
-  if (p.statut === "prete") { span.className = "pastille p-ok"; span.textContent = "Prête"; }
+  if (p.type === "idee") { span.className = "pastille p-idee"; span.textContent = "Idée"; }
+  else if (p.type === "morceau") { span.className = "pastille p-morceau"; span.textContent = "Morceau"; }
+  else if (p.statut === "prete") { span.className = "pastille p-ok"; span.textContent = "Prête"; }
   else { span.className = "pastille p-doute"; span.textContent = restants ? `À relire · ${restants} doute${restants > 1 ? "s" : ""}` : "À relire"; }
   return span;
 }
@@ -98,14 +111,20 @@ function titreDepuisFichier(nom) {
 // ------------------------------------------------------------------------
 
 function montrer(vue) {
+  if (etat.vue === "idee" && vue !== "idee" && editeur) editeur.fermer();
+  if (etat.vue === "morceau" && vue !== "morceau" && vueMorceau) vueMorceau.fermer();
+  transport.arreter();
   etat.vue = vue;
-  for (const v of ["biblio", "atelier", "lecteur"]) $(`vue-${v}`).hidden = v !== vue;
+  for (const v of ["biblio", "atelier", "lecteur", "idee", "morceau"]) $(`vue-${v}`).hidden = v !== vue;
   const dansPartition = vue !== "biblio";
-  $("fil").hidden = !dansPartition;
-  $("onglets").hidden = !dansPartition;
+  // L'écran Idée prend toute la hauteur : le clavier sous le pouce.
+  document.body.classList.toggle("plein", vue === "idee");
+  $("fil").hidden = !dansPartition || vue === "idee" || vue === "morceau";
+  $("onglets").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglet-atelier").setAttribute("aria-selected", String(vue === "atelier"));
   $("onglet-lecteur").setAttribute("aria-selected", String(vue === "lecteur"));
   arreterLecture();
+  if (vue === "biblio") afficherBibliotheque();
   if (vue === "atelier") afficherAtelier();
   if (vue === "lecteur") afficherLecteur();
   window.scrollTo({ top: 0 });
@@ -114,6 +133,8 @@ function montrer(vue) {
 async function ouvrir(id, vue = "atelier") {
   const p = await etat.stockage.lire(id);
   if (!p) { toast("Cette partition n'existe plus."); return; }
+  if (p.type === "idee") { ouvrirIdee(p); return; }
+  if (p.type === "morceau") { ouvrirMorceau(p); return; }
   etat.courante = p;
   etat.page = 0;
   etat.douteActif = -1;
@@ -125,20 +146,81 @@ async function ouvrir(id, vue = "atelier") {
   montrer(vue);
 }
 
+/** Ouvre un morceau ; sans partition, un nouveau, qui ne s'enregistre qu'au premier bloc. */
+function ouvrirMorceau(p = null) {
+  etat.courante = p;
+  if (etat.vue === "morceau") vueMorceau.fermer();
+  montrer("morceau");
+  vueMorceau.ouvrir(p);
+}
+
+const ideesParId = () => new Map(etat.partitions.filter((x) => x.type === "idee").map((x) => [x.id, x]));
+
+/** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */
+function ouvrirIdee(p = null, options = {}) {
+  etat.courante = p;
+  if (etat.vue === "idee") editeur.fermer();
+  montrer("idee");
+  editeur.ouvrir(p, options);
+}
+
 // ------------------------------------------------------------------------
 // Bibliothèque
 // ------------------------------------------------------------------------
+
+function correspondFiltre(p) {
+  if (etat.etiquette && !(p.etiquettes || []).includes(etat.etiquette)) return false;
+  if (etat.filtre === "tout") return true;
+  if (etat.filtre === "favori") return !!p.favori;
+  if (etat.filtre === "idee" || etat.filtre === "morceau") return p.type === etat.filtre;
+  return !p.type && p.statut === etat.filtre;
+}
+
+/** Ce que la recherche regarde : le titre, les étiquettes, la note. */
+const texteDe = (p) => [p.titre, ...(p.etiquettes || []), p.note || ""].join(" ").toLowerCase();
+
+/** Toutes les étiquettes de la bibliothèque, les plus employées d'abord. */
+function toutesEtiquettes() {
+  const compte = new Map();
+  for (const p of etat.partitions) for (const t of p.etiquettes || []) compte.set(t, (compte.get(t) || 0) + 1);
+  return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
+}
+
+/** « Aujourd'hui », « Cette semaine »… : le carnet se lit par date. */
+function periode(iso) {
+  const d = new Date(iso || 0), maintenant = new Date();
+  const jours = (new Date(maintenant.toDateString()) - new Date(d.toDateString())) / 86400000;
+  if (jours <= 0) return "Aujourd'hui";
+  if (jours === 1) return "Hier";
+  if (jours < 7) return "Cette semaine";
+  if (jours < 31) return "Ce mois-ci";
+  return "Plus ancien";
+}
 
 function afficherBibliotheque() {
   const q = $("recherche").value.trim().toLowerCase();
   const liste = $("liste");
   liste.textContent = "";
-  const visibles = etat.partitions.filter((p) =>
-    (etat.filtre === "tout" || p.statut === etat.filtre) && (!q || (p.titre || "").toLowerCase().includes(q)));
+  const visibles = etat.partitions.filter((p) => correspondFiltre(p) && (!q || texteDe(p).includes(q)));
+  // Les étiquettes, en filtres d'un toucher.
+  const etiquettes = toutesEtiquettes();
+  if (etat.etiquette && !etiquettes.includes(etat.etiquette)) etat.etiquette = null;
+  $("filtres-etiquettes").innerHTML = etiquettes.map((t) => `<button class="puce" data-etiquette="${t.replace(/"/g, "&quot;")}" aria-pressed="${t === etat.etiquette}"># ${t.replace(/</g, "&lt;")}</button>`).join("");
+  let periodeAvant = null;
   $("vide").hidden = etat.partitions.length > 0;
+  $("capture").hidden = etat.partitions.length === 0; // l'accueil a déjà son bouton
   $("aucun").hidden = !(etat.partitions.length > 0 && visibles.length === 0);
   $("tout-midi").hidden = $("sauvegarder").hidden = etat.partitions.length === 0;
   for (const p of visibles) {
+    // Sans recherche, le carnet se découpe par date (il est trié du plus récent au plus ancien).
+    const per = periode(p.modifieLe);
+    if (!q && per !== periodeAvant) {
+      const h = document.createElement("p");
+      h.className = "surtitre groupe-date";
+      h.textContent = per;
+      liste.appendChild(h);
+      periodeAvant = per;
+    }
     const carte = document.createElement("article");
     carte.className = "carte";
     const principal = document.createElement("button");
@@ -149,7 +231,9 @@ function afficherBibliotheque() {
     apercu.setAttribute("role", "img");
     apercu.setAttribute("aria-label", `Aperçu de ${p.titre}`);
     principal.appendChild(apercu);
-    if (p.apercu && p.modele) {
+    if (p.type === "idee") dessinerApercu(apercu, p.sequence);
+    else if (p.type === "morceau") dessinerApercuMorceau(apercu, p, ideesParId());
+    else if (p.apercu && p.modele) {
       calibration(p.modele).then((cal) => dessinerPage(apercu, cal, p.apercu, { compact: true, limite: 9 * cal.interligne })).catch(() => {});
     }
     const infos = document.createElement("div");
@@ -157,9 +241,30 @@ function afficherBibliotheque() {
     const titre = document.createElement("span");
     titre.className = "titre"; titre.textContent = p.titre;
     const meta = document.createElement("span");
-    meta.className = "meta"; meta.textContent = `${nomModele(p.modele)} · ${dateCourte(p.modifieLe)}`;
+    meta.className = "meta";
+    meta.textContent = p.type === "idee" ? `${resumeIdee(p.sequence)} · ${dateCourte(p.modifieLe)}`
+      : p.type === "morceau" ? `${(p.blocs || []).map((b) => b.nom).join(", ")} · ${dateCourte(p.modifieLe)}`
+      : `${nomModele(p.modele)} · ${dateCourte(p.modifieLe)}`;
     infos.append(titre, meta, pastilleStatut(p));
+    if ((p.etiquettes || []).length || p.memo || p.note) {
+      const ligne = document.createElement("span");
+      ligne.className = "etiquettes";
+      if (p.memo) { const m = document.createElement("span"); m.className = "etiquette"; m.textContent = `🎙 ${p.memo.duree} s`; ligne.appendChild(m); }
+      for (const t of p.etiquettes || []) { const e = document.createElement("span"); e.className = "etiquette"; e.textContent = "# " + t; ligne.appendChild(e); }
+      if (p.note) { const n = document.createElement("span"); n.className = "remarque"; n.textContent = p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note; ligne.appendChild(n); }
+      infos.appendChild(ligne);
+    }
     principal.appendChild(infos);
+    if (p.type) {
+      // Une étoile, d'un toucher, sans ouvrir.
+      const etoile = document.createElement("button");
+      etoile.className = "favori";
+      etoile.setAttribute("aria-pressed", String(!!p.favori));
+      etoile.setAttribute("aria-label", p.favori ? "Retirer des favoris" : "Mettre en favori");
+      etoile.textContent = p.favori ? "★" : "☆";
+      etoile.addEventListener("click", () => etat.stockage.modifier(p.id, { favori: !p.favori, modifieLe: new Date().toISOString() }));
+      carte.appendChild(etoile);
+    }
     const actions = document.createElement("div");
     actions.className = "actions";
     const bouton = (texte, f, plein = false) => {
@@ -169,9 +274,15 @@ function afficherBibliotheque() {
       b.addEventListener("click", f);
       actions.appendChild(b);
     };
-    bouton("Corriger", () => ouvrir(p.id, "atelier"), p.statut !== "prete");
-    bouton("Écouter", () => ouvrir(p.id, "lecteur"), p.statut === "prete");
-    bouton("MIDI", () => exporterMidi(p));
+    if (p.type === "idee" || p.type === "morceau") {
+      bouton("Ouvrir", () => ouvrir(p.id), true);
+      bouton("▶ Écouter", (ev) => ecouterIdee(p, ev.currentTarget));
+      bouton("Envoyer le MIDI", () => partagerMidi(p));
+    } else {
+      bouton("Corriger", () => ouvrir(p.id, "atelier"), p.statut !== "prete");
+      bouton("Écouter", () => ouvrir(p.id, "lecteur"), p.statut === "prete");
+      bouton("MIDI", () => exporterMidi(p));
+    }
     carte.append(principal, actions);
     liste.appendChild(carte);
   }
@@ -235,6 +346,20 @@ async function synchroniser() {
 
 /** La partition ouverte a changé sur un autre appareil : on la recharge, ou on revient à la bibliothèque. */
 async function rafraichirOuverte() {
+  if (etat.vue === "morceau") {
+    if (!vueMorceau.id) return;
+    const neuf = await etat.stockage.lire(vueMorceau.id);
+    if (!neuf) { toast("Ce morceau a été supprimé sur un autre appareil."); montrer("biblio"); return; }
+    vueMorceau.recharger(neuf);
+    return;
+  }
+  if (etat.vue === "idee") {
+    if (!editeur.id) return;
+    const neuve = await etat.stockage.lire(editeur.id);
+    if (!neuve) { toast("Cette idée a été supprimée sur un autre appareil."); montrer("biblio"); return; }
+    if (editeur.recharger(neuve)) toast(`« ${neuve.titre} » a été modifiée sur un autre appareil : mise à jour.`);
+    return;
+  }
   const p = etat.courante;
   if (!p || etat.vue === "biblio") return;
   const neuve = await etat.stockage.lire(p.id);
@@ -1083,12 +1208,19 @@ function midiDe(abc, { tempo, transposition = 0 } = {}) {
   return binaire instanceof Uint8Array ? binaire : new Uint8Array(binaire);
 }
 
+/** Le MIDI de n'importe quelle partition : une idée part de ses notes, une page lue, de son ABC. */
+function midiDePartition(p, reglages = {}) {
+  if (p.type === "idee") return midiDeLIdee(p);
+  if (p.type === "morceau") return midiDuMorceau(p, ideesParId());
+  return midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0 });
+}
+
 /** Télécharge le .mid (dans un .zip sur claude.ai, dont la liste des formats ignore .mid). */
 async function exporterMidi(p, reglages = {}) {
-  if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
+  if (!p.type && !ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
   const base = nomDeFichier(p);
   try {
-    const octets = midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0 });
+    const octets = midiDePartition(p, reglages);
     if (etat.stockage.midiDirect) await etat.stockage.enregistrerFichier(`${base}.mid`, new Blob([octets], { type: "audio/midi" }));
     else await etat.stockage.enregistrerFichier(`${base} (MIDI).zip`, zipper([{ nom: `${base}.mid`, donnees: octets }]));
   } catch (e) {
@@ -1100,19 +1232,94 @@ async function exporterMidi(p, reglages = {}) {
 
 /** Toutes les partitions en MIDI, dans un seul .zip. */
 async function toutEnMidi() {
-  if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
+  if (!ABCJS() && etat.partitions.some((p) => !p.type)) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
   const pris = new Set();
   const fichiers = etat.partitions.map((p) => {
     let nom = nomDeFichier(p), n = 2;
     while (pris.has(nom)) nom = `${nomDeFichier(p)} (${n++})`;
     pris.add(nom);
-    return { nom: `${nom}.mid`, donnees: midiDe(p.abc, { tempo: p.tempo, transposition: p.transposition || 0 }) };
+    return { nom: `${nom}.mid`, donnees: midiDePartition(p) };
   });
   try {
     await etat.stockage.enregistrerFichier("Portée - MIDI.zip", zipper(fichiers));
   } catch (e) {
     if (e && e.code === "declined") return;
     toast("L'export n'a pas abouti : " + (e.message || e.code || "erreur"));
+  }
+}
+
+/**
+ * Envoie le MIDI là où on veut (AirDrop, Fichiers, mail…) avec le partage
+ * du téléphone ; sinon (ordinateur, claude.ai), le télécharge.
+ */
+async function partagerMidi(p) {
+  try {
+    const fichier = new File([midiDePartition(p)], `${nomDeFichier(p)}.mid`, { type: "audio/midi" });
+    if (!dansClaude() && navigator.canShare && navigator.canShare({ files: [fichier] })) {
+      await navigator.share({ files: [fichier], title: p.titre });
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === "AbortError") return;
+    console.warn("Partage impossible, téléchargement à la place", e);
+  }
+  await exporterMidi(p);
+}
+
+/** Écoute une idée depuis sa carte, sans l'ouvrir. */
+async function ecouterIdee(p, bouton) {
+  if (transport.actif && transport.carte === bouton) { transport.arreter(); return; }
+  transport.arreter();
+  let source;
+  if (p.type === "morceau") source = sourceDuMorceau(assembler(p, ideesParId()));
+  else {
+    const seq = p.sequence;
+    const parPas = new Map();
+    let fin = 0;
+    for (const v of voixCompletes(seq)) for (const n of v.notes) { if (!parPas.has(n.d)) parPas.set(n.d, []); parPas.get(n.d).push(n); fin = Math.max(fin, n.d + n.l); }
+    source = () => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA: (x) => parPas.get(x) || [] });
+  }
+  const libelle = bouton.textContent;
+  bouton.textContent = "■ Arrêter";
+  transport.carte = bouton;
+  try {
+    await transport.jouer(source, {
+      surFin: () => { bouton.textContent = libelle; transport.carte = null; },
+    });
+  } catch (e) {
+    bouton.textContent = libelle;
+    toast(e.message || "Le piano n'a pas pu se charger.");
+  }
+}
+
+/** « 4 mesures · ♩ 90 · Do majeur » */
+function resumeIdee(seq) {
+  if (!seq) return "";
+  const notes = seq.pistes.reduce((n, p) => n + p.notes.length, 0);
+  return `${notes} note${notes > 1 ? "s" : ""} · ♩ ${seq.tempo}`;
+}
+
+/**
+ * Le MusicXML (MuseScore) : une idée part de ses notes, une page lue de son
+ * ABC joué en notes. Sur claude.ai, dans un .zip (liste fermée des formats).
+ */
+async function exporterMusicXml(p) {
+  try {
+    let seq, voix;
+    if (p.type === "idee") { seq = p.sequence; voix = voixCompletes(seq); }
+    else {
+      if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
+      seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
+      voix = seq.pistes;
+    }
+    const nom = `${nomDeFichier(p)}.musicxml`;
+    const octets = new TextEncoder().encode(ecrireMusicXml(seq, { voix, titre: p.titre }));
+    if (etat.stockage.midiDirect) await etat.stockage.enregistrerFichier(nom, new Blob([octets], { type: "application/vnd.recordare.musicxml+xml" }));
+    else await etat.stockage.enregistrerFichier(`${nomDeFichier(p)} (MusicXML).zip`, zipper([{ nom, donnees: octets }]));
+  } catch (e) {
+    if (e && e.code === "declined") return;
+    console.error(e);
+    toast("L'export MusicXML n'a pas abouti : " + (e.message || e.code || "erreur"));
   }
 }
 
@@ -1155,6 +1362,13 @@ function brancher() {
     importer(fichiers);
   });
 
+  // Nouvelle idée
+  $("nouvelle-idee").addEventListener("click", () => ouvrirIdee(null));
+  $("vide-idee").addEventListener("click", () => ouvrirIdee(null));
+  $("nouveau-morceau").addEventListener("click", () => ouvrirMorceau(null));
+  // Fredonner tout de suite : une idée neuve, le mémo qui enregistre déjà.
+  $("nouveau-memo").addEventListener("click", () => ouvrirIdee(null, { memo: true }));
+
   // Ma reMarkable, modèles, bibliothèque
   $("ouvrir-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
   $("vide-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
@@ -1178,6 +1392,12 @@ function brancher() {
 
   // Bibliothèque
   $("recherche").addEventListener("input", afficherBibliotheque);
+  $("filtres-etiquettes").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-etiquette]");
+    if (!b) return;
+    etat.etiquette = etat.etiquette === b.dataset.etiquette ? null : b.dataset.etiquette;
+    afficherBibliotheque();
+  });
   document.querySelectorAll("[data-filtre]").forEach((b) => b.addEventListener("click", () => {
     etat.filtre = b.dataset.filtre;
     document.querySelectorAll("[data-filtre]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
@@ -1233,6 +1453,7 @@ function brancher() {
     montrer("lecteur");
   });
   document.addEventListener("keydown", clavier);
+  document.addEventListener("keyup", (e) => { if (etat.vue === "idee" && editeur.toucheHaut(e)) e.preventDefault(); });
   $("supprimer").addEventListener("click", () => { $("confirmer").hidden = false; });
   $("confirmer-non").addEventListener("click", () => { $("confirmer").hidden = true; });
   $("confirmer-oui").addEventListener("click", async () => {
@@ -1267,6 +1488,20 @@ function brancher() {
   $("main-droite").addEventListener("change", arreterLecture);
   $("main-gauche").addEventListener("change", arreterLecture);
   $("export-abc").addEventListener("click", exporterAbc);
+  $("export-musicxml").addEventListener("click", () => exporterMusicXml(etat.courante));
+  // Une page lue devient une idée : on la prolonge au clavier, en direct, avec des accords.
+  $("continuer-idee").addEventListener("click", () => {
+    const p = etat.courante;
+    if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
+    try {
+      const seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
+      ouvrirIdee(null, { seq, titre: `${p.titre} (idée)` });
+      toast("Une copie en idée : la page d'origine ne change pas.");
+    } catch (e) {
+      console.error(e);
+      toast("Cette partition n'a pas pu devenir une idée : " + (e.message || "erreur"));
+    }
+  });
   $("export-midi").addEventListener("click", () => exporterMidi(etat.courante, { tempo: Number($("tempo").value), transposition: etat.transposition }));
   $("imprimer").addEventListener("click", () => window.print());
 
@@ -1286,6 +1521,11 @@ function brancher() {
 function clavier(e) {
   const cible = e.target;
   if (cible.closest && cible.closest("input, textarea, select, [contenteditable]")) return;
+  if (etat.vue === "idee") {
+    if (cible.closest && cible.closest("button") && (e.key === " " || e.key === "Enter")) return;
+    if (editeur.toucheBas(e)) e.preventDefault();
+    return;
+  }
   if (e.key === " " && etat.vue === "lecteur" && !cible.closest("button")) {
     e.preventDefault();
     $("ecouter").click();
@@ -1317,10 +1557,104 @@ function clavier(e) {
   }
 }
 
+/** Ce que le menu « ••• » de l'éditeur d'idée demande. */
+async function actionIdee(action, p) {
+  switch (action) {
+    case "telecharger-midi": return exporterMidi(p);
+    case "dupliquer": {
+      const id = nouvelId();
+      const maintenant = new Date().toISOString();
+      const { id: _ancien, ...donnees } = p;
+      await etat.stockage.creer(id, { ...donnees, titre: `${p.titre} (copie)`, creeLe: maintenant, modifieLe: maintenant }, []);
+      toast("Copie faite : tu y es.");
+      return ouvrir(id);
+    }
+    case "supprimer": {
+      if (!window.confirm(`Supprimer « ${p.titre} » ? C'est définitif.`)) return undefined;
+      await editeur.fermer();
+      await etat.stockage.supprimer(p.id, 0);
+      toast(`« ${p.titre} » est supprimée.`);
+      return montrer("biblio");
+    }
+    case "morceau": return choisirMorceau(p);
+    case "musicxml": return exporterMusicXml(p);
+    default:
+      toast("Bientôt.");
+      return undefined;
+  }
+}
+
+/** Une petite fenêtre : un titre, des boutons ; rend la valeur du bouton choisi (ou null). */
+function dialogue(titre, texte, choix) {
+  const d = $("dialogue");
+  const f = $("dialogue-dedans");
+  f.textContent = "";
+  const h = document.createElement("h2"); h.textContent = titre;
+  const p = document.createElement("p"); p.className = "remarque"; p.textContent = texte;
+  const liste = document.createElement("div"); liste.className = "liste-choix";
+  for (const c of choix) {
+    const b = document.createElement("button");
+    b.className = "btn" + (c.plein ? " btn-plein" : "");
+    b.value = c.valeur; b.textContent = c.texte;
+    liste.appendChild(b);
+  }
+  const annuler = document.createElement("button");
+  annuler.className = "btn btn-petit"; annuler.value = ""; annuler.textContent = "Annuler";
+  f.append(h, p, liste, annuler);
+  return new Promise((ok) => {
+    d.addEventListener("close", () => ok(d.returnValue || null), { once: true });
+    d.returnValue = "";
+    d.showModal();
+  });
+}
+
+/** « Ajouter à un morceau » : un morceau existant, ou un nouveau. */
+async function choisirMorceau(p) {
+  const morceaux = etat.partitions.filter((x) => x.type === "morceau");
+  const choix = await dialogue("Ajouter à un morceau", `« ${p.titre} » devient un bloc du morceau choisi.`, [
+    { valeur: "nouveau", texte: "+ Un nouveau morceau", plein: true },
+    ...morceaux.map((x) => ({ valeur: x.id, texte: `${x.titre} (${(x.blocs || []).length} bloc${(x.blocs || []).length > 1 ? "s" : ""})` })),
+  ]);
+  if (!choix) return;
+  await editeur.fermer();
+  if (choix === "nouveau") ouvrirMorceau(null);
+  else ouvrirMorceau(await etat.stockage.lire(choix));
+  vueMorceau.ajouter(p.id);
+  $("morceau-choix").hidden = true;
+}
+
+function creerVueDuMorceau() {
+  vueMorceau = creerVueMorceau({
+    transport, toast, nouvelId,
+    stockage: () => etat.stockage,
+    partitions: () => etat.partitions,
+    partager: partagerMidi,
+    ouvrirIdee: (id) => ouvrir(id),
+    quitter: () => montrer("biblio"),
+  });
+}
+
+function creerEditeur() {
+  editeur = creerEditeurIdee({
+    piano, transport, toast, nouvelId,
+    stockage: () => etat.stockage,
+    abcjs: ABCJS,
+    partager: partagerMidi,
+    menu: actionIdee,
+    titreChange: (t) => { $("fil-titre").textContent = t; },
+    etiquettes: toutesEtiquettes,
+    nouvelleDepuis: (seq) => ouvrirIdee(null, { seq, titre: "Idée tirée d'une phrase" }),
+  });
+}
+
 async function demarrer() {
   brancher();
+  creerEditeur();
+  creerVueDuMorceau();
   afficherBibliotheque();
   etat.stockage = await ouvrirStockage();
+  // Raccourci de l'appli installée (« Nouvelle idée ») : on y va tout droit.
+  if (new URLSearchParams(location.search).has("idee")) ouvrirIdee(null);
   const surClaude = etat.stockage.mode === "claude";
   if (surClaude) {
     $("mode").textContent = "Enregistré sur claude.ai";
@@ -1337,6 +1671,7 @@ async function demarrer() {
     (liste) => {
       etat.partitions = liste;
       if (etat.vue === "biblio") afficherBibliotheque();
+      if (etat.vue === "morceau") vueMorceau.rafraichir();
     },
     (e) => toast("La bibliothèque ne répond plus : recharge la page. (" + (e.code || e.message) + ")", 9000),
   );

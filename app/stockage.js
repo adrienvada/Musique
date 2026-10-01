@@ -82,6 +82,15 @@ function stockageClaude(db, downloads) {
     async supprimer(id, nb) {
       await col.doc(id).delete();
       for (let n = 1; n <= nb; n++) await db.doc(`partitions/${id}/pages/${n}`).delete();
+      await db.doc(`partitions/${id}/memo/audio`).delete().catch(() => {});
+    },
+    async lireMemo(id) {
+      const d = await db.doc(`partitions/${id}/memo/audio`).get();
+      return d.exists ? d.data() : null;
+    },
+    async ecrireMemo(id, memo) {
+      const doc = db.doc(`partitions/${id}/memo/audio`);
+      if (memo) await doc.set(memo); else await doc.delete().catch(() => {});
     },
     async enregistrerFichier(nom, donnees) {
       if (!downloads) return telechargerNavigateur(nom, donnees);
@@ -127,7 +136,16 @@ function stockageLocal() {
     },
     async supprimer(id) {
       const tout = lireTout(); delete tout[id]; ecrireTout(tout);
-      try { localStorage.removeItem(`portee:pages:${id}`); } catch { /* rien à faire */ }
+      try { localStorage.removeItem(`portee:pages:${id}`); localStorage.removeItem(`portee:memo:${id}`); } catch { /* rien à faire */ }
+    },
+    async lireMemo(id) {
+      try { return JSON.parse(localStorage.getItem(`portee:memo:${id}`) || "null"); } catch { return null; }
+    },
+    async ecrireMemo(id, memo) {
+      try {
+        if (memo) localStorage.setItem(`portee:memo:${id}`, JSON.stringify(memo));
+        else localStorage.removeItem(`portee:memo:${id}`);
+      } catch { throw new Error("Le stockage de ce navigateur est plein : le mémo n'a pas pu être gardé."); }
     },
     async enregistrerFichier(nom, donnees) {
       return telechargerNavigateur(nom, donnees);
@@ -241,6 +259,21 @@ export async function stockageIndexe(nom = "portee") {
       await aEnvoyer(id, { modifieLe: new Date().toISOString(), supprime: true });
       prevenir();
     },
+    /**
+     * Le mémo vocal d'une idée. Une idée n'a pas de traits : son contenu
+     * lourd (le magasin des pages, synchronisé à part et seulement quand il
+     * change) porte son mémo. La synchronisation n'y voit que des pages.
+     */
+    async lireMemo(id) {
+      const p = await lireCle("pages", id);
+      const m = Array.isArray(p) ? p.find((x) => x && x.memo) : null;
+      return m ? m.memo : null;
+    },
+    async ecrireMemo(id, memo) {
+      await ecrire(["pages"], (m) => m("pages").put(memo ? [{ memo }] : [], id));
+      const d = await lireCle("partitions", id);
+      await aEnvoyer(id, { modifieLe: (d && d.modifieLe) || new Date().toISOString(), pages: true });
+    },
     async enregistrerFichier(nom, donnees) {
       return telechargerNavigateur(nom, donnees);
     },
@@ -296,6 +329,12 @@ export async function sauvegarde(stockage, partitions) {
   const sortie = [];
   for (const p of partitions) {
     const { id, ...donnees } = p;
+    if (p.type) {
+      // Une idée ou un morceau : pas de traits ; le mémo vocal, s'il y en a un.
+      const memo = stockage.lireMemo ? await stockage.lireMemo(id).catch(() => null) : null;
+      sortie.push(memo ? { id, donnees, pages: [], memo } : { id, donnees, pages: [] });
+      continue;
+    }
     const pages = await stockage.pages(id, p.nbPages || 0).catch(() => []);
     sortie.push({ id, donnees, pages: pages.map(compacter) });
   }
@@ -308,9 +347,10 @@ export async function restaurer(stockage, contenu, dejaLa) {
     throw new Error("Ce fichier n'est pas une sauvegarde de Portée.");
   }
   let ajoutees = 0;
-  for (const { id, donnees, pages } of contenu.partitions) {
+  for (const { id, donnees, pages, memo } of contenu.partitions) {
     if (!id || !donnees || dejaLa.has(id)) continue;
     await stockage.creer(id, donnees, (pages || []).map(decompacter));
+    if (memo && stockage.ecrireMemo) await stockage.ecrireMemo(id, memo);
     ajoutees++;
   }
   return { ajoutees, ignorees: contenu.partitions.length - ajoutees };
