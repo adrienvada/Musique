@@ -227,6 +227,25 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     comme dans `harmoniser` : c'est elle qui tire vers la tonique ; le v reste
     dans « Un autre accord ». « Septième » donne la septième de la tonalité
     (Cmaj7, G7, Dm7, Bm7b5).
+- **02/10 · La sélection : une pilule, une boîte à outils, un cercle rangé
+  (refonte 5).** Le menu en cercle alignait douze gestes en symboles sans
+  les regrouper, et c'était le seul chemin vers la moitié d'entre eux.
+  Chaque geste a maintenant sa place, du plus rapide au plus complet.
+  - **La pilule** garde ce qu'on fait cent fois : ½ ton et octave, plus haut
+    ou plus bas, effacer, et « ••• ». Les durées ×2 et ÷2 n'y tenaient pas
+    au téléphone : elles passent dans la boîte.
+  - **La boîte à outils** (« ••• », une feuille du bas) est titrée par ce qui
+    est choisi (« si4, croche », « 4 notes choisies ») et rangée en Durée,
+    Rythme (plus lent, plus vite, recaler, répéter), Motif (à l'envers,
+    miroir) et Ailleurs (idée à part, effacer). Un geste s'applique et la
+    feuille reste ouverte, parce qu'on en enchaîne plusieurs : la grille
+    bouge derrière et une ligne dit ce qui s'est passé. La feuille rend le
+    pupitre inerte, donc elle a son propre « Annuler ». Un geste qui ne
+    changerait rien ne laisse pas d'« Annuler » pour rien.
+  - **Le cercle** reste le raccourci de l'appui long : dix gestes en quatre
+    familles, chacune sur sa bande avec son nom ; la hauteur monte le long
+    du côté gauche, le creux est en bas, sous la main. « Répéter » et
+    « recaler » n'y sont plus (la boîte et la rangée jaune les ont).
 - **02/10 · Jouer en direct, avec une scène (refonte 6).** Avant, rien ne
   disait qu'on enregistrait, ni quel temps tombait, et le recalage se faisait
   d'office sans rien montrer. Pendant le décompte et la prise, la grille
@@ -604,6 +623,15 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
       ouverte sur le téléphone) ; la version claude.ai essayée avec une
       fausse base et localStorage refusé ; les anciens écrans (import,
       correction au toucher, écoute, MIDI) inchangés.
+12. **Refonte visuelle** (plan du 02/10, plus haut) : les dix refontes sont
+    *faites*. Le système (1), l'écran Idée (3), l'accueil (2), les morceaux
+    (9) et les pages manuscrites (10) sont fusionnés le 02/10 (PR #5 et
+    #6) ; le clavier (4), la sélection (5), le jeu en direct (6), le chant
+    (7) et les accords (8) suivent. Chaque refonte a été essayée dans
+    Chromium au téléphone (Studio, Papier clair et sombre, 320 à 390 px de
+    large) et à l'ordinateur, sans erreur de console, puis sur la version
+    assemblée. 98 tests en Node (43 avant la refonte). Pas encore essayé :
+    un vrai iPhone (Safari), une vraie voix au micro.
 
 ## Brancher la reMarkable (une fois)
 

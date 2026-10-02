@@ -24,8 +24,8 @@
  *                     l'ordinateur, MIDI) ;
  *   idee-chant.js     le mode Chanter (micro, accordeur) ;
  *   idee-accords.js   le mode Accords et la feuille des accords ;
- *   idee-selection.js la pilule, la rangée de sélection, les
- *                     transformations, le menu en cercle ;
+ *   idee-selection.js la pilule, la boîte à outils, la rangée de
+ *                     sélection, les transformations, le menu en cercle ;
  *   idee-direct.js    le jeu en direct (décompte, enregistrement, recalage).
  *
  * L'idée vit en notes (sequence.js) ; la partition n'en est qu'une
@@ -140,6 +140,8 @@ export function creerEditeurIdee(deps) {
     choisir, notesPiste: () => notesPiste(), choisies: () => choisies(),
     source, suivreLecture, avantSon, apresSon, choisirMode,
     boiteSelection, grille,
+    // La boîte à outils de la sélection (idee-selection.js) cache le pupitre : elle a son propre « Annuler ».
+    annuler: () => revenir(e.annuler, e.refaire),
   };
   const clavierMode = creerModeClavier(ctx);
   const chant = creerChant(ctx);

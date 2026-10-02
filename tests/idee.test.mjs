@@ -5,7 +5,8 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { placerPilule, nomDuChoix, GESTES } from "../app/idee-selection.js";
+import { placerPilule, nomDuChoix, titreDuChoix, lieuDuChoix, dureeCommune, GESTES, FAMILLES } from "../app/idee-selection.js";
+import { disposer } from "../app/menu-radial.js";
 import { accordsDuPupitre } from "../app/idee-accords.js";
 import { justesse } from "../app/idee-chant.js";
 import { TOUCHES_ORDI } from "../app/idee-clavier.js";
@@ -64,8 +65,56 @@ test("l'aiguille de l'accordeur : juste à dix centièmes près", () => {
   assert.equal(justesse(-25).texte, "un peu bas");
 });
 
-test("chaque geste du menu en cercle a son icône, et le clavier de l'ordinateur ses dix-huit touches", () => {
-  for (const g of GESTES) assert.ok(ICONES[g.icone], `icône ${g.icone} (${g.id})`);
-  assert.equal(new Set(GESTES.map((g) => g.id)).size, 12);
+test("le clavier de l'ordinateur a ses dix-huit touches", () => {
   assert.equal(Object.keys(TOUCHES_ORDI).length, 18);
+});
+
+test("la boîte à outils se titre par la note, ou par le nombre de notes choisies", () => {
+  assert.equal(titreDuChoix([{ d: 0, l: 2, h: 71 }], "C", nomNote), "si4, croche");
+  assert.equal(titreDuChoix([{ d: 4, l: 4, h: 60 }, { d: 4, l: 4, h: 64 }], "C", nomNote), "accord do4-mi4, noire");
+  assert.equal(titreDuChoix([{ d: 0, l: 4, h: 60 }, { d: 4, l: 4, h: 62 }, { d: 8, l: 4, h: 64 }, { d: 12, l: 4, h: 65 }], "C", nomNote), "4 notes choisies");
+});
+
+test("la rangée de sélection dit où sont plusieurs notes, par la mesure de leur début", () => {
+  const mesure = 16;
+  assert.equal(lieuDuChoix([{ d: 16, l: 4 }, { d: 20, l: 4 }], mesure), "mesure 2");
+  assert.equal(lieuDuChoix([{ d: 12, l: 4 }, { d: 16, l: 4 }, { d: 36, l: 8 }], mesure), "mesures 1 à 3");
+  assert.equal(lieuDuChoix([], mesure), "");
+});
+
+test("la durée commune des notes choisies allume la boîte : une durée, pointée ou non, sinon rien", () => {
+  assert.deepEqual(dureeCommune([{ l: 4 }, { l: 4 }]), { pas: 4, pointee: false });
+  assert.deepEqual(dureeCommune([{ l: 6 }]), { pas: 4, pointee: true });
+  assert.deepEqual(dureeCommune([{ l: 3 }]), { pas: 2, pointee: true });
+  assert.equal(dureeCommune([{ l: 4 }, { l: 2 }]), null);
+  assert.equal(dureeCommune([{ l: 5 }]), null);
+  assert.equal(dureeCommune([]), null);
+});
+
+test("chaque geste du menu en cercle a son icône, sa famille, et le cercle les groupe", () => {
+  for (const g of GESTES) {
+    assert.ok(ICONES[g.icone], `icône ${g.icone} (${g.id})`);
+    assert.ok(FAMILLES[g.famille], `famille de ${g.id}`);
+  }
+  assert.equal(new Set(GESTES.map((g) => g.id)).size, GESTES.length);
+  // Les gestes d'une famille se suivent (sinon le cercle les séparerait).
+  const suite = GESTES.map((g) => g.famille).filter((f, i, t) => f !== t[i - 1]);
+  assert.equal(new Set(suite).size, suite.length, "chaque famille d'un seul tenant");
+
+  const { angles, groupes } = disposer(GESTES);
+  assert.equal(groupes.length, Object.keys(FAMILLES).length);
+  const pas = (a, b) => ((angles[b] - angles[a]) * 180) / Math.PI;
+  // Dans une famille : un pas ; d'une famille à l'autre : un pas et demi ; et le tour est bouclé.
+  const intra = pas(0, 1), inter = pas(3, 4);
+  assert.ok(Math.abs(inter - 1.5 * intra) < 1e-9, `creux de ${inter}° pour un pas de ${intra}°`);
+  for (const g of groupes) for (let k = 1; k < g.indices.length; k++) assert.ok(Math.abs(pas(g.indices[k - 1], g.indices[k]) - intra) < 1e-9);
+  const tour = pas(0, GESTES.length - 1) + inter;
+  assert.ok(Math.abs(tour - 360) < 1e-9, `le tour fait ${tour}°`);
+  // La hauteur monte : octave plus bas en premier, plus haut en dernier, et sur le côté gauche (le creux est en bas).
+  const id = (nom) => GESTES.findIndex((g) => g.id === nom);
+  const y = (nom) => Math.sin(angles[id(nom)]);
+  assert.ok(y("octave-haut") < y("monter") && y("monter") < y("descendre") && y("descendre") < y("octave-bas"), "le plus haut est le plus haut à l'écran");
+  // Sans famille : un cercle régulier, le premier geste en haut.
+  const simple = disposer([{}, {}, {}, {}]);
+  assert.ok(Math.abs(simple.angles[0] + Math.PI / 2) < 1e-9 && Math.abs(simple.angles[1] - simple.angles[0] - Math.PI / 2) < 1e-9);
 });

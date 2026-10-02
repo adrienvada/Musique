@@ -477,11 +477,11 @@
         <button class="btn rond" data-action="monter" aria-label="Un demi-ton plus haut" title="Un demi-ton plus haut (↑)"><svg class="ico" aria-hidden="true"><use href="#i-haut"></use></svg></button>
         <button class="btn rond" data-action="descendre" aria-label="Un demi-ton plus bas" title="Un demi-ton plus bas (↓)"><svg class="ico" aria-hidden="true"><use href="#i-bas"></use></svg></button>
         <span class="pilule-trait" aria-hidden="true"></span>
-        <button class="btn rond" data-action="diviser" aria-label="Plus court" title="Plus court (durée divisée par deux)"><svg class="ico" aria-hidden="true"><use href="#i-raccourcir"></use></svg></button>
-        <button class="btn rond" data-action="doubler" aria-label="Plus long" title="Plus long (durée doublée)"><svg class="ico" aria-hidden="true"><use href="#i-allonger"></use></svg></button>
+        <button class="btn rond" data-action="octave-haut" aria-label="Une octave plus haut" title="Une octave plus haut (Maj + ↑)"><svg class="ico" aria-hidden="true"><use href="#i-oct-haut"></use></svg></button>
+        <button class="btn rond" data-action="octave-bas" aria-label="Une octave plus bas" title="Une octave plus bas (Maj + ↓)"><svg class="ico" aria-hidden="true"><use href="#i-oct-bas"></use></svg></button>
         <span class="pilule-trait" aria-hidden="true"></span>
         <button class="btn rond" data-action="effacer" aria-label="Effacer" title="Effacer (Retour arrière)"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg></button>
-        <button class="btn rond" data-action="plus" aria-label="Transformer…" title="Transformer : octave, répéter, à l'envers, miroir…"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
+        <button class="btn rond" data-action="plus" aria-haspopup="dialog" aria-controls="idee-boite" aria-label="Tous les gestes" title="Tous les gestes : durée, rythme, motif…"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
       </div>
       <!-- Jeu en direct · la scène, à la place de la grille pendant le décompte et le jeu (idee-direct.js) :
            le chiffre du décompte (#idee-decompte), puis la mesure en grand, les temps, le ruban des notes jouées -->
@@ -635,6 +635,55 @@
         <button class="btn btn-plein" id="idee-garder" autofocus><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg>Garder</button>
       </div>
     </dialog>
+
+
+    <!-- Sélection · la boîte à outils : « ••• » de la pilule (idee-selection.js).
+         Les gestes y sont rangés par familles ; la feuille reste ouverte entre deux gestes. -->
+    <dialog class="feuille-bas idee-feuille idee-boite" id="idee-boite" aria-labelledby="idee-boite-titre">
+      <div class="feuille-tete">
+        <h2 id="idee-boite-titre"></h2>
+        <button class="btn btn-fantome" id="idee-boite-annuler" data-action="annuler" title="Annuler le dernier geste"><svg class="ico s" aria-hidden="true"><use href="#i-annuler"></use></svg>Annuler</button>
+        <button class="btn btn-fantome rond" data-fermer aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+      </div>
+      <p class="remarque boite-retour" id="idee-boite-retour" role="status"></p>
+      <div class="boite-famille" role="group" aria-labelledby="boite-duree">
+        <h3 class="surtitre" id="boite-duree">Durée</h3>
+        <div class="boite-rangee boite-durees">
+          <button class="btn boite-geste" data-duree="1" aria-pressed="false" title="Double croche"><svg class="ico" aria-hidden="true"><use href="#i-d1"></use></svg><span>double</span></button>
+          <button class="btn boite-geste" data-duree="2" aria-pressed="false" title="Croche"><svg class="ico" aria-hidden="true"><use href="#i-d2"></use></svg><span>croche</span></button>
+          <button class="btn boite-geste" data-duree="4" aria-pressed="false" title="Noire"><svg class="ico" aria-hidden="true"><use href="#i-d4"></use></svg><span>noire</span></button>
+          <button class="btn boite-geste" data-duree="8" aria-pressed="false" title="Blanche"><svg class="ico" aria-hidden="true"><use href="#i-d8"></use></svg><span>blanche</span></button>
+          <button class="btn boite-geste" data-duree="16" aria-pressed="false" title="Ronde"><svg class="ico" aria-hidden="true"><use href="#i-d16"></use></svg><span>ronde</span></button>
+          <button class="btn boite-geste" data-pointee aria-pressed="false" title="Pointée : la moitié en plus"><svg class="ico" aria-hidden="true"><use href="#i-point"></use></svg><span>pointée</span></button>
+        </div>
+      </div>
+      <div class="boite-famille" role="group" aria-labelledby="boite-rythme">
+        <h3 class="surtitre" id="boite-rythme">Rythme</h3>
+        <div class="boite-rangee boite-quatre">
+          <button class="btn boite-geste" data-action="doubler" title="Les durées sont doublées"><svg class="ico" aria-hidden="true"><use href="#i-allonger"></use></svg><span>Plus lent ×2</span></button>
+          <button class="btn boite-geste" data-action="diviser" title="Les durées sont divisées par deux"><svg class="ico" aria-hidden="true"><use href="#i-raccourcir"></use></svg><span>Plus vite ÷2</span></button>
+          <button class="btn boite-geste" data-action="recaler" title="Recaler sur la grille du jeu en direct (Tempo et mesure)"><svg class="ico" aria-hidden="true"><use href="#i-aimant"></use></svg><span>Recaler sur la grille</span></button>
+          <button class="btn boite-geste" data-action="dupliquer" title="Recopier juste après, ce qui suit se pousse"><svg class="ico" aria-hidden="true"><use href="#i-repeter"></use></svg><span>Répéter à la suite</span></button>
+        </div>
+      </div>
+      <div class="boite-duo">
+        <div class="boite-famille" role="group" aria-labelledby="boite-motif">
+          <h3 class="surtitre" id="boite-motif">Motif</h3>
+          <div class="boite-rangee boite-deux">
+            <button class="btn boite-geste" data-action="retrograder" title="La dernière note devient la première"><svg class="ico" aria-hidden="true"><use href="#i-envers"></use></svg><span>À l'envers</span></button>
+            <button class="btn boite-geste" data-action="renverser" title="Ce qui montait descend"><svg class="ico" aria-hidden="true"><use href="#i-miroir"></use></svg><span>Miroir</span></button>
+          </div>
+        </div>
+        <div class="boite-famille" role="group" aria-labelledby="boite-ailleurs">
+          <h3 class="surtitre" id="boite-ailleurs">Ailleurs</h3>
+          <div class="boite-rangee boite-deux">
+            <button class="btn boite-geste" data-action="nouvelle" title="En faire une idée à part"><svg class="ico" aria-hidden="true"><use href="#i-nouvelle"></use></svg><span>Idée à part</span></button>
+            <button class="btn boite-geste btn-danger" data-action="effacer" title="Effacer les notes choisies"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg><span>Effacer</span></button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
 
     <!-- Feuille · Tempo et mesure (idee.js ; le décompte et la grille du jeu en direct : idee-direct.js ; le clavier MIDI : idee-clavier.js) -->
     <dialog class="feuille-bas idee-feuille" id="idee-reglages" aria-labelledby="idee-reglages-titre">
