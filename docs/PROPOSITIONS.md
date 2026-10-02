@@ -630,8 +630,11 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
     (7) et les accords (8) suivent. Chaque refonte a été essayée dans
     Chromium au téléphone (Studio, Papier clair et sombre, 320 à 390 px de
     large) et à l'ordinateur, sans erreur de console, puis sur la version
-    assemblée. 98 tests en Node (43 avant la refonte). Pas encore essayé :
-    un vrai iPhone (Safari), une vraie voix au micro.
+    assemblée, et un grand parcours de toute l'appli (35 étapes : site au
+    téléphone et à l'ordinateur, sombre, sauvegarde et restauration, version
+    claude.ai simulée). 98 tests en Node (43 avant la refonte). L'appli
+    claude.ai est republiée (le 02/10, avec les dix refontes). Pas encore
+    essayé : un vrai iPhone (Safari), une vraie voix au micro.
 
 ## Brancher la reMarkable (une fois)
 
