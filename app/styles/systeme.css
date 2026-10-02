@@ -1,0 +1,172 @@
+/* LE SYSTÈME DE PORTÉE
+ *
+ * Deux ambiances, les mêmes pièces :
+ *  - Papier, pour lire et ranger (bibliothèque, pages, morceaux) : le gris
+ *    d'une liseuse, l'encre, le stylo bleu, le surligneur jaune. Il suit le
+ *    réglage clair ou sombre du téléphone.
+ *  - Studio, pour jouer (l'éditeur d'idée) : une table sombre où les notes
+ *    et le clavier ressortent, sans éblouir le soir. La classe .studio la
+ *    pose sur ce qu'elle couvre (le <body> quand l'éditeur est ouvert).
+ *
+ * Les autres feuilles (bibliotheque, atelier, morceau, idee) n'emploient que
+ * ces jetons et ces composants : une couleur ou une forme qui manque
+ * s'ajoute ici, pas dans l'écran qui en a besoin.
+ */
+
+:root {
+  --papier: #EDEEEA; --feuille: #F8F8F5; --creux: #E3E5DF; --encre: #1C1E21; --gris: #565A61;
+  --trait: #D3D5CF; --trait-fort: #A9ACA5; --stylo: #2F4BC2; --stylo-doux: #DDE3F6; --sur-stylo: #FFFFFF;
+  --surligneur: #F2D04B; --surligneur-doux: #FBF1B0; --rouge: #D93A3F; --ok: #2F7A4D; --ok-doux: #DCEFE2;
+  --alerte: #9A5B00; --danger: #A5281B;
+  /* Le piano reste un piano, mais n'éblouit pas en sombre. */
+  --touche-blanche: #FAFAF7; --touche-noire: #1C1E21; --touche-texte: #565A61; --touche-bord: #A9ACA5;
+  --voile: rgba(28, 30, 33, 0.34);
+  --ombre: 0 10px 28px rgba(28, 30, 33, 0.18);
+  --f-titre: "Young Serif", "Iowan Old Style", Georgia, serif;
+  --f-texte: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-code: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --barre: 56px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --papier: #17181B; --feuille: #202226; --creux: #2A2D32; --encre: #E6E6E1; --gris: #A3A7AE;
+    --trait: #34373C; --trait-fort: #50545A; --stylo: #93A8FF; --stylo-doux: #242C4A; --sur-stylo: #10162E;
+    --surligneur: #E6CB3A; --surligneur-doux: #4A4214; --rouge: #FF6B6F; --ok: #74C995; --ok-doux: #1D3527;
+    --alerte: #E8B35A; --danger: #F0877A;
+    --touche-blanche: #D9DAD4; --touche-noire: #08090A; --touche-texte: #3B3E44; --touche-bord: #0B0C0E;
+    --voile: rgba(0, 0, 0, 0.55); --ombre: 0 12px 32px rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --papier: #17181B; --feuille: #202226; --creux: #2A2D32; --encre: #E6E6E1; --gris: #A3A7AE;
+  --trait: #34373C; --trait-fort: #50545A; --stylo: #93A8FF; --stylo-doux: #242C4A; --sur-stylo: #10162E;
+  --surligneur: #E6CB3A; --surligneur-doux: #4A4214; --rouge: #FF6B6F; --ok: #74C995; --ok-doux: #1D3527;
+  --alerte: #E8B35A; --danger: #F0877A;
+  --touche-blanche: #D9DAD4; --touche-noire: #08090A; --touche-texte: #3B3E44; --touche-bord: #0B0C0E;
+  --voile: rgba(0, 0, 0, 0.55); --ombre: 0 12px 32px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+.studio {
+  --papier: #121315; --feuille: #1B1D21; --creux: #26292E; --encre: #ECECE7; --gris: #A3A7AE;
+  --trait: #2B2E33; --trait-fort: #464A51; --stylo: #8EA2FF; --stylo-doux: #262E52; --sur-stylo: #0E1330;
+  --surligneur: #F2D04B; --surligneur-doux: #4A4214; --rouge: #FF5A5F; --ok: #74C995; --ok-doux: #1D3527;
+  --alerte: #E8B35A; --danger: #F0877A;
+  --touche-blanche: #D9DAD4; --touche-noire: #050506; --touche-texte: #3B3E44; --touche-bord: #0B0C0E;
+  --voile: rgba(0, 0, 0, 0.58); --ombre: 0 12px 32px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+/* Les bases */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--papier); color: var(--encre); font-family: var(--f-texte); font-size: 15px; line-height: 1.55; margin: 0; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--f-titre); font-weight: 400; margin: 0; line-height: 1.2; text-wrap: balance; }
+p { margin: 0; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--stylo); outline-offset: 2px; }
+code, .mono { font-family: var(--f-code); font-size: 0.9em; }
+.mono { font-variant-numeric: tabular-nums; }
+
+/* Une seule famille d'icônes, au trait, de la couleur du texte (icones.js, et le
+   jeu de <symbol> en tête de la page). Jamais d'emoji ni de caractère de
+   remplacement : ▶ ↶ ✕ ★ ⠿ se dessinent tous ici. */
+.ico { width: 22px; height: 22px; flex: none; display: block; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.ico.s { width: 18px; height: 18px; }
+.ico.l { width: 28px; height: 28px; }
+
+/* La barre du haut */
+.barre-haut { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--papier); border-bottom: 1px solid var(--trait); }
+.barre-haut .dedans { max-width: 1240px; margin: 0 auto; min-height: var(--barre); padding: 6px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.logo { font-family: var(--f-titre); font-size: 1.35rem; display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; min-height: 44px; cursor: pointer; }
+.logo svg { width: 18px; height: 30px; color: var(--stylo); }
+.fil { display: flex; align-items: center; gap: 6px; color: var(--gris); font-size: 0.92rem; min-width: 0; }
+.fil b { color: var(--encre); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
+.mode { margin-left: auto; font-size: 0.8rem; color: var(--gris); }
+
+main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex; flex-direction: column; gap: 18px; }
+.vue { display: flex; flex-direction: column; gap: 18px; }
+
+/* Les boutons. Une action principale par écran (.btn-plein) ; le reste
+   discret. Au doigt, rien ne fait moins de 44 px. */
+.btn { min-height: 40px; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); padding: 0 14px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.94rem; font-weight: 500; white-space: nowrap; text-decoration: none; }
+.btn:hover { border-color: var(--encre); }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn[disabled]:hover { border-color: var(--trait-fort); }
+.btn-plein { background: var(--stylo); border-color: var(--stylo); color: var(--sur-stylo); }
+.btn-plein:hover { filter: brightness(1.08); border-color: var(--stylo); }
+.btn-fantome { background: transparent; border-color: transparent; }
+.btn-fantome:hover { background: var(--creux); border-color: transparent; }
+.btn-danger { color: var(--danger); }
+.btn-petit { min-height: 32px; padding: 0 10px; font-size: 0.86rem; border-radius: 8px; }
+.btn.rond { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; }
+.btn.rond.grand { width: 52px; height: 52px; }
+/* Allumé (boucle, métronome, durée choisie…) : le bleu du stylo. */
+.btn[aria-pressed="true"] { background: var(--stylo-doux); border-color: var(--stylo); color: var(--stylo); }
+.btn-plein[aria-pressed="true"] { background: var(--stylo); color: var(--sur-stylo); }
+/* Enregistrer : le seul rouge de l'appli. */
+.btn.enr { color: var(--rouge); border: 2px solid var(--rouge); background: transparent; }
+.btn.enr[aria-pressed="true"] { background: var(--rouge); color: #fff; }
+.rangee { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.pousse { margin-left: auto; }
+.remarque { font-size: 0.85rem; color: var(--gris); }
+.surtitre { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gris); font-weight: 600; }
+
+/* Commutateur à segments : un seul choix parmi deux à quatre. */
+.seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 13px; background: var(--creux); }
+.seg > button { flex: 1 1 0; min-height: 36px; border: 0; background: transparent; border-radius: 10px; padding: 0 14px; color: var(--gris); font-weight: 500; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.seg > button[aria-selected="true"], .seg > button[aria-pressed="true"] { background: var(--feuille); color: var(--encre); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14); }
+
+/* Filtres et étiquettes */
+.puce { min-height: 34px; border: 1px solid var(--trait-fort); background: transparent; color: var(--encre); border-radius: 999px; padding: 0 14px; cursor: pointer; font-size: 0.88rem; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.puce[aria-pressed="true"] { background: var(--encre); color: var(--papier); border-color: var(--encre); }
+.pastille { display: inline-flex; align-items: center; min-height: 24px; font-size: 0.75rem; font-weight: 600; padding: 0 9px; border-radius: 999px; white-space: nowrap; border: 0; }
+.p-doute { background: var(--surligneur-doux); color: var(--encre); }
+.p-ok { background: var(--ok-doux); color: var(--ok); }
+.p-idee { background: var(--stylo-doux); color: var(--stylo); }
+.p-morceau { background: var(--ok-doux); color: var(--ok); }
+.etiquette { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--stylo-doux); color: var(--encre); }
+.etiquette button { border: 0; background: none; cursor: pointer; padding: 0 4px; color: var(--gris); display: inline-flex; }
+
+/* Champs */
+.champ { min-height: 40px; border: 1px solid var(--trait-fort); background: var(--feuille); border-radius: 10px; padding: 7px 12px; min-width: 0; flex: 1 1 220px; }
+select.champ { padding-right: 8px; }
+
+.panneau { background: var(--feuille); border: 1px solid var(--trait); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.panneau > .surtitre { display: flex; align-items: center; gap: 8px; }
+
+/* La fenêtre au milieu (choix courts, confirmations) */
+.dialogue { border: 0; border-radius: 16px; background: var(--feuille); color: var(--encre); padding: 0; width: min(420px, calc(100vw - 32px)); box-shadow: var(--ombre); }
+.dialogue::backdrop { background: rgba(10, 11, 13, 0.4); }
+.dialogue-dedans { display: flex; flex-direction: column; gap: 10px; padding: 18px; }
+.dialogue-dedans h2 { font-size: 1.3rem; }
+.dialogue-dedans .liste-choix { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
+.dialogue-dedans .liste-choix .btn { justify-content: flex-start; white-space: normal; text-align: left; }
+
+/* La feuille du bas : un <dialog class="feuille-bas">, ouvert par feuilles.js.
+   Au téléphone, elle monte sous le pouce ; à l'ordinateur, elle reste
+   centrée en bas, pas plus large qu'un téléphone. */
+dialog.feuille-bas { position: fixed; inset: auto 0 0 0; margin: 0 auto; width: 100%; max-width: 560px; max-height: min(90dvh, 780px); border: 0; border-radius: 22px 22px 0 0; background: var(--feuille); color: var(--encre); padding: 6px 16px calc(18px + env(safe-area-inset-bottom, 0px)); box-shadow: var(--ombre); overflow: auto; overscroll-behavior: contain; }
+dialog.feuille-bas::backdrop { background: rgba(10, 11, 13, 0.45); }
+dialog.feuille-bas::before { content: ""; display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--trait-fort); margin: 4px auto 12px; }
+dialog.feuille-bas[open] { animation: feuille-monte 0.18s ease-out; }
+dialog.feuille-bas .feuille-tete { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: 1.35rem; }
+@keyframes feuille-monte { from { transform: translateY(28px); opacity: 0.6; } }
+
+/* Les messages passagers s'affichent en haut : en bas, ils cachaient le
+   clavier et la liste, là où va le pouce. */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + var(--barre) + 10px); background: var(--encre); color: var(--papier); padding: 10px 16px; border-radius: 12px; font-size: 0.92rem; font-weight: 500; max-width: min(92vw, 560px); z-index: 40; box-shadow: var(--ombre); }
+
+@media (pointer: coarse) {
+  .btn, .btn-petit, .puce, .champ { min-height: 44px; }
+  .seg > button { min-height: 40px; }
+}
+@media (max-width: 820px) {
+  .mode { margin-left: 0; width: 100%; }
+}
+@media print {
+  .barre-haut, #toast { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

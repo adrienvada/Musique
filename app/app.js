@@ -24,6 +24,8 @@ import { voixCompletes } from "./harmonie.js";
 import { creerVueMorceau, dessinerApercuMorceau } from "./vue-morceau.js";
 import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
 import { ecrireMusicXml } from "./musicxml.js";
+import { ico, injecterIcones } from "./icones.js";
+import { ambianceStudio } from "./preferences.js";
 
 const VERSION_LECTEUR = 1;
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
@@ -119,6 +121,8 @@ function montrer(vue) {
   const dansPartition = vue !== "biblio";
   // L'écran Idée prend toute la hauteur : le clavier sous le pouce.
   document.body.classList.toggle("plein", vue === "idee");
+  // Papier pour lire, Studio pour jouer : l'éditeur passe en sombre (sauf réglage contraire).
+  document.body.classList.toggle("studio", vue === "idee" && ambianceStudio());
   $("fil").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglets").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglet-atelier").setAttribute("aria-selected", String(vue === "atelier"));
@@ -249,7 +253,7 @@ function afficherBibliotheque() {
     if ((p.etiquettes || []).length || p.memo || p.note) {
       const ligne = document.createElement("span");
       ligne.className = "etiquettes";
-      if (p.memo) { const m = document.createElement("span"); m.className = "etiquette"; m.textContent = `🎙 ${p.memo.duree} s`; ligne.appendChild(m); }
+      if (p.memo) { const m = document.createElement("span"); m.className = "etiquette"; m.innerHTML = `${ico("micro", "s")} ${p.memo.duree} s`; ligne.appendChild(m); }
       for (const t of p.etiquettes || []) { const e = document.createElement("span"); e.className = "etiquette"; e.textContent = "# " + t; ligne.appendChild(e); }
       if (p.note) { const n = document.createElement("span"); n.className = "remarque"; n.textContent = p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note; ligne.appendChild(n); }
       infos.appendChild(ligne);
@@ -261,7 +265,7 @@ function afficherBibliotheque() {
       etoile.className = "favori";
       etoile.setAttribute("aria-pressed", String(!!p.favori));
       etoile.setAttribute("aria-label", p.favori ? "Retirer des favoris" : "Mettre en favori");
-      etoile.textContent = p.favori ? "★" : "☆";
+      etoile.innerHTML = ico(p.favori ? "etoile-pleine" : "etoile", "s");
       etoile.addEventListener("click", () => etat.stockage.modifier(p.id, { favori: !p.favori, modifieLe: new Date().toISOString() }));
       carte.appendChild(etoile);
     }
@@ -270,13 +274,13 @@ function afficherBibliotheque() {
     const bouton = (texte, f, plein = false) => {
       const b = document.createElement("button");
       b.className = "btn btn-petit" + (plein ? " btn-plein" : "");
-      b.textContent = texte;
+      b.innerHTML = texte;
       b.addEventListener("click", f);
       actions.appendChild(b);
     };
     if (p.type === "idee" || p.type === "morceau") {
       bouton("Ouvrir", () => ouvrir(p.id), true);
-      bouton("▶ Écouter", (ev) => ecouterIdee(p, ev.currentTarget));
+      bouton(`${ico("lire", "s")}Écouter`, (ev) => ecouterIdee(p, ev.currentTarget));
       bouton("Envoyer le MIDI", () => partagerMidi(p));
     } else {
       bouton("Corriger", () => ouvrir(p.id, "atelier"), p.statut !== "prete");
@@ -1111,12 +1115,17 @@ async function sauver(patch) {
 
 let lecture = null;
 
+/** Le bouton d'écoute d'une partition : « Écouter » ou « Arrêter », avec son icône. */
+function libelleLecture(bouton, joue) {
+  bouton.innerHTML = joue ? `${ico("stop", "s")}Arrêter` : `${ico("lire", "s")}Écouter`;
+}
+
 function arreterLecture() {
   if (!lecture) return;
   lecture.tc.stop();
   piano.silence();
   lecture.zone.querySelectorAll(".joue").forEach((n) => n.classList.remove("joue"));
-  lecture.bouton.textContent = "▶ Écouter";
+  libelleLecture(lecture.bouton, false);
   lecture = null;
 }
 
@@ -1137,7 +1146,7 @@ async function ecouter({ objet, abc, zone, bouton, qpm, transposition = 0, voixM
   if (!objet) return;
   bouton.textContent = "Chargement du piano…";
   try { await piano.pret(); }
-  catch (e) { bouton.textContent = "▶ Écouter"; toast(e.message || "Le piano n'a pas pu se charger."); return; }
+  catch (e) { libelleLecture(bouton, false); toast(e.message || "Le piano n'a pas pu se charger."); return; }
   objet.setUpAudio();
   const ronde = (4 * 60) / qpm;
   const plages = plagesVoix(pourGravure(abc));
@@ -1155,7 +1164,7 @@ async function ecouter({ objet, abc, zone, bouton, qpm, transposition = 0, voixM
     },
   });
   lecture = { tc, zone, bouton };
-  bouton.textContent = "■ Arrêter";
+  libelleLecture(bouton, true);
   tc.start();
 }
 
@@ -1279,15 +1288,15 @@ async function ecouterIdee(p, bouton) {
     for (const v of voixCompletes(seq)) for (const n of v.notes) { if (!parPas.has(n.d)) parPas.set(n.d, []); parPas.get(n.d).push(n); fin = Math.max(fin, n.d + n.l); }
     source = () => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA: (x) => parPas.get(x) || [] });
   }
-  const libelle = bouton.textContent;
-  bouton.textContent = "■ Arrêter";
+  const libelle = bouton.innerHTML;
+  libelleLecture(bouton, true);
   transport.carte = bouton;
   try {
     await transport.jouer(source, {
-      surFin: () => { bouton.textContent = libelle; transport.carte = null; },
+      surFin: () => { bouton.innerHTML = libelle; transport.carte = null; },
     });
   } catch (e) {
-    bouton.textContent = libelle;
+    bouton.innerHTML = libelle;
     toast(e.message || "Le piano n'a pas pu se charger.");
   }
 }
@@ -1648,6 +1657,7 @@ function creerEditeur() {
 }
 
 async function demarrer() {
+  injecterIcones();
   brancher();
   creerEditeur();
   creerVueDuMorceau();

@@ -37,6 +37,16 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
 - **Dépôt public** : les journaux de GitHub Actions le sont aussi. N'y
   afficher aucune clé, aucune adresse de connecteur. La clé du connecteur
   vient du secret GitHub `PORTEE_CLE`.
+- **Interface (`app/styles/`, `app/icones.js`)** : deux ambiances, Papier
+  (lire, ranger) et Studio (l'éditeur d'idée, classe `.studio`), mêmes jetons
+  et mêmes composants, définis dans `styles/systeme.css`. Chaque écran a sa
+  feuille (`bibliotheque`, `atelier`, `morceau`, `idee`) et n'y met que des
+  jetons : une couleur ou un composant qui manque s'ajoute au système. Les
+  icônes viennent toutes de `icones.js` (`ico("lire")`, ou
+  `<svg class="ico"><use href="#i-lire"></use></svg>` dans la page) : jamais
+  d'emoji ni de caractère (▶ ✕ ★) en guise d'icône. Au doigt, rien ne fait
+  moins de 44 px. Les choix d'une action se font dans une feuille du bas
+  (`<dialog class="feuille-bas">`, `feuilles.js`).
 - **Correction au toucher (`app/edition.js`)** : Adrien ne lit pas l'ABC.
   Toute correction passe par un geste (bouton, glissé, clavier) qui réécrit
   l'ABC ; le texte reste en « mode avancé ».
