@@ -183,6 +183,29 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · Les accords sur une roue, l'accompagnement visible (refonte 8).**
+  La feuille des accords n'était qu'une liste de boutons : on n'y voyait ni
+  la logique de la tonalité ni ce que l'accompagnement allait jouer, et son
+  style se cachait dans la feuille Tempo.
+  - Elle montre la bande des mesures (une mesure à deux accords s'y coupe en
+    deux), un aperçu de la mesure en mini rouleau de piano (mélodie en bleu,
+    accompagnement calculé en gris, qu'on écoute), la roue des sept accords
+    de la tonalité (l'accord posé au centre avec ses notes en clair), les
+    couleurs (simple, septième, sus4, add9) et quatre cartes de style qui
+    dessinent leur motif et s'entendent.
+  - Deux marques, les mêmes sur la roue et sur les six touches du pupitre :
+    *cerclés*, les accords qui viennent souvent après celui de la mesure
+    d'avant (une petite table de fonctions dans `harmonie.js` : tonique,
+    sous-dominante, dominante ; si tout était cerclé, rien ne se
+    détacherait) ; *teintés*, ceux que `suggerer` propose d'après la mélodie.
+  - Le style reste `seq.accompagnement` : les cartes et le menu de la feuille
+    Tempo affichent la même donnée. Le motif des cartes est calculé par
+    l'accompagnement lui-même (`motifAccompagnement`) : il ne peut pas
+    s'écarter de ce qui sonne, et il suit la mesure.
+  - En mineur, la dominante de la roue est le V majeur (mi en la mineur),
+    comme dans `harmoniser` : c'est elle qui tire vers la tonique ; le v reste
+    dans « Un autre accord ». « Septième » donne la septième de la tonalité
+    (Cmaj7, G7, Dm7, Bm7b5).
 - **02/10 · Jouer en direct, avec une scène (refonte 6).** Avant, rien ne
   disait qu'on enregistrait, ni quel temps tombait, et le recalage se faisait
   d'office sans rien montrer. Pendant le décompte et la prise, la grille

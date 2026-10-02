@@ -21,9 +21,9 @@ export const QUALITES = {
   "": [0, 4, 7], m: [0, 3, 7], 7: [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10],
   dim: [0, 3, 6], dim7: [0, 3, 6, 9], m7b5: [0, 3, 6, 10], aug: [0, 4, 8],
   sus2: [0, 2, 7], sus4: [0, 5, 7], "7sus4": [0, 5, 7, 10], 6: [0, 4, 7, 9], m6: [0, 3, 7, 9],
-  9: [0, 4, 7, 10, 14], add9: [0, 4, 7, 14], m9: [0, 3, 7, 10, 14],
+  9: [0, 4, 7, 10, 14], add9: [0, 4, 7, 14], madd9: [0, 3, 7, 14], m9: [0, 3, 7, 10, 14],
 };
-const FORME = /^([A-G])([#b]?)(maj7|m7b5|dim7|7sus4|add9|sus2|sus4|dim|aug|maj|m9|m7|m6|m|7|6|9)?(?:\/([A-G])([#b]?))?$/;
+const FORME = /^([A-G])([#b]?)(maj7|m7b5|dim7|7sus4|madd9|add9|sus2|sus4|dim|aug|maj|m9|m7|m6|m|7|6|9)?(?:\/([A-G])([#b]?))?$/;
 
 /** « F#m7/E » → { racine: 6, qualite: "m7", intervalles, basse: 4 } ; null si illisible. */
 export function lireAccord(nom) {
@@ -123,6 +123,215 @@ export function harmoniser(seq) {
   return accords.filter((a, i) => i === 0 || a.nom !== accords[i - 1].nom);
 }
 
+// ---------------------------------------------------------------------------
+// La roue : les sept accords de la tonalité, ce qui s'enchaîne, la couleur
+// ---------------------------------------------------------------------------
+//
+// La feuille des accords et le pupitre posent les accords sur une roue de
+// sept : un par degré de la gamme, dans l'ordre des degrés (pas celui des
+// quintes), parce que c'est l'ordre où on les compte et où on les cherche.
+
+const LETTRES = "CDEFGAB";
+const GAMMES = { majeur: [0, 2, 4, 5, 7, 9, 11], mineur: [0, 2, 3, 5, 7, 8, 10] };
+const DEGRES = {
+  majeur: { qualites: ["", "m", "m", "", "", "m", "dim"], noms: ["I", "ii", "iii", "IV", "V", "vi", "vii°"] },
+  // En mineur, la dominante est majeure (V, avec la sensible) : c'est elle qui
+  // tire vers la tonique, et celle que `harmoniser` et le pupitre posent. Le
+  // v mineur de la gamme naturelle reste à un toucher (« Un autre accord »).
+  mineur: { qualites: ["m", "dim", "", "m", "", "", ""], noms: ["i", "ii°", "III", "iv", "V", "VI", "VII"] },
+};
+
+/** La note qui s'écrit avec cette lettre et sonne à `pc` : « C », « C# », « Db » ; null si elle voudrait deux signes. */
+function epeler(lettre, pc) {
+  const ecart = ((mod12(pc - RACINES[lettre]) + 6) % 12) - 6;
+  return ecart === 0 ? lettre : ecart === 1 ? lettre + "#" : ecart === -1 ? lettre + "b" : null;
+}
+
+/**
+ * Les sept accords de la tonalité, dans l'ordre des degrés : { nom, degre,
+ * racine (0-11), qualite, indice }. Chaque racine garde la lettre de son degré
+ * (mi♯ et non fa en fa♯ majeur), comme l'écrirait un musicien.
+ */
+export function roueDeLaTonalite(tonalite) {
+  const k = lireTonalite(tonalite);
+  const gamme = GAMMES[k.mineur ? "mineur" : "majeur"], degres = DEGRES[k.mineur ? "mineur" : "majeur"];
+  const iTonique = LETTRES.indexOf(k.tonique[0]);
+  return gamme.map((ecart, i) => {
+    const racine = mod12(k.pc + ecart);
+    const lettre = epeler(LETTRES[(iTonique + i) % 7], racine) ?? nomRacine(racine, tonalite);
+    return { nom: lettre + degres.qualites[i], degre: degres.noms[i], racine, qualite: degres.qualites[i], indice: i };
+  });
+}
+
+/** La triade d'un accord : "" (majeure), "m" (mineure), "dim" ; null s'il n'a pas de tierce (sus2, sus4). */
+export function familleDe(accord) {
+  const tons = new Set(accord.intervalles);
+  if (tons.has(3)) return tons.has(6) ? "dim" : "m";
+  return tons.has(4) ? "" : null;
+}
+
+/** La place d'un accord dans la roue (0 à 6), d'après sa racine, quelle que soit sa couleur ; -1 s'il n'est pas de la tonalité. */
+export function degreDeLAccord(nom, tonalite) {
+  const a = lireAccord(nom);
+  return a ? roueDeLaTonalite(tonalite).findIndex((r) => r.racine === a.racine) : -1;
+}
+
+/**
+ * Ce qui vient souvent après chaque degré : une petite table de fonctions
+ * harmoniques, pas un modèle de la musique. On distingue trois rôles :
+ *   - la tonique (I, vi, iii ; i, III, VI) : le repos ;
+ *   - la sous-dominante (IV, ii ; iv, ii°) : on s'éloigne du repos ;
+ *   - la dominante (V, vii° ; V, VII) : on veut y revenir.
+ * Le repos mène partout ; l'éloignement mène à la dominante ou revient au
+ * repos ; la dominante retombe sur la tonique, ou « se trompe » sur le
+ * sixième degré (la cadence rompue). Chaque ligne est un degré (I, ii, iii…),
+ * ses suites sont des indices de la roue. On n'a gardé que ce qui s'entend
+ * dans mille chansons : si tout était cerclé, rien ne se détacherait.
+ */
+const SUITES = {
+  majeur: [
+    [1, 3, 4, 5], // I    → ii, IV, V, vi
+    [4, 6],       // ii   → V, vii°
+    [3, 5],       // iii  → IV, vi
+    [0, 1, 4],    // IV   → I, ii, V
+    [0, 5],       // V    → I, vi (cadence rompue)
+    [1, 3, 4],    // vi   → ii, IV, V
+    [0, 2],       // vii° → I, iii
+  ],
+  mineur: [
+    [2, 3, 4, 5], // i    → III, iv, V, VI
+    [4],          // ii°  → V
+    [3, 5, 6],    // III  → iv, VI, VII
+    [0, 4, 6],    // iv   → i, V, VII
+    [0, 5],       // V    → i, VI (cadence rompue)
+    [3, 4, 6],    // VI   → iv, V, VII
+    [0, 2],       // VII  → i, III
+  ],
+};
+
+/**
+ * Les accords de la roue (leurs noms) qui viennent souvent après l'accord
+ * `avant`. Sans accord avant (début de l'idée), on commence sur la tonique ;
+ * après un accord étranger à la tonalité, la table ne dit rien : [].
+ */
+export function suitesProbables(tonalite, avant) {
+  const roue = roueDeLaTonalite(tonalite);
+  if (!avant) return [roue[0].nom];
+  const i = degreDeLAccord(avant, tonalite);
+  if (i < 0) return [];
+  return SUITES[lireTonalite(tonalite).mineur ? "mineur" : "majeur"][i].map((j) => roue[j].nom);
+}
+
+/**
+ * Les accords de la roue que la mélodie entre `debut` et `fin` appelle,
+ * du plus au moins probable (`suggerer`, ramené à la roue : G7 et G sont
+ * le même accord de la roue). Une idée sans mélodie ne propose rien :
+ * `suggerer` y rendrait seulement les accords usuels, ce n'est pas un conseil.
+ */
+export function accordsDeLaMelodie(seq, debut, fin, combien = 3) {
+  if (!seq.pistes[0].notes.some((n) => n.d < fin && n.d + n.l > debut)) return [];
+  const roue = roueDeLaTonalite(seq.tonalite);
+  const noms = [];
+  for (const nom of suggerer(seq, debut, fin, 8)) {
+    const a = lireAccord(nom);
+    // La même racine et la même triade : Em n'est pas le E de la roue en mineur.
+    const r = a && roue.find((x) => x.racine === a.racine && x.qualite === familleDe(a));
+    if (r && !noms.includes(r.nom)) noms.push(r.nom);
+    if (noms.length >= combien) break;
+  }
+  return noms;
+}
+
+const SIGNES = { "-2": "𝄫", "-1": "♭", 0: "", 1: "♯", 2: "𝄪" };
+const NOTES_FR = { C: "do", D: "ré", E: "mi", F: "fa", G: "sol", A: "la", B: "si" };
+// Combien de lettres au-dessus de la racine chaque intervalle s'écrit (tierce
+// = deux lettres plus haut, quinte = quatre…) : c'est ce qui donne mi♭ et non ré♯.
+const LETTRES_DE = { 0: 0, 2: 1, 3: 2, 4: 2, 5: 3, 6: 4, 7: 4, 8: 4, 9: 5, 10: 6, 11: 6, 14: 1 };
+
+/**
+ * Les notes d'un accord, en clair, du grave à l'aigu : « C » → ["do", "mi",
+ * "sol"], « F#m7/E » → ["mi", "fa♯", "la", "do♯"] (la basse d'abord).
+ */
+export function notesDeLAccord(nom) {
+  const m = FORME.exec((nom || "").trim());
+  const a = lireAccord(nom);
+  if (!m || !a) return [];
+  const iRacine = LETTRES.indexOf(m[1]);
+  const ecrire = (lettre, pc) => NOTES_FR[lettre] + (SIGNES[((mod12(pc - RACINES[lettre]) + 6) % 12) - 6] ?? "");
+  const notes = a.intervalles.map((i) => {
+    // Dans l'accord diminué de septième, le 9 est une septième diminuée, pas une sixte.
+    const pas = a.qualite === "dim7" && i === 9 ? 6 : LETTRES_DE[i];
+    return { pc: mod12(a.racine + i), nom: ecrire(LETTRES[(iRacine + pas) % 7], a.racine + i) };
+  });
+  if (a.basse === null) return notes.map((n) => n.nom);
+  return [ecrire(m[4], a.basse), ...notes.filter((n) => n.pc !== a.basse).map((n) => n.nom)];
+}
+
+/**
+ * Les « couleurs » d'un accord, les puces de la feuille : on garde la racine
+ * et on change la sorte d'accord. Elles s'appliquent à un accord posé comme
+ * à un accord de la roue encore à poser.
+ */
+export const COULEURS = [
+  { id: "simple", nom: "Simple" },
+  { id: "septieme", nom: "Septième" },
+  { id: "sus4", nom: "Sus4" },
+  { id: "add9", nom: "Add9" },
+];
+
+const SEPTIEMES = { "0,4,7,11": "maj7", "0,4,7,10": "7", "0,3,7,10": "m7", "0,3,6,10": "m7b5" };
+
+/**
+ * La septième d'un accord : celle de la tonalité s'il en est (do majeur 7
+ * sur do, mais sol 7 sur sol : ce que donne la gamme en empilant les
+ * tierces), sinon la plus courante de sa famille (7, m7, m7b5).
+ */
+function septieme(racine, famille, tonalite) {
+  const k = lireTonalite(tonalite);
+  const gamme = GAMMES[k.mineur ? "mineur" : "majeur"].map((x) => mod12(k.pc + x));
+  const i = gamme.indexOf(racine);
+  if (i >= 0) {
+    const tons = [0, 2, 4, 6].map((j) => mod12(gamme[(i + j) % 7] - racine));
+    const triade = tons[1] === 3 ? (tons[2] === 6 ? "dim" : "m") : tons[1] === 4 && tons[2] === 7 ? "" : null;
+    // La dominante du mineur (mi majeur en la mineur) n'est pas empilée sur la gamme : elle prend la 7.
+    if (triade === famille && SEPTIEMES[tons.join()]) return SEPTIEMES[tons.join()];
+  }
+  return { "": "7", m: "m7", dim: "m7b5" }[famille];
+}
+
+/**
+ * L'accord `nom` dans la couleur voulue (simple, septième, sus4, add9), sans
+ * sa basse : « Dm » + septième → « Dm7 », « C » → « Cmaj7 », « G » → « G7 ».
+ * Null si la couleur n'a pas de sens sur lui (add9 sur un accord diminué)
+ * ou si le nom ne se lit pas.
+ */
+export function appliquerCouleur(nom, couleur, tonalite = "C") {
+  const m = FORME.exec((nom || "").trim());
+  const a = lireAccord(nom);
+  if (!m || !a) return null;
+  // Un accord sans tierce (sus4) garde la famille de son degré dans la tonalité.
+  const roue = roueDeLaTonalite(tonalite).find((r) => r.racine === a.racine);
+  const famille = familleDe(a) ?? (roue ? roue.qualite : "");
+  const qualite = {
+    simple: famille,
+    septieme: septieme(a.racine, famille, tonalite),
+    sus4: "sus4",
+    add9: famille === "" ? "add9" : famille === "m" ? "madd9" : null,
+  }[couleur];
+  return qualite == null ? null : m[1] + m[2] + qualite;
+}
+
+/** La couleur (puce) d'un accord posé, ou null s'il n'en a aucune (sus2, 6, aug…). */
+export function couleurDe(nom) {
+  const a = lireAccord(nom);
+  if (!a) return null;
+  if (["", "m", "dim"].includes(a.qualite)) return "simple";
+  if (["7", "maj7", "m7", "m7b5", "dim7", "9", "m9"].includes(a.qualite)) return "septieme";
+  if (["sus4", "7sus4"].includes(a.qualite)) return "sus4";
+  if (["add9", "madd9"].includes(a.qualite)) return "add9";
+  return null;
+}
+
 export const STYLES = [
   { id: "aucun", nom: "Sans" },
   { id: "plaque", nom: "Plaqués" },
@@ -175,6 +384,19 @@ export function accompagnement(seq, style = seq.accompagnement) {
     }
   });
   return notes;
+}
+
+/**
+ * Le dessin d'un style d'accompagnement : ce qu'il joue sur une mesure d'un
+ * accord de do majeur, tel que `accompagnement` le calcule (pas un schéma à
+ * part qui pourrait s'en écarter). { pas (la longueur de la mesure), notes :
+ * [{ d, l, h }] }.
+ */
+export function motifAccompagnement(style, mesure = [4, 4]) {
+  const seq = { mesure: [...mesure], tonalite: "C", pistes: [{ nom: "", notes: [] }], accords: [{ d: 0, nom: "C" }], accompagnement: style };
+  const pas = pasParMesure(seq);
+  seq.pistes[0].notes.push({ id: 1, d: 0, l: pas, h: 72 }); // une mesure pleine, pour que l'idée en compte une
+  return { pas, notes: accompagnement(seq, style).map(({ d, l, h }) => ({ d, l, h })) };
 }
 
 /** Les voix à graver, jouer et exporter : les pistes, plus l'accompagnement s'il y en a un. */

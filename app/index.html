@@ -730,7 +730,9 @@
       </div>
     </dialog>
 
-    <!-- Feuille · tous les accords d'une mesure (idee-accords.js ; la refonte 8 en fera une roue) -->
+    <!-- Feuille · les accords d'une mesure, en roue (idee-accords.js, idee-accords.css) :
+         la bande des mesures, l'aperçu de ce qui sonnera, la roue des sept accords de la
+         tonalité, les couleurs, le style d'accompagnement, puis les actions -->
     <dialog class="feuille-bas idee-feuille feuille-accords" id="feuille-accords" aria-labelledby="accords-ou">
       <div class="feuille-tete accords-tete">
         <button class="btn btn-fantome rond" id="accord-avant" aria-label="Mesure précédente"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
@@ -738,18 +740,32 @@
         <button class="btn btn-fantome rond" id="accord-apres" aria-label="Mesure suivante"><svg class="ico" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
         <button class="btn btn-fantome rond" id="accords-fermer" aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
       </div>
-      <p class="remarque" id="accords-aide">Ceux qui vont avec ta mélodie, du plus probable au moins probable. Touche pour entendre et poser.</p>
-      <div class="accords-choix" id="accords-proposes"></div>
+      <div class="accords-bande" id="accords-bande" role="group" aria-label="Les mesures de l'idée"></div>
+      <div class="accords-apercu-ligne">
+        <button class="btn rond" id="accords-ecouter" aria-pressed="false" aria-label="Écouter la mesure" title="Écouter la mesure"><svg class="ico" aria-hidden="true"><use href="#i-lire"></use></svg></button>
+        <div class="accords-apercu" id="accords-apercu" role="img"></div>
+      </div>
+      <div class="accords-roue-tete">
+        <span class="surtitre" id="accords-tonalite"></span>
+        <p class="remarque" id="accords-aide"></p>
+      </div>
+      <div class="accords-roue" id="accords-roue" role="group" aria-label="Les sept accords de la tonalité"></div>
+      <div class="accords-couleurs" id="accords-couleurs" role="group" aria-label="Sorte d'accord"></div>
+      <div class="accords-accomp">
+        <span class="surtitre" id="accords-styles-titre">Accompagnement</span>
+        <div class="accords-styles" id="accords-styles" role="group" aria-labelledby="accords-styles-titre"></div>
+      </div>
       <details class="accords-autres">
-        <summary>Un autre accord</summary>
+        <summary><svg class="ico s" aria-hidden="true"><use href="#i-chevron-bas"></use></svg>Un autre accord</summary>
         <div class="accords-choix petits" id="accords-racines"></div>
         <div class="accords-choix petits" id="accords-qualites"></div>
       </details>
-      <div class="rangee">
+      <div class="accords-actions">
         <button class="btn" id="accord-milieu">Changer au milieu de la mesure</button>
         <button class="btn btn-danger" id="accord-retirer">Retirer</button>
-        <button class="btn" id="accords-tout">Proposer pour toute l'idée</button>
+        <button class="btn" id="accords-tout"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Harmoniser toute l'idée</button>
       </div>
+      <span class="accords-annonce" id="accords-annonce" role="status"></span>
     </dialog>
   </section>
 </main>
