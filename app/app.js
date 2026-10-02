@@ -123,8 +123,9 @@ function montrer(vue) {
   document.body.classList.toggle("plein", vue === "idee");
   // Papier pour lire, Studio pour jouer : l'éditeur passe en sombre (sauf réglage contraire).
   document.body.classList.toggle("studio", vue === "idee" && ambianceStudio());
-  // La barre de Portée ne sert qu'à l'accueil ; les autres écrans ont la leur.
-  document.querySelector(".barre-haut").hidden = vue !== "biblio";
+  // La barre de Portée ne sert qu'à l'accueil : un écran qui a sa propre barre
+  // (avec son retour, [data-retour]) la remplace ; les autres la gardent.
+  document.querySelector(".barre-haut").hidden = vue !== "biblio" && !!$(`vue-${vue}`).querySelector("[data-retour]");
   $("fil").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglets").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglet-atelier").setAttribute("aria-selected", String(vue === "atelier"));
