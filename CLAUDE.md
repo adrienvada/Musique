@@ -46,7 +46,9 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   `<svg class="ico"><use href="#i-lire"></use></svg>` dans la page) : jamais
   d'emoji ni de caractère (▶ ✕ ★) en guise d'icône. Au doigt, rien ne fait
   moins de 44 px. Les choix d'une action se font dans une feuille du bas
-  (`<dialog class="feuille-bas">`, `feuilles.js`).
+  (`<dialog class="feuille-bas">`, `feuilles.js`) : le bouton « précédent »
+  la ferme tout seul (`historique.js`). Un calque qui ne serait pas un
+  `<dialog>` doit être ajouté à `aLaRacine()` et `reculer()` (`app.js`).
 - **Correction au toucher (`app/edition.js`)** : Adrien ne lit pas l'ABC.
   Toute correction passe par un geste (bouton, glissé, clavier) qui réécrit
   l'ABC ; le texte reste en « mode avancé ».

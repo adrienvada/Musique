@@ -26,6 +26,7 @@ import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
 import { ecrireMusicXml } from "./musicxml.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
+import { creerHistorique } from "./historique.js";
 import { creerAccueil } from "./accueil.js";
 import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, suivre } from "./doutes.js";
 import { afficherVueAtelier, dateRelative, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes, placerOnglets, suivreDock } from "./atelier.js";
@@ -64,6 +65,7 @@ const etat = {
   transposition: 0,
   selection: null,    // début, dans l'ABC, de la note choisie dans « Corriger »
   historique: [],     // l'état d'avant chaque geste (ABC et doutes), pour « Annuler »
+  pile: [],           // les écrans d'où l'on vient (hors accueil), pour « précédent »
 };
 
 const piano = new Piano(new URL("./piano/", import.meta.url).href);
@@ -124,6 +126,7 @@ function titreDepuisFichier(nom) {
 // ------------------------------------------------------------------------
 
 function montrer(vue) {
+  if (vue === "biblio") etat.pile = [];
   if (etat.vue === "idee" && vue !== "idee" && editeur) editeur.fermer();
   if (etat.vue === "morceau" && vue !== "morceau" && vueMorceau) vueMorceau.fermer();
   transport.arreter();
@@ -154,6 +157,7 @@ function montrer(vue) {
 }
 
 async function ouvrir(id, vue = "atelier") {
+  retenirEcran();
   const p = await etat.stockage.lire(id);
   if (!p) { toast("Cette partition n'existe plus."); return; }
   if (p.type === "idee") { ouvrirIdee(p); return; }
@@ -171,16 +175,88 @@ async function ouvrir(id, vue = "atelier") {
 
 /** Ouvre un morceau ; sans partition, un nouveau, qui ne s'enregistre qu'au premier bloc. */
 function ouvrirMorceau(p = null) {
+  retenirEcran();
   etat.courante = p;
   if (etat.vue === "morceau") vueMorceau.fermer();
   montrer("morceau");
   vueMorceau.ouvrir(p);
 }
 
+// ------------------------------------------------------------------------
+// « Précédent » : la flèche de retour des écrans, et le bouton du téléphone
+// ------------------------------------------------------------------------
+//
+// Un écran peut en ouvrir un autre (l'idée d'un bloc de morceau, « Continuer
+// en idée » depuis une page lue, une idée tirée d'une phrase…) : on retient
+// celui qu'on quitte, et revenir en arrière y ramène, au lieu de sauter à
+// l'accueil. L'accueil vide la pile.
+
+let enRetour = false;
+
+/** Retient l'écran qu'on quitte pour un autre (pas l'accueil), pour y revenir. */
+function retenirEcran() {
+  if (enRetour || etat.vue === "biblio") return;
+  const id = etat.vue === "idee" ? editeur && editeur.id : etat.vue === "morceau" ? vueMorceau && vueMorceau.id : etat.courante && etat.courante.id;
+  if (!id) return; // pas encore enregistré (une idée encore vide) : rien où revenir
+  const dernier = etat.pile.at(-1);
+  if (dernier && dernier.id === id) { dernier.vue = etat.vue; return; }
+  etat.pile.push({ vue: etat.vue, id });
+}
+
+/** Un écran en arrière : celui d'où l'on venait, sinon l'accueil. */
+async function revenirEcran() {
+  enRetour = true;
+  try {
+    while (etat.pile.length) {
+      const { vue, id } = etat.pile.pop();
+      const p = await etat.stockage.lire(id).catch(() => null);
+      if (!p) continue; // supprimée entre-temps : on remonte encore
+      if (p.type === "idee") ouvrirIdee(p);
+      else if (p.type === "morceau") ouvrirMorceau(p);
+      else await ouvrir(id, vue);
+      return;
+    }
+    montrer("biblio");
+  } finally { enRetour = false; }
+}
+
+const visible = (sel) => !!document.querySelector(sel);
+
+/** L'appli est à sa racine : le carnet, rien d'ouvert par-dessus. */
+function aLaRacine() {
+  return etat.vue === "biblio" && etat.onglet === "carnet"
+    && !visible("dialog[open]") && !visible(".radial:not([hidden])")
+    && $("recherche-zone").hidden && $("panneau-remarkable").hidden && $("panneau-modeles").hidden;
+}
+
+/** Un pas en arrière, du plus proche au plus lointain : ce qui est ouvert par-dessus, puis l'écran. */
+function reculer() {
+  const feuilles = [...document.querySelectorAll("dialog[open]")];
+  if (feuilles.length) { feuilles.at(-1).close(); return; }
+  const cercle = document.querySelector(".radial:not([hidden])");
+  if (cercle) { cercle.querySelector(".radial-centre").click(); return; }
+  if (etat.vue === "biblio") {
+    if (!$("recherche-zone").hidden) { $("fermer-recherche").click(); return; }
+    if (!$("panneau-remarkable").hidden) { $("fermer-rm").click(); return; }
+    if (!$("panneau-modeles").hidden) { $("fermer-modeles").click(); return; }
+    if (etat.onglet !== "carnet") accueil.choisirOnglet("carnet");
+    return;
+  }
+  if (etat.vue === "idee") {
+    // Pendant le jeu en direct, « précédent » l'arrête (la feuille de l'arrondi s'ouvre) ;
+    // avec des notes choisies, il les laisse.
+    if ($("idee-enregistrer").getAttribute("aria-pressed") === "true") { $("idee-enregistrer").click(); return; }
+    const laisser = document.querySelector('#idee-selection:not([hidden]) [data-action="deselectionner"]');
+    if (laisser) { laisser.click(); return; }
+  }
+  revenirEcran();
+}
+
 const ideesParId = () => new Map(etat.partitions.filter((x) => x.type === "idee").map((x) => [x.id, x]));
 
 /** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */
 function ouvrirIdee(p = null, options = {}) {
+  retenirEcran();
   etat.courante = p;
   if (etat.vue === "idee") editeur.fermer();
   montrer("idee");
@@ -1536,7 +1612,7 @@ async function exporterAbc() {
 function brancher() {
   $("aller-biblio").addEventListener("click", () => montrer("biblio"));
   // Chaque écran (idée, morceau, pages) a sa propre barre et son bouton retour.
-  document.addEventListener("click", (ev) => { if (ev.target.closest("[data-retour]")) montrer("biblio"); });
+  document.addEventListener("click", (ev) => { if (ev.target.closest("[data-retour]")) revenirEcran(); });
   $("onglet-atelier").addEventListener("click", () => montrer("atelier"));
   $("onglet-lecteur").addEventListener("click", () => montrer("lecteur"));
 
@@ -1848,6 +1924,8 @@ async function demarrer() {
   creerVueDuMorceau();
   afficherBibliotheque();
   etat.stockage = await ouvrirStockage();
+  // Le bouton « précédent » du téléphone recule dans l'appli au lieu de la quitter.
+  creerHistorique({ racine: aLaRacine, reculer }).synchroniser();
   // Raccourci de l'appli installée (« Nouvelle idée ») : on y va tout droit.
   if (new URLSearchParams(location.search).has("idee")) ouvrirIdee(null);
   const surClaude = etat.stockage.mode === "claude";

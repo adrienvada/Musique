@@ -227,6 +227,25 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     comme dans `harmoniser` : c'est elle qui tire vers la tonique ; le v reste
     dans « Un autre accord ». « Septième » donne la septième de la tonalité
     (Cmaj7, G7, Dm7, Bm7b5).
+- **02/10 · Le bouton « précédent » recule dans l'appli.** Demandé par
+  Adrien (« que ça gère mieux quand on fait précédent »). Portée est une
+  seule page : le précédent du téléphone (ou du navigateur, ou le geste de
+  retour) la quittait au lieu de fermer la feuille ouverte ou de revenir à
+  l'écran d'avant. Chaque « précédent » défait maintenant un pas, du plus
+  proche au plus lointain : la feuille ou le menu ouvert, le jeu en direct
+  (il s'arrête, et la feuille de l'arrondi s'ouvre), les notes choisies,
+  l'écran (celui d'où l'on venait : le morceau quand on avait ouvert l'idée
+  d'un de ses blocs, sinon l'accueil), puis l'onglet Carnet ; au carnet, le
+  précédent suivant quitte Portée, comme partout. La flèche de retour des
+  écrans ramène aussi à l'écran d'avant, pas toujours à l'accueil.
+  - Pourquoi une seule entrée d'historique « de garde » (`app/historique.js`)
+    plutôt qu'une par écran et par feuille : tout ce qui s'ouvre et se
+    ferme d'un toucher, d'Échap ou du voile aurait dû rester en phase avec
+    l'historique, et un retrait d'entrée (`history.back()`) est asynchrone.
+    La garde se pose dès que l'appli quitte sa racine (le carnet, rien
+    d'ouvert) et s'en va quand elle y revient ; le module voit ce qui
+    s'ouvre (`<dialog open>`, `hidden`, onglets) sans que les écrans aient à
+    le prévenir.
 - **02/10 · La sélection : une pilule, une boîte à outils, un cercle rangé
   (refonte 5).** Le menu en cercle alignait douze gestes en symboles sans
   les regrouper, et c'était le seul chemin vers la moitié d'entre eux.
