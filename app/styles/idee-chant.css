@@ -1,20 +1,152 @@
-/* L'ÉDITEUR D'IDÉE, MODE CHANTER (idee-chant.js) : l'accordeur, dans le
- * pupitre ; il n'écrase plus la grille. */
+/* L'ÉDITEUR D'IDÉE, MODE CHANTER (idee-chant.js, micro.js, et la couche
+ * « voix » de grille.js) : l'accordeur du pupitre, et la trace de la voix
+ * sur la grille.
+ *
+ * Deux endroits, un seul geste : la grille montre où va la voix (le trait,
+ * la rangée visée), le pupitre dit si elle est juste et combien de temps il
+ * reste à tenir. On lit l'un sans quitter l'autre des yeux.
+ *
+ * Le pupitre a une hauteur fixe (--pupitre-mode, idee.css) : le contenu s'y
+ * range par requêtes de conteneur. Trop court (une note choisie rogne la
+ * place de 52 px), les dernières notes disparaissent d'abord ; assez large
+ * (ordinateur), le nom de la note passe à gauche et le reste à droite. */
 
-.pupitre-chant { display: flex; align-items: center; gap: 16px; padding: 0 4px; }
-.chant-rond { height: min(132px, 100%); aspect-ratio: 1; flex: none; border-radius: 50%; border: 2px solid var(--trait-fort); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; transition: border-color 0.2s; }
-.pupitre-chant.ecoute .chant-rond { border-color: var(--stylo); }
-.micro-note { font-family: var(--f-titre); font-size: 2.5rem; line-height: 1; color: var(--encre); display: inline-flex; align-items: center; gap: 2px; min-height: 1em; }
-.micro-note:empty::before { content: "–"; color: var(--trait-fort); }
-.micro-note.ecrite { color: var(--ok); }
-.chant-justesse { font-size: 0.8rem; font-weight: 600; color: var(--gris); min-height: 1.2em; }
+/* Le panneau est le conteneur des requêtes ; c'est .chant-dedans, son enfant,
+ * qui se range (un élément ne peut pas interroger son propre conteneur). */
+.pupitre-chant { container-type: size; }
+.chant-dedans { height: 100%; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; padding: 2px 2px 0; overflow: hidden; }
+
+/* Le nom de la note, très grand, et ce qu'il y a à en dire */
+.chant-haut { flex: none; display: flex; align-items: center; gap: 10px; min-height: 52px; }
+.chant-rond { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.micro-note { flex: none; min-width: 2.1em; font-family: var(--f-titre); font-size: 3rem; line-height: 1; color: var(--encre); }
+/* Personne ne chante : un micro à la place du nom, et l'indice à côté. */
+.micro-note:empty { display: none; }
+.chant-micro { flex: none; margin: 0 6px; color: var(--stylo); }
+.pupitre-chant.voix .chant-micro { display: none; }
+.chant-annonce { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.chant-justesse { flex: 1 1 0; min-width: 0; font-size: 1rem; font-weight: 600; line-height: 1.25; color: var(--gris); }
 .chant-justesse.juste { color: var(--ok); }
 .chant-justesse.haut, .chant-justesse.bas { color: var(--alerte); }
-.chant-droite { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.micro-justesse { position: relative; width: 100%; height: 16px; border-radius: 8px; background: linear-gradient(90deg, var(--surligneur-doux), var(--ok-doux) 40% 60%, var(--surligneur-doux)); }
-.micro-justesse i { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--ok); }
-.micro-justesse span { position: absolute; top: -4px; width: 4px; height: 24px; border-radius: 2px; background: var(--encre); left: 50%; transform: translateX(-2px); transition: left 80ms linear; }
-.micro-niveau { width: 100%; height: 4px; border-radius: 2px; background: var(--trait); overflow: hidden; }
-.micro-niveau span { display: block; height: 100%; width: 0; background: var(--stylo); }
-.chant-aide { font-size: 0.88rem; color: var(--gris); line-height: 1.35; }
-#micro-relancer { align-self: flex-start; }
+/* Quand personne ne chante, la même place dit quoi faire. */
+.chant-justesse.indice { font-size: 0.85rem; font-weight: 400; }
+/* « écrite » : la note a tenu son quart de seconde. */
+.chant-coche { display: none; flex: none; align-items: center; gap: 4px; min-height: 30px; padding: 0 11px 0 8px; border-radius: 999px; background: var(--ok-doux); color: var(--ok); font-size: 0.85rem; font-weight: 600; }
+.pupitre-chant.ecrite .chant-coche { display: inline-flex; }
+
+/* La jauge : la zone « juste » au milieu (± 10 centièmes de demi-ton, voir
+ * positionAiguille), l'aiguille qui suit la voix. Le niveau du micro court
+ * dans son bord bas : on voit que le micro entend. */
+.micro-justesse { position: relative; flex: none; height: 32px; border-radius: 10px; background: var(--creux); overflow: hidden; }
+.mj-juste { position: absolute; top: 0; bottom: 0; left: 40.8%; width: 18.4%; background: var(--ok-doux); border: 0 solid color-mix(in srgb, var(--ok) 55%, transparent); border-width: 0 1px; transition: background-color 0.15s; }
+.micro-justesse i { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--ok); opacity: 0.6; }
+.mj-bas, .mj-haut { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--f-code); font-size: 0.7rem; color: var(--gris); }
+.mj-bas { left: 10px; }
+.mj-haut { right: 10px; }
+#micro-aiguille { position: absolute; top: 4px; bottom: 6px; left: 50%; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--encre); opacity: 0.3; transition: left 80ms linear, background-color 0.15s, opacity 0.15s; }
+.pupitre-chant.voix #micro-aiguille { opacity: 1; }
+.micro-justesse.juste #micro-aiguille { background: var(--ok); }
+.micro-justesse.juste .mj-juste { background: color-mix(in srgb, var(--ok) 32%, var(--creux)); }
+.micro-niveau { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
+.micro-niveau span { display: block; height: 100%; width: 0; background: var(--stylo); opacity: 0.55; }
+
+/* La barre de tenue : elle se remplit pendant le quart de seconde, puis la
+ * note s'écrit (la barre devient verte, et un éclat l'entoure). */
+.chant-tenue { flex: none; height: 8px; border-radius: 4px; background: var(--creux); }
+.chant-tenue span { display: block; height: 100%; border-radius: 4px; background: var(--stylo); transform: scaleX(0); transform-origin: left; transition: transform 70ms linear, background-color 0.15s; }
+.pupitre-chant.ecrite .chant-tenue span { background: var(--ok); }
+.pupitre-chant.eclat .chant-tenue { animation: chant-eclat 0.6s ease-out; }
+.pupitre-chant.eclat .chant-coche { animation: chant-pop 0.4s ease-out; }
+@keyframes chant-eclat { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 70%, transparent); } to { box-shadow: 0 0 0 9px transparent; } }
+@keyframes chant-pop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+
+/* La durée des notes chantées : celle du mode Clavier. */
+.chant-bas { flex: none; display: flex; gap: 8px; }
+.chant-durees { flex: 1 1 auto; min-width: 0; }
+.chant-durees > button { min-height: 44px; padding: 0 4px; font-size: 0.88rem; }
+.chant-pointee { flex: none; align-self: stretch; padding: 0 12px; }
+
+/* Les dernières notes de l'idée, la plus récente d'abord et en plein. */
+.chant-gardees { flex: none; display: flex; align-items: center; gap: 10px; min-height: 30px; min-width: 0; overflow: hidden; }
+.chant-gardees .surtitre { flex: none; }
+/* Trop de puces pour la largeur : la dernière s'efface au bord, elle n'est pas coupée net. */
+.chant-gardees ul { flex: 1 1 auto; min-width: 0; display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, currentColor 88%, transparent); mask-image: linear-gradient(90deg, currentColor 88%, transparent); }
+.gardee { flex: none; min-height: 30px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 999px; background: var(--stylo-doux); color: var(--stylo); font-size: 0.88rem; font-weight: 600; white-space: nowrap; }
+.gardee.recente { background: var(--stylo); color: var(--sur-stylo); }
+.gardee.neuve { animation: chant-pop 0.45s ease-out; }
+/* (pas « .vide » : la bibliothèque s'en sert pour son écran vide) */
+.chant-sans-note { color: var(--gris); font-size: 0.85rem; }
+
+/* Hors écoute (micro refusé, coupé, piano qui joue, ou un toucher à attendre) :
+ * le message prend la place de la jauge, avec le bouton pour relancer. */
+.chant-aide { display: none; margin: 0; font-size: 1rem; line-height: 1.4; color: var(--encre); }
+.pupitre-chant:not(.ecoute) .chant-dedans { justify-content: flex-start; gap: 12px; }
+.pupitre-chant:not(.ecoute) .chant-aide { display: block; order: 1; flex: 0 1 auto; min-height: 0; overflow: auto; }
+.pupitre-chant:not(.ecoute) .chant-haut { order: 2; min-height: 0; }
+.pupitre-chant:not(.ecoute) .chant-bas { order: 3; margin-top: auto; }
+.pupitre-chant:not(.ecoute) :is(.micro-justesse, .chant-tenue, .chant-gardees, .chant-rond, .chant-coche) { display: none; }
+#micro-relancer { min-height: 44px; }
+
+/* Une note choisie rogne la place du pupitre : tout se serre, et les
+ * dernières notes (le plus facile à perdre) s'effacent. */
+@container (max-height: 203px) { .chant-gardees { display: none; } }
+@container (max-height: 176px) {
+  .chant-haut { min-height: 44px; }
+  .micro-note { font-size: 2.4rem; }
+  .micro-justesse { height: 26px; }
+  .chant-dedans { gap: 6px; }
+}
+/* Le plus serré : un petit téléphone avec une note choisie (124 px). Les
+ * boutons de durée gardent leur taille, c'est le reste qui se rabat. */
+@container (max-height: 150px) {
+  .chant-haut { min-height: 36px; }
+  .micro-note { font-size: 2.1rem; }
+  .chant-justesse.indice { font-size: 0.8rem; line-height: 1.15; }
+  .chant-coche { min-height: 26px; }
+  .micro-justesse { height: 22px; }
+  #micro-aiguille { top: 3px; bottom: 5px; }
+  .chant-tenue { height: 6px; }
+  .chant-durees > button { min-height: 40px; }
+  .chant-dedans { gap: 4px; padding-top: 0; }
+}
+
+/* L'ordinateur : le nom de la note à gauche, tout le reste à droite. */
+@container (min-width: 620px) {
+  .chant-dedans { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(0, 1.6fr); align-content: center; column-gap: 36px; row-gap: 10px; }
+  .chant-haut { grid-column: 1; grid-row: 1 / span 4; flex-direction: column; align-items: flex-start; justify-content: center; gap: 12px; }
+  .chant-rond { flex: none; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .micro-note { font-size: 4.4rem; }
+  .chant-justesse { flex: none; font-size: 1.15rem; }
+  .chant-justesse.indice { font-size: 0.92rem; max-width: 26ch; }
+  .micro-justesse, .chant-tenue, .chant-bas, .chant-gardees, .chant-aide { grid-column: 2; }
+  .pupitre-chant:not(.ecoute) .chant-dedans { justify-content: normal; }
+  .pupitre-chant:not(.ecoute) .chant-aide, .pupitre-chant:not(.ecoute) .chant-haut, .pupitre-chant:not(.ecoute) .chant-bas { order: 0; margin-top: 0; }
+  @container (max-height: 203px) { .chant-gardees { display: flex; } }
+}
+
+/* LA TRACE DE LA VOIX, sur la grille elle-même. La couche (.g-voix), la rangée
+ * visée (.g-cible, sous les notes) et sa touche sont créées par grille.js ;
+ * ici, seulement leur style. Le trait est le surligneur, cerclé d'un bord
+ * plus sombre pour rester lisible sur le papier clair. */
+.g-voix { position: absolute; left: 0; top: 0; z-index: 3; overflow: hidden; pointer-events: none; }
+.g-voix svg { display: block; width: 100%; height: 100%; }
+.g-degrade-trace stop { stop-color: var(--surligneur); }
+.g-degrade-bord stop { stop-color: var(--alerte); }
+.g-trace, .g-bord-trace { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.g-trace { stroke: url(#g-voix-trace); stroke-width: 3.5; }
+.g-bord-trace { stroke: url(#g-voix-bord); stroke-width: 6.5; }
+/* Le point au bout du trait ; son anneau se remplit pendant la tenue. */
+.g-pointe, .g-piste, .g-anneau, .g-eclat { display: none; }
+.g-voix.actif :is(.g-pointe, .g-piste, .g-anneau, .g-eclat) { display: inline; }
+.g-pointe { fill: var(--surligneur); stroke: var(--alerte); stroke-width: 1.5; }
+.g-piste { fill: none; stroke: var(--alerte); stroke-width: 3; opacity: 0.35; }
+.g-anneau { fill: none; stroke: var(--stylo); stroke-width: 3.5; stroke-linecap: round; transform: rotate(-90deg); transform-box: fill-box; transform-origin: center; }
+.g-anneau.pleine { stroke: var(--ok); }
+.g-eclat { fill: none; stroke: var(--ok); stroke-width: 3; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.g-eclat.va { animation: g-eclat 0.55s ease-out; }
+@keyframes g-eclat { from { opacity: 0.9; transform: scale(0.7); } to { opacity: 0; transform: scale(2.4); } }
+/* La rangée visée : bleu doux sous les notes, et la touche de la bande de gauche avec elle. */
+.g-cible { position: absolute; left: 0; right: 0; background: var(--stylo-doux); opacity: 0.92; pointer-events: none; }
+.g-cible.va { animation: g-cible-va 0.6s ease-out; }
+@keyframes g-cible-va { from { background: color-mix(in srgb, var(--stylo) 60%, var(--stylo-doux)); } }
+.g-touche.cible { background: var(--stylo-doux); color: var(--encre); }

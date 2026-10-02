@@ -9,6 +9,11 @@
  *
  * Rien n'est enregistré : le son ne quitte pas l'appareil.
  *
+ * À chaque mesure (toutes les 40 ms), Micro dit aussi à l'écran où en est la
+ * voix : sa hauteur exacte (pour la tracer sur la grille) et l'avancée de la
+ * tenue, de 0 à 1 (pour que le chanteur voie combien de temps il lui reste à
+ * tenir avant que la note s'écrive).
+ *
  * La hauteur se mesure avec l'algorithme YIN (de Cheveigné et Kawahara,
  * 2002), robuste pour la voix : une fonction pure, testée sur des sons
  * fabriqués (tests/micro.test.mjs).
@@ -63,10 +68,16 @@ export function detecterHauteur(x, frequence, { seuil = 0.15, min = 65, max = 12
 /** Hauteur MIDI (fractionnaire) d'une fréquence : 69 = la 440. */
 export const midiDe = (hz) => 69 + 12 * Math.log2(hz / 440);
 
+/** Six mesures de suite (40 ms chacune : un quart de seconde) sur la même note, et elle s'écrit. */
+export const MESURES_TENUE = 6;
+
 /**
  * Écoute le micro et annonce chaque note tenue.
  *   surNote(h)    : une note a tenu assez longtemps ;
- *   surEcoute(e)  : à chaque mesure { h, cents, niveau } (h null : rien).
+ *   surEcoute(e)  : à chaque mesure { h, cents, niveau, m, tenue } : h la
+ *                   note tenue (null : rien), cents l'écart de la voix à cette
+ *                   note, m la hauteur exacte de la voix (MIDI fractionnaire,
+ *                   null : rien), tenue l'avancée vers l'écriture (0 à 1).
  */
 export class Micro {
   constructor({ surNote, surEcoute = () => {} }) {
@@ -119,7 +130,7 @@ export class Micro {
       this.centre = null;
       this.compte = 0;
       this.silences++;
-      this.surEcoute({ h: null, cents: 0, niveau });
+      this.surEcoute({ h: null, cents: 0, niveau, m: null, tenue: 0 });
       return;
     }
     // La note tenue, c'est la moyenne des mesures qui restent à moins d'un
@@ -128,15 +139,15 @@ export class Micro {
     if (this.centre !== null && Math.abs(m - this.centre) < 0.6) { this.compte++; this.centre += (m - this.centre) / this.compte; }
     else { this.centre = m; this.compte = 1; }
     const h = Math.round(this.centre);
-    this.surEcoute({ h, cents: Math.round((m - h) * 100), niveau });
-    // Six mesures de suite (un quart de seconde) sur la même note : elle est écrite.
+    this.surEcoute({ h, cents: Math.round((m - h) * 100), niveau, m, tenue: Math.min(1, this.compte / MESURES_TENUE) });
+    // Un quart de seconde sur la même note : elle est écrite.
     // La même note redite attend une respiration ; une autre s'écrit tout de suite (legato).
-    if (this.compte === 6 && (h !== this.derniere || this.silences >= 3)) {
+    if (this.compte === MESURES_TENUE && (h !== this.derniere || this.silences >= 3)) {
       this.derniere = h;
       this.silences = 0;
       this.surNote(h);
     }
-    if (this.compte >= 6) this.silences = 0;
+    if (this.compte >= MESURES_TENUE) this.silences = 0;
   }
 
   arreter() {

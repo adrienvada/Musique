@@ -555,17 +555,43 @@
           <div id="idee-clavier"></div>
         </div>
 
-        <!-- Pupitre · Chanter : l'accordeur, le micro écoute tant que ce mode est ouvert (idee-chant.js, micro.js) -->
+        <!-- Pupitre · Chanter : l'accordeur (le nom de la note, un verdict en mots, la jauge, la barre de
+             tenue), la durée des notes chantées et les dernières notes écrites. Le micro écoute tant que
+             ce mode est ouvert (idee-chant.js, micro.js) ; la trace de la voix se dessine sur la grille
+             elle-même (grille.js). Hors écoute, la jauge et la barre cèdent la place au message (#micro-aide). -->
         <div class="pupitre-chant micro-panneau" id="micro-panneau" role="tabpanel" aria-label="Chanter" hidden>
-          <div class="chant-rond" id="chant-rond">
-            <span class="micro-note" id="micro-note" aria-live="polite"></span>
-            <span class="chant-justesse" id="chant-justesse"></span>
-          </div>
-          <div class="chant-droite">
-            <div class="micro-justesse" aria-hidden="true"><i></i><span id="micro-aiguille"></span></div>
-            <div class="micro-niveau" aria-hidden="true"><span id="micro-niveau"></span></div>
+          <div class="chant-dedans">
+            <div class="chant-haut">
+              <div class="chant-rond" id="chant-rond">
+                <svg class="ico l chant-micro" aria-hidden="true"><use href="#i-micro"></use></svg>
+                <span class="micro-note" id="micro-note" aria-live="polite"></span>
+                <span class="chant-justesse" id="chant-justesse"></span>
+              </div>
+              <span class="chant-coche"><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg>écrite</span>
+              <button class="btn btn-plein" id="micro-relancer" hidden><svg class="ico s" aria-hidden="true"><use href="#i-micro"></use></svg>Écouter</button>
+            </div>
             <p class="chant-aide" id="micro-aide">Chante une note et tiens-la : elle s'écrit. Puis la suivante.</p>
-            <button class="btn" id="micro-relancer" hidden><svg class="ico s" aria-hidden="true"><use href="#i-micro"></use></svg>Écouter</button>
+            <div class="micro-justesse" aria-hidden="true">
+              <span class="mj-bas">bas</span><span class="mj-haut">haut</span>
+              <span class="mj-juste"></span><i></i><span id="micro-aiguille"></span>
+              <div class="micro-niveau"><span id="micro-niveau"></span></div>
+            </div>
+            <div class="chant-tenue" id="chant-tenue" aria-hidden="true"><span id="chant-tenue-barre"></span></div>
+            <div class="chant-bas">
+              <div class="seg chant-durees" id="chant-durees" role="group" aria-label="Durée des notes chantées">
+                <button data-duree="2" aria-pressed="false" title="Croche (2)">croche</button>
+                <button data-duree="4" aria-pressed="true" title="Noire (3)">noire</button>
+                <button data-duree="8" aria-pressed="false" title="Blanche (4)">blanche</button>
+                <button data-duree="16" aria-pressed="false" title="Ronde (5)">ronde</button>
+              </div>
+              <button class="btn chant-pointee" id="chant-pointee" aria-pressed="false" title="Pointée (.)">pointée</button>
+            </div>
+            <div class="chant-gardees">
+              <span class="surtitre">Écrites</span>
+              <ul id="chant-gardees" aria-label="Dernières notes écrites"></ul>
+            </div>
+            <!-- Dit « la4 écrite » au lecteur d'écran, sans rien montrer -->
+            <span class="chant-annonce" id="chant-annonce" role="status"></span>
           </div>
         </div>
 

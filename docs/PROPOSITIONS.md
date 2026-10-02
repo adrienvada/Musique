@@ -183,6 +183,27 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · Chanter : la voix se voit sur la grille (refonte 7).** On
+  devinait sa voix à une aiguille, sans voir où elle allait ni combien de
+  temps il restait à tenir. Les rangées de la grille sont déjà les notes : la
+  voix s'y trace en direct (un trait surligneur qui défile, un point au bout
+  dont l'anneau se remplit pendant la tenue, la rangée visée qui s'allume, et
+  la grille qui défile en hauteur pour la suivre ; une couche isolée de
+  `grille.js`, qui ne prend aucun toucher).
+  - L'accordeur du pupitre devient lisible de loin : le nom de la note en très
+    grand, un verdict en mots (« juste », « un peu haut », « un peu bas »),
+    une jauge dont le milieu est la zone juste (± 10 centièmes), une barre de
+    tenue puis un éclat quand la note s'écrit, et les dernières notes de
+    l'idée en puces (elles viennent de l'idée : « Annuler » les corrige).
+  - La durée des notes chantées se choisit sans quitter le mode ; c'est la
+    même que celle du mode Clavier.
+  - Rien d'enregistré, rien de transcrit : la détection (YIN) n'a pas changé,
+    `micro.js` dit seulement en plus la hauteur exacte et l'avancée de la
+    tenue. Une note tenue s'écrit toujours toute seule, comme Adrien l'a
+    demandé. Le verdict est lissé (le vibrato ne le fait pas sauter) et un
+    saut d'octave isolé n'est pas tracé.
+  - Le curseur d'écriture reste visible en Chanter : il dit où la note
+    s'écrira, ce que le trait ne dit pas.
 - **02/10 · Les accords sur une roue, l'accompagnement visible (refonte 8).**
   La feuille des accords n'était qu'une liste de boutons : on n'y voyait ni
   la logique de la tonalité ni ce que l'accompagnement allait jouer, et son
