@@ -1,12 +1,14 @@
 /* L'ÉDITEUR D'IDÉE, SÉLECTION (idee-selection.js) : la pilule au-dessus des
- * notes choisies, la rangée « sélection » du pupitre, le menu en cercle. */
+ * notes choisies, la boîte à outils (feuille du bas), la rangée « sélection »
+ * du pupitre, le menu en cercle. */
 
 /* La pilule : de l'encre sur la grille, posée par placer() */
 .idee-pilule { position: absolute; left: 0; top: 0; z-index: 5; display: flex; align-items: center; padding: 4px; border-radius: 16px; background: var(--encre); color: var(--papier); box-shadow: var(--ombre); }
 .idee-pilule .btn { background: transparent; border-color: transparent; color: var(--papier); }
 .idee-pilule .btn:hover { background: color-mix(in srgb, var(--papier) 16%, transparent); border-color: transparent; }
 .pilule-trait { width: 1px; height: 24px; margin: 0 2px; background: var(--papier); opacity: 0.25; }
-/* Pendant qu'une note se glisse, la pilule s'efface : elle cacherait où l'on va. */
+/* Pendant qu'une note se glisse, la pilule s'efface : elle cacherait où l'on va.
+   Elle s'efface aussi sous le menu en cercle et sous la boîte à outils. */
 #idee-grille.en-geste ~ .idee-pilule, .idee-pilule.sous-le-menu { visibility: hidden; }
 
 /* La rangée du pupitre, au-dessus du mode tant qu'une note est choisie */
@@ -14,15 +16,50 @@
 .idee-selection .nom { flex: 1 1 auto; min-width: 0; padding: 0 4px; font-size: 0.84rem; line-height: 1.2; color: var(--encre); }
 .idee-selection .nom .ligne { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .idee-selection .nom .ligne:first-child { font-weight: 600; }
+/* Un accord a un long nom (« accord do4-mi4-sol4 ») : il passe sur deux lignes plutôt que d'être coupé,
+   et la rangée garde sa hauteur (trois lignes de 1,12 tiennent dans les 46 px). */
+.idee-selection .nom { line-height: 1.12; }
+.idee-selection .nom .ligne:first-child { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .idee-selection .nom .ligne + .sep + .ligne, .idee-selection .nom .sep + .ligne { color: var(--gris); font-size: 0.78rem; }
 .idee-selection .nom .sep { display: none; }
 .idee-selection .btn { color: var(--encre); }
 .idee-selection .btn:hover { background: color-mix(in srgb, var(--encre) 10%, transparent); }
 
-/* Le menu en cercle (menu-radial.js) */
+/* La boîte à outils : « ••• » de la pilule. Le voile est léger, pour qu'on voie
+   la grille bouger derrière à chaque geste. */
+.idee-boite::backdrop { background: color-mix(in srgb, var(--voile) 40%, transparent); }
+.idee-boite[open] { gap: 10px; }
+/* Le titre dit ce qui est choisi : un accord à quatre notes passe sur deux lignes plutôt que d'être coupé. */
+dialog.idee-boite .feuille-tete h2 { font-size: 1.2rem; line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
+.idee-boite .feuille-tete .btn:not(.rond) { flex: none; min-height: 44px; }
+/* Ce qui vient de se passer : une ligne sous le titre, qui s'éclaire un instant à chaque geste. */
+.boite-retour { margin: -6px 0 0; padding: 3px 8px; min-height: 1.6em; border-radius: 8px; font-size: 0.88rem; line-height: 1.35; }
+.boite-retour.fait { color: var(--encre); font-weight: 600; }
+.boite-retour.neuf { animation: boite-eclat 0.8s ease-out; }
+@keyframes boite-eclat { from { background: var(--surligneur-doux); } }
+@media (prefers-reduced-motion: reduce) { .boite-retour.neuf { animation: none; } }
+.boite-famille { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.boite-famille .surtitre { margin: 0; padding: 0 2px; }
+.boite-rangee { display: grid; gap: 6px; }
+.boite-durees { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.boite-quatre { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.boite-deux { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Motif et Ailleurs côte à côte : à quatre boutons chacun, la boîte reste basse et ne cache pas la grille. */
+.boite-duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+/* De gros boutons : l'icône, puis le mot. Allumé (une durée) : le bleu du stylo, comme ailleurs. */
+.boite-geste { flex-direction: column; justify-content: center; gap: 4px; min-height: 64px; padding: 6px 2px; border-radius: 12px; border-color: transparent; background: var(--creux); font-size: 0.78rem; line-height: 1.15; white-space: normal; text-align: center; }
+.boite-geste .ico { flex: none; }
+.boite-geste:hover { border-color: var(--trait-fort); }
+
+/* Le menu en cercle (menu-radial.js) : une bande par famille de gestes, le nom de la famille en dedans */
 .radial { position: fixed; inset: 0; z-index: 30; background: var(--voile); touch-action: none; }
 .radial-cercle { position: absolute; width: 0; height: 0; }
+.radial-bandes { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.radial-bande-bord, .radial-bande { fill: none; stroke-linecap: round; }
+.radial-bande-bord { stroke: var(--trait-fort); }
+.radial-bande { stroke: var(--creux); }
+.radial-famille { position: absolute; left: 0; top: 0; padding: 1px 8px; border-radius: 999px; background: var(--feuille); border: 1px solid var(--trait); color: var(--gris); font-size: 0.6rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
 .radial-centre { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); display: grid; place-items: center; cursor: pointer; }
-.radial-geste { position: absolute; left: 0; top: 0; width: 64px; height: 64px; border-radius: 50%; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; box-shadow: var(--ombre); padding: 0; }
+.radial-geste { position: absolute; left: 0; top: 0; width: var(--bouton, 66px); height: var(--bouton, 66px); border-radius: 50%; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; box-shadow: var(--ombre); padding: 0; }
 .radial-geste.survole, .radial-geste:hover { background: var(--stylo); color: var(--sur-stylo); border-color: var(--stylo); }
-.radial-texte { font-size: 0.6rem; line-height: 1.1; max-width: 58px; text-align: center; }
+.radial-texte { font-size: 0.64rem; line-height: 1.05; max-width: 60px; text-align: center; font-weight: 500; }

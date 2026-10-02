@@ -183,6 +183,113 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · Chanter : la voix se voit sur la grille (refonte 7).** On
+  devinait sa voix à une aiguille, sans voir où elle allait ni combien de
+  temps il restait à tenir. Les rangées de la grille sont déjà les notes : la
+  voix s'y trace en direct (un trait surligneur qui défile, un point au bout
+  dont l'anneau se remplit pendant la tenue, la rangée visée qui s'allume, et
+  la grille qui défile en hauteur pour la suivre ; une couche isolée de
+  `grille.js`, qui ne prend aucun toucher).
+  - L'accordeur du pupitre devient lisible de loin : le nom de la note en très
+    grand, un verdict en mots (« juste », « un peu haut », « un peu bas »),
+    une jauge dont le milieu est la zone juste (± 10 centièmes), une barre de
+    tenue puis un éclat quand la note s'écrit, et les dernières notes de
+    l'idée en puces (elles viennent de l'idée : « Annuler » les corrige).
+  - La durée des notes chantées se choisit sans quitter le mode ; c'est la
+    même que celle du mode Clavier.
+  - Rien d'enregistré, rien de transcrit : la détection (YIN) n'a pas changé,
+    `micro.js` dit seulement en plus la hauteur exacte et l'avancée de la
+    tenue. Une note tenue s'écrit toujours toute seule, comme Adrien l'a
+    demandé. Le verdict est lissé (le vibrato ne le fait pas sauter) et un
+    saut d'octave isolé n'est pas tracé.
+  - Le curseur d'écriture reste visible en Chanter : il dit où la note
+    s'écrira, ce que le trait ne dit pas.
+- **02/10 · Les accords sur une roue, l'accompagnement visible (refonte 8).**
+  La feuille des accords n'était qu'une liste de boutons : on n'y voyait ni
+  la logique de la tonalité ni ce que l'accompagnement allait jouer, et son
+  style se cachait dans la feuille Tempo.
+  - Elle montre la bande des mesures (une mesure à deux accords s'y coupe en
+    deux), un aperçu de la mesure en mini rouleau de piano (mélodie en bleu,
+    accompagnement calculé en gris, qu'on écoute), la roue des sept accords
+    de la tonalité (l'accord posé au centre avec ses notes en clair), les
+    couleurs (simple, septième, sus4, add9) et quatre cartes de style qui
+    dessinent leur motif et s'entendent.
+  - Deux marques, les mêmes sur la roue et sur les six touches du pupitre :
+    *cerclés*, les accords qui viennent souvent après celui de la mesure
+    d'avant (une petite table de fonctions dans `harmonie.js` : tonique,
+    sous-dominante, dominante ; si tout était cerclé, rien ne se
+    détacherait) ; *teintés*, ceux que `suggerer` propose d'après la mélodie.
+  - Le style reste `seq.accompagnement` : les cartes et le menu de la feuille
+    Tempo affichent la même donnée. Le motif des cartes est calculé par
+    l'accompagnement lui-même (`motifAccompagnement`) : il ne peut pas
+    s'écarter de ce qui sonne, et il suit la mesure.
+  - En mineur, la dominante de la roue est le V majeur (mi en la mineur),
+    comme dans `harmoniser` : c'est elle qui tire vers la tonique ; le v reste
+    dans « Un autre accord ». « Septième » donne la septième de la tonalité
+    (Cmaj7, G7, Dm7, Bm7b5).
+- **02/10 · La sélection : une pilule, une boîte à outils, un cercle rangé
+  (refonte 5).** Le menu en cercle alignait douze gestes en symboles sans
+  les regrouper, et c'était le seul chemin vers la moitié d'entre eux.
+  Chaque geste a maintenant sa place, du plus rapide au plus complet.
+  - **La pilule** garde ce qu'on fait cent fois : ½ ton et octave, plus haut
+    ou plus bas, effacer, et « ••• ». Les durées ×2 et ÷2 n'y tenaient pas
+    au téléphone : elles passent dans la boîte.
+  - **La boîte à outils** (« ••• », une feuille du bas) est titrée par ce qui
+    est choisi (« si4, croche », « 4 notes choisies ») et rangée en Durée,
+    Rythme (plus lent, plus vite, recaler, répéter), Motif (à l'envers,
+    miroir) et Ailleurs (idée à part, effacer). Un geste s'applique et la
+    feuille reste ouverte, parce qu'on en enchaîne plusieurs : la grille
+    bouge derrière et une ligne dit ce qui s'est passé. La feuille rend le
+    pupitre inerte, donc elle a son propre « Annuler ». Un geste qui ne
+    changerait rien ne laisse pas d'« Annuler » pour rien.
+  - **Le cercle** reste le raccourci de l'appui long : dix gestes en quatre
+    familles, chacune sur sa bande avec son nom ; la hauteur monte le long
+    du côté gauche, le creux est en bas, sous la main. « Répéter » et
+    « recaler » n'y sont plus (la boîte et la rangée jaune les ont).
+- **02/10 · Jouer en direct, avec une scène (refonte 6).** Avant, rien ne
+  disait qu'on enregistrait, ni quel temps tombait, et le recalage se faisait
+  d'office sans rien montrer. Pendant le décompte et la prise, la grille
+  laisse la place à une scène lisible à bout de bras ; le pupitre et son
+  clavier restent dessous, parce qu'on joue avec.
+  - Le décompte est un chiffre géant au vrai tempo, sur un aplat du
+    surligneur (du jaune seul n'a pas le contraste sur le Papier clair).
+    Pendant la prise : un cadre rouge, un point qui clignote et le chrono, le
+    numéro de la mesure en grand, les points des temps et un ruban des notes
+    jouées avec la tête de lecture ; « Arrêter » en gros.
+  - **L'arrondi se choisit après coup, en voyant ce qu'il change** : à
+    l'arrêt, une feuille montre « Tel que joué » et « Arrondi » côte à côte,
+    avec la grille (noire, croche, double croche) ; l'aperçu suit le choix.
+    « Garder » écrit en un seul pas d'« Annuler » ; fermer la feuille sans
+    choisir garde aussi (on ne perd jamais ce qu'on a joué) ; « Recommencer »
+    relance le décompte. La grille choisie est retenue (`portee:arrondi`) et
+    sert aussi à « Recaler » ; elle vit donc aussi dans la feuille Tempo.
+  - Le décompte (aucun, 1 ou 2 mesures, `portee:decompte`) se règle dans la
+    feuille Tempo, ou d'un appui long sur le bouton rouge. Pendant une
+    prise, « Annuler » et « Refaire » ne font rien : ils l'arrêtaient au
+    passage.
+- **02/10 · Le clavier montre la gamme (refonte 4).** Le clavier à l'écran ne
+  disait rien de l'idée : neuf touches sans repère, aucune idée de la gamme,
+  une octave invisible qu'on changeait à l'aveugle.
+  - Une pastille bleue marque les touches de la gamme de l'idée (la tonique
+    cerclée ; les autres restent jouables, atténuées), et chaque touche
+    blanche porte son nom (do4 pour le do). En mineur, la gamme est le
+    mineur naturel, celui de l'armure.
+  - **Piano ou Gamme** (retenu) : en Gamme, huit grosses touches, les sept
+    degrés et l'octave, épelées dans la tonalité (Fa♯, Si♭) : pas de fausse
+    note possible. Elles écrivent par le même chemin que le piano, donc le
+    jeu en direct et la note choisie marchent pareil.
+  - **La carte des octaves** (do2 à do6) montre l'octave affichée et y saute
+    d'un toucher ou d'un glissé ; Z / X la suivent, et les touches de
+    l'ordinateur jouent l'octave montrée (avant, Z / X bougeaient une octave
+    invisible).
+  - Le pupitre garde sa hauteur, pour que la grille ne rétrécisse pas : le
+    choix Piano / Gamme et la carte tiennent sur une rangée, et les chevrons
+    quittent les flancs du clavier, dont les touches passent de 34 à 46 px de
+    large (mais de 155 à 113 px de haut au téléphone, 78 px sur un écran de
+    667 px). Quand une note est choisie, la rangée de sélection prend la
+    place de cette barre, et le clavier montre de lui-même sa hauteur.
+  - Réglage : « Montrer la gamme sur le clavier » (Réglages › Éditeur, oui
+    par défaut) coupe les pastilles, pas le mode Gamme ni les noms.
 - **02/10 · L'écran Idée en studio de poche (refonte 3).** Une seule barre
   en haut : le titre, et dessous le tempo, la mesure et la tonalité, qu'on
   touche pour ouvrir « Tempo et mesure ». La grille passe de 41 % à 52 % de
@@ -516,6 +623,18 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
       ouverte sur le téléphone) ; la version claude.ai essayée avec une
       fausse base et localStorage refusé ; les anciens écrans (import,
       correction au toucher, écoute, MIDI) inchangés.
+12. **Refonte visuelle** (plan du 02/10, plus haut) : les dix refontes sont
+    *faites*. Le système (1), l'écran Idée (3), l'accueil (2), les morceaux
+    (9) et les pages manuscrites (10) sont fusionnés le 02/10 (PR #5 et
+    #6) ; le clavier (4), la sélection (5), le jeu en direct (6), le chant
+    (7) et les accords (8) suivent. Chaque refonte a été essayée dans
+    Chromium au téléphone (Studio, Papier clair et sombre, 320 à 390 px de
+    large) et à l'ordinateur, sans erreur de console, puis sur la version
+    assemblée, et un grand parcours de toute l'appli (35 étapes : site au
+    téléphone et à l'ordinateur, sombre, sauvegarde et restauration, version
+    claude.ai simulée). 98 tests en Node (43 avant la refonte). L'appli
+    claude.ai est republiée (le 02/10, avec les dix refontes). Pas encore
+    essayé : un vrai iPhone (Safari), une vraie voix au micro.
 
 ## Brancher la reMarkable (une fois)
 

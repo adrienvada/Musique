@@ -1,11 +1,18 @@
 /* L'ÉDITEUR D'IDÉE, MODE CLAVIER (idee-clavier.js, clavier.js) : la rangée
- * des durées et le clavier à l'écran, dans le pupitre. */
+ * des durées, puis le clavier à l'écran : une barre (Piano / Gamme, les
+ * octaves) au-dessus des touches ou des huit grosses touches de gamme.
+ *
+ * La hauteur du pupitre ne bouge pas (idee.css : --pupitre-mode) : la barre
+ * des octaves et le choix Piano / Gamme se logent sur une seule rangée de
+ * 44 px, et les chevrons ne mangent plus la largeur des touches. Quand une
+ * note est choisie, la rangée de sélection prend 52 px : la barre s'efface
+ * alors, et le clavier montre de lui-même la hauteur de la note choisie. */
 
-.pupitre-clavier { display: flex; flex-direction: column; gap: 6px; }
+.pupitre-clavier { display: flex; flex-direction: column; gap: 4px; }
 
 /* Les durées : une icône, son nom en petit dessous (on apprend en jouant). */
 .idee-durees { flex: none; display: flex; gap: 2px; }
-.duree { flex: 1 1 0; min-width: 0; min-height: 50px; padding: 2px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 0; border-radius: 10px; background: transparent; color: var(--gris); font-size: 0.66rem; font-weight: 500; line-height: 1.1; white-space: nowrap; cursor: pointer; }
+.duree { flex: 1 1 0; min-width: 0; min-height: 46px; padding: 2px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 0; border-radius: 10px; background: transparent; color: var(--gris); font-size: 0.66rem; font-weight: 500; line-height: 1.1; white-space: nowrap; cursor: pointer; }
 .duree:hover { color: var(--encre); }
 .duree[aria-pressed="true"] { background: var(--stylo-doux); color: var(--stylo); }
 .duree[disabled] { opacity: 0.35; cursor: not-allowed; }
@@ -13,16 +20,68 @@
 
 /* Le clavier à l'écran : un piano reste un piano, sans éblouir en sombre. */
 #idee-clavier { flex: 1 1 auto; min-height: 0; }
-.clavier { display: flex; gap: 4px; height: 100%; }
-.clavier-octave { flex: 0 0 44px; display: grid; place-items: center; padding: 0; border: 1px solid var(--trait); background: var(--creux); border-radius: 10px; color: var(--encre); cursor: pointer; }
-.clavier-octave:hover { border-color: var(--trait-fort); }
-.clavier-touches { position: relative; flex: 1 1 auto; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.clavier {
+  display: flex; flex-direction: column; gap: 4px; height: 100%;
+  /* Le bleu de la gamme, lisible sur la touche blanche et sur la noire dans les trois
+     ambiances (le bleu du stylo est foncé en Papier clair, clair dans les deux autres). */
+  --gamme-blanche: color-mix(in srgb, var(--stylo) 62%, var(--touche-noire));
+  --gamme-noire: color-mix(in srgb, var(--stylo) 40%, var(--touche-blanche));
+}
+.idee-pupitre.avec-selection .clavier-barre { display: none; }
+
+/* La barre : Piano / Gamme, puis ‹ la carte des octaves › */
+.clavier-barre { flex: none; display: flex; align-items: center; gap: 4px; height: 44px; }
+.clavier-barre .clavier-facon { flex: none; }
+.clavier-barre .clavier-facon > button { min-height: 38px; padding: 0 9px; font-size: 0.86rem; }
+.clavier-octave { flex: 0 0 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; border-radius: 10px; color: var(--encre); cursor: pointer; }
+.clavier-octave:hover { background: var(--creux); }
+.clavier-carte { flex: 1 1 auto; min-width: 0; height: 44px; display: flex; gap: 3px; touch-action: none; user-select: none; -webkit-user-select: none; }
+/* Une case par octave, avec des traits de touches ; celles que le clavier montre se teintent de bleu. */
+.carte-octave { flex: 1 1 0; min-width: 0; padding: 0 0 4px; display: flex; align-items: flex-end; justify-content: center; border: 1px solid var(--trait-fort); border-radius: 9px; background-color: var(--creux); background-image: repeating-linear-gradient(to right, transparent 0 4px, var(--trait) 4px 5px); color: var(--gris); font-family: var(--f-code); font-size: 0.64rem; line-height: 1; cursor: pointer; }
+.carte-octave.dans { background-color: var(--stylo-doux); border-color: var(--stylo); color: var(--stylo); }
+.carte-octave[aria-pressed="true"] { border-width: 2px; padding-bottom: 3px; font-weight: 600; }
+/* Un écran de 320 px : la carte n'a plus que 60 px pour cinq cases, le chiffre seul y tient. */
+@media (max-width: 359px) {
+  .carte-do { display: none; }
+  .clavier-barre .clavier-facon > button { padding: 0 7px; font-size: 0.8rem; }
+}
+
+/* Le piano */
+.clavier-touches { position: relative; flex: 1 1 auto; min-height: 0; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .touche { position: absolute; top: 0; cursor: pointer; }
-.touche.blanche { bottom: 0; width: calc(100% / var(--blanches)); background: var(--touche-blanche); border: 1px solid var(--touche-bord); border-radius: 0 0 8px 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; font-size: 0.66rem; color: var(--touche-texte); }
-.touche.noire { height: 60%; width: calc(0.62 * 100% / var(--blanches)); background: var(--touche-noire); border: 1px solid var(--touche-bord); border-top: 0; border-radius: 0 0 6px 6px; z-index: 1; }
+.touche.blanche { --fond-touche: var(--touche-blanche); --repere: var(--gamme-blanche); bottom: 0; width: calc(100% / var(--blanches)); background: var(--fond-touche); border: 1px solid var(--touche-bord); border-radius: 0 0 8px 8px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px; padding-bottom: 9px; font-size: 0.7rem; line-height: 1; color: var(--touche-texte); }
+.touche.noire { --fond-touche: var(--touche-noire); --repere: var(--gamme-noire); height: 60%; width: calc(0.62 * 100% / var(--blanches)); background: var(--fond-touche); border: 1px solid var(--touche-bord); border-top: 0; border-radius: 0 0 6px 6px; z-index: 1; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; }
+/* Le nom de la note ; le do garde son octave et se détache (do4). */
+.touche.blanche span.do { color: var(--touche-noire); font-weight: 600; }
+.clavier-touches.etroit .touche.blanche span:not(.do) { display: none; }
+
+/* La gamme de l'idée : une pastille bleue sur chaque touche de la gamme, la tonique
+   cerclée ; les autres restent jouables, un peu atténuées. */
+.repere-gamme { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--repere); pointer-events: none; }
+.touche.tonique .repere-gamme { width: 9px; height: 9px; margin: 2px 0; box-shadow: 0 0 0 2px var(--fond-touche), 0 0 0 3.5px var(--repere); }
+.avec-gamme .touche.blanche.hors:not(.enfoncee) { --fond-touche: color-mix(in srgb, var(--touche-blanche) 84%, var(--gris)); color: color-mix(in srgb, var(--touche-texte) 70%, var(--fond-touche)); }
+.avec-gamme .touche.noire.hors:not(.enfoncee) { --fond-touche: color-mix(in srgb, var(--touche-noire) 74%, var(--gris)); }
+
 /* La hauteur de la note choisie : un trait bleu au bas de la touche. */
 .touche.blanche.marquee { box-shadow: inset 0 -7px 0 var(--stylo); }
 .touche.noire.marquee { box-shadow: inset 0 -6px 0 var(--stylo); }
-/* Une touche enfoncée (au doigt, au clavier, en MIDI ou chantée) : le surligneur. */
-.touche.blanche.enfoncee { background: var(--surligneur); color: var(--sur-surligneur); }
-.touche.noire.enfoncee { background: color-mix(in srgb, var(--surligneur) 72%, var(--touche-noire)); }
+/* Une touche enfoncée (au doigt, au clavier, en MIDI ou chantée) : le surligneur, net,
+   et le texte sombre dans les trois ambiances. */
+.touche.enfoncee { --fond-touche: var(--surligneur); --repere: var(--sur-surligneur); background: var(--fond-touche); }
+.touche.blanche.enfoncee { color: var(--sur-surligneur); border-color: var(--surligneur); }
+.touche.blanche.enfoncee span { color: var(--sur-surligneur); }
+
+/* Le mode Gamme : huit grosses touches (les sept degrés et l'octave), la tonique en bleu plein.
+   Pas de fausse note possible ; elles écrivent comme les touches du piano. */
+.clavier-gamme { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 6px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pad { position: relative; min-width: 0; min-height: 44px; padding: 5px 10px 6px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; border: 1px solid var(--trait-fort); border-radius: 14px; background: var(--creux); color: var(--encre); font: inherit; text-align: left; cursor: pointer; }
+.pad-haut { width: 100%; display: flex; justify-content: space-between; align-items: baseline; font-family: var(--f-code); font-size: 0.7rem; line-height: 1; color: var(--gris); }
+.pad-nom { font-family: var(--f-titre); font-size: 1.55rem; line-height: 1; }
+.pad.tonique { background: var(--stylo); border-color: var(--stylo); color: var(--sur-stylo); }
+.pad.tonique .pad-haut { color: inherit; opacity: 0.8; }
+.pad.enfoncee { background: var(--surligneur); border-color: var(--surligneur); color: var(--sur-surligneur); }
+.pad.enfoncee .pad-haut { color: inherit; opacity: 0.8; }
+/* La note choisie : le même trait au bas de la touche que sur le piano. */
+.pad.marquee { box-shadow: inset 0 -6px 0 var(--stylo); }
+.pad.tonique.marquee { box-shadow: inset 0 -6px 0 var(--surligneur); }
+

@@ -176,6 +176,12 @@
             </div>
           </div>
           <p class="reglages-texte">Studio : sombre, pour jouer sans éblouir le soir. Papier : clair, comme le reste de Portée.</p>
+          <!-- Clavier · l'interrupteur de la gamme sur les touches (accueil.js ; lu par idee-clavier.js) -->
+          <button class="reglages-ligne" id="reglage-gamme" role="switch" aria-checked="true">
+            <span>Montrer la gamme sur le clavier</span>
+            <span class="interrupteur" aria-hidden="true"></span>
+          </button>
+          <p class="reglages-texte">Les notes de la gamme de l'idée portent une pastille bleue, la tonique est cerclée. Les autres restent jouables, un peu plus pâles.</p>
         </div>
       </section>
 
@@ -471,14 +477,33 @@
         <button class="btn rond" data-action="monter" aria-label="Un demi-ton plus haut" title="Un demi-ton plus haut (↑)"><svg class="ico" aria-hidden="true"><use href="#i-haut"></use></svg></button>
         <button class="btn rond" data-action="descendre" aria-label="Un demi-ton plus bas" title="Un demi-ton plus bas (↓)"><svg class="ico" aria-hidden="true"><use href="#i-bas"></use></svg></button>
         <span class="pilule-trait" aria-hidden="true"></span>
-        <button class="btn rond" data-action="diviser" aria-label="Plus court" title="Plus court (durée divisée par deux)"><svg class="ico" aria-hidden="true"><use href="#i-raccourcir"></use></svg></button>
-        <button class="btn rond" data-action="doubler" aria-label="Plus long" title="Plus long (durée doublée)"><svg class="ico" aria-hidden="true"><use href="#i-allonger"></use></svg></button>
+        <button class="btn rond" data-action="octave-haut" aria-label="Une octave plus haut" title="Une octave plus haut (Maj + ↑)"><svg class="ico" aria-hidden="true"><use href="#i-oct-haut"></use></svg></button>
+        <button class="btn rond" data-action="octave-bas" aria-label="Une octave plus bas" title="Une octave plus bas (Maj + ↓)"><svg class="ico" aria-hidden="true"><use href="#i-oct-bas"></use></svg></button>
         <span class="pilule-trait" aria-hidden="true"></span>
         <button class="btn rond" data-action="effacer" aria-label="Effacer" title="Effacer (Retour arrière)"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg></button>
-        <button class="btn rond" data-action="plus" aria-label="Transformer…" title="Transformer : octave, répéter, à l'envers, miroir…"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
+        <button class="btn rond" data-action="plus" aria-haspopup="dialog" aria-controls="idee-boite" aria-label="Tous les gestes" title="Tous les gestes : durée, rythme, motif…"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
       </div>
-      <!-- Jeu en direct · le décompte (idee-direct.js) -->
-      <div class="decompte" id="idee-decompte" aria-live="assertive" hidden></div>
+      <!-- Jeu en direct · la scène, à la place de la grille pendant le décompte et le jeu (idee-direct.js) :
+           le chiffre du décompte (#idee-decompte), puis la mesure en grand, les temps, le ruban des notes jouées -->
+      <div class="dir-scene" id="idee-scene" data-phase="decompte" role="region" aria-label="Jeu en direct" hidden>
+        <div class="dir-haut">
+          <span class="dir-etat"><i class="dir-point" id="idee-scene-point" aria-hidden="true" hidden></i><span id="idee-scene-titre">Décompte</span></span>
+          <span class="dir-chrono mono" id="idee-chrono" hidden>0:00</span>
+          <span class="dir-compte" id="idee-scene-compte"></span>
+        </div>
+        <div class="dir-centre">
+          <span class="dir-legende" id="idee-scene-legende" hidden>mesure</span>
+          <div class="dir-grand dir-chiffre" id="idee-decompte" aria-hidden="true"></div>
+          <div class="dir-grand dir-mesure" id="idee-mesure-direct" aria-hidden="true" hidden></div>
+          <div class="dir-temps" id="idee-temps" aria-hidden="true"></div>
+        </div>
+        <div class="dir-ruban dir-ruban-direct" id="idee-ruban" aria-hidden="true">
+          <div class="dir-lignes" id="idee-ruban-lignes"></div>
+          <div class="dir-notes" id="idee-ruban-notes"></div>
+          <i class="dir-tete" id="idee-ruban-tete" hidden></i>
+        </div>
+        <button class="btn dir-arreter" id="idee-arreter" title="Annuler (R)"></button>
+      </div>
       <span class="idee-mode" id="idee-mode" role="status"></span>
     </div>
 
@@ -513,7 +538,9 @@
       </div>
 
       <div class="idee-mode-dedans">
-        <!-- Pupitre · Clavier : les durées et le clavier à l'écran (idee-clavier.js, clavier.js) -->
+        <!-- Pupitre · Clavier : les durées et le clavier à l'écran (idee-clavier.js, clavier.js).
+             #idee-clavier reçoit, écrits par clavier.js : la barre (Piano / Gamme, ‹ la carte des
+             octaves ›), le piano et les huit touches de gamme. -->
         <div class="pupitre-clavier" id="pupitre-clavier" role="tabpanel" aria-label="Clavier" hidden>
           <div class="idee-durees" id="idee-durees" role="group" aria-label="Durée des notes">
             <button class="duree" data-pas="1" aria-pressed="false" title="Double croche (1)"><svg class="ico" aria-hidden="true"><use href="#i-d1"></use></svg><span>double</span></button>
@@ -528,17 +555,43 @@
           <div id="idee-clavier"></div>
         </div>
 
-        <!-- Pupitre · Chanter : l'accordeur, le micro écoute tant que ce mode est ouvert (idee-chant.js, micro.js) -->
+        <!-- Pupitre · Chanter : l'accordeur (le nom de la note, un verdict en mots, la jauge, la barre de
+             tenue), la durée des notes chantées et les dernières notes écrites. Le micro écoute tant que
+             ce mode est ouvert (idee-chant.js, micro.js) ; la trace de la voix se dessine sur la grille
+             elle-même (grille.js). Hors écoute, la jauge et la barre cèdent la place au message (#micro-aide). -->
         <div class="pupitre-chant micro-panneau" id="micro-panneau" role="tabpanel" aria-label="Chanter" hidden>
-          <div class="chant-rond" id="chant-rond">
-            <span class="micro-note" id="micro-note" aria-live="polite"></span>
-            <span class="chant-justesse" id="chant-justesse"></span>
-          </div>
-          <div class="chant-droite">
-            <div class="micro-justesse" aria-hidden="true"><i></i><span id="micro-aiguille"></span></div>
-            <div class="micro-niveau" aria-hidden="true"><span id="micro-niveau"></span></div>
+          <div class="chant-dedans">
+            <div class="chant-haut">
+              <div class="chant-rond" id="chant-rond">
+                <svg class="ico l chant-micro" aria-hidden="true"><use href="#i-micro"></use></svg>
+                <span class="micro-note" id="micro-note" aria-live="polite"></span>
+                <span class="chant-justesse" id="chant-justesse"></span>
+              </div>
+              <span class="chant-coche"><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg>écrite</span>
+              <button class="btn btn-plein" id="micro-relancer" hidden><svg class="ico s" aria-hidden="true"><use href="#i-micro"></use></svg>Écouter</button>
+            </div>
             <p class="chant-aide" id="micro-aide">Chante une note et tiens-la : elle s'écrit. Puis la suivante.</p>
-            <button class="btn" id="micro-relancer" hidden><svg class="ico s" aria-hidden="true"><use href="#i-micro"></use></svg>Écouter</button>
+            <div class="micro-justesse" aria-hidden="true">
+              <span class="mj-bas">bas</span><span class="mj-haut">haut</span>
+              <span class="mj-juste"></span><i></i><span id="micro-aiguille"></span>
+              <div class="micro-niveau"><span id="micro-niveau"></span></div>
+            </div>
+            <div class="chant-tenue" id="chant-tenue" aria-hidden="true"><span id="chant-tenue-barre"></span></div>
+            <div class="chant-bas">
+              <div class="seg chant-durees" id="chant-durees" role="group" aria-label="Durée des notes chantées">
+                <button data-duree="2" aria-pressed="false" title="Croche (2)">croche</button>
+                <button data-duree="4" aria-pressed="true" title="Noire (3)">noire</button>
+                <button data-duree="8" aria-pressed="false" title="Blanche (4)">blanche</button>
+                <button data-duree="16" aria-pressed="false" title="Ronde (5)">ronde</button>
+              </div>
+              <button class="btn chant-pointee" id="chant-pointee" aria-pressed="false" title="Pointée (.)">pointée</button>
+            </div>
+            <div class="chant-gardees">
+              <span class="surtitre">Écrites</span>
+              <ul id="chant-gardees" aria-label="Dernières notes écrites"></ul>
+            </div>
+            <!-- Dit « la4 écrite » au lecteur d'écran, sans rien montrer -->
+            <span class="chant-annonce" id="chant-annonce" role="status"></span>
           </div>
         </div>
 
@@ -555,7 +608,84 @@
       </div>
     </div>
 
-    <!-- Feuille · Tempo et mesure (idee.js ; le recalage : idee-direct.js ; le clavier MIDI : idee-clavier.js) -->
+    <!-- Jeu en direct · le cadre rouge autour de l'écran pendant qu'on joue (idee-direct.js) -->
+    <div class="dir-cadre" id="idee-cadre" aria-hidden="true" hidden></div>
+
+    <!-- Jeu en direct · arrondir après coup : deux rubans qui se répondent, la grille, Recommencer, Garder (idee-direct.js) -->
+    <dialog class="feuille-bas idee-feuille feuille-arrondi" id="idee-arrondi" aria-labelledby="idee-arrondi-titre">
+      <div class="feuille-tete">
+        <h2 id="idee-arrondi-titre">Notes jouées</h2>
+      </div>
+      <p class="remarque">Choisis comment arrondir le rythme. Fermer la feuille garde ce que tu vois.</p>
+      <div class="dir-defil">
+        <div class="dir-plan" id="idee-plan-arrondi">
+          <span class="surtitre dir-etiquette">Tel que joué</span>
+          <div class="dir-ruban" id="idee-ruban-brut" role="img" aria-label="Tel que joué"></div>
+          <span class="surtitre dir-etiquette">Arrondi</span>
+          <div class="dir-ruban" id="idee-ruban-arrondi" role="img" aria-label="Arrondi"></div>
+        </div>
+      </div>
+      <div class="seg dir-grilles" id="idee-grilles" role="group" aria-label="Arrondir à la">
+        <button data-grille="4" aria-pressed="false">Noire</button>
+        <button data-grille="2" aria-pressed="true">Croche</button>
+        <button data-grille="1" aria-pressed="false">Double croche</button>
+      </div>
+      <div class="dir-actions">
+        <button class="btn" id="idee-recommencer"><svg class="ico s" aria-hidden="true"><use href="#i-annuler"></use></svg>Recommencer</button>
+        <button class="btn btn-plein" id="idee-garder" autofocus><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg>Garder</button>
+      </div>
+    </dialog>
+
+
+    <!-- Sélection · la boîte à outils : « ••• » de la pilule (idee-selection.js).
+         Les gestes y sont rangés par familles ; la feuille reste ouverte entre deux gestes. -->
+    <dialog class="feuille-bas idee-feuille idee-boite" id="idee-boite" aria-labelledby="idee-boite-titre">
+      <div class="feuille-tete">
+        <h2 id="idee-boite-titre"></h2>
+        <button class="btn btn-fantome" id="idee-boite-annuler" data-action="annuler" title="Annuler le dernier geste"><svg class="ico s" aria-hidden="true"><use href="#i-annuler"></use></svg>Annuler</button>
+        <button class="btn btn-fantome rond" data-fermer aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+      </div>
+      <p class="remarque boite-retour" id="idee-boite-retour" role="status"></p>
+      <div class="boite-famille" role="group" aria-labelledby="boite-duree">
+        <h3 class="surtitre" id="boite-duree">Durée</h3>
+        <div class="boite-rangee boite-durees">
+          <button class="btn boite-geste" data-duree="1" aria-pressed="false" title="Double croche"><svg class="ico" aria-hidden="true"><use href="#i-d1"></use></svg><span>double</span></button>
+          <button class="btn boite-geste" data-duree="2" aria-pressed="false" title="Croche"><svg class="ico" aria-hidden="true"><use href="#i-d2"></use></svg><span>croche</span></button>
+          <button class="btn boite-geste" data-duree="4" aria-pressed="false" title="Noire"><svg class="ico" aria-hidden="true"><use href="#i-d4"></use></svg><span>noire</span></button>
+          <button class="btn boite-geste" data-duree="8" aria-pressed="false" title="Blanche"><svg class="ico" aria-hidden="true"><use href="#i-d8"></use></svg><span>blanche</span></button>
+          <button class="btn boite-geste" data-duree="16" aria-pressed="false" title="Ronde"><svg class="ico" aria-hidden="true"><use href="#i-d16"></use></svg><span>ronde</span></button>
+          <button class="btn boite-geste" data-pointee aria-pressed="false" title="Pointée : la moitié en plus"><svg class="ico" aria-hidden="true"><use href="#i-point"></use></svg><span>pointée</span></button>
+        </div>
+      </div>
+      <div class="boite-famille" role="group" aria-labelledby="boite-rythme">
+        <h3 class="surtitre" id="boite-rythme">Rythme</h3>
+        <div class="boite-rangee boite-quatre">
+          <button class="btn boite-geste" data-action="doubler" title="Les durées sont doublées"><svg class="ico" aria-hidden="true"><use href="#i-allonger"></use></svg><span>Plus lent ×2</span></button>
+          <button class="btn boite-geste" data-action="diviser" title="Les durées sont divisées par deux"><svg class="ico" aria-hidden="true"><use href="#i-raccourcir"></use></svg><span>Plus vite ÷2</span></button>
+          <button class="btn boite-geste" data-action="recaler" title="Recaler sur la grille du jeu en direct (Tempo et mesure)"><svg class="ico" aria-hidden="true"><use href="#i-aimant"></use></svg><span>Recaler sur la grille</span></button>
+          <button class="btn boite-geste" data-action="dupliquer" title="Recopier juste après, ce qui suit se pousse"><svg class="ico" aria-hidden="true"><use href="#i-repeter"></use></svg><span>Répéter à la suite</span></button>
+        </div>
+      </div>
+      <div class="boite-duo">
+        <div class="boite-famille" role="group" aria-labelledby="boite-motif">
+          <h3 class="surtitre" id="boite-motif">Motif</h3>
+          <div class="boite-rangee boite-deux">
+            <button class="btn boite-geste" data-action="retrograder" title="La dernière note devient la première"><svg class="ico" aria-hidden="true"><use href="#i-envers"></use></svg><span>À l'envers</span></button>
+            <button class="btn boite-geste" data-action="renverser" title="Ce qui montait descend"><svg class="ico" aria-hidden="true"><use href="#i-miroir"></use></svg><span>Miroir</span></button>
+          </div>
+        </div>
+        <div class="boite-famille" role="group" aria-labelledby="boite-ailleurs">
+          <h3 class="surtitre" id="boite-ailleurs">Ailleurs</h3>
+          <div class="boite-rangee boite-deux">
+            <button class="btn boite-geste" data-action="nouvelle" title="En faire une idée à part"><svg class="ico" aria-hidden="true"><use href="#i-nouvelle"></use></svg><span>Idée à part</span></button>
+            <button class="btn boite-geste btn-danger" data-action="effacer" title="Effacer les notes choisies"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg><span>Effacer</span></button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+
+    <!-- Feuille · Tempo et mesure (idee.js ; le décompte et la grille du jeu en direct : idee-direct.js ; le clavier MIDI : idee-clavier.js) -->
     <dialog class="feuille-bas idee-feuille" id="idee-reglages" aria-labelledby="idee-reglages-titre">
       <div class="feuille-tete">
         <h2 id="idee-reglages-titre">Tempo et mesure</h2>
@@ -588,8 +718,24 @@
         </div>
       </div>
       <label class="reglage-bloc"><span class="surtitre">Accompagnement</span><select class="champ" id="idee-accomp"></select></label>
-      <!-- Jeu en direct · le recalage (idee-direct.js) -->
-      <label class="reglage-bloc"><span class="surtitre">Jeu en direct recalé à la</span><select class="champ" id="idee-recalage"><option value="2">croche</option><option value="1">double croche</option><option value="4">noire</option></select></label>
+      <!-- Jeu en direct · le décompte (aussi d'un appui long sur le bouton rouge) et la grille de l'arrondi, retenue
+           d'une prise à l'autre ; c'est aussi celle de « Recaler » dans le menu en cercle (idee-direct.js) -->
+      <div class="reglage-bloc" id="idee-decompte-bloc">
+        <span class="surtitre">Jeu en direct : décompte</span>
+        <div class="seg" id="idee-decompte-mesures" role="group" aria-label="Mesures de décompte avant de jouer en direct">
+          <button data-decompte="0" aria-pressed="false">Aucun</button>
+          <button data-decompte="1" aria-pressed="true">1 mesure</button>
+          <button data-decompte="2" aria-pressed="false">2 mesures</button>
+        </div>
+      </div>
+      <div class="reglage-bloc">
+        <span class="surtitre">Arrondir le rythme à la</span>
+        <div class="seg" id="idee-recalage-reglage" role="group" aria-label="Grille de l'arrondi du jeu en direct et de « Recaler »">
+          <button data-grille="4" aria-pressed="false">Noire</button>
+          <button data-grille="2" aria-pressed="true">Croche</button>
+          <button data-grille="1" aria-pressed="false">Double croche</button>
+        </div>
+      </div>
       <div class="reglage-bloc">
         <span class="surtitre">Pistes</span>
         <div class="rangee">
@@ -659,7 +805,9 @@
       </div>
     </dialog>
 
-    <!-- Feuille · tous les accords d'une mesure (idee-accords.js ; la refonte 8 en fera une roue) -->
+    <!-- Feuille · les accords d'une mesure, en roue (idee-accords.js, idee-accords.css) :
+         la bande des mesures, l'aperçu de ce qui sonnera, la roue des sept accords de la
+         tonalité, les couleurs, le style d'accompagnement, puis les actions -->
     <dialog class="feuille-bas idee-feuille feuille-accords" id="feuille-accords" aria-labelledby="accords-ou">
       <div class="feuille-tete accords-tete">
         <button class="btn btn-fantome rond" id="accord-avant" aria-label="Mesure précédente"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
@@ -667,18 +815,32 @@
         <button class="btn btn-fantome rond" id="accord-apres" aria-label="Mesure suivante"><svg class="ico" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
         <button class="btn btn-fantome rond" id="accords-fermer" aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
       </div>
-      <p class="remarque" id="accords-aide">Ceux qui vont avec ta mélodie, du plus probable au moins probable. Touche pour entendre et poser.</p>
-      <div class="accords-choix" id="accords-proposes"></div>
+      <div class="accords-bande" id="accords-bande" role="group" aria-label="Les mesures de l'idée"></div>
+      <div class="accords-apercu-ligne">
+        <button class="btn rond" id="accords-ecouter" aria-pressed="false" aria-label="Écouter la mesure" title="Écouter la mesure"><svg class="ico" aria-hidden="true"><use href="#i-lire"></use></svg></button>
+        <div class="accords-apercu" id="accords-apercu" role="img"></div>
+      </div>
+      <div class="accords-roue-tete">
+        <span class="surtitre" id="accords-tonalite"></span>
+        <p class="remarque" id="accords-aide"></p>
+      </div>
+      <div class="accords-roue" id="accords-roue" role="group" aria-label="Les sept accords de la tonalité"></div>
+      <div class="accords-couleurs" id="accords-couleurs" role="group" aria-label="Sorte d'accord"></div>
+      <div class="accords-accomp">
+        <span class="surtitre" id="accords-styles-titre">Accompagnement</span>
+        <div class="accords-styles" id="accords-styles" role="group" aria-labelledby="accords-styles-titre"></div>
+      </div>
       <details class="accords-autres">
-        <summary>Un autre accord</summary>
+        <summary><svg class="ico s" aria-hidden="true"><use href="#i-chevron-bas"></use></svg>Un autre accord</summary>
         <div class="accords-choix petits" id="accords-racines"></div>
         <div class="accords-choix petits" id="accords-qualites"></div>
       </details>
-      <div class="rangee">
+      <div class="accords-actions">
         <button class="btn" id="accord-milieu">Changer au milieu de la mesure</button>
         <button class="btn btn-danger" id="accord-retirer">Retirer</button>
-        <button class="btn" id="accords-tout">Proposer pour toute l'idée</button>
+        <button class="btn" id="accords-tout"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Harmoniser toute l'idée</button>
       </div>
+      <span class="accords-annonce" id="accords-annonce" role="status"></span>
     </dialog>
   </section>
 </main>

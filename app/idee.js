@@ -24,8 +24,8 @@
  *                     l'ordinateur, MIDI) ;
  *   idee-chant.js     le mode Chanter (micro, accordeur) ;
  *   idee-accords.js   le mode Accords et la feuille des accords ;
- *   idee-selection.js la pilule, la rangée de sélection, les
- *                     transformations, le menu en cercle ;
+ *   idee-selection.js la pilule, la boîte à outils, la rangée de
+ *                     sélection, les transformations, le menu en cercle ;
  *   idee-direct.js    le jeu en direct (décompte, enregistrement, recalage).
  *
  * L'idée vit en notes (sequence.js) ; la partition n'en est qu'une
@@ -140,6 +140,8 @@ export function creerEditeurIdee(deps) {
     choisir, notesPiste: () => notesPiste(), choisies: () => choisies(),
     source, suivreLecture, avantSon, apresSon, choisirMode,
     boiteSelection, grille,
+    // La boîte à outils de la sélection (idee-selection.js) cache le pupitre : elle a son propre « Annuler ».
+    annuler: () => revenir(e.annuler, e.refaire),
   };
   const clavierMode = creerModeClavier(ctx);
   const chant = creerChant(ctx);
@@ -267,6 +269,8 @@ export function creerEditeurIdee(deps) {
   }
 
   function revenir(depuis, vers) {
+    // Pendant le jeu en direct, « Annuler » arrêterait la prise au passage et la ferait écrire après coup.
+    if (e.enregistrement) return;
     const etat = depuis.pop();
     if (!etat) return;
     vers.push(JSON.stringify({ seq: e.seq, curseur: e.curseur, piste: e.piste }));
@@ -700,8 +704,8 @@ export function creerEditeurIdee(deps) {
     $("idee-accomp").value = k.accompagnement || "aucun";
     $("idee-boucle").setAttribute("aria-pressed", String(e.boucle));
     $("idee-metronome").setAttribute("aria-pressed", String(e.metronome));
-    $("idee-annuler").disabled = !e.annuler.length;
-    $("idee-refaire").disabled = !e.refaire.length;
+    $("idee-annuler").disabled = !e.annuler.length || !!e.enregistrement;
+    $("idee-refaire").disabled = !e.refaire.length || !!e.enregistrement;
     // Les pistes : une puce dans la barre (dès qu'il y en a deux), le choix dans la feuille Tempo.
     const plusieurs = k.pistes.length > 1;
     $("idee-piste-puce").hidden = !plusieurs;

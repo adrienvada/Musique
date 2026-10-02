@@ -14,7 +14,8 @@
  *     les accords ;
  *   - pincer à deux doigts (ou Ctrl + molette) zoome dans le temps.
  * Glisser sur le fond fait défiler, comme partout. Les notes des autres
- * pistes restent visibles, en pâle.
+ * pistes restent visibles, en pâle. En mode Chanter, une couche « voix » y
+ * trace la hauteur chantée (voir plus bas).
  *
  * La règle n'écrit « + accord » que sur la mesure choisie : répété dans
  * chaque mesure, il couvrait la règle d'un texte gris qu'on ne lisait plus.
@@ -358,8 +359,168 @@ export function creerGrille(conteneur, rappels) {
   defil.addEventListener("touchend", finPince);
   defil.addEventListener("touchcancel", finPince);
 
+  // --- La voix (mode Chanter) -------------------------------------------------
+  //
+  // idee-chant.js y pose, mesure après mesure, la hauteur de la voix : un
+  // trait (le surligneur) défile vers la gauche au-dessus de la grille, avec
+  // un point au bout, et la rangée visée s'allume dessous, comme sa touche
+  // dans la bande de gauche. Les rangées étant déjà les notes, la voix se lit
+  // sans autre échelle. La grille défile en hauteur pour garder la voix dans
+  // la vue. La couche ne prend aucun toucher et ne dessine rien tant qu'on
+  // ne chante pas ; son style est dans idee-chant.css.
+  function creerVoix() {
+    const reduit = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const MEMOIRE = 4000; // ms de voix gardées : la longueur du trait
+    const TOUR = 2 * Math.PI * 12; // le tour du point : la tenue s'y remplit
+    let points = []; // { t, m } : m est une hauteur MIDI (fractionnaire), null pour un silence
+    let cible = null, tenue = 0, image = 0, suit = false;
+    let couche = null, rangee = null, touche = null, trace = null, bord = null, anneau = null, eclatPoint = null, cercles = [], degrades = [], cadreVoix = "", finEclat = null;
+    const yPlan = (m) => yDe(m) + rang / 2; // le milieu de la rangée de la note m
+
+    function preparer() {
+      if (couche) return;
+      couche = document.createElement("div");
+      couche.className = "g-voix";
+      couche.setAttribute("aria-hidden", "true");
+      // Le trait s'efface en s'éloignant du point : un dégradé d'opacité tendu dans
+      // l'espace de la couche (userSpaceOnUse). Calé sur la boîte du trait, il ne
+      // marcherait pas : une ligne presque horizontale n'a presque pas de hauteur.
+      couche.innerHTML = `<svg><defs>
+        <linearGradient id="g-voix-trace" class="g-degrade-trace" gradientUnits="userSpaceOnUse" y1="0" y2="0"><stop offset="0" stop-opacity="0"/><stop offset="1" stop-opacity="1"/></linearGradient>
+        <linearGradient id="g-voix-bord" class="g-degrade-bord" gradientUnits="userSpaceOnUse" y1="0" y2="0"><stop offset="0" stop-opacity="0"/><stop offset="1" stop-opacity="0.75"/></linearGradient>
+      </defs><path class="g-bord-trace"/><path class="g-trace"/><circle class="g-eclat" r="12"/><circle class="g-piste" r="12"/><circle class="g-anneau" r="12"/><circle class="g-pointe" r="6"/></svg>`;
+      conteneur.appendChild(couche);
+      trace = couche.querySelector(".g-trace");
+      bord = couche.querySelector(".g-bord-trace");
+      anneau = couche.querySelector(".g-anneau");
+      eclatPoint = couche.querySelector(".g-eclat");
+      cercles = [...couche.querySelectorAll("circle")];
+      degrades = [...couche.querySelectorAll("linearGradient")];
+      anneau.setAttribute("stroke-dasharray", TOUR.toFixed(2));
+      // La rangée visée se glisse sous les notes, au-dessus du fond.
+      rangee = document.createElement("div");
+      rangee.className = "g-cible";
+      rangee.hidden = true;
+      plan.insertBefore(rangee, calque);
+    }
+
+    /** Allume la rangée de la note h (et sa touche) ; null l'éteint. */
+    function allumer(h) {
+      if (h === cible && (h === null || (touche && touche.isConnected))) return;
+      cible = h;
+      if (touche) touche.classList.remove("cible");
+      touche = null;
+      if (!rangee) return;
+      rangee.hidden = h === null;
+      if (h === null) return;
+      rangee.style.top = `${yDe(h)}px`;
+      rangee.style.height = `${rang}px`;
+      touche = touches.querySelector(`.g-touche[data-h="${h}"]`);
+      if (touche) touche.classList.add("cible");
+    }
+
+    function dessiner() {
+      image = 0;
+      if (!couche) return;
+      const L = defil.clientWidth, H = defil.clientHeight;
+      if (!L || !H) { couche.classList.remove("actif"); return; } // la grille est cachée (la partition)
+      // La couche recouvre exactement la zone qui défile (sans sa barre de défilement).
+      // Elle ne se place pas dans la grille CSS : un élément à place fixe y chasserait
+      // la zone de sa case.
+      const cadre = `${defil.offsetLeft}px ${defil.offsetTop}px ${L}px ${H}px`;
+      if (cadre !== cadreVoix) {
+        cadreVoix = cadre;
+        Object.assign(couche.style, { left: `${defil.offsetLeft}px`, top: `${defil.offsetTop}px`, width: `${L}px`, height: `${H}px` });
+      }
+      const maintenant = performance.now();
+      while (points.length && maintenant - points[0].t > MEMOIRE) points.shift();
+      const dernier = points[points.length - 1];
+      const enVoix = !!dernier && dernier.m !== null && maintenant - dernier.t < 250;
+      // La grille défile en hauteur pour garder la voix dans la vue : dès qu'elle
+      // approche d'un bord, la grille la recentre en douceur.
+      if (enVoix) {
+        const y = yPlan(dernier.m);
+        const marge = Math.min(rang * 2.5, H / 4);
+        const vue = y - defil.scrollTop;
+        if (vue < marge || vue > H - marge) suit = true;
+        if (suit) {
+          const but = Math.max(0, Math.min(defil.scrollHeight - H, y - H / 2));
+          // En douceur ; d'un coup si la voix est sortie de la vue (elle ne doit pas
+          // se chercher), ou pour qui a demandé moins de mouvement.
+          defil.scrollTop += (but - defil.scrollTop) * (reduit || vue < 0 || vue > H ? 1 : 0.2);
+          if (Math.abs(but - defil.scrollTop) < 1.5) suit = false;
+        }
+      }
+      // Le point est à droite ; le trait file derrière lui, sur une longueur
+      // qui suit la largeur de la grille (un téléphone, un grand écran).
+      const tete = L - 24;
+      const longueur = Math.max(200, Math.min(520, L * 0.62));
+      const vitesse = longueur / (MEMOIRE / 1000);
+      let d = "", dedans = false;
+      for (const p of points) {
+        if (p.m === null) { dedans = false; continue; }
+        const x = (tete - (maintenant - p.t) * vitesse / 1000).toFixed(1);
+        const y = (yPlan(p.m) - defil.scrollTop).toFixed(1);
+        d += dedans ? `L${x} ${y}` : `M${x} ${y}h.01`; // un point seul se voit quand même
+        dedans = true;
+      }
+      const yTete = enVoix ? yPlan(dernier.m) - defil.scrollTop : 0;
+      if (enVoix) d += `L${tete} ${yTete.toFixed(1)}`;
+      trace.setAttribute("d", d);
+      bord.setAttribute("d", d);
+      for (const g of degrades) {
+        g.setAttribute("x1", (tete - longueur).toFixed(1));
+        g.setAttribute("x2", (tete - longueur * 0.12).toFixed(1));
+      }
+      couche.classList.toggle("actif", enVoix);
+      if (enVoix) {
+        for (const el of cercles) { el.setAttribute("cx", tete); el.setAttribute("cy", yTete.toFixed(1)); }
+        anneau.setAttribute("stroke-dashoffset", (TOUR * (1 - tenue)).toFixed(2));
+        anneau.classList.toggle("pleine", tenue >= 1);
+      }
+      if (points.length) image = requestAnimationFrame(dessiner);
+    }
+
+    return {
+      /**
+       * Une mesure de la voix : m (hauteur MIDI exacte, null : silence),
+       * cible (la note visée, dont la rangée s'allume), tenue (0 à 1 : le
+       * quart de seconde qui reste à tenir avant que la note s'écrive).
+       */
+      point(m, { cible: h = null, tenue: t = 0 } = {}) {
+        preparer();
+        const dernier = points[points.length - 1];
+        if (m !== null || (dernier && dernier.m !== null)) points.push({ t: performance.now(), m });
+        if (points.length > 400) points.splice(0, points.length - 400); // un onglet en arrière-plan ne dessine plus : on ne laisse pas grossir
+        tenue = t;
+        allumer(h);
+        if (!image && points.length) image = requestAnimationFrame(dessiner);
+      },
+      /** Un éclat sur le point et la rangée : la note vient de s'écrire. */
+      eclat() {
+        if (!couche) return;
+        for (const el of [eclatPoint, rangee]) { el.classList.remove("va"); void el.getBoundingClientRect(); el.classList.add("va"); }
+        // Le style « va » ne reste pas : un élément qui se remontre rejouerait l'animation.
+        clearTimeout(finEclat);
+        finEclat = setTimeout(() => { eclatPoint.classList.remove("va"); rangee.classList.remove("va"); }, 700);
+      },
+      /** Plus personne ne chante : la couche se vide. */
+      fin() {
+        points = []; suit = false; tenue = 0;
+        allumer(null);
+        cancelAnimationFrame(image);
+        image = 0;
+        if (!couche) return;
+        couche.classList.remove("actif");
+        trace.setAttribute("d", "");
+        bord.setAttribute("d", "");
+      },
+    };
+  }
+  const voix = creerVoix();
+
   return {
-    afficher, lecture, zoom, centrer, montrer, boite,
+    afficher, lecture, zoom, centrer, montrer, boite, voix,
     get px() { return px; },
   };
 }
