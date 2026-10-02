@@ -183,6 +183,27 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · Jouer en direct, avec une scène (refonte 6).** Avant, rien ne
+  disait qu'on enregistrait, ni quel temps tombait, et le recalage se faisait
+  d'office sans rien montrer. Pendant le décompte et la prise, la grille
+  laisse la place à une scène lisible à bout de bras ; le pupitre et son
+  clavier restent dessous, parce qu'on joue avec.
+  - Le décompte est un chiffre géant au vrai tempo, sur un aplat du
+    surligneur (du jaune seul n'a pas le contraste sur le Papier clair).
+    Pendant la prise : un cadre rouge, un point qui clignote et le chrono, le
+    numéro de la mesure en grand, les points des temps et un ruban des notes
+    jouées avec la tête de lecture ; « Arrêter » en gros.
+  - **L'arrondi se choisit après coup, en voyant ce qu'il change** : à
+    l'arrêt, une feuille montre « Tel que joué » et « Arrondi » côte à côte,
+    avec la grille (noire, croche, double croche) ; l'aperçu suit le choix.
+    « Garder » écrit en un seul pas d'« Annuler » ; fermer la feuille sans
+    choisir garde aussi (on ne perd jamais ce qu'on a joué) ; « Recommencer »
+    relance le décompte. La grille choisie est retenue (`portee:arrondi`) et
+    sert aussi à « Recaler » ; elle vit donc aussi dans la feuille Tempo.
+  - Le décompte (aucun, 1 ou 2 mesures, `portee:decompte`) se règle dans la
+    feuille Tempo, ou d'un appui long sur le bouton rouge. Pendant une
+    prise, « Annuler » et « Refaire » ne font rien : ils l'arrêtaient au
+    passage.
 - **02/10 · Le clavier montre la gamme (refonte 4).** Le clavier à l'écran ne
   disait rien de l'idée : neuf touches sans repère, aucune idée de la gamme,
   une octave invisible qu'on changeait à l'aveugle.

@@ -483,8 +483,27 @@
         <button class="btn rond" data-action="effacer" aria-label="Effacer" title="Effacer (Retour arrière)"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg></button>
         <button class="btn rond" data-action="plus" aria-label="Transformer…" title="Transformer : octave, répéter, à l'envers, miroir…"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
       </div>
-      <!-- Jeu en direct · le décompte (idee-direct.js) -->
-      <div class="decompte" id="idee-decompte" aria-live="assertive" hidden></div>
+      <!-- Jeu en direct · la scène, à la place de la grille pendant le décompte et le jeu (idee-direct.js) :
+           le chiffre du décompte (#idee-decompte), puis la mesure en grand, les temps, le ruban des notes jouées -->
+      <div class="dir-scene" id="idee-scene" data-phase="decompte" role="region" aria-label="Jeu en direct" hidden>
+        <div class="dir-haut">
+          <span class="dir-etat"><i class="dir-point" id="idee-scene-point" aria-hidden="true" hidden></i><span id="idee-scene-titre">Décompte</span></span>
+          <span class="dir-chrono mono" id="idee-chrono" hidden>0:00</span>
+          <span class="dir-compte" id="idee-scene-compte"></span>
+        </div>
+        <div class="dir-centre">
+          <span class="dir-legende" id="idee-scene-legende" hidden>mesure</span>
+          <div class="dir-grand dir-chiffre" id="idee-decompte" aria-hidden="true"></div>
+          <div class="dir-grand dir-mesure" id="idee-mesure-direct" aria-hidden="true" hidden></div>
+          <div class="dir-temps" id="idee-temps" aria-hidden="true"></div>
+        </div>
+        <div class="dir-ruban dir-ruban-direct" id="idee-ruban" aria-hidden="true">
+          <div class="dir-lignes" id="idee-ruban-lignes"></div>
+          <div class="dir-notes" id="idee-ruban-notes"></div>
+          <i class="dir-tete" id="idee-ruban-tete" hidden></i>
+        </div>
+        <button class="btn dir-arreter" id="idee-arreter" title="Annuler (R)"></button>
+      </div>
       <span class="idee-mode" id="idee-mode" role="status"></span>
     </div>
 
@@ -563,7 +582,35 @@
       </div>
     </div>
 
-    <!-- Feuille · Tempo et mesure (idee.js ; le recalage : idee-direct.js ; le clavier MIDI : idee-clavier.js) -->
+    <!-- Jeu en direct · le cadre rouge autour de l'écran pendant qu'on joue (idee-direct.js) -->
+    <div class="dir-cadre" id="idee-cadre" aria-hidden="true" hidden></div>
+
+    <!-- Jeu en direct · arrondir après coup : deux rubans qui se répondent, la grille, Recommencer, Garder (idee-direct.js) -->
+    <dialog class="feuille-bas idee-feuille feuille-arrondi" id="idee-arrondi" aria-labelledby="idee-arrondi-titre">
+      <div class="feuille-tete">
+        <h2 id="idee-arrondi-titre">Notes jouées</h2>
+      </div>
+      <p class="remarque">Choisis comment arrondir le rythme. Fermer la feuille garde ce que tu vois.</p>
+      <div class="dir-defil">
+        <div class="dir-plan" id="idee-plan-arrondi">
+          <span class="surtitre dir-etiquette">Tel que joué</span>
+          <div class="dir-ruban" id="idee-ruban-brut" role="img" aria-label="Tel que joué"></div>
+          <span class="surtitre dir-etiquette">Arrondi</span>
+          <div class="dir-ruban" id="idee-ruban-arrondi" role="img" aria-label="Arrondi"></div>
+        </div>
+      </div>
+      <div class="seg dir-grilles" id="idee-grilles" role="group" aria-label="Arrondir à la">
+        <button data-grille="4" aria-pressed="false">Noire</button>
+        <button data-grille="2" aria-pressed="true">Croche</button>
+        <button data-grille="1" aria-pressed="false">Double croche</button>
+      </div>
+      <div class="dir-actions">
+        <button class="btn" id="idee-recommencer"><svg class="ico s" aria-hidden="true"><use href="#i-annuler"></use></svg>Recommencer</button>
+        <button class="btn btn-plein" id="idee-garder" autofocus><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg>Garder</button>
+      </div>
+    </dialog>
+
+    <!-- Feuille · Tempo et mesure (idee.js ; le décompte et la grille du jeu en direct : idee-direct.js ; le clavier MIDI : idee-clavier.js) -->
     <dialog class="feuille-bas idee-feuille" id="idee-reglages" aria-labelledby="idee-reglages-titre">
       <div class="feuille-tete">
         <h2 id="idee-reglages-titre">Tempo et mesure</h2>
@@ -596,8 +643,24 @@
         </div>
       </div>
       <label class="reglage-bloc"><span class="surtitre">Accompagnement</span><select class="champ" id="idee-accomp"></select></label>
-      <!-- Jeu en direct · le recalage (idee-direct.js) -->
-      <label class="reglage-bloc"><span class="surtitre">Jeu en direct recalé à la</span><select class="champ" id="idee-recalage"><option value="2">croche</option><option value="1">double croche</option><option value="4">noire</option></select></label>
+      <!-- Jeu en direct · le décompte (aussi d'un appui long sur le bouton rouge) et la grille de l'arrondi, retenue
+           d'une prise à l'autre ; c'est aussi celle de « Recaler » dans le menu en cercle (idee-direct.js) -->
+      <div class="reglage-bloc" id="idee-decompte-bloc">
+        <span class="surtitre">Jeu en direct : décompte</span>
+        <div class="seg" id="idee-decompte-mesures" role="group" aria-label="Mesures de décompte avant de jouer en direct">
+          <button data-decompte="0" aria-pressed="false">Aucun</button>
+          <button data-decompte="1" aria-pressed="true">1 mesure</button>
+          <button data-decompte="2" aria-pressed="false">2 mesures</button>
+        </div>
+      </div>
+      <div class="reglage-bloc">
+        <span class="surtitre">Arrondir le rythme à la</span>
+        <div class="seg" id="idee-recalage-reglage" role="group" aria-label="Grille de l'arrondi du jeu en direct et de « Recaler »">
+          <button data-grille="4" aria-pressed="false">Noire</button>
+          <button data-grille="2" aria-pressed="true">Croche</button>
+          <button data-grille="1" aria-pressed="false">Double croche</button>
+        </div>
+      </div>
       <div class="reglage-bloc">
         <span class="surtitre">Pistes</span>
         <div class="rangee">

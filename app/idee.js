@@ -267,6 +267,8 @@ export function creerEditeurIdee(deps) {
   }
 
   function revenir(depuis, vers) {
+    // Pendant le jeu en direct, « Annuler » arrêterait la prise au passage et la ferait écrire après coup.
+    if (e.enregistrement) return;
     const etat = depuis.pop();
     if (!etat) return;
     vers.push(JSON.stringify({ seq: e.seq, curseur: e.curseur, piste: e.piste }));
@@ -700,8 +702,8 @@ export function creerEditeurIdee(deps) {
     $("idee-accomp").value = k.accompagnement || "aucun";
     $("idee-boucle").setAttribute("aria-pressed", String(e.boucle));
     $("idee-metronome").setAttribute("aria-pressed", String(e.metronome));
-    $("idee-annuler").disabled = !e.annuler.length;
-    $("idee-refaire").disabled = !e.refaire.length;
+    $("idee-annuler").disabled = !e.annuler.length || !!e.enregistrement;
+    $("idee-refaire").disabled = !e.refaire.length || !!e.enregistrement;
     // Les pistes : une puce dans la barre (dès qu'il y en a deux), le choix dans la feuille Tempo.
     const plusieurs = k.pistes.length > 1;
     $("idee-piste-puce").hidden = !plusieurs;
