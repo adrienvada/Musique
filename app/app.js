@@ -123,6 +123,8 @@ function montrer(vue) {
   document.body.classList.toggle("plein", vue === "idee");
   // Papier pour lire, Studio pour jouer : l'éditeur passe en sombre (sauf réglage contraire).
   document.body.classList.toggle("studio", vue === "idee" && ambianceStudio());
+  // La barre de Portée ne sert qu'à l'accueil ; les autres écrans ont la leur.
+  document.querySelector(".barre-haut").hidden = vue !== "biblio";
   $("fil").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglets").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglet-atelier").setAttribute("aria-selected", String(vue === "atelier"));
@@ -1348,6 +1350,8 @@ async function exporterAbc() {
 
 function brancher() {
   $("aller-biblio").addEventListener("click", () => montrer("biblio"));
+  // Chaque écran (idée, morceau, pages) a sa propre barre et son bouton retour.
+  document.addEventListener("click", (ev) => { if (ev.target.closest("[data-retour]")) montrer("biblio"); });
   $("onglet-atelier").addEventListener("click", () => montrer("atelier"));
   $("onglet-lecteur").addEventListener("click", () => montrer("lecteur"));
 
