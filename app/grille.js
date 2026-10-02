@@ -12,7 +12,10 @@
  *     lecture part) et choisit la mesure (celle des accords) ; toucher
  *     l'accord d'une mesure, ou « + accord » sur la mesure choisie, ouvre
  *     les accords ;
- *   - pincer à deux doigts (ou Ctrl + molette) zoome dans le temps.
+ *   - pincer à deux doigts zoome : en écartant les doigts en largeur, le
+ *     temps s'étire ; en hauteur, les rangées grandissent. Un pincement en
+ *     biais fait les deux. À la souris : Ctrl + molette pour le temps,
+ *     Alt + molette pour la hauteur.
  * Glisser sur le fond fait défiler, comme partout. Les notes des autres
  * pistes restent visibles, en pâle. En mode Chanter, une couche « voix » y
  * trace la hauteur chantée (voir plus bas).
@@ -23,16 +26,47 @@
 import { nomNote, pasParMesure, pasParTemps, nbMesures } from "./sequence.js";
 import { joliAccord } from "./harmonie.js";
 import { ico } from "./icones.js";
+import { lirePref, ecrirePref } from "./preferences.js";
 
 const HAUT = 108, BAS = 21;
 const NOIRES = new Set([1, 3, 6, 8, 10]);
+// Le temps : un pas (la double croche) de 4 à 28 px. La hauteur : une rangée
+// de 6 px (plus de quatre octaves dans la vue d'un téléphone, pour voir où
+// est la mélodie) à 44 px (la taille d'un doigt : au-delà, rien n'y gagne).
 const PX_MIN = 4, PX_MAX = 28;
+const RANG_MIN = 6, RANG_MAX = 44;
+// En dessous de cette hauteur de rangée, le nom de la note ne tient plus dans son rectangle.
+const RANG_NOM = 13;
+const CLE_ZOOM = "portee:zoom-grille";
 const borne = (x, a, b) => Math.max(a, Math.min(b, x));
+
+/**
+ * Ce qu'un pincement change au zoom : l'écart des doigts en largeur règle le
+ * temps, l'écart en hauteur règle les rangées. `debut` et `maintenant` :
+ * { dx, dy }, les écarts (positifs) entre les deux doigts, en px.
+ *
+ * Un écart de moins de `plancher` px compte pour `plancher` : deux doigts
+ * posés côte à côte ne sont jamais tout à fait à la même hauteur, et ce
+ * petit écart vertical, qui varie d'un rien, ne doit pas faire bondir la
+ * hauteur des rangées pendant qu'on zoome dans le temps (et inversement).
+ */
+export function facteursPince(debut, maintenant, plancher = 60) {
+  const f = (avant, apres) => Math.max(apres, plancher) / Math.max(avant, plancher);
+  return { temps: f(debut.dx, maintenant.dx), hauteur: f(debut.dy, maintenant.dy) };
+}
 
 export function creerGrille(conteneur, rappels) {
   // Au doigt, des rangées plus hautes : une note de 20 px se touche sans viser.
+  // Le zoom choisi se garde sur l'appareil : on le règle une fois à sa main.
   const auDoigt = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
   let px = 11, rang = auDoigt ? 20 : 17;
+  try {
+    const z = JSON.parse(lirePref(CLE_ZOOM) || "null");
+    if (z && Number.isFinite(z.px) && Number.isFinite(z.rang)) {
+      px = borne(z.px, PX_MIN, PX_MAX);
+      rang = borne(Math.round(z.rang), RANG_MIN, RANG_MAX);
+    }
+  } catch { /* une préférence illisible : le zoom par défaut */ }
   let etat = null;
   let geste = null;
   let pince = null;
@@ -130,7 +164,7 @@ export function creerGrille(conteneur, rappels) {
     });
     for (const n of seq.pistes[piste].notes) {
       const choisie = selection.has(n.id);
-      const nom = n.l * px >= 30 ? `<span>${nomNote(n.h, seq.tonalite)}</span>` : "";
+      const nom = n.l * px >= 30 && rang >= RANG_NOM ? `<span>${nomNote(n.h, seq.tonalite)}</span>` : "";
       html += `<div class="g-note${choisie ? " choisie" : ""}" data-id="${n.id}" style="left:${n.d * px}px;top:${yDe(n.h)}px;width:${n.l * px - 1}px;height:${rang - 1}px">${nom}<i class="g-bord"></i></div>`;
     }
     calque.innerHTML = html;
@@ -203,22 +237,44 @@ export function creerGrille(conteneur, rappels) {
   }
 
   /**
-   * Zoom dans le temps. `ancre` (abscisse à l'écran) reste sous le doigt ;
-   * sans elle, c'est le milieu de la vue.
+   * Un point de la vue : sa place dans la zone qui défile (x, y, en px) et ce
+   * qu'il y a dessous (pas : le temps, en pas ; rangs : la hauteur, en
+   * rangées depuis le haut). Sans coordonnées, le milieu de la vue.
    */
-  function zoomA(nouveau, ancre = null) {
-    if (!etat) return;
+  function point(clientX = null, clientY = null) {
     const r = defil.getBoundingClientRect();
-    const x = ancre === null ? defil.clientWidth / 2 : borne(ancre - r.left, 0, defil.clientWidth);
-    const instant = (defil.scrollLeft + x) / px;
-    const avant = px;
-    px = borne(nouveau, PX_MIN, PX_MAX);
-    if (px === avant) return;
-    signature = "";
-    afficher(etat);
-    defil.scrollLeft = Math.max(0, instant * px - x);
+    const x = clientX === null ? defil.clientWidth / 2 : borne(clientX - r.left, 0, defil.clientWidth);
+    const y = clientY === null ? defil.clientHeight / 2 : borne(clientY - r.top, 0, defil.clientHeight);
+    return { x, y, pas: (defil.scrollLeft + x) / px, rangs: (defil.scrollTop + y) / rang };
   }
-  const zoom = (facteur, ancre = null) => zoomA(Math.round(px * facteur), ancre);
+
+  /**
+   * Zoom dans le temps (`nouveauPx`) et en hauteur (`nouveauRang`). Ce qui
+   * était sous `p` (pas, rangs) revient sous sa place à l'écran (x, y) : sous
+   * les doigts qui pincent, ou au milieu de la vue.
+   */
+  function zoomA(nouveauPx, nouveauRang, p = point()) {
+    if (!etat) return;
+    const avant = [px, rang];
+    px = borne(nouveauPx, PX_MIN, PX_MAX);
+    rang = borne(Math.round(nouveauRang), RANG_MIN, RANG_MAX);
+    if (px !== avant[0] || rang !== avant[1]) {
+      signature = "";
+      afficher(etat);
+      retenirZoom();
+    }
+    defil.scrollLeft = Math.max(0, p.pas * px - p.x);
+    defil.scrollTop = Math.max(0, p.rangs * rang - p.y);
+  }
+  /** Les boutons − et + : `axe` vaut "temps" ou "hauteur". */
+  const zoom = (facteur, axe = "temps") => axe === "hauteur" ? zoomA(px, rang * facteur) : zoomA(Math.round(px * facteur), rang);
+
+  // Écrit une fois le geste fini, pas à chaque image d'un pincement.
+  let minuterieZoom = null;
+  function retenirZoom() {
+    clearTimeout(minuterieZoom);
+    minuterieZoom = setTimeout(() => ecrirePref(CLE_ZOOM, JSON.stringify({ px, rang })), 400);
+  }
 
   // --- Gestes ---------------------------------------------------------------
 
@@ -331,29 +387,44 @@ export function creerGrille(conteneur, rappels) {
     if (t) rappels.ecouter(Number(t.dataset.h));
   });
   // Ctrl + molette (et le pincement du pavé tactile, que le navigateur
-  // envoie ainsi) : zoom, comme dans un logiciel de musique.
+  // envoie ainsi) : zoom dans le temps, comme dans un logiciel de musique.
+  // Alt + molette : la hauteur des rangées (Ableton fait de même).
   defil.addEventListener("wheel", (e) => {
-    if (!e.ctrlKey) return;
+    if (!e.ctrlKey && !e.altKey) return;
     e.preventDefault();
-    zoomA(px * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX);
+    // Alt change parfois la molette en défilement de côté : on prend le delta qui bouge.
+    const delta = e.deltaY || e.deltaX;
+    if (!delta) return;
+    const f = delta < 0 ? 1.15 : 1 / 1.15;
+    const p = point(e.clientX, e.clientY);
+    if (e.ctrlKey) zoomA(px * f, rang, p);
+    else zoomA(px, rang * f, p);
   }, { passive: false });
-  // Pincer à deux doigts : le temps s'étire ou se resserre entre les doigts.
-  // La grille garde son défilement au doigt (touch-action) ; seul le
-  // mouvement à deux doigts est pris ici.
+  // Pincer à deux doigts : la grille s'étire entre les doigts, en largeur
+  // (le temps) et en hauteur (les rangées), et suit leur milieu (on peut
+  // déplacer la vue en pinçant). La grille garde son défilement à un doigt
+  // (touch-action) ; seul le mouvement à deux doigts est pris ici.
   let imagePince = null;
+  const ecarts = (a, b) => ({ dx: Math.abs(a.clientX - b.clientX), dy: Math.abs(a.clientY - b.clientY) });
   defil.addEventListener("touchstart", (e) => {
     if (e.touches.length !== 2) return;
     const [a, b] = e.touches;
-    pince = { ecart: Math.max(20, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)), px, centre: (a.clientX + b.clientX) / 2 };
+    const p = point((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+    pince = { ...ecarts(a, b), px, rang, pas: p.pas, rangs: p.rangs };
     abandonner();
   }, { passive: true });
   defil.addEventListener("touchmove", (e) => {
     if (!pince || e.touches.length !== 2) return;
     if (e.cancelable) e.preventDefault();
     const [a, b] = e.touches;
-    const ecart = Math.max(20, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY));
+    const f = facteursPince(pince, ecarts(a, b));
+    const cx = (a.clientX + b.clientX) / 2, cy = (a.clientY + b.clientY) / 2;
     cancelAnimationFrame(imagePince);
-    imagePince = requestAnimationFrame(() => { if (pince) zoomA(pince.px * (ecart / pince.ecart), pince.centre); });
+    imagePince = requestAnimationFrame(() => {
+      if (!pince) return;
+      const r = defil.getBoundingClientRect();
+      zoomA(pince.px * f.temps, pince.rang * f.hauteur, { pas: pince.pas, rangs: pince.rangs, x: cx - r.left, y: cy - r.top });
+    });
   }, { passive: false });
   const finPince = (e) => { if (e.touches.length < 2) pince = null; };
   defil.addEventListener("touchend", finPince);
@@ -406,7 +477,7 @@ export function creerGrille(conteneur, rappels) {
 
     /** Allume la rangée de la note h (et sa touche) ; null l'éteint. */
     function allumer(h) {
-      if (h === cible && (h === null || (touche && touche.isConnected))) return;
+      if (h === cible && (h === null || (touche && touche.isConnected && rangee.style.height === `${rang}px`))) return;
       cible = h;
       if (touche) touche.classList.remove("cible");
       touche = null;

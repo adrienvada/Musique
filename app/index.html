@@ -460,7 +460,10 @@
         <button class="idee-resume" id="idee-reglages-bouton" aria-haspopup="dialog" aria-controls="idee-reglages" aria-label="Tempo, mesure et tonalité"><span class="mono" id="idee-resume"></span></button>
       </div>
       <button class="puce idee-piste-puce" id="idee-piste-puce" hidden></button>
-      <button class="btn btn-fantome rond" id="idee-affichage" data-affichage="partition" aria-label="Voir la partition"><svg class="ico" aria-hidden="true"><use href="#i-vue-portee"></use></svg></button>
+      <div class="seg idee-affichage" id="idee-affichage" role="group" aria-label="Affichage">
+        <button data-affichage="grille" aria-pressed="true" aria-label="Grille" title="La grille (piano roll)"><svg class="ico" aria-hidden="true"><use href="#i-vue-grille"></use></svg><span aria-hidden="true">Grille</span></button>
+        <button data-affichage="partition" aria-pressed="false" aria-label="Partition" title="La partition"><svg class="ico" aria-hidden="true"><use href="#i-vue-portee"></use></svg><span aria-hidden="true">Partition</span></button>
+      </div>
       <button class="btn btn-fantome rond" id="idee-partager" aria-label="Envoyer le MIDI" title="Envoyer le MIDI (AirDrop, Fichiers, mail…) ou le télécharger"><svg class="ico" aria-hidden="true"><use href="#i-partager"></use></svg></button>
       <button class="btn btn-fantome rond" id="idee-plus" aria-haspopup="dialog" aria-controls="idee-menu" aria-label="Plus d'actions"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
     </header>
@@ -750,13 +753,21 @@
       </div>
       <div class="reglage-bloc">
         <span class="surtitre">Zoom de la grille</span>
-        <div class="rangee">
-          <button class="btn rond" id="idee-zoom-moins" aria-label="Dézoomer la grille"><svg class="ico" aria-hidden="true"><use href="#i-moins"></use></svg></button>
-          <button class="btn rond" id="idee-zoom-plus" aria-label="Zoomer la grille"><svg class="ico" aria-hidden="true"><use href="#i-plus"></use></svg></button>
-          <span class="remarque idee-zoom-aide">ou pince la grille à deux doigts</span>
+        <div class="rangee idee-zoom">
+          <span class="idee-zoom-axe">
+            <span>Temps</span>
+            <button class="btn rond" data-zoom="temps" data-facteur="0.77" aria-label="Resserrer le temps"><svg class="ico" aria-hidden="true"><use href="#i-moins"></use></svg></button>
+            <button class="btn rond" data-zoom="temps" data-facteur="1.3" aria-label="Étirer le temps"><svg class="ico" aria-hidden="true"><use href="#i-plus"></use></svg></button>
+          </span>
+          <span class="idee-zoom-axe">
+            <span>Hauteur</span>
+            <button class="btn rond" data-zoom="hauteur" data-facteur="0.77" aria-label="Rangées moins hautes"><svg class="ico" aria-hidden="true"><use href="#i-moins"></use></svg></button>
+            <button class="btn rond" data-zoom="hauteur" data-facteur="1.3" aria-label="Rangées plus hautes"><svg class="ico" aria-hidden="true"><use href="#i-plus"></use></svg></button>
+          </span>
         </div>
+        <span class="remarque idee-zoom-aide">Ou pince la grille à deux doigts : en largeur pour le temps, en hauteur pour les notes.</span>
       </div>
-      <p class="remarque idee-raccourcis">Clavier de l'ordinateur, comme dans Ableton : <kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd>… pour jouer, <kbd>Z</kbd> <kbd>X</kbd> octave, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>0</kbd> silence, <kbd>Espace</kbd> écouter, <kbd>R</kbd> jouer en direct, <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> choisir et monter, <kbd>Ctrl</kbd> + molette pour zoomer.</p>
+      <p class="remarque idee-raccourcis">Clavier de l'ordinateur, comme dans Ableton : <kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd>… pour jouer, <kbd>Z</kbd> <kbd>X</kbd> octave, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>0</kbd> silence, <kbd>Espace</kbd> écouter, <kbd>R</kbd> jouer en direct, <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> choisir et monter, <kbd>Ctrl</kbd> + molette pour zoomer dans le temps, <kbd>Alt</kbd> + molette en hauteur.</p>
       <button class="btn btn-plein idee-fini" data-fermer>C'est bon</button>
     </dialog>
 

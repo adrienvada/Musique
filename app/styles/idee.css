@@ -30,6 +30,15 @@ body.plein #mode, body.plein .mode { display: none; }
 /* La barre du haut : retour, titre (et tempo dessous), affichage, partager, ••• */
 .idee-barre-haut { flex: none; height: calc(var(--barre) + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 4px 0 2px; display: flex; align-items: center; gap: 2px; background: var(--feuille); border-bottom: 1px solid var(--trait); }
 .idee-barre-haut > .btn { flex: none; }
+/* Grille | Partition : au téléphone, les deux icônes (la barre n'a pas la
+   place des mots sans couper le titre) ; les mots aussi quand elle l'a. */
+.idee-affichage { flex: none; margin: 0 2px 0 4px; }
+.idee-affichage > button { padding: 0 9px; }
+.idee-affichage > button > span { display: none; }
+@media (min-width: 600px) {
+  .idee-affichage > button { padding: 0 12px; }
+  .idee-affichage > button > span { display: inline; }
+}
 .idee-titres { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 .idee-titre { width: 100%; min-width: 0; font-family: var(--f-titre); font-size: 1.12rem; line-height: 1.25; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 1px 4px; margin: 0; text-overflow: ellipsis; }
 .idee-titre:hover, .idee-titre:focus { border-color: var(--trait-fort); background: var(--creux); }
@@ -130,8 +139,11 @@ body.plein #mode, body.plein .mode { display: none; }
 .idee-raccourcis { display: none; }
 @media (pointer: fine) { .idee-raccourcis { display: block; } }
 .idee-raccourcis kbd { font-family: var(--f-code); font-size: 0.78rem; border: 1px solid var(--trait-fort); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--encre); }
+.idee-zoom { gap: 10px 24px; }
+.idee-zoom-axe { display: inline-flex; align-items: center; gap: 6px; }
+.idee-zoom-axe > span { min-width: 4.4em; font-size: 0.9rem; color: var(--gris); }
 .idee-zoom-aide { display: none; }
-@media (pointer: coarse) { .idee-zoom-aide { display: inline; } }
+@media (pointer: coarse) { .idee-zoom-aide { display: block; } }
 .idee-fini { width: 100%; min-height: 48px; }
 
 /* ••• : une liste d'actions, une icône chacune */

@@ -657,16 +657,15 @@ export function creerEditeurIdee(deps) {
 
   // --- Affichage ------------------------------------------------------------------
 
-  /** Grille ou partition ; le bouton de la barre montre l'autre. */
+  /**
+   * Grille ou partition. Le choix se fait dans la barre du haut, les deux
+   * côte à côte, celui qu'on voit allumé : un seul bouton qui montrait
+   * l'autre affichage passait pour un menu, et on ne trouvait pas la partition.
+   */
   function afficherAffichage() {
     $("idee-grille").hidden = e.affichage !== "grille";
     $("idee-partition").hidden = e.affichage !== "partition";
-    const autre = e.affichage === "grille" ? "partition" : "grille";
-    const b = $("idee-affichage");
-    b.dataset.affichage = autre;
-    b.innerHTML = ico(autre === "partition" ? "vue-portee" : "vue-grille");
-    b.setAttribute("aria-label", autre === "partition" ? "Voir la partition" : "Voir la grille");
-    b.title = b.getAttribute("aria-label");
+    $("idee-affichage").querySelectorAll("[data-affichage]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.affichage === e.affichage)));
   }
 
   let image = null;
@@ -830,8 +829,10 @@ export function creerEditeurIdee(deps) {
     planifierSauvegarde(0);
   });
   $("idee-titre").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("idee-titre").blur(); });
-  $("idee-affichage").addEventListener("click", () => {
-    e.affichage = $("idee-affichage").dataset.affichage;
+  $("idee-affichage").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-affichage]");
+    if (!b || b.dataset.affichage === e.affichage) return;
+    e.affichage = b.dataset.affichage;
     ecrirePref("portee:affichage-idee", e.affichage);
     transport.arreter();
     afficherAffichage();
@@ -895,8 +896,10 @@ export function creerEditeurIdee(deps) {
   $("idee-transp-moins").addEventListener("click", () => modifier(() => transposerIdee(e.seq, -1)));
   $("idee-transp-plus").addEventListener("click", () => modifier(() => transposerIdee(e.seq, 1)));
   $("idee-accomp").addEventListener("change", () => modifier(() => { e.seq.accompagnement = $("idee-accomp").value; }));
-  $("idee-zoom-moins").addEventListener("click", () => grille.zoom(1 / 1.3));
-  $("idee-zoom-plus").addEventListener("click", () => grille.zoom(1.3));
+  $("idee-reglages").querySelector(".idee-zoom").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-zoom]");
+    if (b) grille.zoom(Number(b.dataset.facteur), b.dataset.zoom);
+  });
 
   // Les pistes
   function changerPiste(i) {

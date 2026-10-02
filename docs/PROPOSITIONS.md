@@ -227,6 +227,30 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     comme dans `harmoniser` : c'est elle qui tire vers la tonique ; le v reste
     dans « Un autre accord ». « Septième » donne la septième de la tonalité
     (Cmaj7, G7, Dm7, Bm7b5).
+- **02/10 · La grille zoome aussi en hauteur ; Grille | Partition dans la
+  barre.** Demandé par Adrien (« zoomer dans le piano roll sur l'axe
+  vertical aussi », « switcher en piano roll et partition »).
+  - **Le zoom** : pincer en largeur étire le temps (comme avant), pincer en
+    hauteur agrandit les rangées (de 6 px, plus de quatre octaves dans la
+    vue d'un téléphone, à 44 px, la taille d'un doigt), en biais les deux ;
+    la vue suit le milieu des doigts. Pourquoi deux axes séparés plutôt
+    qu'un zoom d'ensemble : la mélodie demande souvent plus de place en
+    hauteur qu'en temps (ou l'inverse), comme dans GarageBand. Un écart de
+    moins de 60 px entre les doigts sur un axe compte pour 60 px
+    (`facteursPince`) : deux doigts posés côte à côte ne sont jamais à la
+    même hauteur, et ce petit écart ne doit pas faire bondir les rangées
+    pendant qu'on zoome dans le temps. À la souris : Ctrl + molette (le
+    temps), Alt + molette (la hauteur), comme dans Ableton ; dans « Tempo
+    et mesure », des boutons − et + pour chaque axe. Le zoom choisi se
+    garde sur l'appareil (`portee:zoom-grille`) : on le règle une fois à
+    sa main. Sous 13 px de haut, une note ne porte plus son nom.
+  - **Grille | Partition** : les deux côte à côte dans la barre du haut,
+    celui qu'on voit allumé (au téléphone en icônes, avec les mots dès
+    que la barre a la place). Avant, un seul bouton montrait l'autre
+    affichage, avec une icône de lignes qu'on prenait pour un menu :
+    Adrien ne trouvait pas la partition. Les icônes sont redessinées : des
+    barres décalées au bord d'un clavier (la grille), deux croches liées
+    (la partition).
 - **02/10 · Le bouton « précédent » recule dans l'appli.** Demandé par
   Adrien (« que ça gère mieux quand on fait précédent »). Portée est une
   seule page : le précédent du téléphone (ou du navigateur, ou le geste de
@@ -654,6 +678,10 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
     claude.ai simulée). 98 tests en Node (43 avant la refonte). L'appli
     claude.ai est republiée (le 02/10, avec les dix refontes). Pas encore
     essayé : un vrai iPhone (Safari), une vraie voix au micro.
+    Ensuite (02/10, même jour) : le bouton « précédent », puis le zoom de la
+    grille en hauteur et le choix Grille | Partition dans la barre, essayés
+    dans Chromium au téléphone (pincements simulés en largeur, en hauteur,
+    en biais) et à l'ordinateur (molette) ; 99 tests en Node.
 
 ## Brancher la reMarkable (une fois)
 

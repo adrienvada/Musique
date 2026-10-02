@@ -27,7 +27,9 @@ enregistrée sur ton compte claude.ai).
    rouge) : un décompte, le métronome, puis tu choisis comment arrondir le
    rythme en voyant ce que ça change.
 4. **Corrige au doigt** dans la grille (toucher, glisser, tirer le bord) ou
-   sur la partition. La pilule au-dessus des notes choisies les monte, les
+   sur la partition : on passe de l'une à l'autre en haut de l'écran
+   (Grille | Partition). Pince la grille en largeur pour zoomer dans le
+   temps, en hauteur pour agrandir les notes. La pilule au-dessus des notes choisies les monte, les
    descend ou les efface ; « ••• » range le reste (durées, plus lent, à
    l'envers, miroir…). Une note choisie prend la hauteur de la touche que tu
    joues. Tout s'annule.
