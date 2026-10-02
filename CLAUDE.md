@@ -69,7 +69,12 @@ C'est le premier réflexe quand une lecture est fausse.
 ## Republier l'appli
 
 **Le site** (https://adrienvada.fr/Musique/, servi par GitHub Pages) se republie tout seul à
-chaque fusion sur `main` (`.github/workflows/site.yml`). Hors de claude.ai, la
+chaque fusion sur `main` (`.github/workflows/site.yml`). Ses modules et ses
+feuilles de style portent la version dans leur adresse (`?v=…`, ajouté par
+`npm run appli -- --autonome`) : sans elle, le cache du navigateur mélangeait
+deux versions juste après une mise en ligne. Les imports s'écrivent
+`from "./x.js"`, littéralement : l'assembleur refuse ceux qu'il ne sait pas
+versionner. Hors de claude.ai, la
 bibliothèque est dans IndexedDB (`portee`, version 2 : `partitions`, `pages`,
 `envois`, `meta`) et se synchronise par le connecteur (`app/synchro.js`,
 `supabase/functions/portee-remarkable/bibliotheque.js`). Ne jamais changer la

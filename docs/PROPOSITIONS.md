@@ -227,6 +227,28 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     comme dans `harmoniser` : c'est elle qui tire vers la tonique ; le v reste
     dans « Un autre accord ». « Septième » donne la septième de la tonalité
     (Cmaj7, G7, Dm7, Bm7b5).
+- **02/10 · Le site ne mélange plus deux versions après une mise en ligne.**
+  Adrien a ouvert le site une minute après la fusion de la PR #8 : barre
+  sans titre, anciennes icônes, grille vide (« je ne vois plus rien »). La
+  page était neuve et ses modules anciens : GitHub Pages laisse chaque
+  fichier dix minutes dans le cache du navigateur (`max-age=600`), et un
+  rechargement reprend même les modules gardés en mémoire sans rien
+  demander, pas même au service worker. L'ancien `idee.js` cherchait le
+  bouton de zoom disparu et l'éditeur plantait. Reproduit dans Chromium avec
+  un serveur qui cache comme Pages, puis corrigé :
+  - à l'assemblage du site, chaque module et chaque feuille de style porte
+    la version dans son adresse (`idee.js?v=…`, tous les imports relatifs ;
+    l'assembleur refuse un import qu'il n'a pas su versionner, car un
+    module importé sous deux adresses serait chargé deux fois). Pourquoi
+    plutôt que des en-têtes : Pages ne laisse pas choisir son `Cache-Control`,
+    et une adresse neuve échappe à tous les caches à la fois ;
+  - le service worker redemande la page (et les fichiers sans version) au
+    serveur plutôt qu'au cache du navigateur : la page est toujours la
+    dernière, et ses modules suivent ;
+  - la version claude.ai n'est pas touchée (pas de service worker, pas de
+    cache Pages).
+  La première mise en ligne de cette correction peut encore montrer
+  l'ancienne version entière (jamais un mélange) jusqu'au rechargement suivant.
 - **02/10 · Un appui long sur une icône dit ce qu'elle fait.** Demandé par
   Adrien (« quand je laisse appuyé mon doigt sur une icône, il faudrait
   qu'il y ait sa description »). Au doigt, il n'y a pas de survol : le titre
@@ -737,6 +759,12 @@ Pour couper l'accès : retirer l'appareil « desktop-linux » sur my.remarkable.
 ou supprimer la fonction dans Supabase.
 
 ## Pièges connus
+
+- **Mise en ligne du site et caches.** GitHub Pages sert tout avec
+  `max-age=600` ; un rechargement reprend les modules en mémoire. Sans
+  version dans les adresses, une page neuve tournait avec des modules
+  anciens. `assembler-appli.mjs` versionne les imports `"./x.js"` du site :
+  écrire les imports sous cette forme littérale (il refuse les autres).
 
 - **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, absent des
   navigateurs de 2026 : il faut prendre la version `legacy/`.
