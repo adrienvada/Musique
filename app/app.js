@@ -1827,10 +1827,9 @@ async function actionIdee(action, p) {
       return ouvrir(id);
     }
     case "supprimer": {
-      if (!window.confirm(`Supprimer « ${p.titre} » ? C'est définitif.`)) return undefined;
+      if (!(await veutSupprimer(p))) return undefined;
       await editeur.fermer();
-      await etat.stockage.supprimer(p.id, 0);
-      toast(`« ${p.titre} » est supprimée.`);
+      await supprimerDeLaBibliotheque(p);
       return montrer("biblio");
     }
     case "morceau": return choisirMorceau(p);
@@ -1839,6 +1838,30 @@ async function actionIdee(action, p) {
       toast("Bientôt.");
       return undefined;
   }
+}
+
+/**
+ * Faut-il supprimer `p` (partition, idée ou morceau) ? La question se pose
+ * dans la fenêtre de l'appli, pas avec window.confirm : celle du navigateur
+ * ne suit pas l'ambiance de l'appli, et une page intégrée (claude.ai) peut
+ * ne pas avoir le droit de l'ouvrir, la réponse est alors « non » sans rien
+ * montrer. Une idée qui sert dans un morceau le dit : sa partie y sera sautée.
+ */
+async function veutSupprimer(p) {
+  const quoi = p.type === "morceau" ? "le morceau" : p.type === "idee" ? "l'idée" : "la partition";
+  let texte = "Ses pages partent avec elle. C'est définitif.";
+  if (p.type === "morceau") texte = "Ses idées restent dans ta bibliothèque. C'est définitif.";
+  if (p.type === "idee") {
+    const morceaux = etat.partitions.filter((m) => m.type === "morceau" && (m.blocs || []).some((b) => b.idee === p.id)).map((m) => `« ${m.titre} »`);
+    texte = morceaux.length ? `Elle sert dans ${morceaux.join(", ")} : cette partie y sera sautée. C'est définitif.` : "C'est définitif.";
+  }
+  return (await dialogue(`Supprimer ${quoi} « ${p.titre} » ?`, texte, [{ valeur: "supprimer", texte: "Supprimer", danger: true }])) === "supprimer";
+}
+
+/** Supprime `p` de la bibliothèque (et des autres appareils, par la synchro). */
+async function supprimerDeLaBibliotheque(p) {
+  await etat.stockage.supprimer(p.id, p.type ? 0 : p.nbPages || 0);
+  toast(`« ${p.titre} » est supprimé${p.type === "morceau" ? "" : "e"}.`);
 }
 
 /** Une petite fenêtre : un titre, des boutons ; rend la valeur du bouton choisi (ou null). */
@@ -1851,7 +1874,7 @@ function dialogue(titre, texte, choix) {
   const liste = document.createElement("div"); liste.className = "liste-choix";
   for (const c of choix) {
     const b = document.createElement("button");
-    b.className = "btn" + (c.plein ? " btn-plein" : "");
+    b.className = "btn" + (c.plein ? " btn-plein" : "") + (c.danger ? " btn-danger" : "");
     b.value = c.valeur; b.textContent = c.texte;
     liste.appendChild(b);
   }
@@ -1888,6 +1911,7 @@ function creerVueDuMorceau() {
     partager: partagerMidi,
     ouvrirIdee: (id) => ouvrir(id),
     quitter: () => montrer("biblio"),
+    veutSupprimer,
   });
 }
 
@@ -1899,6 +1923,7 @@ function creerAccueilDeLAppli() {
     enLecture: (bouton) => transport.actif && transport.carte === bouton,
     arreter: () => transport.arreter(),
     partagerMidi, exporterMidi,
+    supprimer: async (p) => { if (await veutSupprimer(p)) await supprimerDeLaBibliotheque(p); },
     etiquettes: toutesEtiquettes,
     dateCourte, resumeIdee, nomModele, pastilleStatut,
   });

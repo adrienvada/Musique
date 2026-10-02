@@ -484,7 +484,7 @@ export function creerVueMorceau(deps) {
   });
   $("morceau-supprimer").addEventListener("click", async () => {
     if (!m.id) { deps.quitter(); return; }
-    if (!window.confirm(`Supprimer le morceau « ${m.titre} » ? Ses idées restent dans ta bibliothèque.`)) return;
+    if (!(await deps.veutSupprimer({ id: m.id, type: "morceau", titre: m.titre }))) return;
     clearTimeout(m.minuterie); m.minuterie = null;
     await m.sauvegarde;
     await deps.stockage().supprimer(m.id, 0);

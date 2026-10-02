@@ -95,6 +95,7 @@ function dessinerApercuPage(svg, cal, traits, ratio) {
  * @param deps {
  *   etat, ouvrir(id, vue), ouvrirIdee(p, options), ouvrirMorceau(p),
  *   ecouter(p, bouton), enLecture(bouton), arreter(), partagerMidi(p), exporterMidi(p),
+ *   supprimer(p) (demande confirmation, puis supprime),
  *   calibration(modele), ideesParId(), etiquettes(), importer(fichiers),
  *   dateCourte(iso), resumeIdee(seq), nomModele(m), pastilleStatut(p), toast(texte)
  * }
@@ -402,8 +403,8 @@ export function creerAccueil(deps) {
     $("feuille-sous").textContent = [genre, resume, duree, deps.dateCourte(p.modifieLe)].filter(Boolean).join(" · ");
     const liste = $("feuille-liste");
     liste.textContent = "";
-    const ajouter = (icone, texte, agir, { plein = false } = {}) => {
-      const b = el("button", "btn" + (plein ? " btn-plein" : ""));
+    const ajouter = (icone, texte, agir, { plein = false, danger = false } = {}) => {
+      const b = el("button", "btn" + (plein ? " btn-plein" : "") + (danger ? " btn-danger" : ""));
       b.type = "button";
       b.innerHTML = `${ico(icone, "s")}${texte}`;
       b.addEventListener("click", (ev) => agir(ev.currentTarget));
@@ -423,6 +424,9 @@ export function creerAccueil(deps) {
       ajouter("telecharger", "MIDI", puis(() => deps.exporterMidi(p)));
     }
     ajouter(p.favori ? "etoile-pleine" : "etoile", p.favori ? "Retirer des favoris" : "Mettre en favori", puis(() => basculerFavori(p)));
+    // Supprimer se faisait seulement de l'intérieur (le « ••• » de l'écran ouvert) :
+    // depuis la liste, on ne trouvait pas comment. La question vient ensuite.
+    ajouter("corbeille", "Supprimer", puis(() => deps.supprimer(p)), { danger: true });
     ouvrirFeuille(feuille);
   }
 

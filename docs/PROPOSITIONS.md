@@ -227,6 +227,18 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     comme dans `harmoniser` : c'est elle qui tire vers la tonique ; le v reste
     dans « Un autre accord ». « Septième » donne la septième de la tonalité
     (Cmaj7, G7, Dm7, Bm7b5).
+- **02/10 · Supprimer depuis la liste.** Adrien : « c'est normal que je ne
+  puisse supprimer aucune partition ? ». Supprimer n'existait que de
+  l'intérieur (le « ••• » de l'écran d'une partition, d'une idée ou d'un
+  morceau) ; le « ••• » d'une ligne du carnet ou d'une carte, là où on le
+  cherche, ne le proposait pas. Il le propose maintenant, en dernier et en
+  rouge, et la question vient ensuite, dans la fenêtre de l'appli (Annuler
+  garde tout). Pour une idée qui sert dans un morceau, la question le dit :
+  sa partie y sera sautée. La suppression d'une idée et celle d'un morceau
+  ouverts posent la même question au lieu de `window.confirm` : la fenêtre
+  du navigateur ne suit pas l'ambiance, et une page intégrée (claude.ai)
+  peut ne pas avoir le droit de l'ouvrir, la réponse est alors « non » sans
+  rien montrer. (Le mémo vocal s'efface encore avec `window.confirm`.)
 - **02/10 · Le site ne mélange plus deux versions après une mise en ligne.**
   Adrien a ouvert le site une minute après la fusion de la PR #8 : barre
   sans titre, anciennes icônes, grille vide (« je ne vois plus rien »). La
