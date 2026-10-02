@@ -227,6 +227,26 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     comme dans `harmoniser` : c'est elle qui tire vers la tonique ; le v reste
     dans « Un autre accord ». « Septième » donne la septième de la tonalité
     (Cmaj7, G7, Dm7, Bm7b5).
+- **02/10 · Un appui long sur une icône dit ce qu'elle fait.** Demandé par
+  Adrien (« quand je laisse appuyé mon doigt sur une icône, il faudrait
+  qu'il y ait sa description »). Au doigt, il n'y a pas de survol : le titre
+  d'un bouton ne se voyait jamais. Une demi-seconde de doigt sur un bouton à
+  icône montre une infobulle au-dessus (dessous dans la barre du haut) ; le
+  doigt levé, le bouton ne se déclenche pas, et la bulle part au bout d'une
+  seconde et demie. Glisser avant annule (on fait défiler).
+  - Pourquoi un seul module (`app/infobulles.js`, en capture sur toute la
+    page) plutôt qu'un appui long par bouton : les icônes naissent partout
+    (barres, pilule, feuilles, lignes du carnet), et chacune a déjà sa
+    description, celle du lecteur d'écran (`title` ou `aria-label`). La
+    bulle prend la plus longue des deux, sans les raccourcis clavier
+    (« (Maj + ↑) » ne sert à rien au doigt).
+  - Ce qui a déjà son propre appui long garde le sien et porte
+    `data-sans-infobulle` : le bouton rouge (le réglage du décompte), le
+    clavier et sa carte (tenir la note). Les notes de la grille ne sont pas
+    des boutons à icône : leur appui long ouvre toujours le cercle.
+  - À la souris, rien ne change (le navigateur montre le titre au survol).
+  - Piège : la classe `.bulle` était déjà prise (la pastille des onglets du
+    bas) ; c'est `.infobulle`.
 - **02/10 · La grille zoome aussi en hauteur ; Grille | Partition dans la
   barre.** Demandé par Adrien (« zoomer dans le piano roll sur l'axe
   vertical aussi », « switcher en piano roll et partition »).
@@ -681,7 +701,10 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
     Ensuite (02/10, même jour) : le bouton « précédent », puis le zoom de la
     grille en hauteur et le choix Grille | Partition dans la barre, essayés
     dans Chromium au téléphone (pincements simulés en largeur, en hauteur,
-    en biais) et à l'ordinateur (molette) ; 99 tests en Node.
+    en biais) et à l'ordinateur (molette) ; puis les infobulles de l'appui
+    long (appuis simulés : la bulle, le bouton qui ne part pas, le défilement,
+    le bouton rouge et le clavier qui gardent leur appui long ; inventaire :
+    aucune icône sans description). 103 tests en Node.
 
 ## Brancher la reMarkable (une fois)
 

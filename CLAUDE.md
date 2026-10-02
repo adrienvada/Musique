@@ -49,6 +49,9 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   (`<dialog class="feuille-bas">`, `feuilles.js`) : le bouton « précédent »
   la ferme tout seul (`historique.js`). Un calque qui ne serait pas un
   `<dialog>` doit être ajouté à `aLaRacine()` et `reculer()` (`app.js`).
+  Tout bouton à icône a un `aria-label` ou un `title` : un appui long
+  l'affiche en infobulle (`infobulles.js`). Un élément qui a son propre
+  appui long porte `data-sans-infobulle`.
 - **Correction au toucher (`app/edition.js`)** : Adrien ne lit pas l'ABC.
   Toute correction passe par un geste (bouton, glissé, clavier) qui réécrit
   l'ABC ; le texte reste en « mode avancé ».

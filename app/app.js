@@ -27,6 +27,7 @@ import { ecrireMusicXml } from "./musicxml.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerHistorique } from "./historique.js";
+import { installerInfobulles } from "./infobulles.js";
 import { creerAccueil } from "./accueil.js";
 import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, suivre } from "./doutes.js";
 import { afficherVueAtelier, dateRelative, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes, placerOnglets, suivreDock } from "./atelier.js";
@@ -1918,6 +1919,8 @@ function creerEditeur() {
 
 async function demarrer() {
   injecterIcones();
+  // Un appui long sur une icône dit ce qu'elle fait.
+  installerInfobulles();
   creerAccueilDeLAppli();
   brancher();
   creerEditeur();

@@ -29,7 +29,8 @@ enregistrée sur ton compte claude.ai).
 4. **Corrige au doigt** dans la grille (toucher, glisser, tirer le bord) ou
    sur la partition : on passe de l'une à l'autre en haut de l'écran
    (Grille | Partition). Pince la grille en largeur pour zoomer dans le
-   temps, en hauteur pour agrandir les notes. La pilule au-dessus des notes choisies les monte, les
+   temps, en hauteur pour agrandir les notes. Un doute sur une icône ?
+   Laisse le doigt dessus : une bulle dit ce qu'elle fait. La pilule au-dessus des notes choisies les monte, les
    descend ou les efface ; « ••• » range le reste (durées, plus lent, à
    l'envers, miroir…). Une note choisie prend la hauteur de la touche que tu
    joues. Tout s'annule.

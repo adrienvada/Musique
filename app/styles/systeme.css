@@ -66,7 +66,9 @@ body { background: var(--papier); color: var(--encre); font-family: var(--f-text
 h1, h2, h3 { font-family: var(--f-titre); font-weight: 400; margin: 0; line-height: 1.2; text-wrap: balance; }
 p { margin: 0; }
 button, input, textarea, select { font: inherit; color: inherit; }
-button { -webkit-tap-highlight-color: transparent; }
+/* Un appui long sur un bouton montre sa bulle (infobulles.js) : ni sélection de
+   texte, ni menu du navigateur, ni loupe par-dessus. */
+button { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 :focus-visible { outline: 2px solid var(--stylo); outline-offset: 2px; }
 code, .mono { font-family: var(--f-code); font-size: 0.9em; }
 .mono { font-variant-numeric: tabular-nums; }
@@ -172,6 +174,14 @@ dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: 1.35rem; }
    un message posé sur un bouton ne doit pas l'avaler. */
 .toast { pointer-events: none; inset: auto; margin: 0; border: 0; overflow: visible; position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + var(--barre) + 10px); background: var(--encre); color: var(--papier); padding: 10px 16px; border-radius: 12px; font-size: 0.92rem; font-weight: 500; max-width: min(92vw, 560px); z-index: 40; box-shadow: var(--ombre); }
 
+/* La bulle d'un appui long (infobulles.js) : ce que fait une icône, au-dessus du
+   doigt, avec une pointe vers elle. En « popover », elle passe au-dessus des
+   feuilles ; elle ne prend aucun toucher. */
+.infobulle { pointer-events: none; inset: auto; margin: 0; border: 0; overflow: visible; position: fixed; z-index: 41; width: max-content; max-width: min(300px, calc(100vw - 16px)); padding: 8px 12px; border-radius: 10px; background: var(--encre); color: var(--papier); font-size: 0.92rem; font-weight: 500; line-height: 1.35; box-shadow: var(--ombre); animation: infobulle-vient 0.12s ease-out; }
+.infobulle::after { content: ""; position: absolute; left: var(--fleche, 50%); bottom: -5px; width: 10px; height: 10px; background: inherit; border-radius: 2px; transform: translateX(-50%) rotate(45deg); }
+.infobulle.dessous::after { bottom: auto; top: -5px; }
+@keyframes infobulle-vient { from { opacity: 0; transform: translateY(4px); } }
+
 @media (pointer: coarse) {
   .btn, .btn-petit, .puce, .champ { min-height: 44px; }
   .seg > button { min-height: 40px; }
@@ -180,6 +190,6 @@ dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: 1.35rem; }
   .mode { margin-left: 0; width: 100%; }
 }
 @media print {
-  .barre-haut, #toast { display: none !important; }
+  .barre-haut, #toast, .infobulle { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
