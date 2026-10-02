@@ -7,7 +7,7 @@
   "scope": "./",
   "display": "standalone",
   "background_color": "#EDEEEA",
-  "theme_color": "#2B48B0",
+  "theme_color": "#2F4BC2",
   "shortcuts": [
     { "name": "Nouvelle idée", "short_name": "Idée", "description": "Noter tout de suite une mélodie qui te vient", "url": "./?idee", "icons": [{ "src": "icones/icone-192.png", "sizes": "192x192" }] }
   ],

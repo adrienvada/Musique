@@ -18,6 +18,7 @@
  * traduction. Ce module ne parle à l'appli que par les dépendances qu'on
  * lui passe (stockage, piano, transport, messages).
  */
+import { lirePref, ecrirePref } from "./preferences.js";
 import * as sq from "./sequence.js";
 import { fichierMidi } from "./midi.js";
 import { voixCompletes, transposerIdee, STYLES, suggerer, harmoniser, accordsDeLaTonalite, lireAccord, nomRacine, joliAccord, QUALITES } from "./harmonie.js";
@@ -40,10 +41,6 @@ const TOUCHES_ORDI = {
   KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13, KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17,
 };
 const CLE_DEFAUTS = "portee:idee-defauts";
-// Les préférences de cet appareil. Dans la page claude.ai, localStorage peut
-// être refusé : on fait alors sans.
-const lirePref = (cle) => { try { return localStorage.getItem(cle); } catch { return null; } };
-const ecrirePref = (cle, valeur) => { try { localStorage.setItem(cle, valeur); } catch { /* facultatif */ } };
 
 /** Une petite note dessinée, pour les boutons de durée. */
 export function iconeDuree(pas) {

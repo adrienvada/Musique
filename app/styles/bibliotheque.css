@@ -1,0 +1,59 @@
+/* Bibliothèque : le carnet, les pages de la tablette, la synchronisation. */
+.entete-biblio { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; }
+.entete-biblio h1 { font-size: clamp(1.7rem, 4vw, 2.3rem); }
+.depot { border: 2px dashed var(--trait-fort); border-radius: 12px; padding: 18px; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; background: var(--feuille); }
+.depot.survol { border-color: var(--stylo); background: var(--stylo-doux); }
+.depot p { max-width: 70ch; }
+.outils { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.champ { border: 1px solid var(--trait-fort); background: var(--feuille); border-radius: 8px; padding: 7px 12px; min-width: 0; flex: 1 1 220px; }
+.puce { border: 1px solid var(--trait-fort); background: transparent; border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 0.88rem; }
+.puce[aria-pressed="true"] { background: var(--encre); color: var(--feuille); border-color: var(--encre); }
+.grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.carte { border: 1px solid var(--trait); background: var(--feuille); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+.carte:hover, .carte:focus-within { border-color: var(--stylo); }
+.carte .ouvrir { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; display: flex; flex-direction: column; }
+.carte svg { width: 100%; height: 120px; display: block; background: var(--feuille); border-bottom: 1px solid var(--trait); }
+.carte .infos { padding: 10px 12px 4px; display: flex; flex-direction: column; gap: 6px; }
+.carte .titre { font-weight: 600; }
+.carte .meta { font-size: 0.8rem; color: var(--gris); font-variant-numeric: tabular-nums; }
+.carte .infos .pastille { align-self: flex-start; }
+.carte .actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 12px; }
+.modeles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.modele { border: 1px solid var(--trait); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--feuille); }
+.modele img { width: 100%; aspect-ratio: 3 / 4; object-fit: contain; background: #fff; border-radius: 6px; border: 1px solid var(--trait); }
+.modele .nom { font-weight: 600; }
+.pied-biblio { border-top: 1px solid var(--trait); padding-top: 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.pied-biblio .aide-connecteur { flex: 1 1 100%; }
+.etapes { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: etape; }
+.etapes li { border: 1px solid var(--trait); border-radius: 10px; padding: 14px; background: var(--papier); display: flex; flex-direction: column; gap: 8px; counter-increment: etape; }
+.etapes li::before { content: counter(etape); font-family: var(--f-titre); font-size: 1.5rem; color: var(--stylo); line-height: 1; }
+.arbre { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow: auto; }
+.arbre details > summary { cursor: pointer; padding: 5px 6px; border-radius: 6px; font-weight: 500; list-style: none; display: flex; align-items: center; gap: 8px; }
+.arbre details > summary::before { content: "▸"; color: var(--gris); width: 1em; }
+.arbre details[open] > summary::before { content: "▾"; }
+.arbre details > summary:hover { background: var(--papier); }
+.arbre .enfants { padding-left: 18px; border-left: 1px solid var(--trait); margin-left: 12px; display: flex; flex-direction: column; gap: 2px; }
+.doc-rm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 5px 6px; border-radius: 6px; }
+.doc-rm:hover { background: var(--papier); }
+.doc-rm .nom { min-width: 0; overflow-wrap: anywhere; }
+.doc-rm .meta { font-size: 0.8rem; color: var(--gris); font-variant-numeric: tabular-nums; }
+.doc-rm .btn { margin-left: auto; }
+.aide-connecteur { border: 1px solid var(--surligneur); background: var(--surligneur-doux); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 0.92rem; }
+.aide-connecteur ol { margin: 0; padding-left: 1.2em; }
+.aide-connecteur p:empty { display: none; }
+.vide { border: 1px solid var(--trait); background: var(--feuille); border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Nouvelle idée */
+.capture { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.capture p { max-width: 60ch; }
+.titre-import { margin-top: 8px; }
+.btn-idee { font-size: 1.05rem; padding: 11px 20px; border-radius: 999px; font-weight: 600; }
+.carte svg .apercu-note { fill: var(--stylo); }
+.pastille.p-idee { background: var(--stylo-doux); color: var(--stylo); border-color: var(--stylo); }
+.carte .etiquettes { gap: 4px; }
+.carte .etiquette { padding: 1px 8px; font-size: 0.72rem; }
+.carte .favori { position: absolute; top: 6px; right: 6px; border: 0; background: color-mix(in srgb, var(--feuille) 85%, transparent); border-radius: 999px; width: 30px; height: 30px; cursor: pointer; font-size: 1rem; color: var(--gris); }
+.carte .favori[aria-pressed="true"] { color: var(--alerte); }
+.carte { position: relative; }
+.groupe-date { grid-column: 1 / -1; margin-top: 6px; }
+.filtres-etiquettes { display: flex; flex-wrap: wrap; gap: 6px; }

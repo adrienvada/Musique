@@ -1,6 +1,6 @@
 # Propositions — de la tablette au piano
 
-*Mis à jour le 1er octobre 2026 : Portée devient un carnet MIDI de poche (idées notées au clavier, au chant ou en direct).*
+*Mis à jour le 2 octobre 2026 : refonte visuelle complète (système Papier et Studio, puis les écrans un à un).*
 
 **L'appli** :
 - **https://adrienvada.fr/Musique/** (site public sur GitHub Pages, installable, bibliothèque synchronisée) ;
@@ -164,6 +164,48 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     synchronisation et la sauvegarde la prennent sans changement.
   - Une page lue peut **continuer en idée** (« Écouter et exporter ») :
     abcjs la joue en notes (reprises dépliées), la page d'origine ne change pas.
+
+- **02/10 · Refonte visuelle complète, dans l'ordre proposé.** Adrien a
+  vu les dix prototypes (https://claude.ai/artifact/8Wbx95N15P8EtKF4yVBroA)
+  et demandé de les implémenter tous, dans l'ordre conseillé : le système
+  d'abord (1), puis l'écran Idée (3), puis les autres (voir « La refonte
+  visuelle : le plan » plus bas).
+  - **Deux ambiances, un seul système.** Papier pour lire et ranger
+    (bibliothèque, pages, morceaux ; suit le clair ou sombre du téléphone),
+    Studio pour jouer (l'éditeur d'idée, sombre par défaut : les notes et le
+    clavier ressortent, et l'écran n'éblouit pas le soir). Un réglage rend
+    le Papier à l'éditeur.
+  - **Une seule famille d'icônes** (`app/icones.js`), au trait : les
+    caractères (▶ ↶ ✕ ★ ⠿ •••) et l'emoji du micro se dessinaient
+    différemment selon la police et se lisaient mal au lecteur d'écran.
+  - **Une feuille de style par écran** (`app/styles/`) au lieu d'un seul
+    bloc dans la page : chaque écran ne prend que les jetons et composants
+    du système, et plusieurs refontes avancent sans se marcher dessus.
+  - **Les messages passagers en haut** : en bas, ils cachaient le clavier
+    et la liste, là où va le pouce.
+
+## La refonte visuelle : le plan (02/10)
+
+Dans l'ordre (le numéro est celui du classement) :
+1. **Système** : jetons Papier et Studio, icônes, boutons d'au moins 44 px
+   au doigt, commutateurs à segments, feuilles du bas.
+3. **Écran Idée, studio de poche** : une barre en haut (toucher le titre
+   ouvre tempo et mesure), la grille prend l'écran, un pupitre en bas à
+   trois modes (Clavier, Chanter, Accords).
+2. **Accueil-carnet** : « Noter une idée » (Jouer, Chanter, Mémo), une
+   liste compacte, quatre onglets (Carnet, Partitions, Morceaux, Réglages).
+4. **Clavier** : la gamme marquée, des modes Gamme et Accords, une carte
+   des octaves.
+5. **Sélection** : une barre flottante au-dessus des notes choisies, les
+   gestes rangés par familles.
+6. **Jouer en direct** : plein écran, décompte et battue en grand,
+   l'arrondi du rythme choisi après coup.
+7. **Chanter** : un accordeur lisible de loin, la trace de la voix.
+8. **Accords** : la roue de la tonalité, les suites probables,
+   l'accompagnement visible.
+9. **Morceaux** : la structure en frise colorée.
+10. **Pages manuscrites** : la page d'abord, les doutes un par un, en
+    questions fermées.
 
 ## Carnet MIDI de poche : le plan (01/10)
 

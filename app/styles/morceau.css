@@ -1,0 +1,19 @@
+/* Morceaux : des idées bout à bout. */
+.blocs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bloc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px 8px 8px; background: var(--feuille); border: 1px solid var(--trait); border-left: 6px solid var(--section, var(--stylo)); border-radius: 10px; }
+.bloc.joue { outline: 2px solid var(--alerte); }
+.bloc.glisse { position: relative; z-index: 2; box-shadow: 0 10px 30px rgba(0,0,0,.2); opacity: 0.95; }
+.poignee { cursor: grab; touch-action: none; user-select: none; font-size: 1.3rem; color: var(--gris); padding: 4px 6px; }
+.bloc-apercu { width: 96px; height: 40px; background: var(--papier); border-radius: 6px; flex: 0 0 auto; }
+.bloc-apercu .apercu-note, .choix-idee svg .apercu-note { fill: var(--stylo); }
+.bloc-infos { display: flex; flex-direction: column; gap: 2px; flex: 1 1 160px; min-width: 0; }
+.bloc-nom { font-weight: 600; font-size: 1rem; border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 2px 4px; margin-left: -4px; width: 100%; max-width: 220px; }
+.bloc-nom:hover, .bloc-nom:focus { border-color: var(--trait-fort); background: var(--papier); }
+.bloc-idee { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bloc-fois, .bloc-actions { display: inline-flex; align-items: center; gap: 4px; }
+.choix-idees { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.choix-idee { display: flex; flex-direction: column; gap: 4px; align-items: stretch; text-align: left; border: 1px solid var(--trait); background: var(--feuille); border-radius: 8px; padding: 6px; cursor: pointer; }
+.choix-idee:hover { border-color: var(--stylo); }
+.choix-idee svg { width: 100%; height: 40px; background: var(--papier); border-radius: 4px; }
+.choix-idee .titre { font-size: 0.85rem; font-weight: 500; }
+.pastille.p-morceau { background: var(--ok-doux); color: var(--ok); border-color: var(--ok); }

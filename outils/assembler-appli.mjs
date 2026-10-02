@@ -31,6 +31,8 @@ const copier = (src, dst) => {
 const fichiers = [];
 // Tous les modules de l'appli (sw.js à part : il n'existe que sur le site).
 for (const f of fs.readdirSync(path.join(racine, "app")).filter((f) => f.endsWith(".js") && f !== "sw.js").sort()) fichiers.push(copier(`app/${f}`, f));
+// Une feuille de style par écran, plus le système commun (styles/systeme.css).
+for (const f of fs.readdirSync(path.join(racine, "app/styles")).filter((f) => f.endsWith(".css")).sort()) fichiers.push(copier(`app/styles/${f}`, `styles/${f}`));
 for (const f of fs.readdirSync(path.join(racine, "lecteur"))) fichiers.push(copier(`lecteur/${f}`, `lecteur/${f}`));
 for (const f of fs.readdirSync(path.join(racine, "modeles")).filter((f) => /\.(json|pdf)$/.test(f))) fichiers.push(copier(`modeles/${f}`, `modeles/${f}`));
 for (const f of fs.readdirSync(path.join(racine, "modeles/apercu")).filter((f) => f.endsWith(".svg"))) fichiers.push(copier(`modeles/apercu/${f}`, `modeles/apercu/${f}`));
@@ -62,7 +64,7 @@ if (autonome) {
     '<html lang="fr"><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">',
     '<meta name="description" content="Tes partitions écrites à la main sur la reMarkable, lues, corrigées, jouées au piano et exportées en MIDI.">',
-    '<meta name="theme-color" content="#2B48B0">',
+    '<meta name="theme-color" content="#2F4BC2">',
     '<link rel="manifest" href="manifest.webmanifest">',
     '<link rel="icon" href="icones/icone.svg" type="image/svg+xml">',
     '<link rel="apple-touch-icon" href="icones/icone-180.png">',
