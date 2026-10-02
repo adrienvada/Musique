@@ -209,30 +209,71 @@
   </section>
   <!-- ===== Morceau ===== -->
   <section class="vue vue-morceau" id="vue-morceau" hidden>
-    <div class="rangee">
-      <input class="titre-edit" id="morceau-titre" aria-label="Titre du morceau">
-      <span class="remarque" id="morceau-etat" role="status"></span>
-      <button class="btn btn-petit btn-plein" id="morceau-midi">Envoyer le MIDI</button>
-      <button class="btn btn-petit btn-danger" id="morceau-supprimer">Supprimer</button>
-    </div>
-    <p class="remarque">Tes idées bout à bout : une intro, un couplet, un refrain… Glisse un bloc par sa poignée (⠿) pour le déplacer, « + » pour le répéter. Corriger une idée corrige le morceau.</p>
-    <datalist id="morceau-sections"></datalist>
-    <ol class="blocs" id="morceau-blocs"></ol>
-    <p class="remarque" id="morceau-vide" hidden>Le morceau est vide : ajoute une première idée.</p>
-    <div class="rangee"><button class="btn btn-plein" id="morceau-ajouter">+ Ajouter une idée</button></div>
-    <div class="panneau" id="morceau-choix" hidden>
-      <div class="rangee">
-        <strong>Quelle idée ajouter ?</strong>
-        <input class="champ" type="search" id="morceau-cherche" placeholder="Chercher une idée…" aria-label="Chercher une idée" style="flex:0 1 240px">
-        <button class="btn btn-petit pousse" id="morceau-choix-fermer">Fermer</button>
+    <!-- La barre et la frise restent en haut quand la liste défile : on voit la tête de lecture avancer. -->
+    <div class="morceau-tete">
+      <div class="morceau-barre">
+        <button class="btn btn-fantome rond" data-retour aria-label="Retour à la bibliothèque"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
+        <div class="morceau-titrage">
+          <input class="morceau-titre" id="morceau-titre" aria-label="Titre du morceau" autocomplete="off" enterkeyhint="done">
+          <p class="mono morceau-resume"><span id="morceau-duree"></span><span class="morceau-etat" id="morceau-etat" role="status"></span></p>
+        </div>
+        <button class="btn btn-plein rond grand" id="morceau-ecouter" aria-label="Écouter l'enchaînement"><svg class="ico" aria-hidden="true"><use href="#i-lire"></use></svg></button>
+        <button class="btn btn-fantome rond" id="morceau-plus" aria-label="Plus d'actions" aria-haspopup="dialog"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
       </div>
+      <div class="frise-zone" id="morceau-frise-zone" hidden>
+        <div class="frise" id="morceau-frise" role="group" aria-label="Structure du morceau : touche une partie pour la choisir">
+          <span class="frise-tete" id="morceau-frise-tete" aria-hidden="true" hidden></span>
+        </div>
+        <p class="mono frise-temps"><span>0:00</span><span id="morceau-frise-fin">0:00</span></p>
+      </div>
+    </div>
+
+    <div class="morceau-corps">
+      <datalist id="morceau-sections"></datalist>
+      <ol class="blocs" id="morceau-blocs"></ol>
+      <div class="morceau-vide" id="morceau-vide" hidden>
+        <svg class="ico l" aria-hidden="true"><use href="#i-morceau"></use></svg>
+        <p>Le morceau est vide : ajoute une première idée.</p>
+      </div>
+      <p class="remarque morceau-aide" id="morceau-aide">Touche une partie pour la régler, glisse sa poignée pour la déplacer. Corriger une idée corrige aussi le morceau.</p>
+    </div>
+
+    <div class="morceau-pied">
+      <button class="btn btn-plein morceau-ajouter" id="morceau-ajouter"><svg class="ico" aria-hidden="true"><use href="#i-plus"></use></svg>Ajouter une partie</button>
+    </div>
+
+    <!-- Quelle idée ? (s'ouvre d'elle-même pour un morceau vide) -->
+    <dialog class="feuille-bas" id="morceau-choix" aria-labelledby="morceau-choix-titre">
+      <div class="feuille-tete">
+        <h2 id="morceau-choix-titre">Quelle idée ?</h2>
+        <button class="btn btn-fantome rond" id="morceau-choix-fermer" aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+      </div>
+      <input class="champ morceau-cherche" type="search" id="morceau-cherche" placeholder="Chercher une idée…" aria-label="Chercher une idée">
       <div class="choix-idees" id="morceau-idees"></div>
-    </div>
-    <div class="transport">
-      <button class="btn btn-plein" id="morceau-ecouter">▶ Écouter l'enchaînement</button>
-      <label for="morceau-tempo">Tempo <input type="range" id="morceau-tempo" min="40" max="240"><span class="val" id="morceau-tempo-val"></span></label>
-      <span class="remarque" id="morceau-duree"></span>
-    </div>
+    </dialog>
+
+    <!-- « ••• » : le tempo, le MIDI, la suppression -->
+    <dialog class="feuille-bas" id="morceau-menu" aria-labelledby="morceau-menu-titre">
+      <div class="feuille-tete">
+        <h2 id="morceau-menu-titre">Le morceau</h2>
+        <button class="btn btn-fantome rond" id="morceau-menu-fermer" aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+      </div>
+      <div class="menu-tempo">
+        <div class="menu-tempo-tete">
+          <label class="surtitre" for="morceau-tempo">Tempo</label>
+          <span class="mono menu-tempo-val" id="morceau-tempo-val"></span>
+        </div>
+        <div class="menu-tempo-reglage">
+          <button class="btn rond" id="morceau-tempo-moins" aria-label="Un battement de moins par minute"><svg class="ico" aria-hidden="true"><use href="#i-moins"></use></svg></button>
+          <input type="range" id="morceau-tempo" min="40" max="240">
+          <button class="btn rond" id="morceau-tempo-plus" aria-label="Un battement de plus par minute"><svg class="ico" aria-hidden="true"><use href="#i-plus"></use></svg></button>
+        </div>
+      </div>
+      <div class="menu-actions">
+        <button class="btn btn-plein" id="morceau-midi"><svg class="ico" aria-hidden="true"><use href="#i-partager"></use></svg>Envoyer le MIDI</button>
+        <button class="btn btn-danger" id="morceau-supprimer"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg>Supprimer le morceau</button>
+      </div>
+    </dialog>
   </section>
 
   <!-- ===== Idée ===== -->

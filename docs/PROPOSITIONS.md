@@ -183,6 +183,25 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · Morceaux : la structure en frise colorée (refonte 9).** L'écran
+  montre d'abord le morceau d'en haut : une frise, un segment par bloc aussi
+  long que son passage (mesures × fois), avec une tête de lecture qui suit le
+  transport ; dessous, une carte par bloc, compacte, sauf celle qu'on choisit,
+  qui montre ses gestes (plus tôt, plus tard, une fois de plus ou de moins,
+  écouter, ouvrir l'idée, retirer). « Ajouter une partie » et « ••• » (tempo,
+  MIDI, suppression) ouvrent des feuilles du bas. Pourquoi : huit boutons par
+  bloc noyaient la structure, qu'on cherche d'abord à voir.
+  - **Une même idée garde sa couleur partout** (frise, cartes, choix d'une
+    idée, vignette de la bibliothèque) : la couleur vient de l'idée
+    (`couleursDesIdees`, `morceau.js`), pas de la place du bloc ni du nom de
+    la section, pour que réordonner ou répéter ne recolore rien. Six couleurs
+    (`--section-1` à `--section-6`, dans `morceau.css`), tirées des jetons du
+    système, lisibles en clair comme en sombre.
+  - Les cartes ne sont reconstruites que si le morceau change : choisir ou
+    renommer ne touche qu'à des classes, sinon le toucher suivant se perd. Le
+    nom d'une carte ne s'édite qu'une fois la carte choisie (le premier
+    toucher choisit, il ne fait pas surgir le clavier). Modifier le morceau
+    pendant l'écoute l'arrête.
 
 ## La refonte visuelle : le plan (02/10)
 
