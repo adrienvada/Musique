@@ -10,7 +10,7 @@
 
 <header class="barre-haut">
   <div class="dedans">
-    <button class="logo" id="aller-biblio" aria-label="Revenir à la bibliothèque">
+    <button class="logo" id="aller-biblio" aria-label="Revenir au carnet">
       <svg viewBox="-10 -1110 690 1780" aria-hidden="true"><path fill="currentColor" d="M376,-415C374,-427 376,-428 382,-434C398,-449 419,-470 438,-491C522,-583 572,-702 572,-815C572,-902 548,-988 507,-1048C492,-1070 466,-1098 455,-1098C441,-1098 410,-1072 390,-1050C316,-968 292,-843 292,-739C292,-681 299,-616 306,-575C308,-563 309,-561 297,-551C233,-498 164,-437 112,-373C43,-287 0,-194 0,-87C0,87 119,252 364,252C387,252 413,250 433,246C444,244 446,243 448,255C460,322 475,409 475,456C475,604 375,622 316,622C262,622 236,606 236,593C236,586 245,583 268,576C299,567 335,540 335,482C335,427 300,380 239,380C172,380 132,433 132,495C132,560 171,658 322,658C389,658 519,628 519,458C519,401 501,306 490,244C488,232 489,233 503,227C604,187 671,102 671,-11C671,-139 577,-252 430,-252C404,-252 404,-252 401,-270ZM470,-943C503,-943 530,-916 530,-861C530,-792 497,-728 419,-650C403,-634 379,-611 356,-591C349,-585 345,-586 343,-599C339,-625 337,-659 337,-691C337,-847 409,-943 470,-943ZM361,-262C364,-243 364,-244 346,-238C258,-208 201,-129 201,-44C201,46 248,110 316,133C324,136 336,139 343,139C351,139 355,134 355,128C355,121 347,118 340,115C298,97 268,54 268,8C268,-49 307,-92 368,-109C384,-113 386,-112 388,-101L438,197C440,208 439,208 424,211C408,214 388,216 368,216C193,216 80,119 80,-20C80,-79 90,-158 173,-252C233,-319 279,-356 326,-394C336,-402 338,-401 340,-390ZM430,-103C428,-115 429,-118 441,-117C522,-110 589,-42 589,46C589,109 551,160 495,188C483,194 481,194 479,182Z"/></svg>
       Portée
     </button>
@@ -19,88 +19,193 @@
       <button role="tab" id="onglet-atelier" aria-selected="false">Corriger</button>
       <button role="tab" id="onglet-lecteur" aria-selected="false">Écouter et exporter</button>
     </div>
-    <span class="mode" id="mode">Ouverture de ta bibliothèque…</span>
-    <button class="btn btn-petit" id="installer" hidden>Installer l'appli</button>
+    <!-- Les quatre onglets de l'accueil : dans la barre du haut à l'ordinateur ;
+         au téléphone, la feuille de style les fixe en bas, sous le pouce. La barre
+         n'apparaît que dans l'accueil, comme tout ce qu'elle contient. -->
+    <nav class="onglets-accueil" id="onglets-accueil" role="tablist" aria-label="Sections de Portée">
+      <button role="tab" id="tab-carnet" data-onglet="carnet" aria-selected="true" aria-controls="onglet-carnet"><span class="bulle"><svg class="ico" aria-hidden="true"><use href="#i-carnet"></use></svg></span><span class="libelle">Carnet</span></button>
+      <button role="tab" id="tab-partitions" data-onglet="partitions" aria-selected="false" aria-controls="onglet-partitions" tabindex="-1"><span class="bulle"><svg class="ico" aria-hidden="true"><use href="#i-partition"></use></svg></span><span class="libelle">Partitions</span></button>
+      <button role="tab" id="tab-morceaux" data-onglet="morceaux" aria-selected="false" aria-controls="onglet-morceaux" tabindex="-1"><span class="bulle"><svg class="ico" aria-hidden="true"><use href="#i-morceau"></use></svg></span><span class="libelle">Morceaux</span></button>
+      <button role="tab" id="tab-reglages" data-onglet="reglages" aria-selected="false" aria-controls="onglet-reglages" tabindex="-1"><span class="bulle"><svg class="ico" aria-hidden="true"><use href="#i-reglages"></use></svg></span><span class="libelle">Réglages</span></button>
+    </nav>
+    <div class="outils-haut">
+      <button class="btn rond btn-fantome" id="chercher" aria-label="Chercher" aria-expanded="false" aria-controls="recherche-zone"><svg class="ico" aria-hidden="true"><use href="#i-chercher"></use></svg></button>
+      <button class="btn rond btn-fantome" id="etat-synchro" aria-label="Synchronisation : ouvrir les réglages" data-ton="gris"><svg class="ico" aria-hidden="true"><use href="#i-nuage-vide"></use></svg></button>
+    </div>
+  </div>
+  <!-- La recherche s'ouvre sous la barre (qui reste collée en haut) : elle filtre le carnet,
+       les partitions et les morceaux, selon l'onglet où l'on est. -->
+  <div class="recherche-zone" id="recherche-zone" hidden>
+    <div class="dedans-recherche">
+      <input class="champ" id="recherche" type="search" placeholder="Chercher un titre, une étiquette, une note…" aria-label="Chercher dans la bibliothèque" autocomplete="off">
+      <button class="btn rond btn-fantome" id="fermer-recherche" aria-label="Fermer la recherche"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+    </div>
   </div>
 </header>
 
 <main>
-  <!-- ===== Bibliothèque ===== -->
+  <!-- ===== Accueil : Carnet, Partitions, Morceaux, Réglages ===== -->
   <section class="vue" id="vue-biblio">
-    <div class="entete-biblio">
-      <div>
-        <p class="surtitre">Tes partitions</p>
-        <h1>Bibliothèque</h1>
+
+    <!-- Carnet : noter d'abord, retrouver ensuite -->
+    <div class="onglet" id="onglet-carnet" role="tabpanel" aria-labelledby="tab-carnet">
+      <section class="capture" id="capture" aria-labelledby="titre-capture">
+        <h1 id="titre-capture">Noter une idée</h1>
+        <div class="tuiles">
+          <button class="tuile" id="nouvelle-idee" title="Joue la mélodie sur le clavier"><svg class="ico l" aria-hidden="true"><use href="#i-clavier"></use></svg><span>Jouer</span></button>
+          <button class="tuile" id="noter-chant" title="Chante les notes une à une, elles s'écrivent"><svg class="ico l" aria-hidden="true"><use href="#i-micro"></use></svg><span>Chanter</span></button>
+          <button class="tuile" id="nouveau-memo" title="Fredonne l'idée tout de suite ; tu l'écriras plus tard"><svg class="ico l" aria-hidden="true"><use href="#i-onde"></use></svg><span>Mémo</span></button>
+        </div>
+      </section>
+      <div id="vide" class="vide" hidden>
+        <h2>Bienvenue dans Portée</h2>
+        <p>Ton carnet de musique : note une mélodie dès qu'elle te vient, écoute-la au piano, ajoute des accords, et envoie-la en MIDI dans Ableton. Tes pages écrites à la main sur la reMarkable y entrent aussi.</p>
+        <ol class="etapes">
+          <li><strong>Note une idée</strong><span class="remarque">Au clavier, en chantant les notes une à une, ou avec un mémo vocal : les trois tuiles, juste au-dessus.</span><button class="btn btn-petit btn-plein" id="vide-idee">Nouvelle idée</button></li>
+          <li><strong>Ou écris sur la tablette</strong><span class="remarque">Sur un modèle Portée : des portées calibrées pour une mélodie ou le piano.</span><button class="btn btn-petit" id="vide-modeles">Voir les modèles</button></li>
+          <li><strong>Et importe tes pages</strong><span class="remarque">Depuis ta reMarkable, ou en déposant le PDF exporté.</span><button class="btn btn-petit" id="vide-remarkable">Importer de ma reMarkable</button></li>
+        </ol>
+        <div class="rangee"><button class="btn btn-petit" id="exemples">Essayer avec les pages d'essai</button></div>
       </div>
-      <div class="outils pousse">
-        <input class="champ" id="recherche" type="search" placeholder="Chercher un titre, une étiquette, une note…" aria-label="Chercher dans la bibliothèque">
+      <div class="filtres" id="filtres-carnet" role="group" aria-label="Filtrer le carnet">
         <button class="puce" data-filtre="tout" aria-pressed="true">Tout</button>
         <button class="puce" data-filtre="idee" aria-pressed="false">Idées</button>
+        <button class="puce" data-filtre="partition" aria-pressed="false">Partitions</button>
         <button class="puce" data-filtre="morceau" aria-pressed="false">Morceaux</button>
-        <button class="puce" data-filtre="a-relire" aria-pressed="false">À relire</button>
-        <button class="puce" data-filtre="prete" aria-pressed="false">Prêtes</button>
-        <button class="puce" data-filtre="favori" aria-pressed="false" aria-label="Favoris">★</button>
+        <button class="puce" data-filtre="favori" aria-pressed="false"><svg class="ico s" aria-hidden="true"><use href="#i-etoile"></use></svg>Favoris</button>
+        <span class="filtres-etiquettes" id="filtres-etiquettes"></span>
       </div>
+      <div id="liste" class="liste-carnet" aria-live="polite"></div>
+      <p class="remarque" id="aucun" hidden>Rien ne correspond. Essaie un autre mot, ou le filtre « Tout ».</p>
     </div>
-    <div class="filtres-etiquettes" id="filtres-etiquettes"></div>
-    <div class="capture" id="capture">
-      <button class="btn btn-plein btn-idee" id="nouvelle-idee"><span aria-hidden="true">＋</span> Nouvelle idée</button>
-      <button class="btn" id="nouveau-memo" title="Fredonne l'idée tout de suite ; tu l'écriras plus tard"><span class="point-rouge" aria-hidden="true">●</span> Mémo vocal</button>
-      <button class="btn" id="nouveau-morceau">Nouveau morceau</button>
-      <p class="remarque">Note une mélodie qui te vient : au clavier, en la chantant, ou en direct avec le métronome. Elle s'enregistre toute seule.</p>
-    </div>
-    <div id="liste" class="grille" aria-live="polite"></div>
-    <div id="vide" class="vide" hidden>
-      <h2>Bienvenue dans Portée</h2>
-      <p>Ton carnet de musique : note une mélodie dès qu'elle te vient, écoute-la au piano, ajoute des accords, et envoie-la en MIDI dans Ableton. Tes pages écrites à la main sur la reMarkable y entrent aussi.</p>
-      <ol class="etapes">
-        <li><strong>Note une idée</strong><span class="remarque">Au clavier, en chantant les notes une à une, ou en direct avec le métronome.</span><button class="btn btn-petit btn-plein" id="vide-idee">Nouvelle idée</button></li>
-        <li><strong>Ou écris sur la tablette</strong><span class="remarque">Sur un modèle Portée : des portées calibrées pour une mélodie ou le piano.</span><button class="btn btn-petit" id="vide-modeles">Voir les modèles</button></li>
-        <li><strong>Et importe tes pages</strong><span class="remarque">Depuis ta reMarkable, ou en déposant le PDF exporté.</span><button class="btn btn-petit" id="vide-remarkable">Importer de ma reMarkable</button></li>
-      </ol>
-      <div class="rangee"><button class="btn btn-petit" id="exemples">Essayer avec les pages d'essai</button></div>
-    </div>
-    <p class="remarque" id="aucun" hidden>Rien ne correspond. Essaie un autre mot, ou le filtre « Tout ».</p>
-    <p class="surtitre titre-import">Pages écrites à la main</p>
-    <div class="depot" id="depot">
-      <div class="rangee">
-        <button class="btn btn-plein" id="ouvrir-remarkable">Importer de ma reMarkable</button>
-        <label class="btn" for="fichier">Importer un PDF</label>
-        <button class="btn" id="ouvrir-modeles">Modèles pour la tablette</button>
+
+    <!-- Partitions : les pages écrites à la main, et tout ce qui les amène ici -->
+    <div class="onglet" id="onglet-partitions" role="tabpanel" aria-labelledby="tab-partitions" hidden>
+      <div class="onglet-tete">
+        <div>
+          <h1>Partitions</h1>
+          <p class="remarque" id="resume-partitions"></p>
+        </div>
       </div>
-      <p class="remarque">Ou glisse ici le PDF d'une page écrite sur un modèle Portée (sur la tablette : <em>Partager → PDF</em>).</p>
-      <input id="fichier" type="file" accept="application/pdf,.pdf" multiple hidden>
-    </div>
-    <div class="panneau" id="panneau-modeles" hidden>
-      <div class="rangee">
-        <h2 style="font-size:1.3rem">Modèles pour la tablette</h2>
-        <button class="btn btn-petit pousse" id="fermer-modeles">Fermer</button>
+      <!-- Le dépôt d'un PDF marche sur tout l'onglet ; la zone ne s'allume qu'au survol d'un fichier. -->
+      <div class="depot" id="depot">
+        <button class="btn btn-plein" id="ouvrir-remarkable"><svg class="ico s" aria-hidden="true"><use href="#i-tablette"></use></svg>Importer de ma reMarkable</button>
+        <div class="depot-autres">
+          <label class="btn" for="fichier" tabindex="0" id="importer-pdf"><svg class="ico s" aria-hidden="true"><use href="#i-page"></use></svg>Importer un PDF</label>
+          <button class="btn" id="ouvrir-modeles"><svg class="ico s" aria-hidden="true"><use href="#i-partition"></use></svg>Modèles pour la tablette</button>
+        </div>
+        <p class="remarque">Une page écrite sur un modèle Portée s'exporte de la tablette en PDF (<em>Partager → PDF</em>) : importe-le, ou glisse-le sur cet onglet.</p>
+        <input id="fichier" type="file" accept="application/pdf,.pdf" multiple hidden>
       </div>
-      <p>Des portées placées au pixel près, pour que Portée sache où sont les lignes. Mets le PDF sur ta reMarkable (glisse-le sur <a href="https://my.remarkable.com" target="_blank" rel="noopener">my.remarkable.com</a> ou dans l'appli reMarkable de l'ordinateur). Ensuite, duplique-le pour chaque pièce et écris dessus.</p>
-      <div class="modeles" id="liste-modeles"></div>
-    </div>
-    <div class="panneau" id="panneau-remarkable" hidden>
-      <div class="rangee">
-        <h2 style="font-size:1.3rem">Ma reMarkable</h2>
-        <input class="champ" id="recherche-rm" type="search" placeholder="Chercher un document…" aria-label="Chercher un document de la reMarkable" style="flex:0 1 260px">
-        <button class="btn btn-petit" id="actualiser-rm">Actualiser</button>
-        <button class="btn btn-petit" id="changer-adresse" hidden>Changer l'adresse du connecteur</button>
-        <button class="btn btn-petit pousse" id="fermer-rm">Fermer</button>
+      <div class="panneau" id="panneau-modeles" hidden>
+        <div class="panneau-tete">
+          <h2>Modèles pour la tablette</h2>
+          <button class="btn btn-fantome btn-petit" id="fermer-modeles"><svg class="ico s" aria-hidden="true"><use href="#i-fermer"></use></svg>Fermer</button>
+        </div>
+        <p>Des portées placées au pixel près, pour que Portée sache où sont les lignes. Mets le PDF sur ta reMarkable (glisse-le sur <a href="https://my.remarkable.com" target="_blank" rel="noopener">my.remarkable.com</a> ou dans l'appli reMarkable de l'ordinateur). Ensuite, duplique-le pour chaque pièce et écris dessus.</p>
+        <div class="modeles" id="liste-modeles"></div>
       </div>
-      <div class="etat" id="etat-rm" role="status"></div>
-      <div class="arbre" id="arbre-rm"></div>
-    </div>
-    <div class="pied-biblio" id="pied-biblio">
-      <span class="remarque" id="mode-detail"></span>
-      <div class="rangee pousse">
-        <button class="btn btn-petit btn-plein" id="activer-synchro" hidden>Synchroniser mes appareils</button>
-        <button class="btn btn-petit" id="synchroniser" hidden>Synchroniser maintenant</button>
-        <button class="btn btn-petit" id="tout-midi">Tout exporter en MIDI (.zip)</button>
-        <button class="btn btn-petit" id="sauvegarder">Sauvegarder ma bibliothèque</button>
-        <label class="btn btn-petit" for="restaurer">Restaurer une sauvegarde</label>
-        <input id="restaurer" type="file" accept="application/json,.json" hidden>
+      <div class="panneau" id="panneau-remarkable" hidden>
+        <div class="panneau-tete">
+          <h2>Ma reMarkable</h2>
+          <button class="btn btn-fantome btn-petit" id="fermer-rm"><svg class="ico s" aria-hidden="true"><use href="#i-fermer"></use></svg>Fermer</button>
+        </div>
+        <div class="rangee">
+          <input class="champ" id="recherche-rm" type="search" placeholder="Chercher un document…" aria-label="Chercher un document de la reMarkable">
+          <button class="btn btn-petit" id="actualiser-rm">Actualiser</button>
+        </div>
+        <div class="etat" id="etat-rm" role="status"></div>
+        <div class="arbre" id="arbre-rm"></div>
       </div>
+      <div class="filtres" id="filtres-pages" role="group" aria-label="Filtrer les partitions">
+        <button class="puce" data-filtre-page="tout" aria-pressed="true">Toutes</button>
+        <button class="puce" data-filtre-page="a-relire" aria-pressed="false">À relire</button>
+        <button class="puce" data-filtre-page="prete" aria-pressed="false">Prêtes</button>
+      </div>
+      <div id="liste-partitions" class="grille-pages"></div>
+      <p class="remarque" id="aucune-partition" hidden></p>
     </div>
+
+    <!-- Morceaux : des idées bout à bout -->
+    <div class="onglet" id="onglet-morceaux" role="tabpanel" aria-labelledby="tab-morceaux" hidden>
+      <div class="onglet-tete">
+        <div>
+          <h1>Morceaux</h1>
+          <p class="remarque" id="resume-morceaux"></p>
+        </div>
+        <button class="btn btn-plein" id="nouveau-morceau"><svg class="ico s" aria-hidden="true"><use href="#i-plus"></use></svg>Nouveau morceau</button>
+      </div>
+      <div id="liste-morceaux" class="liste-morceaux"></div>
+      <p class="remarque" id="aucun-morceau" hidden></p>
+    </div>
+
+    <!-- Réglages : des groupes de lignes, comme sur un téléphone -->
+    <div class="onglet reglages" id="onglet-reglages" role="tabpanel" aria-labelledby="tab-reglages" hidden>
+      <div class="onglet-tete"><h1>Réglages</h1></div>
+
+      <section class="reglages-bloc" aria-labelledby="rg-remarkable">
+        <h2 class="surtitre" id="rg-remarkable">Ma reMarkable</h2>
+        <div class="reglages-groupe">
+          <div class="reglages-ligne"><span>Tablette</span><span class="valeur" id="rm-tablette"></span></div>
+          <div class="reglages-ligne"><span>Connecteur</span><span class="valeur" id="rm-connecteur"></span></div>
+          <button class="reglages-ligne" id="reglage-rm"><span>Parcourir ma reMarkable</span><svg class="ico s" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
+          <button class="reglages-ligne" id="changer-adresse" hidden><span>Changer l'adresse du connecteur</span><svg class="ico s" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
+        </div>
+        <div id="zone-adresse"></div>
+      </section>
+
+      <section class="reglages-bloc" aria-labelledby="rg-synchro">
+        <h2 class="surtitre" id="rg-synchro">Synchronisation</h2>
+        <div class="reglages-groupe">
+          <p class="reglages-texte" id="mode-detail"></p>
+          <button class="reglages-ligne principal" id="activer-synchro" hidden><span>Synchroniser mes appareils</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
+          <button class="reglages-ligne" id="synchroniser" hidden><span>Synchroniser maintenant</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
+        </div>
+        <div id="zone-synchro"></div>
+      </section>
+
+      <section class="reglages-bloc" aria-labelledby="rg-editeur">
+        <h2 class="surtitre" id="rg-editeur">Éditeur</h2>
+        <div class="reglages-groupe">
+          <div class="reglages-ligne">
+            <span id="ambiance-libelle">Ambiance de l'éditeur</span>
+            <div class="seg" id="ambiance" role="group" aria-labelledby="ambiance-libelle">
+              <button data-ambiance="studio" aria-pressed="true">Studio</button>
+              <button data-ambiance="papier" aria-pressed="false">Papier</button>
+            </div>
+          </div>
+          <p class="reglages-texte">Studio : sombre, pour jouer sans éblouir le soir. Papier : clair, comme le reste de Portée.</p>
+        </div>
+      </section>
+
+      <section class="reglages-bloc" aria-labelledby="rg-sauvegarde">
+        <h2 class="surtitre" id="rg-sauvegarde">Sauvegarde</h2>
+        <div class="reglages-groupe">
+          <button class="reglages-ligne" id="tout-midi"><span>Tout exporter en MIDI (.zip)</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
+          <button class="reglages-ligne" id="sauvegarder"><span>Sauvegarder ma bibliothèque</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
+          <label class="reglages-ligne" for="restaurer" tabindex="0" id="restaurer-ligne"><span>Restaurer une sauvegarde</span><svg class="ico s" aria-hidden="true"><use href="#i-partager"></use></svg></label>
+          <input id="restaurer" type="file" accept="application/json,.json" hidden>
+        </div>
+      </section>
+
+      <section class="reglages-bloc" aria-labelledby="rg-appli">
+        <h2 class="surtitre" id="rg-appli">L'appli</h2>
+        <div class="reglages-groupe">
+          <button class="reglages-ligne" id="installer" hidden><span>Installer l'appli sur cet appareil</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
+          <div class="reglages-ligne"><span>Tes données</span><span class="valeur" id="mode">Ouverture de ta bibliothèque…</span></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Les actions d'une ligne ou d'une carte (« ••• ») : la même feuille pour toutes. -->
+    <dialog class="feuille-bas" id="feuille-actions" aria-labelledby="feuille-titre">
+      <div class="feuille-tete">
+        <h2 id="feuille-titre"></h2>
+        <button class="btn rond btn-fantome" id="feuille-fermer" aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+      </div>
+      <p class="remarque" id="feuille-sous"></p>
+      <div class="feuille-liste" id="feuille-liste"></div>
+    </dialog>
   </section>
 
   <!-- ===== Atelier ===== -->

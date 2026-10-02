@@ -17,15 +17,16 @@ import { zipper } from "./zip.js";
 import * as ed from "./edition.js";
 import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE } from "./connecteur.js";
 import { creerSynchro } from "./synchro.js";
-import { creerEditeurIdee, dessinerApercu, midiDeLIdee } from "./idee.js";
+import { creerEditeurIdee, midiDeLIdee } from "./idee.js";
 import { Transport } from "./transport.js";
 import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
-import { creerVueMorceau, dessinerApercuMorceau } from "./vue-morceau.js";
+import { creerVueMorceau } from "./vue-morceau.js";
 import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
 import { ecrireMusicXml } from "./musicxml.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
+import { creerAccueil } from "./accueil.js";
 
 const VERSION_LECTEUR = 1;
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
@@ -48,8 +49,10 @@ const MODELES = [
 const etat = {
   stockage: null,
   partitions: [],
-  filtre: "tout",
+  filtre: "tout",     // filtre du carnet : tout, idee, partition, morceau, favori
   etiquette: null,    // filtre par étiquette (carnet)
+  onglet: "carnet",   // l'onglet de l'accueil, retenu dans une préférence (accueil.js)
+  filtrePages: "tout", // filtre de l'onglet Partitions : tout, a-relire, prete
   courante: null,     // la partition ouverte (document)
   pages: [],          // ses traits, page par page
   page: 0,            // page affichée dans l'atelier
@@ -65,6 +68,7 @@ const transport = new Transport(piano);
 const calibrations = new Map();
 let editeur = null; // l'éditeur d'idée (idee.js), créé au démarrage
 let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
+let accueil = null; // l'accueil et ses quatre onglets (accueil.js)
 
 async function calibration(modele) {
   if (!calibrations.has(modele)) {
@@ -126,6 +130,9 @@ function montrer(vue) {
   // La barre de Portée ne sert qu'à l'accueil : un écran qui a sa propre barre
   // (avec son retour, [data-retour]) la remplace ; les autres la gardent.
   document.querySelector(".barre-haut").hidden = vue !== "biblio" && !!$(`vue-${vue}`).querySelector("[data-retour]");
+  // Les onglets, la recherche et la synchro sont ceux de l'accueil : ailleurs, la
+  // barre (quand elle reste) ne garde que son retour, et ne couvre pas le clavier.
+  for (const id of ["onglets-accueil", "chercher", "etat-synchro"]) $(id).hidden = vue !== "biblio";
   $("fil").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglets").hidden = !dansPartition || vue === "idee" || vue === "morceau";
   $("onglet-atelier").setAttribute("aria-selected", String(vue === "atelier"));
@@ -175,17 +182,6 @@ function ouvrirIdee(p = null, options = {}) {
 // Bibliothèque
 // ------------------------------------------------------------------------
 
-function correspondFiltre(p) {
-  if (etat.etiquette && !(p.etiquettes || []).includes(etat.etiquette)) return false;
-  if (etat.filtre === "tout") return true;
-  if (etat.filtre === "favori") return !!p.favori;
-  if (etat.filtre === "idee" || etat.filtre === "morceau") return p.type === etat.filtre;
-  return !p.type && p.statut === etat.filtre;
-}
-
-/** Ce que la recherche regarde : le titre, les étiquettes, la note. */
-const texteDe = (p) => [p.titre, ...(p.etiquettes || []), p.note || ""].join(" ").toLowerCase();
-
 /** Toutes les étiquettes de la bibliothèque, les plus employées d'abord. */
 function toutesEtiquettes() {
   const compte = new Map();
@@ -193,106 +189,9 @@ function toutesEtiquettes() {
   return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
 }
 
-/** « Aujourd'hui », « Cette semaine »… : le carnet se lit par date. */
-function periode(iso) {
-  const d = new Date(iso || 0), maintenant = new Date();
-  const jours = (new Date(maintenant.toDateString()) - new Date(d.toDateString())) / 86400000;
-  if (jours <= 0) return "Aujourd'hui";
-  if (jours === 1) return "Hier";
-  if (jours < 7) return "Cette semaine";
-  if (jours < 31) return "Ce mois-ci";
-  return "Plus ancien";
-}
-
+/** Redessine l'onglet visible de l'accueil (carnet, partitions, morceaux). Le dessin est dans accueil.js. */
 function afficherBibliotheque() {
-  const q = $("recherche").value.trim().toLowerCase();
-  const liste = $("liste");
-  liste.textContent = "";
-  const visibles = etat.partitions.filter((p) => correspondFiltre(p) && (!q || texteDe(p).includes(q)));
-  // Les étiquettes, en filtres d'un toucher.
-  const etiquettes = toutesEtiquettes();
-  if (etat.etiquette && !etiquettes.includes(etat.etiquette)) etat.etiquette = null;
-  $("filtres-etiquettes").innerHTML = etiquettes.map((t) => `<button class="puce" data-etiquette="${t.replace(/"/g, "&quot;")}" aria-pressed="${t === etat.etiquette}"># ${t.replace(/</g, "&lt;")}</button>`).join("");
-  let periodeAvant = null;
-  $("vide").hidden = etat.partitions.length > 0;
-  $("capture").hidden = etat.partitions.length === 0; // l'accueil a déjà son bouton
-  $("aucun").hidden = !(etat.partitions.length > 0 && visibles.length === 0);
-  $("tout-midi").hidden = $("sauvegarder").hidden = etat.partitions.length === 0;
-  for (const p of visibles) {
-    // Sans recherche, le carnet se découpe par date (il est trié du plus récent au plus ancien).
-    const per = periode(p.modifieLe);
-    if (!q && per !== periodeAvant) {
-      const h = document.createElement("p");
-      h.className = "surtitre groupe-date";
-      h.textContent = per;
-      liste.appendChild(h);
-      periodeAvant = per;
-    }
-    const carte = document.createElement("article");
-    carte.className = "carte";
-    const principal = document.createElement("button");
-    principal.className = "ouvrir";
-    principal.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
-    principal.addEventListener("click", () => ouvrir(p.id, p.statut === "prete" ? "lecteur" : "atelier"));
-    const apercu = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    apercu.setAttribute("role", "img");
-    apercu.setAttribute("aria-label", `Aperçu de ${p.titre}`);
-    principal.appendChild(apercu);
-    if (p.type === "idee") dessinerApercu(apercu, p.sequence);
-    else if (p.type === "morceau") dessinerApercuMorceau(apercu, p, ideesParId());
-    else if (p.apercu && p.modele) {
-      calibration(p.modele).then((cal) => dessinerPage(apercu, cal, p.apercu, { compact: true, limite: 9 * cal.interligne })).catch(() => {});
-    }
-    const infos = document.createElement("div");
-    infos.className = "infos";
-    const titre = document.createElement("span");
-    titre.className = "titre"; titre.textContent = p.titre;
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = p.type === "idee" ? `${resumeIdee(p.sequence)} · ${dateCourte(p.modifieLe)}`
-      : p.type === "morceau" ? `${(p.blocs || []).map((b) => b.nom).join(", ")} · ${dateCourte(p.modifieLe)}`
-      : `${nomModele(p.modele)} · ${dateCourte(p.modifieLe)}`;
-    infos.append(titre, meta, pastilleStatut(p));
-    if ((p.etiquettes || []).length || p.memo || p.note) {
-      const ligne = document.createElement("span");
-      ligne.className = "etiquettes";
-      if (p.memo) { const m = document.createElement("span"); m.className = "etiquette"; m.innerHTML = `${ico("micro", "s")} ${p.memo.duree} s`; ligne.appendChild(m); }
-      for (const t of p.etiquettes || []) { const e = document.createElement("span"); e.className = "etiquette"; e.textContent = "# " + t; ligne.appendChild(e); }
-      if (p.note) { const n = document.createElement("span"); n.className = "remarque"; n.textContent = p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note; ligne.appendChild(n); }
-      infos.appendChild(ligne);
-    }
-    principal.appendChild(infos);
-    if (p.type) {
-      // Une étoile, d'un toucher, sans ouvrir.
-      const etoile = document.createElement("button");
-      etoile.className = "favori";
-      etoile.setAttribute("aria-pressed", String(!!p.favori));
-      etoile.setAttribute("aria-label", p.favori ? "Retirer des favoris" : "Mettre en favori");
-      etoile.innerHTML = ico(p.favori ? "etoile-pleine" : "etoile", "s");
-      etoile.addEventListener("click", () => etat.stockage.modifier(p.id, { favori: !p.favori, modifieLe: new Date().toISOString() }));
-      carte.appendChild(etoile);
-    }
-    const actions = document.createElement("div");
-    actions.className = "actions";
-    const bouton = (texte, f, plein = false) => {
-      const b = document.createElement("button");
-      b.className = "btn btn-petit" + (plein ? " btn-plein" : "");
-      b.innerHTML = texte;
-      b.addEventListener("click", f);
-      actions.appendChild(b);
-    };
-    if (p.type === "idee" || p.type === "morceau") {
-      bouton("Ouvrir", () => ouvrir(p.id), true);
-      bouton(`${ico("lire", "s")}Écouter`, (ev) => ecouterIdee(p, ev.currentTarget));
-      bouton("Envoyer le MIDI", () => partagerMidi(p));
-    } else {
-      bouton("Corriger", () => ouvrir(p.id, "atelier"), p.statut !== "prete");
-      bouton("Écouter", () => ouvrir(p.id, "lecteur"), p.statut === "prete");
-      bouton("MIDI", () => exporterMidi(p));
-    }
-    carte.append(principal, actions);
-    liste.appendChild(carte);
-  }
+  accueil.afficher();
 }
 
 // ------------------------------------------------------------------------
@@ -393,10 +292,21 @@ function afficherSynchro(e) {
   const actif = synchronisable();
   $("synchroniser").hidden = !actif;
   $("activer-synchro").hidden = actif || dansClaude() || !(etat.stockage && etat.stockage.synchronisable);
-  if (!etat.stockage || dansClaude() || etat.stockage.mode === "claude") return;
+  majReglagesRm();
+  if (!etat.stockage) return;
+  if (dansClaude() || etat.stockage.mode === "claude") {
+    // Les textes de claude.ai sont posés au démarrage ; ici, seulement l'icône du haut.
+    const surClaude = etat.stockage.mode === "claude";
+    if (!surClaude) $("mode").textContent = "Enregistré dans ce navigateur";
+    accueil.montrerSynchro(surClaude
+      ? { nuage: true, ton: "ok", titre: "Enregistré sur claude.ai" }
+      : { nuage: false, ton: "gris", titre: "Enregistré dans ce navigateur" });
+    return;
+  }
   if (!actif) {
     $("mode").textContent = "Enregistré dans ce navigateur";
     $("mode-detail").textContent = "Tes partitions restent dans ce navigateur. Active la synchronisation pour les retrouver sur tous tes appareils, ou sauvegarde-les dans un fichier.";
+    accueil.montrerSynchro({ nuage: false, ton: "gris", titre: "Enregistré dans ce navigateur, pas synchronisé" });
     return;
   }
   const d = dernierEtat || { etat: "encours" };
@@ -407,6 +317,20 @@ function afficherSynchro(e) {
   $("mode-detail").textContent = d.etat === "erreur"
     ? `Tes partitions restent dans ce navigateur et partiront à la prochaine connexion. (${(d.erreur && (d.erreur.message || d.erreur.code)) || "erreur"})`
     : "Ta bibliothèque est synchronisée : tu retrouves les mêmes partitions sur chaque appareil où tu as collé l'adresse du connecteur.";
+  // L'icône du haut : verte quand tout est parti, ambre quand quelque chose attend.
+  accueil.montrerSynchro({ nuage: d.etat !== "erreur", ton: d.etat === "ok" ? "ok" : d.etat === "erreur" ? "alerte" : "gris", titre: $("mode").textContent });
+}
+
+/**
+ * Les lignes « Ma reMarkable » des Réglages : où en est le connecteur, où en est la tablette.
+ * La tablette n'est connue qu'après un premier appel au connecteur (le panneau de l'onglet Partitions).
+ */
+function majReglagesRm() {
+  const adresse = !!adresseEnregistree();
+  $("rm-connecteur").textContent = dansClaude() ? "Portée reMarkable (claude.ai)" : adresse ? "Adresse enregistrée" : "Pas encore d'adresse";
+  $("rm-tablette").textContent = tabletteReliee === true ? "Reliée" : tabletteReliee === false ? "À relier"
+    : dansClaude() || adresse ? "Pas encore vérifiée" : "Colle l'adresse du connecteur";
+  $("changer-adresse").hidden = dansClaude() || !adresse;
 }
 
 function formulaireSynchro() {
@@ -422,7 +346,13 @@ function formulaireSynchro() {
 // Modèles à mettre sur la tablette, sauvegarde de la bibliothèque
 // ------------------------------------------------------------------------
 
+/** Les panneaux de la reMarkable et des modèles sont dans l'onglet Partitions : on y va d'abord. */
+function versPartitions() {
+  if (etat.onglet !== "partitions") accueil.choisirOnglet("partitions");
+}
+
 function afficherModeles() {
+  versPartitions();
   $("panneau-modeles").hidden = false;
   const zone = $("liste-modeles");
   if (zone.childElementCount) return;
@@ -567,6 +497,7 @@ const mcp = () => (mcpPromesse ??= (async () => {
   return adresse ? connecteurDirect(adresse) : null;
 })());
 let noeudsRm = [];
+let tabletteReliee = null; // null tant que le connecteur n'a pas répondu
 const ouverts = new Set();
 
 function etatRm(texte, aide = null) {
@@ -613,7 +544,9 @@ function expliquerErreurRm(err) {
 }
 
 async function ouvrirRemarkable(rafraichir = false) {
+  versPartitions();
   $("panneau-remarkable").hidden = false;
+  $("panneau-remarkable").scrollIntoView({ behavior: "smooth", block: "nearest" });
   $("arbre-rm").textContent = "";
   const m = await mcp();
   if (!m) {
@@ -642,18 +575,33 @@ async function ouvrirRemarkable(rafraichir = false) {
 function oublierAdresse() {
   enregistrerAdresse("");
   mcpPromesse = null;
+  tabletteReliee = null;
   $("changer-adresse").hidden = true;
   arreterSynchro();
-  ouvrirRemarkable(false);
+  majReglagesRm();
+  // On reste dans les Réglages : l'adresse se recolle juste dessous.
+  const zone = $("zone-adresse");
+  zone.textContent = "";
+  const bloc = document.createElement("div");
+  bloc.className = "aide-connecteur";
+  const p = document.createElement("p");
+  p.textContent = "L'ancienne adresse est oubliée. Colle celle de ton connecteur « Portée reMarkable » (la même que dans claude.ai) : elle reste dans ce navigateur, nulle part ailleurs.";
+  bloc.append(p, formulaireAdresse(() => { zone.textContent = ""; toast("Adresse enregistrée."); }));
+  zone.appendChild(bloc);
+  bloc.querySelector("input").focus();
 }
 
 function recevoirArbre(reponse) {
   if (reponse && reponse.connectee === false) {
+    tabletteReliee = false;
+    majReglagesRm();
     noeudsRm = [];
     $("arbre-rm").textContent = "";
     etatRm("", formulaireRelier(reponse.raison));
     return;
   }
+  tabletteReliee = true;
+  majReglagesRm();
   noeudsRm = (reponse && reponse.noeuds) || [];
   const n = noeudsRm.filter((x) => x.type === "document").length;
   etatRm(n === 1 ? "1 document sur ta reMarkable." : `${n} documents sur ta reMarkable.`);
@@ -1358,14 +1306,6 @@ function brancher() {
 
   // Import
   $("fichier").addEventListener("change", (e) => { importer([...e.target.files]); e.target.value = ""; });
-  const depot = $("depot");
-  ["dragenter", "dragover"].forEach((t) => depot.addEventListener(t, (e) => { e.preventDefault(); depot.classList.add("survol"); }));
-  ["dragleave", "drop"].forEach((t) => depot.addEventListener(t, () => depot.classList.remove("survol")));
-  depot.addEventListener("drop", (e) => {
-    e.preventDefault();
-    const fichiers = [...(e.dataTransfer?.files || [])].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
-    if (fichiers.length) importer(fichiers); else toast("Dépose un fichier PDF exporté de la tablette.");
-  });
   $("exemples").addEventListener("click", async () => {
     const noms = ["2026-09-30-piano-standard.pdf", "2026-09-30-melodie-standard.pdf"];
     const fichiers = [];
@@ -1376,15 +1316,9 @@ function brancher() {
     importer(fichiers);
   });
 
-  // Nouvelle idée
-  $("nouvelle-idee").addEventListener("click", () => ouvrirIdee(null));
-  $("vide-idee").addEventListener("click", () => ouvrirIdee(null));
-  $("nouveau-morceau").addEventListener("click", () => ouvrirMorceau(null));
-  // Fredonner tout de suite : une idée neuve, le mémo qui enregistre déjà.
-  $("nouveau-memo").addEventListener("click", () => ouvrirIdee(null, { memo: true }));
-
   // Ma reMarkable, modèles, bibliothèque
   $("ouvrir-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
+  $("reglage-rm").addEventListener("click", () => ouvrirRemarkable(false));
   $("vide-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
   $("ouvrir-modeles").addEventListener("click", afficherModeles);
   $("vide-modeles").addEventListener("click", afficherModeles);
@@ -1393,7 +1327,7 @@ function brancher() {
   $("tout-midi").addEventListener("click", toutEnMidi);
   $("synchroniser").addEventListener("click", synchroniser);
   $("activer-synchro").addEventListener("click", () => {
-    if (!document.querySelector("#pied-biblio .aide-connecteur")) $("pied-biblio").appendChild(formulaireSynchro());
+    if (!document.querySelector("#zone-synchro .aide-connecteur")) $("zone-synchro").appendChild(formulaireSynchro());
   });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") synchroniser(); });
   window.addEventListener("online", synchroniser);
@@ -1403,20 +1337,6 @@ function brancher() {
   $("actualiser-rm").addEventListener("click", () => ouvrirRemarkable(true));
   $("fermer-rm").addEventListener("click", () => { $("panneau-remarkable").hidden = true; });
   $("recherche-rm").addEventListener("input", dessinerArbre);
-
-  // Bibliothèque
-  $("recherche").addEventListener("input", afficherBibliotheque);
-  $("filtres-etiquettes").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-etiquette]");
-    if (!b) return;
-    etat.etiquette = etat.etiquette === b.dataset.etiquette ? null : b.dataset.etiquette;
-    afficherBibliotheque();
-  });
-  document.querySelectorAll("[data-filtre]").forEach((b) => b.addEventListener("click", () => {
-    etat.filtre = b.dataset.filtre;
-    document.querySelectorAll("[data-filtre]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    afficherBibliotheque();
-  }));
 
   // Atelier
   $("titre").addEventListener("change", () => {
@@ -1648,6 +1568,19 @@ function creerVueDuMorceau() {
   });
 }
 
+/** L'accueil : ses onglets, sa recherche, ses listes. Il ne sait rien de la tablette ni du stockage : tout passe par ces dépendances. */
+function creerAccueilDeLAppli() {
+  accueil = creerAccueil({
+    etat, toast, ouvrir, ouvrirIdee, ouvrirMorceau, calibration, ideesParId, importer,
+    ecouter: ecouterIdee,
+    enLecture: (bouton) => transport.actif && transport.carte === bouton,
+    arreter: () => transport.arreter(),
+    partagerMidi, exporterMidi,
+    etiquettes: toutesEtiquettes,
+    dateCourte, resumeIdee, nomModele, pastilleStatut,
+  });
+}
+
 function creerEditeur() {
   editeur = creerEditeurIdee({
     piano, transport, toast, nouvelId,
@@ -1663,6 +1596,7 @@ function creerEditeur() {
 
 async function demarrer() {
   injecterIcones();
+  creerAccueilDeLAppli();
   brancher();
   creerEditeur();
   creerVueDuMorceau();

@@ -183,6 +183,27 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · L'accueil en quatre onglets (refonte 2).** L'accueil se lit comme
+  un carnet : on note d'abord, on retrouve ensuite. Il avait ~520 px
+  d'en-tête, de filtres et de boutons avant la première partition, et quatre
+  boutons empilés en pied de page ; il montre maintenant six lignes sur un
+  téléphone.
+  - Quatre onglets (Carnet, Partitions, Morceaux, Réglages) vivent dans la
+    vue `biblio`, qui reste une seule vue pour `montrer()`. La barre
+    d'onglets se fixe en bas au téléphone et n'existe que sur l'accueil.
+    L'onglet courant est retenu (`portee:onglet`).
+  - Le Carnet commence par « Noter une idée » : Jouer, Chanter (l'éditeur
+    s'ouvre dans ce mode) et Mémo. Chaque ligne a son étoile et « ••• », une
+    feuille du bas qui porte les actions de l'ancienne carte (ouvrir ou
+    corriger, écouter, MIDI, favori).
+  - Partitions regroupe les pages de la tablette, leurs imports et les
+    modèles ; le dépôt d'un PDF marche sur tout l'accueil. Réglages
+    rassemble la tablette, la synchronisation, l'ambiance de l'éditeur
+    (Studio ou Papier), la sauvegarde et l'installation.
+  - Le dessin de l'accueil est dans `app/accueil.js`, qui reçoit ses
+    dépendances comme l'éditeur ; `app.js` garde le stockage, la tablette
+    et la synchro. Piège : le dépôt d'un PDF doit faire `preventDefault`,
+    sinon le navigateur quitte Portée pour afficher le fichier.
 - **02/10 · Morceaux : la structure en frise colorée (refonte 9).** L'écran
   montre d'abord le morceau d'en haut : une frise, un segment par bloc aussi
   long que son passage (mesures × fois), avec une tête de lecture qui suit le
