@@ -63,8 +63,11 @@ export const ICONES = {
   // Jouer et écrire
   clavier: '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M9 13v6.5M15 13v6.5"/><path d="M7.5 4.5V13h3V4.5M13.5 4.5V13h3V4.5"/>',
   accords: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3.5v6M12 14.5v6M3.5 12h6M14.5 12h6"/>',
-  "vue-grille": '<rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M7 8.5h5M10.5 12h6M6.5 15.5h4.5"/>',
-  "vue-portee": '<path d="M3 6.5h18M3 10h18M3 13.5h18M3 17h18"/><ellipse cx="13.5" cy="15.3" rx="2.6" ry="2" fill="currentColor"/><path d="M16 15V3.8"/>',
+  // La grille : le bord du clavier, et des notes en barres décalées (un piano roll).
+  // La partition : deux croches liées, le signe de la musique écrite. Les
+  // premiers dessins (des lignes et un cadre) se lisaient comme une liste.
+  "vue-grille": '<path d="M4 3.5v17"/><rect x="7" y="5" width="6.5" height="3.6" rx="1.2" fill="currentColor" stroke="none"/><rect x="11.5" y="10.2" width="9" height="3.6" rx="1.2" fill="currentColor" stroke="none"/><rect x="8" y="15.4" width="5.5" height="3.6" rx="1.2" fill="currentColor" stroke="none"/>',
+  "vue-portee": '<ellipse cx="7.2" cy="17.6" rx="3.2" ry="2.4" transform="rotate(-20 7.2 17.6)" fill="currentColor" stroke="none"/><ellipse cx="17" cy="15.6" rx="3.2" ry="2.4" transform="rotate(-20 17 15.6)" fill="currentColor" stroke="none"/><path d="M10 17V6.2M19.8 15V4.2"/><path d="M10 4.9l9.8-2.2v3.2L10 8.1z" fill="currentColor" stroke="none"/>',
   effacer: '<path d="M9 5.5h10.5a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9L3.5 12z"/><path d="M11.5 9.5l5 5M16.5 9.5l-5 5"/>',
   haut: '<path d="M12 19V5M6 11l6-6 6 6"/>',
   bas: '<path d="M12 5v14M6 13l6 6 6-6"/>',

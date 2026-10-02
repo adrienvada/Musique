@@ -103,11 +103,11 @@ export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFaco
         <button type="button" data-facon="gamme" aria-pressed="false">Gamme</button>
       </div>
       <button type="button" class="clavier-octave" data-sens="-1" aria-label="Une octave plus bas">${ico("retour")}</button>
-      <div class="clavier-carte" role="group" aria-label="Octaves du clavier"></div>
+      <div class="clavier-carte" role="group" aria-label="Octaves du clavier" data-sans-infobulle></div>
       <button type="button" class="clavier-octave" data-sens="1" aria-label="Une octave plus haut">${ico("suivant")}</button>
     </div>
-    <div class="clavier-touches" role="group" aria-label="Clavier de piano"></div>
-    <div class="clavier-gamme" role="group" aria-label="Les huit notes de la gamme" hidden></div>`;
+    <div class="clavier-touches" role="group" aria-label="Clavier de piano" data-sans-infobulle></div>
+    <div class="clavier-gamme" role="group" aria-label="Les huit notes de la gamme" data-sans-infobulle hidden></div>`;
   const zone = conteneur.querySelector(".clavier-touches");
   const pads = conteneur.querySelector(".clavier-gamme");
   const carte = conteneur.querySelector(".clavier-carte");

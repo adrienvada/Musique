@@ -227,6 +227,69 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     comme dans `harmoniser` : c'est elle qui tire vers la tonique ; le v reste
     dans « Un autre accord ». « Septième » donne la septième de la tonalité
     (Cmaj7, G7, Dm7, Bm7b5).
+- **02/10 · Un appui long sur une icône dit ce qu'elle fait.** Demandé par
+  Adrien (« quand je laisse appuyé mon doigt sur une icône, il faudrait
+  qu'il y ait sa description »). Au doigt, il n'y a pas de survol : le titre
+  d'un bouton ne se voyait jamais. Une demi-seconde de doigt sur un bouton à
+  icône montre une infobulle au-dessus (dessous dans la barre du haut) ; le
+  doigt levé, le bouton ne se déclenche pas, et la bulle part au bout d'une
+  seconde et demie. Glisser avant annule (on fait défiler).
+  - Pourquoi un seul module (`app/infobulles.js`, en capture sur toute la
+    page) plutôt qu'un appui long par bouton : les icônes naissent partout
+    (barres, pilule, feuilles, lignes du carnet), et chacune a déjà sa
+    description, celle du lecteur d'écran (`title` ou `aria-label`). La
+    bulle prend la plus longue des deux, sans les raccourcis clavier
+    (« (Maj + ↑) » ne sert à rien au doigt).
+  - Ce qui a déjà son propre appui long garde le sien et porte
+    `data-sans-infobulle` : le bouton rouge (le réglage du décompte), le
+    clavier et sa carte (tenir la note). Les notes de la grille ne sont pas
+    des boutons à icône : leur appui long ouvre toujours le cercle.
+  - À la souris, rien ne change (le navigateur montre le titre au survol).
+  - Piège : la classe `.bulle` était déjà prise (la pastille des onglets du
+    bas) ; c'est `.infobulle`.
+- **02/10 · La grille zoome aussi en hauteur ; Grille | Partition dans la
+  barre.** Demandé par Adrien (« zoomer dans le piano roll sur l'axe
+  vertical aussi », « switcher en piano roll et partition »).
+  - **Le zoom** : pincer en largeur étire le temps (comme avant), pincer en
+    hauteur agrandit les rangées (de 6 px, plus de quatre octaves dans la
+    vue d'un téléphone, à 44 px, la taille d'un doigt), en biais les deux ;
+    la vue suit le milieu des doigts. Pourquoi deux axes séparés plutôt
+    qu'un zoom d'ensemble : la mélodie demande souvent plus de place en
+    hauteur qu'en temps (ou l'inverse), comme dans GarageBand. Un écart de
+    moins de 60 px entre les doigts sur un axe compte pour 60 px
+    (`facteursPince`) : deux doigts posés côte à côte ne sont jamais à la
+    même hauteur, et ce petit écart ne doit pas faire bondir les rangées
+    pendant qu'on zoome dans le temps. À la souris : Ctrl + molette (le
+    temps), Alt + molette (la hauteur), comme dans Ableton ; dans « Tempo
+    et mesure », des boutons − et + pour chaque axe. Le zoom choisi se
+    garde sur l'appareil (`portee:zoom-grille`) : on le règle une fois à
+    sa main. Sous 13 px de haut, une note ne porte plus son nom.
+  - **Grille | Partition** : les deux côte à côte dans la barre du haut,
+    celui qu'on voit allumé (au téléphone en icônes, avec les mots dès
+    que la barre a la place). Avant, un seul bouton montrait l'autre
+    affichage, avec une icône de lignes qu'on prenait pour un menu :
+    Adrien ne trouvait pas la partition. Les icônes sont redessinées : des
+    barres décalées au bord d'un clavier (la grille), deux croches liées
+    (la partition).
+- **02/10 · Le bouton « précédent » recule dans l'appli.** Demandé par
+  Adrien (« que ça gère mieux quand on fait précédent »). Portée est une
+  seule page : le précédent du téléphone (ou du navigateur, ou le geste de
+  retour) la quittait au lieu de fermer la feuille ouverte ou de revenir à
+  l'écran d'avant. Chaque « précédent » défait maintenant un pas, du plus
+  proche au plus lointain : la feuille ou le menu ouvert, le jeu en direct
+  (il s'arrête, et la feuille de l'arrondi s'ouvre), les notes choisies,
+  l'écran (celui d'où l'on venait : le morceau quand on avait ouvert l'idée
+  d'un de ses blocs, sinon l'accueil), puis l'onglet Carnet ; au carnet, le
+  précédent suivant quitte Portée, comme partout. La flèche de retour des
+  écrans ramène aussi à l'écran d'avant, pas toujours à l'accueil.
+  - Pourquoi une seule entrée d'historique « de garde » (`app/historique.js`)
+    plutôt qu'une par écran et par feuille : tout ce qui s'ouvre et se
+    ferme d'un toucher, d'Échap ou du voile aurait dû rester en phase avec
+    l'historique, et un retrait d'entrée (`history.back()`) est asynchrone.
+    La garde se pose dès que l'appli quitte sa racine (le carnet, rien
+    d'ouvert) et s'en va quand elle y revient ; le module voit ce qui
+    s'ouvre (`<dialog open>`, `hidden`, onglets) sans que les écrans aient à
+    le prévenir.
 - **02/10 · La sélection : une pilule, une boîte à outils, un cercle rangé
   (refonte 5).** Le menu en cercle alignait douze gestes en symboles sans
   les regrouper, et c'était le seul chemin vers la moitié d'entre eux.
@@ -635,6 +698,13 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
     claude.ai simulée). 98 tests en Node (43 avant la refonte). L'appli
     claude.ai est republiée (le 02/10, avec les dix refontes). Pas encore
     essayé : un vrai iPhone (Safari), une vraie voix au micro.
+    Ensuite (02/10, même jour) : le bouton « précédent », puis le zoom de la
+    grille en hauteur et le choix Grille | Partition dans la barre, essayés
+    dans Chromium au téléphone (pincements simulés en largeur, en hauteur,
+    en biais) et à l'ordinateur (molette) ; puis les infobulles de l'appui
+    long (appuis simulés : la bulle, le bouton qui ne part pas, le défilement,
+    le bouton rouge et le clavier qui gardent leur appui long ; inventaire :
+    aucune icône sans description). 103 tests en Node.
 
 ## Brancher la reMarkable (une fois)
 

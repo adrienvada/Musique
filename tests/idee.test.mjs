@@ -1,7 +1,8 @@
 /**
  * L'éditeur d'idée : ce qui se calcule sans écran. Où se pose la pilule de
  * la sélection, ce que dit la rangée de sélection, les six accords du mode
- * Accords, ce que dit l'aiguille de l'accordeur.
+ * Accords, ce que dit l'aiguille de l'accordeur, ce qu'un pincement fait
+ * au zoom de la grille.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -12,6 +13,7 @@ import { justesse } from "../app/idee-chant.js";
 import { TOUCHES_ORDI } from "../app/idee-clavier.js";
 import { nomNote } from "../app/sequence.js";
 import { ICONES } from "../app/icones.js";
+import { facteursPince } from "../app/grille.js";
 
 const zone = { left: 44, right: 390, top: 90, bottom: 500 };
 const cadre = { left: 0, right: 390 };
@@ -117,4 +119,17 @@ test("chaque geste du menu en cercle a son icône, sa famille, et le cercle les 
   // Sans famille : un cercle régulier, le premier geste en haut.
   const simple = disposer([{}, {}, {}, {}]);
   assert.ok(Math.abs(simple.angles[0] + Math.PI / 2) < 1e-9 && Math.abs(simple.angles[1] - simple.angles[0] - Math.PI / 2) < 1e-9);
+});
+
+test("pincer la grille : en largeur le temps, en hauteur les rangées, en biais les deux", () => {
+  // Deux doigts côte à côte qu'on écarte : le temps double, la hauteur ne bouge pas,
+  // même si les doigts ne restent pas tout à fait à la même hauteur.
+  assert.deepEqual(facteursPince({ dx: 100, dy: 12 }, { dx: 200, dy: 40 }), { temps: 2, hauteur: 1 });
+  // L'un au-dessus de l'autre : les rangées seules.
+  assert.deepEqual(facteursPince({ dx: 20, dy: 100 }, { dx: 45, dy: 250 }), { temps: 1, hauteur: 2.5 });
+  // En biais : les deux. Et dans l'autre sens, ça resserre.
+  assert.deepEqual(facteursPince({ dx: 120, dy: 120 }, { dx: 180, dy: 240 }), { temps: 1.5, hauteur: 2 });
+  assert.deepEqual(facteursPince({ dx: 240, dy: 30 }, { dx: 120, dy: 30 }), { temps: 0.5, hauteur: 1 });
+  // Deux doigts posés au même endroit : rien ne bouge (et pas de division par zéro).
+  assert.deepEqual(facteursPince({ dx: 0, dy: 0 }, { dx: 0, dy: 0 }), { temps: 1, hauteur: 1 });
 });
