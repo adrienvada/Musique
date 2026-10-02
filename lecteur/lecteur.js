@@ -562,8 +562,9 @@ export function assembler(lue, cal) {
   for (const t of tetes) {
     if (vues.has(t.id)) continue;
     const duree = dureeNote(t, null);
-    if (duree === null) doutes.push(doute(lue, t.portee, t, "Tête pleine sans hampe : lue comme une noire."));
-    parPortee[t.portee].push({ type: "note", x: t.cx, tetes: [t], hampe: null, duree: duree ?? 2, points: 0, ligature: null });
+    const ev = { type: "note", x: t.cx, tetes: [t], hampe: null, duree: duree ?? 2, points: 0, ligature: null };
+    if (duree === null) doutes.push(doute(lue, t.portee, t, "Tête pleine sans hampe : lue comme une noire.", { type: "sans-hampe", _ev: ev }));
+    parPortee[t.portee].push(ev);
   }
 
   // Points de durée et points de reprise.
@@ -618,24 +619,32 @@ export function assembler(lue, cal) {
   for (const g of signes.filter((g) => g.nature === "inconnu")) {
     const pres = hampes.find((h) => Math.abs(xA(h.seg.a, h.seg.b, g.cy) - g.cx) < 0.8 * il && g.cy > Math.min(h.pied[1], h.bout[1]) - il && g.cy < Math.max(h.pied[1], h.bout[1]) + il);
     if (pres && signes.some((x) => x.nature === "crochet-douteux" && x.hampeDouteuse === pres)) continue;
-    doutes.push(doute(lue, g.portee, g, "Signe non reconnu : ignoré."));
+    doutes.push(doute(lue, g.portee, g, "Signe non reconnu : ignoré.", { type: "signe" }));
   }
   const vuesDouteuses = new Set();
   for (const g of signes.filter((g) => g.nature === "crochet-douteux")) {
     if (vuesDouteuses.has(g.hampeDouteuse)) continue;
     vuesDouteuses.add(g.hampeDouteuse);
-    doutes.push(doute(lue, g.hampeDouteuse.tetes[0].portee, g, "Petit trait au bout de la hampe : lu comme une noire. Si c'est un crochet, la note est une croche."));
+    const ev = parPortee.flat().find((e) => e.type === "note" && e.hampe === g.hampeDouteuse);
+    doutes.push(doute(lue, g.hampeDouteuse.tetes[0].portee, g, "Petit trait au bout de la hampe : lu comme une noire. Si c'est un crochet, la note est une croche.", { type: "crochet", _ev: ev }));
   }
 
   return { parPortee, entetes, doutes };
 }
 
-function doute(lue, porteeIndex, boiteElt, message) {
+/**
+ * Un doute. `type` dit de quoi il s'agit (l'atelier en tire une question
+ * fermée) ; `_ev` est l'événement concerné, que partition.js remplace par sa
+ * place dans l'ABC (`cible`) avant de rendre les doutes : il ne sort jamais
+ * de la lecture.
+ */
+function doute(lue, porteeIndex, boiteElt, message, extra = {}) {
   return {
     page: lue.page,
     portee: porteeIndex,
     boite: { x0: boiteElt.x0, y0: boiteElt.y0, x1: boiteElt.x1, y1: boiteElt.y1 },
     message,
+    ...extra,
   };
 }
 

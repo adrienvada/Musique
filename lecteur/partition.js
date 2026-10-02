@@ -94,8 +94,13 @@ function barreABC(b, derniere) {
   return "|";
 }
 
+/**
+ * L'ABC d'une mesure. Chaque événement retient au passage où son jeton tombe
+ * dans ce texte (`pos`) : c'est ce qui permet à l'atelier de viser la note
+ * d'un doute sans relire l'ABC.
+ */
 function mesureABC(m, portee) {
-  const jetons = [];
+  let texte = "";
   let groupe = null;
   for (const e of m.evs) {
     const d = dureeABC(dureeEv(e));
@@ -107,11 +112,12 @@ function mesureABC(m, portee) {
     }
     // Les notes d'une même ligature s'écrivent collées : l'ABC les relie.
     const lie = e.type === "note" && e.ligature !== null && e.ligature === groupe;
-    if (lie) jetons[jetons.length - 1] += j;
-    else jetons.push(j);
+    if (!lie && texte) texte += " ";
+    e.pos = [texte.length, texte.length + j.length];
+    texte += j;
     groupe = e.type === "note" ? e.ligature : null;
   }
-  return jetons.join(" ");
+  return texte;
 }
 
 // ------------------------------------------------------------------------
@@ -153,7 +159,7 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
     let k = cle;
     if (e0.bemols || e0.dieses) k = tonalite(e0.bemols, e0.dieses);
     else if (cle && cle !== "C") {
-      doutes.push({ page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), message: `Pas d'armure en début de ligne : celle de la ligne précédente (${cle}) est reprise.` });
+      doutes.push({ type: "armure", cle, page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), message: `Pas d'armure en début de ligne : celle de la ligne précédente (${cle}) est reprise.` });
     }
     if (!k) k = "C";
 
@@ -166,7 +172,7 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
     let m = chiffrage;
     if (devine && (!chiffrage || e0.chiffrage || devine.m !== chiffrage.m)) m = devine;
     if (e0.chiffrage && !devine) {
-      doutes.push({ page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), message: "Chiffrage écrit mais pas de mesure complète pour le vérifier." });
+      doutes.push({ type: "chiffrage", page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), message: "Chiffrage écrit mais pas de mesure complète pour le vérifier." });
     }
 
     const champs = [];
@@ -195,9 +201,12 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
         const ecart = Math.abs(mes.duree - m.croches) > 1e-6;
         if (ecart) {
           doutes.push({
-            page: sys.page, portee: v.portee.index, mesure: numeroMesure + i,
+            type: "mesure", page: sys.page, portee: v.portee.index, mesure: numeroMesure + i,
+            // Pour poser la question : où (ligne, main, rang dans la ligne) et combien de croches.
+            ligne: n + 1, ...(piano ? { main: iv ? "gauche" : "droite" } : {}), rang: i + 1, trouve: mes.duree, attendu: m.croches,
             boite: boiteMesure(mes, v.portee, cal),
             message: `Ligne ${n + 1}${piano ? (iv ? ", main gauche" : ", main droite") : ""}, ${i + 1}ᵉ mesure : ${temps(mes.duree)} au lieu de ${temps(m.croches)}.`,
+            _mes: mes,
           });
         }
       });
@@ -205,24 +214,33 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
 
     // Écriture ABC de la ligne.
     const derniereLigne = n === systemes.length - 1;
-    const ecrireVoix = (v) => {
+    // Chaque mesure et chaque note retient où elle tombe dans sa ligne (`place`) :
+    // les doutes en font leur `cible`, une fois l'ABC entier assemblé.
+    const ecrireVoix = (v, prefixe = "") => {
       const debut = v.mesures[0] && v.mesures[0].barreAvant ? barreABC(v.mesures[0].barreAvant, false) + " " : "";
+      const ligne = lignes.length;
+      let pos = prefixe.length + champs.join("").length + debut.length;
       const corps = v.mesures.map((mes, i) => {
         const fin = mes.barreApres ? barreABC(mes.barreApres, derniereLigne && i === v.mesures.length - 1) : "";
-        return mesureABC(mes, v.portee) + (fin ? " " + fin : "");
+        const texte = mesureABC(mes, v.portee);
+        mes.place = { ligne, debut: pos, fin: pos + texte.length };
+        for (const e of mes.evs) e.place = { ligne, debut: pos + e.pos[0], fin: pos + e.pos[1] };
+        const piece = texte + (fin ? " " + fin : "");
+        pos += piece.length + 1; // + l'espace qui sépare deux mesures
+        return piece;
       });
       // Une voix plus courte que l'autre est complétée par des silences invisibles.
       for (let i = v.mesures.length; i < nbMesures; i++) corps.push(`x${dureeABC(m ? m.croches : 8)} |`);
-      return champs.join("") + debut + corps.join(" ");
+      return prefixe + champs.join("") + debut + corps.join(" ");
     };
     if (piano) {
-      voix.forEach((v, i) => lignes.push(`[V:${i + 1}] ${ecrireVoix(v)}`));
+      voix.forEach((v, i) => lignes.push(ecrireVoix(v, `[V:${i + 1}] `)));
     } else lignes.push(ecrireVoix(voix[0]));
     numeroMesure += nbMesures;
   });
 
   const composees = enTete.M && /^(6|9|12)\/8$/.test(enTete.M);
-  const abc = [
+  const entete = [
     "X:1",
     `T:${titre}`,
     `M:${enTete.M || "none"}`,
@@ -230,8 +248,20 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
     composees ? "Q:3/8=60" : "Q:1/4=90",
     `K:${enTete.K || "C"}`,
     ...(piano ? ["%%score {1 2}", "V:1 clef=treble", "V:2 clef=bass"] : []),
-    ...lignes,
-  ].join("\n");
+  ];
+  const abc = [...entete, ...lignes].join("\n");
+
+  // Où tombe chaque doute dans l'ABC (début et fin du jeton ou de la mesure).
+  // C'est ce qui permet à l'atelier de poser une question fermée et d'appliquer
+  // la réponse sur la bonne note ; l'ABC, lui, n'en dépend pas.
+  let debutLigne = entete.join("\n").length + 1;
+  const debutsLignes = lignes.map((l) => { const d = debutLigne; debutLigne += l.length + 1; return d; });
+  for (const d of doutes) {
+    const place = (d._ev || d._mes || {}).place;
+    if (place) d.cible = { debut: debutsLignes[place.ligne] + place.debut, fin: debutsLignes[place.ligne] + place.fin };
+    delete d._ev;
+    delete d._mes;
+  }
 
   return { abc, doutes, lues, piano, nbSystemes: systemes.length };
 }

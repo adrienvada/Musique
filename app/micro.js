@@ -84,7 +84,19 @@ export class Micro {
     this.flux = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
     const AC = window.AudioContext || window.webkitAudioContext;
     this.ctx = new AC();
-    if (this.ctx.state === "suspended") await this.ctx.resume();
+    if (this.ctx.state === "suspended") {
+      // Hors d'un geste, certains navigateurs (Safari) ne réveillent pas le
+      // son et la promesse ne se tient jamais : on n'attend pas plus d'une
+      // seconde et demie, puis on demande un toucher.
+      await Promise.race([this.ctx.resume().catch(() => {}), new Promise((ok) => setTimeout(ok, 1500))]);
+      if (this.ctx.state !== "running") {
+        for (const piste of this.flux.getTracks()) piste.stop();
+        this.ctx.close().catch(() => {});
+        const err = new Error("Touche « Écouter » pour que le micro t'entende.");
+        err.name = "GesteRequis";
+        throw err;
+      }
+    }
     this.analyse = this.ctx.createAnalyser();
     this.analyse.fftSize = 2048;
     this.ctx.createMediaStreamSource(this.flux).connect(this.analyse);

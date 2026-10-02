@@ -74,6 +74,77 @@ export function sourceDuMorceau(a) {
   return () => ({ tempo: a.tempo, mesure, temps, fin: a.fin, notesA: (p) => parPas.get(p) || [] });
 }
 
+// --- La structure en frise ---------------------------------------------------------
+
+/** Les couleurs de section (--section-1 à --section-6, morceau.css). */
+export const NB_COULEURS = 6;
+
+/** Empreinte stable d'un texte (FNV-1a) : de quoi répartir les idées entre les couleurs. */
+function empreinte(texte) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texte.length; i++) { h ^= texte.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h;
+}
+
+/**
+ * La couleur (1 à 6) de chaque idée d'un morceau : une même idée garde la
+ * sienne partout où elle revient (frise, cartes, vignette de la bibliothèque).
+ * Elle vient de l'idée, pas de la place du bloc : réordonner ou répéter un
+ * bloc ne recolore rien. Deux idées d'un même morceau ne partagent une
+ * couleur qu'au-delà de six idées ; quand deux tombent sur la même, la
+ * première dans l'ordre alphabétique des identifiants garde la sienne, l'autre
+ * prend la suivante libre (l'ordre des blocs n'y entre pas).
+ * @returns Map idée → 1…6
+ */
+export function couleursDesIdees(blocs) {
+  const ids = [...new Set((blocs || []).map((b) => b.idee).filter(Boolean))].sort();
+  const prises = new Set();
+  const couleurs = new Map();
+  for (const id of ids) {
+    const voulue = empreinte(id) % NB_COULEURS;
+    let c = voulue;
+    // Six tours sans place libre ramènent à la couleur voulue : on la partage.
+    for (let k = 0; k < NB_COULEURS && prises.has(c); k++) c = (c + 1) % NB_COULEURS;
+    prises.add(c);
+    couleurs.set(id, c + 1);
+  }
+  return couleurs;
+}
+
+/** « 1:57 » : des secondes en minutes:secondes. */
+export function dureeEnTexte(secondes) {
+  const s = Math.max(0, Math.round(secondes));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Le morceau vu d'en haut : un segment par bloc, aussi long que ses passages
+ * (mesures × fois), pour la frise de l'écran Morceau et la vignette de la
+ * bibliothèque. Un bloc dont l'idée a disparu y figure, muet (manque : true) :
+ * l'assemblage le saute, et la frise le dit.
+ * @returns { segments: [{ bloc, nom, idee, couleur, fois, mesures, pas, debut, fin, manque }],
+ *            mesures, pas, secondes, tempo }
+ */
+export function structure(morceau, idees) {
+  const a = assembler(morceau, idees);
+  const couleurs = couleursDesIdees(morceau.blocs);
+  const segments = [];
+  let mesures = 0;
+  for (const b of morceau.blocs || []) {
+    const p = idees.get(b.idee);
+    const passages = a.passages.filter((x) => x.bloc === b.id);
+    if (!p || !p.sequence || !passages.length) {
+      segments.push({ bloc: b.id, nom: b.nom, idee: b.idee, couleur: 0, fois: Math.max(1, b.fois || 1), mesures: 0, pas: 0, debut: 0, fin: 0, manque: true });
+      continue;
+    }
+    const debut = passages[0].debut, fin = passages[passages.length - 1].fin;
+    const nb = nbMesures(p.sequence) * passages.length;
+    mesures += nb;
+    segments.push({ bloc: b.id, nom: b.nom, idee: b.idee, couleur: couleurs.get(b.idee), fois: passages.length, mesures: nb, pas: fin - debut, debut, fin, manque: false });
+  }
+  return { segments, mesures, pas: a.fin, secondes: (a.fin / 4) * (60 / a.tempo), tempo: a.tempo };
+}
+
 /** Un nom de section pour le bloc suivant : on déroule Intro, Couplet, Refrain… */
 export function sectionSuivante(blocs) {
   const deja = new Set(blocs.map((b) => b.nom));

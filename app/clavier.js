@@ -7,6 +7,7 @@
  * rien de l'idée : il dit seulement quelle touche s'enfonce et se relève.
  */
 import { nomNote } from "./sequence.js";
+import { ico } from "./icones.js";
 
 const BLANCHES = [0, 2, 4, 5, 7, 9, 11];
 const NOIRES = { 1: 0, 3: 1, 6: 3, 8: 4, 10: 5 }; // demi-ton → touche blanche à sa gauche
@@ -25,9 +26,9 @@ export function creerClavier(conteneur, { surNote }) {
 
   conteneur.classList.add("clavier");
   conteneur.innerHTML = `
-    <button class="clavier-octave" data-sens="-1" aria-label="Une octave plus bas">‹</button>
+    <button class="clavier-octave" data-sens="-1" aria-label="Une octave plus bas">${ico("retour")}</button>
     <div class="clavier-touches" role="group" aria-label="Clavier de piano"></div>
-    <button class="clavier-octave" data-sens="1" aria-label="Une octave plus haut">›</button>`;
+    <button class="clavier-octave" data-sens="1" aria-label="Une octave plus haut">${ico("suivant")}</button>`;
   const zone = conteneur.querySelector(".clavier-touches");
 
   function dessiner() {

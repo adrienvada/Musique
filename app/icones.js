@@ -86,6 +86,8 @@ export const ICONES = {
   d16: '<ellipse cx="12" cy="13.5" rx="5.2" ry="3.6" transform="rotate(-20 12 13.5)"/>',
   point: '<ellipse cx="9.5" cy="17.5" rx="3.7" ry="2.6" transform="rotate(-20 9.5 17.5)" fill="currentColor"/><path d="M12.9 16.6V3.8"/><circle cx="18" cy="16.5" r="1.6" fill="currentColor" stroke="none"/>',
   silence: '<path d="M10 3.5l4 4.5-3.2 3.6 4.2 4.6c-2.4-1-4.8-.2-3.8 3.3"/>',
+  // Choisir aussi la note suivante (la sélection s'étend vers la droite)
+  etendre: '<path d="M3.5 12h7M7 8.5v7"/><path d="M14 6l6 6-6 6"/>',
 };
 
 /** Une icône en SVG, prête pour innerHTML. taille : "" (22 px), "s" (18) ou "l" (28). */

@@ -17,15 +17,19 @@ import { zipper } from "./zip.js";
 import * as ed from "./edition.js";
 import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE } from "./connecteur.js";
 import { creerSynchro } from "./synchro.js";
-import { creerEditeurIdee, dessinerApercu, midiDeLIdee } from "./idee.js";
+import { creerEditeurIdee, midiDeLIdee } from "./idee.js";
 import { Transport } from "./transport.js";
 import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
-import { creerVueMorceau, dessinerApercuMorceau } from "./vue-morceau.js";
+import { creerVueMorceau } from "./vue-morceau.js";
 import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
 import { ecrireMusicXml } from "./musicxml.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
+import { creerAccueil } from "./accueil.js";
+import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, suivre } from "./doutes.js";
+import { afficherVueAtelier, dateRelative, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes, placerOnglets, suivreDock } from "./atelier.js";
+import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 
 const VERSION_LECTEUR = 1;
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
@@ -48,8 +52,10 @@ const MODELES = [
 const etat = {
   stockage: null,
   partitions: [],
-  filtre: "tout",
+  filtre: "tout",     // filtre du carnet : tout, idee, partition, morceau, favori
   etiquette: null,    // filtre par étiquette (carnet)
+  onglet: "carnet",   // l'onglet de l'accueil, retenu dans une préférence (accueil.js)
+  filtrePages: "tout", // filtre de l'onglet Partitions : tout, a-relire, prete
   courante: null,     // la partition ouverte (document)
   pages: [],          // ses traits, page par page
   page: 0,            // page affichée dans l'atelier
@@ -57,7 +63,7 @@ const etat = {
   vue: "biblio",
   transposition: 0,
   selection: null,    // début, dans l'ABC, de la note choisie dans « Corriger »
-  historique: [],     // les ABC d'avant chaque geste, pour « Annuler »
+  historique: [],     // l'état d'avant chaque geste (ABC et doutes), pour « Annuler »
 };
 
 const piano = new Piano(new URL("./piano/", import.meta.url).href);
@@ -65,6 +71,7 @@ const transport = new Transport(piano);
 const calibrations = new Map();
 let editeur = null; // l'éditeur d'idée (idee.js), créé au démarrage
 let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
+let accueil = null; // l'accueil et ses quatre onglets (accueil.js)
 
 async function calibration(modele) {
   if (!calibrations.has(modele)) {
@@ -84,8 +91,12 @@ function toast(texte, duree = 4000) {
   const t = $("toast");
   t.textContent = texte;
   t.hidden = false;
+  // En « popover », le message passe au-dessus d'une feuille du bas ouverte
+  // (un <dialog> est dans la couche du dessus) au lieu d'être grisé dessous.
+  // Le rouvrir le remet au premier plan ; sans popover, il s'affiche comme avant.
+  if (t.showPopover) { try { if (t.matches(":popover-open")) t.hidePopover(); t.showPopover(); } catch { /* sans popover */ } }
   clearTimeout(minuterieToast);
-  minuterieToast = setTimeout(() => (t.hidden = true), duree);
+  minuterieToast = setTimeout(() => { t.hidden = true; if (t.hidePopover) try { t.hidePopover(); } catch { /* déjà fermé */ } }, duree);
 }
 
 function dateCourte(iso) {
@@ -121,13 +132,18 @@ function montrer(vue) {
   const dansPartition = vue !== "biblio";
   // L'écran Idée prend toute la hauteur : le clavier sous le pouce.
   document.body.classList.toggle("plein", vue === "idee");
+  // L'écran ouvert, pour les règles qui en dépendent (où tombent les messages…).
+  document.body.dataset.vue = vue;
   // Papier pour lire, Studio pour jouer : l'éditeur passe en sombre (sauf réglage contraire).
   document.body.classList.toggle("studio", vue === "idee" && ambianceStudio());
   // La barre de Portée ne sert qu'à l'accueil : un écran qui a sa propre barre
   // (avec son retour, [data-retour]) la remplace ; les autres la gardent.
   document.querySelector(".barre-haut").hidden = vue !== "biblio" && !!$(`vue-${vue}`).querySelector("[data-retour]");
+  // Les onglets, la recherche et la synchro sont ceux de l'accueil : ailleurs, la
+  // barre (quand elle reste) ne garde que son retour, et ne couvre pas le clavier.
+  for (const id of ["onglets-accueil", "chercher", "etat-synchro"]) $(id).hidden = vue !== "biblio";
   $("fil").hidden = !dansPartition || vue === "idee" || vue === "morceau";
-  $("onglets").hidden = !dansPartition || vue === "idee" || vue === "morceau";
+  // Corriger ↔ Écouter : les onglets vivent dans la barre de l'écran de partition (atelier.js).
   $("onglet-atelier").setAttribute("aria-selected", String(vue === "atelier"));
   $("onglet-lecteur").setAttribute("aria-selected", String(vue === "lecteur"));
   arreterLecture();
@@ -175,17 +191,6 @@ function ouvrirIdee(p = null, options = {}) {
 // Bibliothèque
 // ------------------------------------------------------------------------
 
-function correspondFiltre(p) {
-  if (etat.etiquette && !(p.etiquettes || []).includes(etat.etiquette)) return false;
-  if (etat.filtre === "tout") return true;
-  if (etat.filtre === "favori") return !!p.favori;
-  if (etat.filtre === "idee" || etat.filtre === "morceau") return p.type === etat.filtre;
-  return !p.type && p.statut === etat.filtre;
-}
-
-/** Ce que la recherche regarde : le titre, les étiquettes, la note. */
-const texteDe = (p) => [p.titre, ...(p.etiquettes || []), p.note || ""].join(" ").toLowerCase();
-
 /** Toutes les étiquettes de la bibliothèque, les plus employées d'abord. */
 function toutesEtiquettes() {
   const compte = new Map();
@@ -193,106 +198,9 @@ function toutesEtiquettes() {
   return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
 }
 
-/** « Aujourd'hui », « Cette semaine »… : le carnet se lit par date. */
-function periode(iso) {
-  const d = new Date(iso || 0), maintenant = new Date();
-  const jours = (new Date(maintenant.toDateString()) - new Date(d.toDateString())) / 86400000;
-  if (jours <= 0) return "Aujourd'hui";
-  if (jours === 1) return "Hier";
-  if (jours < 7) return "Cette semaine";
-  if (jours < 31) return "Ce mois-ci";
-  return "Plus ancien";
-}
-
+/** Redessine l'onglet visible de l'accueil (carnet, partitions, morceaux). Le dessin est dans accueil.js. */
 function afficherBibliotheque() {
-  const q = $("recherche").value.trim().toLowerCase();
-  const liste = $("liste");
-  liste.textContent = "";
-  const visibles = etat.partitions.filter((p) => correspondFiltre(p) && (!q || texteDe(p).includes(q)));
-  // Les étiquettes, en filtres d'un toucher.
-  const etiquettes = toutesEtiquettes();
-  if (etat.etiquette && !etiquettes.includes(etat.etiquette)) etat.etiquette = null;
-  $("filtres-etiquettes").innerHTML = etiquettes.map((t) => `<button class="puce" data-etiquette="${t.replace(/"/g, "&quot;")}" aria-pressed="${t === etat.etiquette}"># ${t.replace(/</g, "&lt;")}</button>`).join("");
-  let periodeAvant = null;
-  $("vide").hidden = etat.partitions.length > 0;
-  $("capture").hidden = etat.partitions.length === 0; // l'accueil a déjà son bouton
-  $("aucun").hidden = !(etat.partitions.length > 0 && visibles.length === 0);
-  $("tout-midi").hidden = $("sauvegarder").hidden = etat.partitions.length === 0;
-  for (const p of visibles) {
-    // Sans recherche, le carnet se découpe par date (il est trié du plus récent au plus ancien).
-    const per = periode(p.modifieLe);
-    if (!q && per !== periodeAvant) {
-      const h = document.createElement("p");
-      h.className = "surtitre groupe-date";
-      h.textContent = per;
-      liste.appendChild(h);
-      periodeAvant = per;
-    }
-    const carte = document.createElement("article");
-    carte.className = "carte";
-    const principal = document.createElement("button");
-    principal.className = "ouvrir";
-    principal.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
-    principal.addEventListener("click", () => ouvrir(p.id, p.statut === "prete" ? "lecteur" : "atelier"));
-    const apercu = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    apercu.setAttribute("role", "img");
-    apercu.setAttribute("aria-label", `Aperçu de ${p.titre}`);
-    principal.appendChild(apercu);
-    if (p.type === "idee") dessinerApercu(apercu, p.sequence);
-    else if (p.type === "morceau") dessinerApercuMorceau(apercu, p, ideesParId());
-    else if (p.apercu && p.modele) {
-      calibration(p.modele).then((cal) => dessinerPage(apercu, cal, p.apercu, { compact: true, limite: 9 * cal.interligne })).catch(() => {});
-    }
-    const infos = document.createElement("div");
-    infos.className = "infos";
-    const titre = document.createElement("span");
-    titre.className = "titre"; titre.textContent = p.titre;
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = p.type === "idee" ? `${resumeIdee(p.sequence)} · ${dateCourte(p.modifieLe)}`
-      : p.type === "morceau" ? `${(p.blocs || []).map((b) => b.nom).join(", ")} · ${dateCourte(p.modifieLe)}`
-      : `${nomModele(p.modele)} · ${dateCourte(p.modifieLe)}`;
-    infos.append(titre, meta, pastilleStatut(p));
-    if ((p.etiquettes || []).length || p.memo || p.note) {
-      const ligne = document.createElement("span");
-      ligne.className = "etiquettes";
-      if (p.memo) { const m = document.createElement("span"); m.className = "etiquette"; m.innerHTML = `${ico("micro", "s")} ${p.memo.duree} s`; ligne.appendChild(m); }
-      for (const t of p.etiquettes || []) { const e = document.createElement("span"); e.className = "etiquette"; e.textContent = "# " + t; ligne.appendChild(e); }
-      if (p.note) { const n = document.createElement("span"); n.className = "remarque"; n.textContent = p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note; ligne.appendChild(n); }
-      infos.appendChild(ligne);
-    }
-    principal.appendChild(infos);
-    if (p.type) {
-      // Une étoile, d'un toucher, sans ouvrir.
-      const etoile = document.createElement("button");
-      etoile.className = "favori";
-      etoile.setAttribute("aria-pressed", String(!!p.favori));
-      etoile.setAttribute("aria-label", p.favori ? "Retirer des favoris" : "Mettre en favori");
-      etoile.innerHTML = ico(p.favori ? "etoile-pleine" : "etoile", "s");
-      etoile.addEventListener("click", () => etat.stockage.modifier(p.id, { favori: !p.favori, modifieLe: new Date().toISOString() }));
-      carte.appendChild(etoile);
-    }
-    const actions = document.createElement("div");
-    actions.className = "actions";
-    const bouton = (texte, f, plein = false) => {
-      const b = document.createElement("button");
-      b.className = "btn btn-petit" + (plein ? " btn-plein" : "");
-      b.innerHTML = texte;
-      b.addEventListener("click", f);
-      actions.appendChild(b);
-    };
-    if (p.type === "idee" || p.type === "morceau") {
-      bouton("Ouvrir", () => ouvrir(p.id), true);
-      bouton(`${ico("lire", "s")}Écouter`, (ev) => ecouterIdee(p, ev.currentTarget));
-      bouton("Envoyer le MIDI", () => partagerMidi(p));
-    } else {
-      bouton("Corriger", () => ouvrir(p.id, "atelier"), p.statut !== "prete");
-      bouton("Écouter", () => ouvrir(p.id, "lecteur"), p.statut === "prete");
-      bouton("MIDI", () => exporterMidi(p));
-    }
-    carte.append(principal, actions);
-    liste.appendChild(carte);
-  }
+  accueil.afficher();
 }
 
 // ------------------------------------------------------------------------
@@ -393,10 +301,21 @@ function afficherSynchro(e) {
   const actif = synchronisable();
   $("synchroniser").hidden = !actif;
   $("activer-synchro").hidden = actif || dansClaude() || !(etat.stockage && etat.stockage.synchronisable);
-  if (!etat.stockage || dansClaude() || etat.stockage.mode === "claude") return;
+  majReglagesRm();
+  if (!etat.stockage) return;
+  if (dansClaude() || etat.stockage.mode === "claude") {
+    // Les textes de claude.ai sont posés au démarrage ; ici, seulement l'icône du haut.
+    const surClaude = etat.stockage.mode === "claude";
+    if (!surClaude) $("mode").textContent = "Enregistré dans ce navigateur";
+    accueil.montrerSynchro(surClaude
+      ? { nuage: true, ton: "ok", titre: "Enregistré sur claude.ai" }
+      : { nuage: false, ton: "gris", titre: "Enregistré dans ce navigateur" });
+    return;
+  }
   if (!actif) {
     $("mode").textContent = "Enregistré dans ce navigateur";
     $("mode-detail").textContent = "Tes partitions restent dans ce navigateur. Active la synchronisation pour les retrouver sur tous tes appareils, ou sauvegarde-les dans un fichier.";
+    accueil.montrerSynchro({ nuage: false, ton: "gris", titre: "Enregistré dans ce navigateur, pas synchronisé" });
     return;
   }
   const d = dernierEtat || { etat: "encours" };
@@ -407,6 +326,20 @@ function afficherSynchro(e) {
   $("mode-detail").textContent = d.etat === "erreur"
     ? `Tes partitions restent dans ce navigateur et partiront à la prochaine connexion. (${(d.erreur && (d.erreur.message || d.erreur.code)) || "erreur"})`
     : "Ta bibliothèque est synchronisée : tu retrouves les mêmes partitions sur chaque appareil où tu as collé l'adresse du connecteur.";
+  // L'icône du haut : verte quand tout est parti, ambre quand quelque chose attend.
+  accueil.montrerSynchro({ nuage: d.etat !== "erreur", ton: d.etat === "ok" ? "ok" : d.etat === "erreur" ? "alerte" : "gris", titre: $("mode").textContent });
+}
+
+/**
+ * Les lignes « Ma reMarkable » des Réglages : où en est le connecteur, où en est la tablette.
+ * La tablette n'est connue qu'après un premier appel au connecteur (le panneau de l'onglet Partitions).
+ */
+function majReglagesRm() {
+  const adresse = !!adresseEnregistree();
+  $("rm-connecteur").textContent = dansClaude() ? "Portée reMarkable (claude.ai)" : adresse ? "Adresse enregistrée" : "Pas encore d'adresse";
+  $("rm-tablette").textContent = tabletteReliee === true ? "Reliée" : tabletteReliee === false ? "À relier"
+    : dansClaude() || adresse ? "Pas encore vérifiée" : "Colle l'adresse du connecteur";
+  $("changer-adresse").hidden = dansClaude() || !adresse;
 }
 
 function formulaireSynchro() {
@@ -422,7 +355,13 @@ function formulaireSynchro() {
 // Modèles à mettre sur la tablette, sauvegarde de la bibliothèque
 // ------------------------------------------------------------------------
 
+/** Les panneaux de la reMarkable et des modèles sont dans l'onglet Partitions : on y va d'abord. */
+function versPartitions() {
+  if (etat.onglet !== "partitions") accueil.choisirOnglet("partitions");
+}
+
 function afficherModeles() {
+  versPartitions();
   $("panneau-modeles").hidden = false;
   const zone = $("liste-modeles");
   if (zone.childElementCount) return;
@@ -567,6 +506,7 @@ const mcp = () => (mcpPromesse ??= (async () => {
   return adresse ? connecteurDirect(adresse) : null;
 })());
 let noeudsRm = [];
+let tabletteReliee = null; // null tant que le connecteur n'a pas répondu
 const ouverts = new Set();
 
 function etatRm(texte, aide = null) {
@@ -613,7 +553,9 @@ function expliquerErreurRm(err) {
 }
 
 async function ouvrirRemarkable(rafraichir = false) {
+  versPartitions();
   $("panneau-remarkable").hidden = false;
+  $("panneau-remarkable").scrollIntoView({ behavior: "smooth", block: "nearest" });
   $("arbre-rm").textContent = "";
   const m = await mcp();
   if (!m) {
@@ -642,18 +584,33 @@ async function ouvrirRemarkable(rafraichir = false) {
 function oublierAdresse() {
   enregistrerAdresse("");
   mcpPromesse = null;
+  tabletteReliee = null;
   $("changer-adresse").hidden = true;
   arreterSynchro();
-  ouvrirRemarkable(false);
+  majReglagesRm();
+  // On reste dans les Réglages : l'adresse se recolle juste dessous.
+  const zone = $("zone-adresse");
+  zone.textContent = "";
+  const bloc = document.createElement("div");
+  bloc.className = "aide-connecteur";
+  const p = document.createElement("p");
+  p.textContent = "L'ancienne adresse est oubliée. Colle celle de ton connecteur « Portée reMarkable » (la même que dans claude.ai) : elle reste dans ce navigateur, nulle part ailleurs.";
+  bloc.append(p, formulaireAdresse(() => { zone.textContent = ""; toast("Adresse enregistrée."); }));
+  zone.appendChild(bloc);
+  bloc.querySelector("input").focus();
 }
 
 function recevoirArbre(reponse) {
   if (reponse && reponse.connectee === false) {
+    tabletteReliee = false;
+    majReglagesRm();
     noeudsRm = [];
     $("arbre-rm").textContent = "";
     etatRm("", formulaireRelier(reponse.raison));
     return;
   }
+  tabletteReliee = true;
+  majReglagesRm();
   noeudsRm = (reponse && reponse.noeuds) || [];
   const n = noeudsRm.filter((x) => x.type === "document").length;
   etatRm(n === 1 ? "1 document sur ta reMarkable." : `${n} documents sur ta reMarkable.`);
@@ -855,20 +812,82 @@ function apercuTraits(traits, cal) {
 // Atelier
 // ------------------------------------------------------------------------
 
-let minuterieGravure = null, minuterieSauvegarde = null, objetAtelier = null;
+let minuterieGravure = null, minuterieSauvegarde = null, minuterieEclat = null, objetAtelier = null;
+// Le doute que « Je corrige moi-même » règle en ce moment (son rang), ou null.
+let manuel = null;
+// Le texte ABC avant la dernière saisie : de quoi suivre les doutes pendant qu'on tape dans le mode avancé.
+let abcPrecedent = "";
+let historiqueVu = null;
+let renduDoutes = 0;
+let dockEnOutils = false;
+let dockReplie = false;
+
+const doutesDe = () => (etat.courante && etat.courante.doutes) || [];
+const premierOuvert = () => doutesDe().findIndex((d) => !d.leve);
+
+/** L'état d'une partition dans sa barre : « Prête », ou le nombre de doutes qui restent. */
+function pastilleBarre(p) {
+  const s = document.createElement("span");
+  const restants = (p.doutes || []).filter((d) => !d.leve).length;
+  if (p.statut === "prete") { s.className = "pastille p-ok"; s.textContent = "Prête"; }
+  else { s.className = "pastille p-doute"; s.textContent = restants ? `${restants} doute${restants > 1 ? "s" : ""}` : "À relire"; }
+  return s;
+}
+
+function majStatut() {
+  $("statut-atelier").replaceChildren(pastilleBarre(etat.courante));
+  $("statut-lecteur").replaceChildren(pastilleBarre(etat.courante));
+}
+
+/** « 2 pages · lue il y a 3 min », sous le titre. */
+function infosPage() {
+  const p = etat.courante;
+  const n = etat.pages.length || p.nbPages || 1;
+  return `${n} page${n > 1 ? "s" : ""} · lue ${dateRelative(p.creeLe)}`;
+}
+
+/** Le texte ABC de l'atelier ; il en garde la valeur d'avant pour suivre les doutes. */
+function poserAbc(texte) {
+  $("abc").value = texte;
+  abcPrecedent = texte;
+}
 
 async function afficherAtelier() {
   const p = etat.courante;
+  placerOnglets("vue-atelier");
+  // « Je corrige moi-même » ne survit pas à la fermeture de la partition (ouvrir() repart d'un historique neuf).
+  if (historiqueVu !== etat.historique) { historiqueVu = etat.historique; manuel = null; }
   $("titre").value = p.titre;
-  $("abc").value = p.abc;
+  poserAbc(p.abc);
   $("confirmer").hidden = true;
-  $("statut-atelier").replaceChildren(pastilleStatut(p));
+  $("infos-atelier").textContent = infosPage();
   $("enregistre").textContent = "";
   $("annuler").disabled = etat.historique.length === 0;
+  afficherVueAtelier();
+  initialiserVise(p.doutes || [], p.abc, p.abcLu);
+  await retrouverCibles(p);
   await dessinerManuscrit();
   graverAtelier();
   majOutils();
   afficherDoutes();
+}
+
+/**
+ * Une partition lue avant que les doutes sachent où est leur note : tant que rien
+ * n'a été corrigé, on relit ses traits (c'est déterministe) pour la leur donner.
+ */
+async function retrouverCibles(p) {
+  const doutes = p.doutes || [];
+  if (!doutes.some((d) => !d.type) || p.abc !== p.abcLu || !etat.pages.length) return;
+  try {
+    const titre = (p.abcLu.match(/^T:(.*)$/m) || [])[1] ?? p.titre;
+    const res = lirePartition(etat.pages, await calibration(p.modele), { titre });
+    if (res.abc !== p.abcLu) return; // la lecture a changé depuis : on ne devine pas
+    p.doutes = completerDoutes(doutes, res.doutes);
+    await sauver({ doutes: p.doutes });
+  } catch (e) {
+    console.warn("Les doutes de cette partition restent sans cible", e);
+  }
 }
 
 async function dessinerManuscrit() {
@@ -886,10 +905,8 @@ async function dessinerManuscrit() {
   }
   const cal = await calibration(p.modele);
   const svg = $("page");
-  dessinerPage(svg, cal, etat.pages[etat.page] || [], {
-    doutes: (p.doutes || []).map((d) => ((d.page || 1) === etat.page + 1 ? d : { ...d, leve: true })),
-    actif: etat.douteActif,
-  });
+  dessinerPage(svg, cal, etat.pages[etat.page] || []);
+  dessinerReperes($("reperes"), svg, cal, doutesDe(), etat.page + 1, etat.douteActif, ouvrirDoute);
 }
 
 const couleur = (nom, secours) => getComputedStyle(document.documentElement).getPropertyValue(nom).trim() || secours;
@@ -938,29 +955,75 @@ function surClicNote(abcelem, _numero, _classes, _analyse, glisse) {
   entendre(j);
 }
 
-/** Surligne la note choisie après chaque nouvelle gravure. */
+/**
+ * Surligne dans la partition lue : la note choisie ; à défaut, ce que vise le
+ * doute ouvert (une note, ou toute la mesure), pour qu'on voie de quoi il parle.
+ */
 function surligner() {
+  const gravure = objetAtelier && objetAtelier.engraver;
+  if (!gravure) return;
   const j = jetonChoisi();
-  if (!j || !objetAtelier || !objetAtelier.engraver) return;
-  try { objetAtelier.engraver.rangeHighlight(j.debut + PREFIXE_GRAVURE.length, j.fin + PREFIXE_GRAVURE.length); } catch { /* gravure en cours */ }
+  const d = doutesDe()[etat.douteActif];
+  const cible = j ? { debut: j.debut, fin: j.fin } : d && etat.vue === "atelier" ? cibleVisible(d, abcCourant()) : null;
+  try {
+    // rangeHighlight commence par effacer la sélection d'avant : une plage vide (-1) suffit à tout effacer.
+    if (cible) gravure.rangeHighlight(cible.debut + PREFIXE_GRAVURE.length, cible.fin + PREFIXE_GRAVURE.length);
+    else gravure.rangeHighlight(-1, -1);
+  } catch { /* gravure en cours */ }
+}
+
+/** Un instant, la note qu'une réponse vient de changer (puis on revient à ce qui est surligné d'ordinaire). */
+function eclat(debut, fin) {
+  const gravure = objetAtelier && objetAtelier.engraver;
+  if (!gravure || fin <= debut) return;
+  try { gravure.rangeHighlight(debut + PREFIXE_GRAVURE.length, fin + PREFIXE_GRAVURE.length); } catch { return; }
+  clearTimeout(minuterieEclat);
+  minuterieEclat = setTimeout(surligner, 1400);
+}
+
+/** Le panneau du bas : les outils quand une note est choisie, sinon le doute (ou « Tout est relu »). */
+function majDock(j = jetonChoisi()) {
+  const outils = !!j;
+  $("outils-note").hidden = !outils;
+  $("tete-note").hidden = !outils;
+  $("fermer-note").hidden = !outils;
+  $("tete-doutes").hidden = outils;
+  $("doutes").hidden = outils;
+  $("dock-manuel").hidden = manuel === null;
+  // Replié, il ne laisse que sa tête : on voit la page en entier. Choisir une note le redéplie.
+  const replie = dockReplie && !outils;
+  $("dock-atelier").classList.toggle("replie", replie);
+  const bascule = $("replier-dock");
+  bascule.hidden = outils;
+  bascule.setAttribute("aria-expanded", String(!replie));
+  bascule.setAttribute("aria-label", replie ? "Déplier le panneau" : "Replier le panneau");
+  bascule.querySelector("use").setAttribute("href", replie ? "#i-chevron-haut" : "#i-chevron-bas");
+  // De retour des outils, la loupe se redessine à sa vraie taille (elle ne se mesure pas cachée).
+  const etaitEnOutils = dockEnOutils;
+  dockEnOutils = outils;
+  if (etaitEnOutils && !outils) afficherDoutes();
 }
 
 function majOutils() {
   const j = jetonChoisi();
   const barre = $("outils-note");
-  barre.querySelectorAll("button").forEach((b) => { b.disabled = !j; b.setAttribute("aria-pressed", "false"); });
-  if (!j) { $("note-choisie").textContent = "Aucune note choisie : touche une note de la partition."; return; }
+  majDock(j);
+  surligner();
+  if (!j) { $("note-choisie").textContent = ""; return; }
   if (j.notes.length) derniereNote = { ...j.notes[0], alteration: "" };
   $("note-choisie").textContent = ed.decrire(j);
+  const silence = j.type === "silence";
   const base = ed.estPointee(j.croches) ? j.croches / 1.5 : j.croches;
   barre.querySelectorAll("[data-duree]").forEach((b) => b.setAttribute("aria-pressed", String(Math.abs(Number(b.dataset.duree) - base) < 1e-9)));
   barre.querySelector('[data-geste="point"]').setAttribute("aria-pressed", String(ed.estPointee(j.croches)));
   barre.querySelectorAll("[data-alteration]").forEach((b) => {
-    b.disabled = j.type === "silence";
+    b.disabled = silence;
     b.setAttribute("aria-pressed", String(j.notes.length > 0 && j.notes.every((n) => n.alteration === b.dataset.alteration)));
   });
-  barre.querySelectorAll('[data-geste="haut"], [data-geste="bas"]').forEach((b) => { b.disabled = j.type === "silence"; });
-  $("bouton-silence").textContent = j.type === "silence" ? "en note" : "en silence";
+  barre.querySelectorAll('[data-geste="haut"], [data-geste="bas"]').forEach((b) => { b.disabled = silence; });
+  const bs = $("bouton-silence");
+  bs.setAttribute("aria-pressed", String(silence));
+  bs.setAttribute("aria-label", silence ? "Changer en note" : "Changer en silence");
 }
 
 /** Fait entendre la note choisie (ou l'accord), brièvement. */
@@ -970,21 +1033,36 @@ function entendre(j) {
   piano.pret().then(() => hauteurs.forEach((h) => piano.note(h, 0.7, 80))).catch(() => {});
 }
 
-/** Applique un geste : mémorise l'état d'avant, regrave, enregistre. */
-function appliquer(res, { entendre: jouer = false } = {}) {
+/**
+ * Applique un geste : mémorise l'état d'avant, regrave, enregistre. Les doutes
+ * suivent le texte qui bouge ; une réponse à un doute (`doute`) le règle dans
+ * le même geste, pour qu'« Annuler » défasse les deux.
+ */
+function appliquer(res, { entendre: jouer = false, doute = null, reponse = "", selectionner = true } = {}) {
   if (!res) return;
   arreterLecture();
   memoriser(abcCourant());
-  $("abc").value = res.abc;
-  etat.selection = res.fin > res.debut ? res.debut : prochaineNote(res.abc, res.debut);
+  poserAbc(res.abc);
+  suivre(doutesDe(), res.modif);
+  if (doute !== null) marquer(doute, true, reponse);
+  etat.selection = !selectionner ? null : res.fin > res.debut ? res.debut : prochaineNote(res.abc, res.debut);
   graverAtelier();
   majOutils();
   planifierSauvegarde();
+  if (doute !== null) {
+    dessinerManuscrit();
+    afficherDoutes().then(() => eclat(res.debut, res.fin));
+  }
   if (jouer) entendre(jetonChoisi());
 }
 
-function memoriser(abc) {
-  etat.historique.push(abc);
+/** L'état d'avant chaque geste, pour « Annuler » : l'ABC, et où en étaient les doutes. */
+function memoriser(abc = abcCourant()) {
+  etat.historique.push({
+    abc,
+    doutes: doutesDe().map((d) => ({ leve: !!d.leve, reponse: d.reponse, vise: d.vise ? { ...d.vise } : null })),
+    actif: etat.douteActif,
+  });
   if (etat.historique.length > 200) etat.historique.shift();
   $("annuler").disabled = false;
 }
@@ -993,18 +1071,29 @@ function annuler() {
   const avant = etat.historique.pop();
   if (avant === undefined) return;
   arreterLecture();
-  $("abc").value = avant;
-  if (etat.selection !== null && !ed.lireJeton(avant, etat.selection)) etat.selection = null;
+  poserAbc(avant.abc);
+  doutesDe().forEach((d, k) => {
+    const s = avant.doutes[k];
+    if (!s) return;
+    d.leve = s.leve; d.vise = s.vise;
+    if (s.reponse) d.reponse = s.reponse; else delete d.reponse;
+  });
+  // Défaire un geste pendant « Je corrige moi-même » n'en sort pas, tant que le doute reste ouvert.
+  if (manuel !== null && doutesDe()[manuel] && !doutesDe()[manuel].leve) etat.douteActif = manuel;
+  else { manuel = null; etat.douteActif = avant.actif; }
+  if (etat.selection !== null && !ed.lireJeton(avant.abc, etat.selection)) etat.selection = null;
   $("annuler").disabled = etat.historique.length === 0;
   graverAtelier();
   majOutils();
+  dessinerManuscrit();
+  afficherDoutes();
   planifierSauvegarde();
 }
 
 function planifierSauvegarde() {
   clearTimeout(minuterieSauvegarde);
   $("enregistre").textContent = "…";
-  minuterieSauvegarde = setTimeout(() => sauver({ abc: abcCourant() }), 800);
+  minuterieSauvegarde = setTimeout(() => sauver({ abc: abcCourant(), ...(etat.courante && etat.courante.doutes ? { doutes: etat.courante.doutes } : {}) }), 800);
 }
 
 /** Les débuts de toutes les notes et silences, dans l'ordre (d'après abcjs). */
@@ -1057,45 +1146,128 @@ function geste(nom, valeur) {
   }
 }
 
-function afficherDoutes() {
-  const p = etat.courante;
-  const zone = $("doutes");
-  zone.textContent = "";
-  const doutes = p.doutes || [];
-  if (!doutes.length) {
-    const r = document.createElement("p");
-    r.className = "remarque";
-    r.textContent = "Portée n'a rien trouvé de douteux. Écoute pour vérifier, puis valide.";
-    zone.appendChild(r);
-    return;
+// ------------------------------------------------------------------------
+// Les doutes, un par un
+// ------------------------------------------------------------------------
+
+/** Le doute ouvert qui suit `apres` (en reprenant au début), ou -1 s'il n'en reste aucun. */
+function prochainDoute(apres) {
+  const d = doutesDe();
+  for (let k = 1; k <= d.length; k++) {
+    const j = (apres + k) % d.length;
+    if (!d[j].leve) return j;
   }
-  doutes.forEach((d, i) => {
-    const item = document.createElement("div");
-    item.className = "doute-item" + (d.leve ? " leve" : "") + (i === etat.douteActif ? " actif" : "");
-    const msg = document.createElement("p");
-    msg.textContent = (d.leve ? "Vu : " : "") + d.message;
-    const actions = document.createElement("div");
-    actions.className = "rangee";
-    const voir = document.createElement("button");
-    voir.className = "btn btn-petit"; voir.textContent = "Montrer sur la page";
-    voir.addEventListener("click", () => { etat.douteActif = i; etat.page = (d.page || 1) - 1; dessinerManuscrit(); afficherDoutes(); $("page").scrollIntoView({ behavior: "smooth", block: "center" }); });
-    const vu = document.createElement("button");
-    vu.className = "btn btn-petit"; vu.textContent = d.leve ? "Rouvrir" : "C'est vu";
-    vu.addEventListener("click", () => leverDoute(i, !d.leve));
-    actions.append(voir, vu);
-    item.append(msg, actions);
-    zone.appendChild(item);
-  });
+  return -1;
 }
 
-async function leverDoute(i, leve) {
-  const p = etat.courante;
-  const doutes = p.doutes.map((d, k) => (k === i ? { ...d, leve } : d));
-  p.doutes = doutes;
-  await sauver({ doutes });
-  afficherDoutes();
+/** Règle (ou rouvre) un doute en mémoire et passe au suivant ; l'appelant a déjà mémorisé l'état d'avant. */
+function marquer(i, leve, reponse = "") {
+  const d = doutesDe()[i];
+  d.leve = leve;
+  if (leve) d.reponse = reponse; else delete d.reponse;
+  manuel = null;
+  etat.douteActif = leve ? prochainDoute(i) : i;
+}
+
+/** Ouvre un doute : sa carte en bas, son repère sur la page (la bonne page, s'il y en a plusieurs). */
+function ouvrirDoute(i) {
+  const d = doutesDe()[i];
+  if (!d) return;
+  manuel = null;
+  dockReplie = false;
+  etat.selection = null;
+  etat.douteActif = i;
+  etat.page =Math.max(0, Math.min((d.page || 1) - 1, Math.max(0, etat.pages.length - 1)));
   dessinerManuscrit();
-  $("statut-atelier").replaceChildren(pastilleStatut(p));
+  majOutils();
+  afficherDoutes();
+}
+
+/** Dessine le panneau du bas : une carte de doute, la consigne de « Je corrige moi-même », ou « Tout est relu ». */
+async function afficherDoutes() {
+  const p = etat.courante;
+  const doutes = doutesDe();
+  const rendu = ++renduDoutes;
+  if (etat.douteActif >= doutes.length) etat.douteActif = -1;
+  // Tant qu'il reste un doute, on n'en laisse pas un autre à l'écran qu'un doute choisi.
+  if (etat.douteActif < 0 && manuel === null) { const o = premierOuvert(); if (o >= 0) etat.douteActif = o; }
+  const actif = etat.douteActif;
+  dessinerPas(doutes, actif, ouvrirDoute, manuel !== null);
+  majStatut();
+  const cal = await calibration(p.modele);
+  if (rendu !== renduDoutes || etat.courante !== p) return;
+  const zone = $("doutes");
+  if (manuel !== null) {
+    const q = poser(doutes[manuel], abcCourant());
+    dessinerConsigne(zone, q.cible && q.cible.genre === "mesure" ? "Touche la note à corriger dans la mesure surlignée de la partition lue." : "Touche la note à corriger dans la partition lue.");
+  } else if (actif >= 0) {
+    const d = doutes[actif];
+    dessinerCarteDoute(zone, {
+      doute: d, question: poser(d, abcCourant()), cal, traits: etat.pages[(d.page || 1) - 1] || [],
+      surReponse: (r) => repondre(actif, r),
+      surRouvrir: () => leverDoute(actif, false),
+      surMoiMeme: () => commencerManuel(actif),
+      surVoulu: () => leverDoute(actif, true, "C'est voulu"),
+    });
+  } else {
+    dessinerRelu(zone, { aucun: !doutes.length, surRevoir: () => ouvrirDoute(0), surValider: validerAtelier });
+  }
+  surligner();
+}
+
+/** Une réponse : le vrai geste d'edition.js sur la bonne note, puis le doute est réglé (et « Annuler » défait les deux). */
+function repondre(i, r) {
+  const res = r.geste ? r.geste(abcCourant()) : null;
+  if (r.geste && !res) { toast("Cette réponse ne s'applique plus : corrige la note toi-même."); afficherDoutes(); return; }
+  if (res) appliquer(res, { doute: i, reponse: r.texte, selectionner: false });
+  else { memoriser(); marquer(i, true, r.texte); etat.selection = null; sauver({ doutes: etat.courante.doutes }); dessinerManuscrit(); afficherDoutes(); majOutils(); }
+  dockReplie = false;
+  toast(r.fait, 2400);
+}
+
+/** « C'est voulu » ou « Rouvrir » : règle ou rouvre un doute sans toucher à l'ABC. */
+async function leverDoute(i, leve, reponse = "") {
+  memoriser();
+  marquer(i, leve, reponse);
+  if (leve) etat.selection = null;
+  await sauver({ doutes: etat.courante.doutes });
+  dessinerManuscrit();
+  afficherDoutes();
+  majOutils();
+}
+
+/** « Je corrige moi-même » : la partition lue se montre, la note visée est choisie (ou la mesure, surlignée) et les outils apparaissent. */
+function commencerManuel(i) {
+  const d = doutesDe()[i];
+  manuel = i;
+  etat.douteActif = i;
+  if (afficherVueAtelier() === "page") afficherVueAtelier("deux");
+  const c = cibleVisible(d, abcCourant());
+  etat.selection = c && c.genre === "note" ? c.debut : null;
+  dessinerManuscrit();
+  majOutils();
+  afficherDoutes();
+  // Une fois le panneau redimensionné (sa hauteur règle la marge du bas), on amène la partition lue sous la barre.
+  setTimeout(() => $("zone-lue").scrollIntoView({ behavior: "smooth", block: "start" }), 250);
+  if (etat.selection !== null) entendre(jetonChoisi());
+}
+
+/** Fin de « Je corrige moi-même » : le doute est réglé (`regle`), ou on revient à sa question. */
+function finirManuel(regle) {
+  const i = manuel;
+  if (i === null) return;
+  if (regle) { leverDoute(i, true, "Corrigé à la main"); return; }
+  manuel = null;
+  etat.selection = null;
+  dessinerManuscrit();
+  majOutils();
+  afficherDoutes();
+}
+
+async function validerAtelier() {
+  clearTimeout(minuterieSauvegarde);
+  await sauver({ abc: $("abc").value, ...(etat.courante.doutes ? { doutes: etat.courante.doutes } : {}), statut: "prete" });
+  montrer("lecteur");
 }
 
 async function sauver(patch) {
@@ -1110,6 +1282,15 @@ async function sauver(patch) {
     console.error(e);
     $("enregistre").textContent = "Non enregistré : " + (e.message || e.code || "erreur");
   }
+}
+
+/** Supprime la partition ouverte (après la confirmation de l'atelier ou du lecteur). */
+async function supprimerOuverte() {
+  const p = etat.courante;
+  await etat.stockage.supprimer(p.id, p.nbPages || 0);
+  etat.courante = null;
+  toast(`« ${p.titre} » est supprimée.`);
+  montrer("biblio");
 }
 
 // ------------------------------------------------------------------------
@@ -1190,11 +1371,14 @@ let objetLecteur = null;
 
 function afficherLecteur() {
   const p = etat.courante;
+  placerOnglets("vue-lecteur");
   $("titre-lecteur").textContent = p.titre;
+  $("confirmer-lecteur").hidden = true;
+  majStatut();
   const k = (p.abc.match(/^K:(.*)$/m) || [])[1] || "C";
   const m0 = (p.abc.match(/^M:(.*)$/m) || [])[1];
   const m = !m0 || m0 === "none" ? "libre" : m0;
-  $("meta-lecteur").textContent = `tonalité ${k} · mesure ${m} · ${nomModele(p.modele)}`;
+  $("meta-lecteur").textContent = `${k} · ${m === "libre" ? "mesure libre" : m} · lue ${dateRelative(p.creeLe)}`;
   $("mains").hidden = !/^\[V:2\]/m.test(p.abc);
   graverLecteur();
   const q = p.tempo || tempoInitial(objetLecteur);
@@ -1358,14 +1542,6 @@ function brancher() {
 
   // Import
   $("fichier").addEventListener("change", (e) => { importer([...e.target.files]); e.target.value = ""; });
-  const depot = $("depot");
-  ["dragenter", "dragover"].forEach((t) => depot.addEventListener(t, (e) => { e.preventDefault(); depot.classList.add("survol"); }));
-  ["dragleave", "drop"].forEach((t) => depot.addEventListener(t, () => depot.classList.remove("survol")));
-  depot.addEventListener("drop", (e) => {
-    e.preventDefault();
-    const fichiers = [...(e.dataTransfer?.files || [])].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
-    if (fichiers.length) importer(fichiers); else toast("Dépose un fichier PDF exporté de la tablette.");
-  });
   $("exemples").addEventListener("click", async () => {
     const noms = ["2026-09-30-piano-standard.pdf", "2026-09-30-melodie-standard.pdf"];
     const fichiers = [];
@@ -1376,15 +1552,9 @@ function brancher() {
     importer(fichiers);
   });
 
-  // Nouvelle idée
-  $("nouvelle-idee").addEventListener("click", () => ouvrirIdee(null));
-  $("vide-idee").addEventListener("click", () => ouvrirIdee(null));
-  $("nouveau-morceau").addEventListener("click", () => ouvrirMorceau(null));
-  // Fredonner tout de suite : une idée neuve, le mémo qui enregistre déjà.
-  $("nouveau-memo").addEventListener("click", () => ouvrirIdee(null, { memo: true }));
-
   // Ma reMarkable, modèles, bibliothèque
   $("ouvrir-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
+  $("reglage-rm").addEventListener("click", () => ouvrirRemarkable(false));
   $("vide-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
   $("ouvrir-modeles").addEventListener("click", afficherModeles);
   $("vide-modeles").addEventListener("click", afficherModeles);
@@ -1393,7 +1563,7 @@ function brancher() {
   $("tout-midi").addEventListener("click", toutEnMidi);
   $("synchroniser").addEventListener("click", synchroniser);
   $("activer-synchro").addEventListener("click", () => {
-    if (!document.querySelector("#pied-biblio .aide-connecteur")) $("pied-biblio").appendChild(formulaireSynchro());
+    if (!document.querySelector("#zone-synchro .aide-connecteur")) $("zone-synchro").appendChild(formulaireSynchro());
   });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") synchroniser(); });
   window.addEventListener("online", synchroniser);
@@ -1404,32 +1574,16 @@ function brancher() {
   $("fermer-rm").addEventListener("click", () => { $("panneau-remarkable").hidden = true; });
   $("recherche-rm").addEventListener("input", dessinerArbre);
 
-  // Bibliothèque
-  $("recherche").addEventListener("input", afficherBibliotheque);
-  $("filtres-etiquettes").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-etiquette]");
-    if (!b) return;
-    etat.etiquette = etat.etiquette === b.dataset.etiquette ? null : b.dataset.etiquette;
-    afficherBibliotheque();
-  });
-  document.querySelectorAll("[data-filtre]").forEach((b) => b.addEventListener("click", () => {
-    etat.filtre = b.dataset.filtre;
-    document.querySelectorAll("[data-filtre]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    afficherBibliotheque();
-  }));
-
   // Atelier
-  $("titre").addEventListener("change", () => {
-    const t = $("titre").value.trim() || "Sans titre";
-    $("fil-titre").textContent = t;
-    sauver({ titre: t });
-  });
-  // Saisie à la main (mode avancé) : un seul « Annuler » par salve de frappe.
+  $("titre").addEventListener("change", () => sauver({ titre: $("titre").value.trim() || "Sans titre" }));
+  // Saisie à la main (mode avancé) : un seul « Annuler » par salve de frappe, et les doutes suivent le texte qui bouge.
   let avantSaisie = null;
   $("abc").addEventListener("focus", () => { avantSaisie = $("abc").value; });
   $("abc").addEventListener("input", () => {
     arreterLecture();
     if (avantSaisie !== null) { memoriser(avantSaisie); avantSaisie = null; }
+    suivre(doutesDe(), modifEntre(abcPrecedent, $("abc").value));
+    abcPrecedent = $("abc").value;
     etat.selection = null;
     clearTimeout(minuterieGravure);
     minuterieGravure = setTimeout(() => { graverAtelier(); majOutils(); }, 250);
@@ -1438,45 +1592,57 @@ function brancher() {
   $("abc").addEventListener("blur", () => { avantSaisie = null; });
   $("relire").addEventListener("click", () => {
     memoriser(abcCourant());
-    $("abc").value = etat.courante.abcLu;
+    poserAbc(etat.courante.abcLu);
+    // L'ABC redevient celui de la lecture : chaque doute retrouve la place que la lecture lui avait donnée.
+    for (const d of doutesDe()) d.vise = d.cible ? { ...d.cible } : null;
     etat.selection = null;
     graverAtelier();
     majOutils();
-    sauver({ abc: etat.courante.abcLu });
+    afficherDoutes();
+    sauver({ abc: etat.courante.abcLu, ...(etat.courante.doutes ? { doutes: etat.courante.doutes } : {}) });
   });
   $("annuler").addEventListener("click", annuler);
   $("outils-note").addEventListener("click", (e) => {
-    const b = e.target.closest("button");
+    const b = e.target.closest("[data-geste], [data-duree], [data-alteration]");
     if (!b || b.disabled) return;
     if (b.dataset.duree) geste("duree", Number(b.dataset.duree));
     else if (b.dataset.alteration) geste("alteration", b.dataset.alteration);
     else geste(b.dataset.geste);
   });
-  $("page").addEventListener("click", (e) => {
-    const r = e.target.closest("[data-doute]");
-    if (!r) return;
-    etat.douteActif = Number(r.dataset.doute);
-    dessinerManuscrit(); afficherDoutes();
+  $("fermer-note").addEventListener("click", () => { etat.selection = null; majOutils(); });
+  $("replier-dock").addEventListener("click", () => { dockReplie = !dockReplie; majDock(); });
+  $("vues-atelier").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-vue]");
+    if (b) afficherVueAtelier(b.dataset.vue, true);
   });
+  $("manuel-retour").addEventListener("click", () => finirManuel(false));
+  $("manuel-fini").addEventListener("click", () => finirManuel(true));
   $("ecouter-atelier").addEventListener("click", () => ecouter({
     objet: objetAtelier, abc: $("abc").value, zone: $("gravure-atelier"), bouton: $("ecouter-atelier"), qpm: tempoInitial(objetAtelier),
   }));
-  $("valider").addEventListener("click", async () => {
-    clearTimeout(minuterieSauvegarde);
-    await sauver({ abc: $("abc").value, statut: "prete" });
-    montrer("lecteur");
+  // Le panneau du bas est fixé : chaque écran lui laisse sa hauteur.
+  suivreDock($("vue-atelier"), $("dock-atelier"));
+  suivreDock($("vue-lecteur"), $("transport-lecteur"));
+  // Les « ••• » : une feuille du bas par écran. Toucher une de ses actions la referme.
+  for (const [bouton, feuille] of [["plus-atelier", "feuille-atelier"], ["plus-lecteur", "feuille-lecteur"]]) {
+    $(bouton).addEventListener("click", () => ouvrirFeuille($(feuille)));
+    $(feuille).addEventListener("click", (e) => { if (e.target.closest(".liste-actions .btn")) fermerFeuille($(feuille)); });
+  }
+  $("valider-menu").addEventListener("click", validerAtelier);
+  $("voir-abc").addEventListener("click", () => {
+    const avance = document.querySelector("#vue-atelier .avance");
+    avance.open = true;
+    avance.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   document.addEventListener("keydown", clavier);
   document.addEventListener("keyup", (e) => { if (etat.vue === "idee" && editeur.toucheHaut(e)) e.preventDefault(); });
-  $("supprimer").addEventListener("click", () => { $("confirmer").hidden = false; });
+  // Supprimer : la feuille « ••• » demande confirmation sous la barre, comme avant.
+  $("supprimer").addEventListener("click", () => { $("confirmer").hidden = false; window.scrollTo({ top: 0, behavior: "smooth" }); });
+  $("supprimer-lecteur").addEventListener("click", () => { $("confirmer-lecteur").hidden = false; window.scrollTo({ top: 0, behavior: "smooth" }); });
   $("confirmer-non").addEventListener("click", () => { $("confirmer").hidden = true; });
-  $("confirmer-oui").addEventListener("click", async () => {
-    const p = etat.courante;
-    await etat.stockage.supprimer(p.id, p.nbPages || 0);
-    etat.courante = null;
-    toast(`« ${p.titre} » est supprimée.`);
-    montrer("biblio");
-  });
+  $("confirmer-lecteur-non").addEventListener("click", () => { $("confirmer-lecteur").hidden = true; });
+  $("confirmer-oui").addEventListener("click", supprimerOuverte);
+  $("confirmer-lecteur-oui").addEventListener("click", supprimerOuverte);
 
   // Lecteur
   const voixMuettes = () => new Set([...($("main-droite").checked ? [] : [1]), ...($("main-gauche").checked ? [] : [2])]);
@@ -1648,6 +1814,19 @@ function creerVueDuMorceau() {
   });
 }
 
+/** L'accueil : ses onglets, sa recherche, ses listes. Il ne sait rien de la tablette ni du stockage : tout passe par ces dépendances. */
+function creerAccueilDeLAppli() {
+  accueil = creerAccueil({
+    etat, toast, ouvrir, ouvrirIdee, ouvrirMorceau, calibration, ideesParId, importer,
+    ecouter: ecouterIdee,
+    enLecture: (bouton) => transport.actif && transport.carte === bouton,
+    arreter: () => transport.arreter(),
+    partagerMidi, exporterMidi,
+    etiquettes: toutesEtiquettes,
+    dateCourte, resumeIdee, nomModele, pastilleStatut,
+  });
+}
+
 function creerEditeur() {
   editeur = creerEditeurIdee({
     piano, transport, toast, nouvelId,
@@ -1663,6 +1842,7 @@ function creerEditeur() {
 
 async function demarrer() {
   injecterIcones();
+  creerAccueilDeLAppli();
   brancher();
   creerEditeur();
   creerVueDuMorceau();

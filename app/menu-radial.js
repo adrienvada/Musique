@@ -5,12 +5,17 @@
  * appuyé sur une note, le menu s'ouvre, on glisse vers un geste et on lâche
  * (ou on touche le geste, menu ouvert). Plus rapide qu'une barre d'outils,
  * et le pouce n'a pas à traverser l'écran.
+ *
+ * Chaque geste : { id, icone (nom dans icones.js), libelle, aide } ;
+ * surFermer() (facultatif) est appelé dès que le menu se ferme.
  */
-export function creerMenuRadial({ actions, surChoix }) {
+import { ico } from "./icones.js";
+
+export function creerMenuRadial({ actions, surChoix, surFermer = () => {} }) {
   const fond = document.createElement("div");
   fond.className = "radial";
   fond.hidden = true;
-  fond.innerHTML = `<div class="radial-cercle"><button class="radial-centre" aria-label="Fermer le menu">✕</button>${actions.map((a) => `<button class="radial-geste" data-geste="${a.id}" title="${a.aide || a.libelle}"><span class="radial-icone" aria-hidden="true">${a.icone}</span><span class="radial-texte">${a.libelle}</span></button>`).join("")}</div>`;
+  fond.innerHTML = `<div class="radial-cercle"><button class="radial-centre" aria-label="Fermer le menu">${ico("fermer")}</button>${actions.map((a) => `<button class="radial-geste" data-geste="${a.id}" title="${a.aide || a.libelle}" aria-label="${a.aide || a.libelle}">${ico(a.icone)}<span class="radial-texte" aria-hidden="true">${a.libelle}</span></button>`).join("")}</div>`;
   document.body.appendChild(fond);
   const cercle = fond.querySelector(".radial-cercle");
   const gestes = [...fond.querySelectorAll(".radial-geste")];
@@ -31,11 +36,13 @@ export function creerMenuRadial({ actions, surChoix }) {
   }
 
   function fermer() {
+    const etait = !fond.hidden;
     fond.hidden = true;
     survole = null;
     gestes.forEach((g) => g.classList.remove("survole"));
     window.removeEventListener("pointermove", suivre);
     window.removeEventListener("pointerup", lacher);
+    if (etait) surFermer();
   }
 
   /** Le geste sous le doigt (pendant le glissé du « appui long → glisser → lâcher »). */

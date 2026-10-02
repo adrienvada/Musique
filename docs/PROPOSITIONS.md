@@ -183,6 +183,99 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · L'écran Idée en studio de poche (refonte 3).** Une seule barre
+  en haut : le titre, et dessous le tempo, la mesure et la tonalité, qu'on
+  touche pour ouvrir « Tempo et mesure ». La grille passe de 41 % à 52 % de
+  l'écran du téléphone : trois rangées de commandes et des volets posés sur
+  les notes la mangeaient. Les réglages, « ••• », le carnet et les accords
+  passent dans des feuilles du bas. Le pupitre reste sous le pouce : le
+  transport, puis trois modes, Clavier, Chanter (l'accordeur dans le
+  pupitre ; le micro écoute tant que le mode est ouvert et se tait quand le
+  piano joue) et Accords (les six accords de la tonalité, posés sur la
+  mesure choisie). Le dernier mode est retenu ; l'accueil ouvre une idée
+  directement en Chanter.
+  - **La sélection** : une pilule au-dessus des notes choisies, qui ne sort
+    jamais de l'écran, et une rangée dans le pupitre pour le reste. La barre
+    qui défilait de côté cachait la moitié de ses gestes. La rangée s'ajoute
+    au-dessus du mode au lieu de remplacer les durées : la durée est la
+    correction la plus fréquente, et changer de mode ne doit pas obliger à
+    désélectionner.
+  - **La règle** n'écrit « + accord » que sur la mesure choisie : répété
+    partout, c'était du bruit. La note choisie est jaune avec un anneau du
+    fond, sans bord brun. La partition remplit la place de la grille.
+  - **Un module par refonte à venir** : `idee.js` garde le cœur (état,
+    annuler, sauvegarde, dessin, transport, barre, feuilles) ; le mode
+    Clavier, le chant, les accords, la sélection et le jeu en direct vivent
+    chacun dans un `idee-*.js` (et un `idee-*.css`) qui reçoit un contexte
+    explicite.
+  - Pièges : une feuille du bas ouverte au `pointerdown` se referme aussitôt
+    (le clic du même doigt tombe sur son voile) : on l'ouvre au `click`. Hors
+    d'un geste, Safari peut garder le son du micro endormi : au bout d'une
+    seconde et demie, on demande un toucher.
+- **02/10 · Pages manuscrites : la page d'abord, les doutes un par un
+  (refonte 10).** Un doute en prose, sous une page de boutons grisés, ne se
+  règle pas quand on ne lit pas l'ABC. « Corriger » et « Écouter » ont
+  désormais leur barre, et les doutes passent dans un panneau fixé en bas
+  (pas une fenêtre : la page reste sous les yeux).
+  - **Corriger** : « Ta page | Lue | Les deux » (côte à côte à
+    l'ordinateur), des repères numérotés sur la page, un doute à la fois
+    avec une loupe sur le passage, une question fermée (« Croche ou
+    noire ? », « Il manque une croche ») et de gros boutons. Une réponse
+    applique le vrai geste d'`edition.js` sur la bonne note et règle le
+    doute dans le même pas : « Annuler » défait les deux. « Je corrige
+    moi-même » et « C'est voulu » restent possibles. Les outils d'une note
+    n'apparaissent qu'avec une note choisie.
+  - **Pourquoi ça marche sans lire l'ABC** : le lecteur écrit pour chaque
+    doute son `type` et sa `cible` (où tombe la note ou la mesure dans l'ABC
+    produit), sans changer l'ABC (les tests du lecteur n'ont pas bougé).
+    `app/doutes.js` fait suivre ces places à chaque correction ; si la note
+    disparaît, la question se pose sans réponse fermée. Les pages lues avant
+    retrouvent leurs cibles en relisant leurs traits, tant qu'on n'y a pas
+    touché. Les réponses se calculent sur l'ABC d'aujourd'hui.
+  - **Écouter** : transport fixé en bas, MIDI et impression en haut, les
+    autres formats et « Supprimer » dans « ••• ».
+  - Pas fait : « Non, sans armure » pour le doute d'armure, qu'aucun geste
+    d'`edition.js` ne sait écrire.
+- **02/10 · L'accueil en quatre onglets (refonte 2).** L'accueil se lit comme
+  un carnet : on note d'abord, on retrouve ensuite. Il avait ~520 px
+  d'en-tête, de filtres et de boutons avant la première partition, et quatre
+  boutons empilés en pied de page ; il montre maintenant six lignes sur un
+  téléphone.
+  - Quatre onglets (Carnet, Partitions, Morceaux, Réglages) vivent dans la
+    vue `biblio`, qui reste une seule vue pour `montrer()`. La barre
+    d'onglets se fixe en bas au téléphone et n'existe que sur l'accueil.
+    L'onglet courant est retenu (`portee:onglet`).
+  - Le Carnet commence par « Noter une idée » : Jouer, Chanter (l'éditeur
+    s'ouvre dans ce mode) et Mémo. Chaque ligne a son étoile et « ••• », une
+    feuille du bas qui porte les actions de l'ancienne carte (ouvrir ou
+    corriger, écouter, MIDI, favori).
+  - Partitions regroupe les pages de la tablette, leurs imports et les
+    modèles ; le dépôt d'un PDF marche sur tout l'accueil. Réglages
+    rassemble la tablette, la synchronisation, l'ambiance de l'éditeur
+    (Studio ou Papier), la sauvegarde et l'installation.
+  - Le dessin de l'accueil est dans `app/accueil.js`, qui reçoit ses
+    dépendances comme l'éditeur ; `app.js` garde le stockage, la tablette
+    et la synchro. Piège : le dépôt d'un PDF doit faire `preventDefault`,
+    sinon le navigateur quitte Portée pour afficher le fichier.
+- **02/10 · Morceaux : la structure en frise colorée (refonte 9).** L'écran
+  montre d'abord le morceau d'en haut : une frise, un segment par bloc aussi
+  long que son passage (mesures × fois), avec une tête de lecture qui suit le
+  transport ; dessous, une carte par bloc, compacte, sauf celle qu'on choisit,
+  qui montre ses gestes (plus tôt, plus tard, une fois de plus ou de moins,
+  écouter, ouvrir l'idée, retirer). « Ajouter une partie » et « ••• » (tempo,
+  MIDI, suppression) ouvrent des feuilles du bas. Pourquoi : huit boutons par
+  bloc noyaient la structure, qu'on cherche d'abord à voir.
+  - **Une même idée garde sa couleur partout** (frise, cartes, choix d'une
+    idée, vignette de la bibliothèque) : la couleur vient de l'idée
+    (`couleursDesIdees`, `morceau.js`), pas de la place du bloc ni du nom de
+    la section, pour que réordonner ou répéter ne recolore rien. Six couleurs
+    (`--section-1` à `--section-6`, dans `morceau.css`), tirées des jetons du
+    système, lisibles en clair comme en sombre.
+  - Les cartes ne sont reconstruites que si le morceau change : choisir ou
+    renommer ne touche qu'à des classes, sinon le toucher suivant se perd. Le
+    nom d'une carte ne s'édite qu'une fois la carte choisie (le premier
+    toucher choisit, il ne fait pas surgir le clavier). Modifier le morceau
+    pendant l'écoute l'arrête.
 
 ## La refonte visuelle : le plan (02/10)
 
