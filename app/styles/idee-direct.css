@@ -1,0 +1,6 @@
+/* L'ÉDITEUR D'IDÉE, JEU EN DIRECT (idee-direct.js) : le décompte en grand
+ * sur la grille, le bouton rouge qui clignote pendant qu'on joue. */
+
+.decompte { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; font-family: var(--f-titre); font-size: clamp(5rem, 24vw, 10rem); color: var(--rouge); background: color-mix(in srgb, var(--papier) 55%, transparent); pointer-events: none; }
+#idee-enregistrer[aria-pressed="true"] .ico { animation: clignote-direct 1s steps(2, start) infinite; }
+@keyframes clignote-direct { to { visibility: hidden; } }

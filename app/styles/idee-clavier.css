@@ -1,0 +1,28 @@
+/* L'ÉDITEUR D'IDÉE, MODE CLAVIER (idee-clavier.js, clavier.js) : la rangée
+ * des durées et le clavier à l'écran, dans le pupitre. */
+
+.pupitre-clavier { display: flex; flex-direction: column; gap: 6px; }
+
+/* Les durées : une icône, son nom en petit dessous (on apprend en jouant). */
+.idee-durees { flex: none; display: flex; gap: 2px; }
+.duree { flex: 1 1 0; min-width: 0; min-height: 50px; padding: 2px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 0; border-radius: 10px; background: transparent; color: var(--gris); font-size: 0.66rem; font-weight: 500; line-height: 1.1; white-space: nowrap; cursor: pointer; }
+.duree:hover { color: var(--encre); }
+.duree[aria-pressed="true"] { background: var(--stylo-doux); color: var(--stylo); }
+.duree[disabled] { opacity: 0.35; cursor: not-allowed; }
+.duree span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+/* Le clavier à l'écran : un piano reste un piano, sans éblouir en sombre. */
+#idee-clavier { flex: 1 1 auto; min-height: 0; }
+.clavier { display: flex; gap: 4px; height: 100%; }
+.clavier-octave { flex: 0 0 44px; display: grid; place-items: center; padding: 0; border: 1px solid var(--trait); background: var(--creux); border-radius: 10px; color: var(--encre); cursor: pointer; }
+.clavier-octave:hover { border-color: var(--trait-fort); }
+.clavier-touches { position: relative; flex: 1 1 auto; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.touche { position: absolute; top: 0; cursor: pointer; }
+.touche.blanche { bottom: 0; width: calc(100% / var(--blanches)); background: var(--touche-blanche); border: 1px solid var(--touche-bord); border-radius: 0 0 8px 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; font-size: 0.66rem; color: var(--touche-texte); }
+.touche.noire { height: 60%; width: calc(0.62 * 100% / var(--blanches)); background: var(--touche-noire); border: 1px solid var(--touche-bord); border-top: 0; border-radius: 0 0 6px 6px; z-index: 1; }
+/* La hauteur de la note choisie : un trait bleu au bas de la touche. */
+.touche.blanche.marquee { box-shadow: inset 0 -7px 0 var(--stylo); }
+.touche.noire.marquee { box-shadow: inset 0 -6px 0 var(--stylo); }
+/* Une touche enfoncée (au doigt, au clavier, en MIDI ou chantée) : le surligneur. */
+.touche.blanche.enfoncee { background: var(--surligneur); color: var(--sur-surligneur); }
+.touche.noire.enfoncee { background: color-mix(in srgb, var(--surligneur) 72%, var(--touche-noire)); }

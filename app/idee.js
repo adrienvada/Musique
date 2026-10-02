@@ -1,18 +1,32 @@
 /**
- * L'ÉDITEUR D'IDÉE
+ * L'ÉDITEUR D'IDÉE : LE CŒUR
  *
  * Noter une mélodie, une phrase, une grille, là où elle vient, téléphone en
- * main. Tout part du clavier (à l'écran, de l'ordinateur ou MIDI) et du
- * micro, et tout se corrige au doigt, dans la grille ou sur la partition :
+ * main. Un studio de poche : une barre en haut (le titre ; toucher le tempo
+ * ouvre « Tempo et mesure »), la grille ou la partition qui prend l'écran,
+ * et un pupitre sous le pouce (le transport, puis trois modes : Clavier,
+ * Chanter, Accords).
  *
  *   - sans note choisie, une touche écrit à la suite, comme dans un texte
  *     (à la place du curseur, de la durée choisie ; plusieurs doigts font
  *     un accord) ;
  *   - avec une note choisie, une touche lui donne sa hauteur : on essaie
  *     jusqu'à ce que ça sonne juste ;
- *   - « Enregistrer » : un décompte, le métronome, et on joue en direct ;
- *     les notes se recalent sur la grille ;
  *   - tout s'annule, tout s'enregistre tout seul (et se synchronise).
+ *
+ * Ce module tient le cœur : l'état (e), annuler et refaire, la sauvegarde,
+ * le dessin (grille.js ou la partition d'abcjs), le transport (écouter,
+ * boucle, métronome), la barre du haut, les feuilles Tempo, ••• et Carnet,
+ * et le choix du mode du pupitre. Le reste vit dans des modules qui
+ * reçoivent un contexte explicite (ctx, plus bas) et ne partagent rien
+ * d'autre :
+ *   idee-clavier.js   le mode Clavier (durées, clavier à l'écran, de
+ *                     l'ordinateur, MIDI) ;
+ *   idee-chant.js     le mode Chanter (micro, accordeur) ;
+ *   idee-accords.js   le mode Accords et la feuille des accords ;
+ *   idee-selection.js la pilule, la rangée de sélection, les
+ *                     transformations, le menu en cercle ;
+ *   idee-direct.js    le jeu en direct (décompte, enregistrement, recalage).
  *
  * L'idée vit en notes (sequence.js) ; la partition n'en est qu'une
  * traduction. Ce module ne parle à l'appli que par les dépendances qu'on
@@ -21,35 +35,21 @@
 import { lirePref, ecrirePref } from "./preferences.js";
 import * as sq from "./sequence.js";
 import { fichierMidi } from "./midi.js";
-import { voixCompletes, transposerIdee, STYLES, suggerer, harmoniser, accordsDeLaTonalite, lireAccord, nomRacine, joliAccord, QUALITES } from "./harmonie.js";
-import { creerClavier } from "./clavier.js";
+import { voixCompletes, transposerIdee, STYLES } from "./harmonie.js";
 import { creerGrille } from "./grille.js";
-import { Micro } from "./micro.js";
-import { creerMenuRadial } from "./menu-radial.js";
+import { ico } from "./icones.js";
+import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
+import { creerModeClavier } from "./idee-clavier.js";
+import { creerChant, messageMicro } from "./idee-chant.js";
+import { creerAccords } from "./idee-accords.js";
+import { creerSelection } from "./idee-selection.js";
+import { creerDirect } from "./idee-direct.js";
 
 const $ = (id) => document.getElementById(id);
-const DUREES = [
-  { pas: 1, nom: "double croche" }, { pas: 2, nom: "croche" }, { pas: 4, nom: "noire" },
-  { pas: 8, nom: "blanche" }, { pas: 16, nom: "ronde" },
-];
 const MESURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8", "2/2"];
-// Le clavier de l'ordinateur, comme dans Ableton : la rangée du milieu pour
-// les touches blanches, celle du dessus pour les noires (positions physiques :
-// pareil en AZERTY).
-const TOUCHES_ORDI = {
-  KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 6, KeyG: 7, KeyY: 8, KeyH: 9,
-  KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13, KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17,
-};
 const CLE_DEFAUTS = "portee:idee-defauts";
-
-/** Une petite note dessinée, pour les boutons de durée. */
-export function iconeDuree(pas) {
-  const pleine = pas <= 4, hampe = pas < 16, crochets = pas === 2 ? 1 : pas === 1 ? 2 : 0;
-  let s = `<svg viewBox="0 0 20 30" width="16" height="24" aria-hidden="true"><ellipse cx="8" cy="24" rx="5.2" ry="3.8" transform="rotate(-20 8 24)" fill="${pleine ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.6"/>`;
-  if (hampe) s += `<line x1="12.6" y1="23" x2="12.6" y2="3" stroke="currentColor" stroke-width="1.6"/>`;
-  for (let i = 0; i < crochets; i++) s += `<path d="M12.6 ${3 + i * 6} q6 4 4 11" fill="none" stroke="currentColor" stroke-width="1.6"/>`;
-  return s + "</svg>";
-}
+const CLE_MODE = "portee:mode-idee";
+const MODES = ["clavier", "chanter", "accords"];
 
 /** Une vignette de l'idée : ses notes en petits traits (pour la bibliothèque). */
 export function dessinerApercu(svg, seq) {
@@ -82,10 +82,9 @@ function defauts() {
 /**
  * @param deps {
  *   piano, transport, stockage() → le stockage ouvert, toast(texte),
- *   nouvelId(), partager(p) (envoie le MIDI), telecharger(p, format),
- *   supprimer(p), dupliquer(p), ajouterAuMorceau(p), titreChange(t),
- *   abcjs() → window.ABCJS, micro (micro.js, facultatif), accords (feuille
- *   des accords, facultative), menuRadial (facultatif)
+ *   nouvelId(), partager(p) (envoie le MIDI), menu(action, p) (les actions
+ *   de la feuille •••), titreChange(t), etiquettes() → celles de la
+ *   bibliothèque, nouvelleDepuis(seq), abcjs() → window.ABCJS
  * }
  */
 export function creerEditeurIdee(deps) {
@@ -93,20 +92,25 @@ export function creerEditeurIdee(deps) {
   const e = {
     id: null, creeLe: null, titre: "", seq: null, piste: 0,
     note: "", etiquettes: [], favori: false, memo: null,
-    selection: new Set(), curseur: 0,
+    selection: new Set(), curseur: 0, mesureChoisie: 0,
     duree: 4, pointee: false,
     affichage: lirePref("portee:affichage-idee") || "grille",
+    mode: "clavier", modeOuvert: false,
     boucle: false, metronome: false, recalage: 2,
     annuler: [], refaire: [],
-    version: 0, enregistrement: null, accordEnCours: null,
+    version: 0,
+    enregistrement: null, // le jeu en direct en cours (idee-direct.js seul l'écrit)
+    accordEnCours: null,
     jetons: [], elements: new Map(),
     sauvegarde: Promise.resolve(), minuterie: null, ouverte: false,
   };
   const tenues = new Map(); // hauteur → note qui sonne (piano)
+  // Le tempo se règle par petits pas (−, +, le curseur) : on l'affiche tout
+  // de suite, on ne l'écrit qu'une fois le geste fini (un seul « Annuler »).
+  let tempoEnAttente = null, minuterieTempo = null;
 
-  // --- Construction des morceaux d'interface --------------------------------
+  // --- La grille ---------------------------------------------------------------
 
-  const clavier = creerClavier($("idee-clavier"), { surNote: (h, bas, v) => (bas ? enfoncer(h, v) : relever(h)) });
   const grille = creerGrille($("idee-grille"), {
     poser: (d, h) => modifier(() => {
       const id = sq.poser(e.seq, e.piste, { d, l: dureeCourante(), h });
@@ -117,39 +121,49 @@ export function creerEditeurIdee(deps) {
     deplacer: (id, d, h) => modifier(() => sq.deplacer(e.seq, e.piste, id, d, h)),
     redimensionner: (id, l) => modifier(() => sq.redimensionner(e.seq, e.piste, id, l)),
     effacer: (id) => modifier(() => { sq.effacer(e.seq, e.piste, [id], { decaler: false }); e.selection.delete(id); }),
-    curseur: (pas) => { e.selection.clear(); e.curseur = pas; rafraichir(); },
+    curseur: (pas, m) => { e.selection.clear(); e.curseur = pas; e.mesureChoisie = m; rafraichir(); },
     ecouter: (h) => entendre([h]),
-    accord: (m, pas) => ouvrirAccords(m, pas),
-    menu: (id, x, y) => { if (!e.selection.has(id)) choisir([id]); menuRadial.ouvrir(x, y, { glisser: true }); },
-  });
-  // Les gestes sur la sélection, en cercle autour du doigt (appui long sur une note).
-  const menuRadial = creerMenuRadial({
-    actions: [
-      { id: "monter", icone: "▲", libelle: "½ ton", aide: "Un demi-ton plus haut" },
-      { id: "octave-haut", icone: "⇈", libelle: "octave", aide: "Une octave plus haut" },
-      { id: "doubler", icone: "×2", libelle: "plus lent", aide: "Durées doublées" },
-      { id: "dupliquer", icone: "⧉", libelle: "répéter", aide: "Recopier juste après" },
-      { id: "retrograder", icone: "⇄", libelle: "à l'envers", aide: "La dernière note devient la première" },
-      { id: "recaler", icone: "⌗", libelle: "recaler", aide: "Recaler sur la grille" },
-      { id: "effacer", icone: "⌫", libelle: "effacer", aide: "Effacer" },
-      { id: "nouvelle", icone: "✚", libelle: "idée à part", aide: "En faire une nouvelle idée" },
-      { id: "renverser", icone: "⇅", libelle: "miroir", aide: "Ce qui montait descend" },
-      { id: "diviser", icone: "÷2", libelle: "plus vite", aide: "Durées divisées par deux" },
-      { id: "octave-bas", icone: "⇊", libelle: "octave", aide: "Une octave plus bas" },
-      { id: "descendre", icone: "▼", libelle: "½ ton", aide: "Un demi-ton plus bas" },
-    ],
-    surChoix: (id) => transformer(id),
+    accord: (m, pas) => accords.ouvrirFeuille(m, pas),
+    menu: (id, x, y) => { if (!e.selection.has(id)) choisir([id]); selection.ouvrirMenu(x, y, { glisser: true }); },
+    defile: () => selection.placer(),
   });
 
-  $("idee-durees").querySelectorAll("[data-pas]").forEach((b) => { b.innerHTML = iconeDuree(Number(b.dataset.pas)); });
+  // --- Le contexte des modules ---------------------------------------------------
+  //
+  // Tout ce qu'un module du pupitre peut lire ou faire passe par ici : pas
+  // de variable partagée en douce. Les fonctions sont celles du cœur, plus bas.
+
+  const ctx = {
+    e, $, sq, deps, piano, transport, toast,
+    modifier, rafraichir, entendre, enfoncer, relever,
+    dureeCourante: () => dureeCourante(), choisirDuree, basculerPointee, silence, effacer,
+    choisir, notesPiste: () => notesPiste(), choisies: () => choisies(),
+    source, suivreLecture, avantSon, apresSon, choisirMode,
+    boiteSelection, grille,
+  };
+  const clavierMode = creerModeClavier(ctx);
+  const chant = creerChant(ctx);
+  const accords = creerAccords(ctx);
+  const selection = creerSelection(ctx);
+  const direct = creerDirect(ctx);
+  const modes = { clavier: clavierMode, chanter: chant, accords };
+
   $("idee-mesure").innerHTML = MESURES.map((m) => `<option value="${m}">${m}</option>`).join("");
   $("idee-tonalite").innerHTML = sq.TONALITES.map((t) => `<option value="${t}">${sq.nomTonalite(t)}</option>`).join("");
   $("idee-accomp").innerHTML = STYLES.map((s) => `<option value="${s.id}">${s.nom}</option>`).join("");
+  const feuilles = ["idee-reglages", "idee-menu", "idee-infos"].map((id) => brancherFeuille($(id)));
+  for (const f of feuilles) f.addEventListener("click", (ev) => { if (ev.target.closest("[data-fermer]")) fermerFeuille(f); });
 
   // --- Ouvrir, fermer ---------------------------------------------------------
 
-  /** Ouvre une idée enregistrée, ou une nouvelle (null) qui ne s'enregistre qu'à la première note. */
-  function ouvrir(p = null, { seq = null, titre = null, memo = false } = {}) {
+  /**
+   * Ouvre une idée enregistrée, ou une nouvelle (null) qui ne s'enregistre
+   * qu'à la première note.
+   * @param options { seq, titre (une idée née d'une partition ou d'une
+   *   phrase), memo (ouvrir le carnet et enregistrer un mémo), mode
+   *   ("clavier", "chanter" ou "accords" ; sinon le dernier employé) }
+   */
+  function ouvrir(p = null, { seq = null, titre = null, memo = false, mode = null } = {}) {
     e.ouverte = true;
     e.id = p ? p.id : null;
     e.creeLe = p ? p.creeLe : null;
@@ -162,32 +176,36 @@ export function creerEditeurIdee(deps) {
     e.piste = 0;
     e.selection = new Set();
     e.curseur = sq.finSequence(e.seq);
+    e.mesureChoisie = Math.max(0, Math.floor(Math.max(0, e.curseur - 1) / sq.pasParMesure(e.seq)));
     e.annuler = []; e.refaire = [];
     e.version++;
     // Une idée née d'une partition (« continuer en idée ») s'enregistre tout de suite.
     if (!p && seq) planifierSauvegarde(0);
     $("idee-titre").value = e.titre;
-    $("idee-reglages").hidden = true;
-    $("idee-menu").hidden = true;
-    $("feuille-accords").hidden = true;
-    $("idee-infos").hidden = !memo;
+    $("idee-etat").textContent = "";
+    for (const f of feuilles) fermerFeuille(f);
+    accords.fermer();
     afficherAffichage();
+    // Un mémo vocal prend le micro : on l'ouvre au clavier, pas au chant.
+    choisirMode(MODES.includes(mode) ? mode : memo ? "clavier" : lirePref(CLE_MODE));
     rafraichir();
     afficherInfos();
-    if (memo) memoEnregistrer();
+    if (memo) { ouvrirFeuille($("idee-infos")); memoEnregistrer(); }
     requestAnimationFrame(() => grille.centrer());
-    const notes = e.seq.pistes[0].notes;
-    clavier.amener(notes.length ? notes[notes.length - 1].h : 60);
-    if (lirePref("portee:midi") === "1") brancherMidi(false);
+    clavierMode.ouvrir(e.seq.pistes[0].notes);
   }
 
-  /** Quitte l'éditeur : arrête le son, enregistre ce qui reste. */
+  /** Quitte l'éditeur : arrête le son et le micro, enregistre ce qui reste. */
   async function fermer() {
     if (!e.ouverte) return;
     e.ouverte = false;
-    if (e.enregistrement) arreterEnregistrement();
+    if (e.enregistrement) direct.arreter();
     transport.arreter();
-    arreterMicro();
+    if (e.modeOuvert) { modes[e.mode].sortir(); e.modeOuvert = false; }
+    chant.fermer();
+    selection.fermer();
+    accords.fermer();
+    for (const f of feuilles) fermerFeuille(f);
     if (enregistreur) enregistreur.stop();
     if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; }
     for (const h of [...tenues.keys()]) relever(h);
@@ -209,6 +227,26 @@ export function creerEditeurIdee(deps) {
     rafraichir();
     return true;
   }
+
+  // --- Les modes du pupitre -----------------------------------------------------
+
+  /** Clavier, Chanter ou Accords : le pupitre change, le dernier choisi est retenu. */
+  function choisirMode(mode) {
+    if (!MODES.includes(mode)) mode = "clavier";
+    if (e.modeOuvert && e.mode === mode) return;
+    if (e.modeOuvert) modes[e.mode].sortir();
+    e.mode = mode;
+    e.modeOuvert = true;
+    ecrirePref(CLE_MODE, mode);
+    document.querySelectorAll("#idee-modes [data-mode]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === mode)));
+    $("idee-pupitre").dataset.pupitre = mode;
+    modes[mode].entrer();
+    rafraichir();
+  }
+  $("idee-modes").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-mode]");
+    if (b) choisirMode(b.dataset.mode);
+  });
 
   // --- Modifier, annuler, enregistrer -----------------------------------------
 
@@ -243,7 +281,7 @@ export function creerEditeurIdee(deps) {
 
   function planifierSauvegarde(delai = 700) {
     clearTimeout(e.minuterie);
-    $("idee-etat").textContent = "…";
+    $("idee-etat").textContent = "Enregistrement…";
     e.minuterie = setTimeout(() => { e.minuterie = null; sauver(); }, delai);
   }
 
@@ -276,13 +314,16 @@ export function creerEditeurIdee(deps) {
         if (e.ouverte) $("idee-etat").textContent = "Enregistrée";
       } catch (err) {
         console.error(err);
-        $("idee-etat").textContent = "Non enregistrée : " + (err.message || err.code || "erreur");
+        const texte = "Non enregistrée : " + (err.message || err.code || "erreur");
+        $("idee-etat").textContent = texte;
+        // L'état ne se voit plus dans la barre : une erreur se dit tout haut.
+        if (e.ouverte) toast(`L'idée n'a pas pu être enregistrée (${err.message || err.code || "erreur"}).`, 8000);
       }
     });
     return e.sauvegarde;
   }
 
-  // --- Jouer une note, écrire au clavier -----------------------------------------
+  // --- Jouer une note, écrire -----------------------------------------------------
 
   function entendre(hauteurs, duree = 0.6) {
     piano.pret().then(() => hauteurs.forEach((h) => piano.note(h, duree, 85))).catch(() => {});
@@ -294,15 +335,13 @@ export function creerEditeurIdee(deps) {
     if (tenues.has(h)) relever(h);
     const autres = tenues.size > 0;
     tenues.set(h, null);
-    clavier.montrer(h, true);
+    clavierMode.montrer(h, true);
     if (!muet) {
       if (piano.echantillons) tenues.set(h, piano.debut(h, v));
       else piano.pret().then(() => { if (tenues.has(h) && !tenues.get(h)) tenues.set(h, piano.debut(h, v)); }).catch(() => {});
     }
-    if (e.enregistrement) {
-      e.enregistrement.ouvertes.set(h, { debut: transport.position(), v });
-      return;
-    }
+    // En direct, la touche est notée à l'instant ; elle ne s'écrit qu'à la fin.
+    if (direct.enfoncer(h, v)) return;
     const sel = [...e.selection];
     if (autres && e.accordEnCours !== null) {
       // Un doigt de plus pendant que les autres tiennent : un accord.
@@ -332,11 +371,8 @@ export function creerEditeurIdee(deps) {
     if (!tenues.has(h)) return;
     piano.fin(tenues.get(h));
     tenues.delete(h);
-    clavier.montrer(h, false);
-    if (e.enregistrement) {
-      const o = e.enregistrement.ouvertes.get(h);
-      if (o) { e.enregistrement.notes.push({ h, debut: o.debut, fin: transport.position(), v: o.v }); e.enregistrement.ouvertes.delete(h); }
-    }
+    clavierMode.montrer(h, false);
+    direct.relever(h);
     if (!tenues.size) e.accordEnCours = null;
   }
 
@@ -380,8 +416,7 @@ export function creerEditeurIdee(deps) {
     else rafraichir();
   }
 
-  // --- Sélection ----------------------------------------------------------------
-
+  /** Choisit des notes (ou en ajoute, ou en retire, avec `ajouter`). */
   function choisir(ids, ajouter = false) {
     if (ajouter) {
       const tous = ids.every((id) => e.selection.has(id));
@@ -390,83 +425,34 @@ export function creerEditeurIdee(deps) {
     const sel = choisies();
     if (sel.length) {
       e.curseur = Math.max(...sel.map((n) => n.d + n.l));
+      // Les accords visent la mesure de la note choisie.
+      e.mesureChoisie = Math.floor(Math.min(...sel.map((n) => n.d)) / sq.pasParMesure(e.seq));
       // La durée affichée devient celle de la note : on voit ce qu'elle est.
       const l = sel[0].l;
       const base = [1, 2, 4, 8, 16].find((d) => d === l || d * 1.5 === l);
       if (base) { e.duree = base; e.pointee = base !== l; }
       entendre(sel.filter((n) => n.d === sel[0].d).map((n) => n.h));
-      grille.montrer(sel[0]);
+      if (e.affichage === "grille") grille.montrer(sel[0]);
     }
     rafraichir();
   }
 
-  /** La note d'avant ou d'après (sans sélection : le curseur saute d'une note). */
-  function voisine(sens) {
-    const notes = notesPiste();
-    if (!notes.length) return;
-    const debuts = [...new Set(notes.map((n) => n.d))].sort((a, b) => a - b);
-    const sel = choisies();
-    let cible;
-    if (sel.length) {
-      const d0 = Math.min(...sel.map((n) => n.d));
-      cible = sens > 0 ? debuts.find((d) => d > d0) : [...debuts].reverse().find((d) => d < d0);
-    } else {
-      cible = sens > 0 ? debuts.find((d) => d >= e.curseur) : [...debuts].reverse().find((d) => d < e.curseur);
-    }
-    if (cible === undefined) return;
-    choisir(notes.filter((n) => n.d === cible).map((n) => n.id));
+  /** Le cadre des notes choisies à l'écran, et la zone visible (pour la pilule). */
+  function boiteSelection() {
+    if (!e.selection.size || !e.ouverte) return null;
+    if (e.affichage === "grille") return grille.boite([...e.selection]);
+    const zone = $("idee-partition");
+    const els = [...zone.querySelectorAll(".choisie")];
+    if (!els.length) return null;
+    const rs = els.map((x) => x.getBoundingClientRect()).filter((r) => r.width || r.height);
+    if (!rs.length) return null;
+    return {
+      boite: { left: Math.min(...rs.map((r) => r.left)), right: Math.max(...rs.map((r) => r.right)), top: Math.min(...rs.map((r) => r.top)), bottom: Math.max(...rs.map((r) => r.bottom)) },
+      zone: zone.getBoundingClientRect(),
+    };
   }
 
-  /** Ajoute à la sélection la note (ou l'accord) qui suit. */
-  function etendre() {
-    const notes = notesPiste();
-    const sel = choisies();
-    if (!sel.length) { voisine(1); return; }
-    const fin = Math.max(...sel.map((n) => n.d));
-    const suivant = notes.filter((n) => n.d > fin);
-    if (!suivant.length) return;
-    const d = Math.min(...suivant.map((n) => n.d));
-    choisir(notes.filter((n) => n.d === d).map((n) => n.id), true);
-  }
-
-  function transformer(nom) {
-    const ids = [...e.selection];
-    if (!ids.length) return;
-    switch (nom) {
-      case "monter": return modifier(() => sq.transposer(e.seq, e.piste, ids, 1), { entendre: choisiesApres(ids, 1) });
-      case "descendre": return modifier(() => sq.transposer(e.seq, e.piste, ids, -1), { entendre: choisiesApres(ids, -1) });
-      case "octave-haut": return modifier(() => sq.transposer(e.seq, e.piste, ids, 12), { entendre: choisiesApres(ids, 12) });
-      case "octave-bas": return modifier(() => sq.transposer(e.seq, e.piste, ids, -12), { entendre: choisiesApres(ids, -12) });
-      case "dupliquer": return modifier(() => { const copies = sq.dupliquerSelection(e.seq, e.piste, ids); e.selection = new Set(copies); });
-      case "doubler": return modifier(() => sq.etirer(e.seq, e.piste, ids, 2));
-      case "diviser": return modifier(() => sq.etirer(e.seq, e.piste, ids, 0.5));
-      case "retrograder": return modifier(() => sq.retrograder(e.seq, e.piste, ids));
-      case "renverser": return modifier(() => sq.renverser(e.seq, e.piste, ids));
-      case "recaler": return modifier(() => sq.recaler(e.seq, e.piste, ids, e.recalage));
-      case "effacer": return effacer();
-      case "nouvelle": return deps.nouvelleDepuis && deps.nouvelleDepuis(extraire(ids));
-      default: return undefined;
-    }
-  }
-
-  /** Les hauteurs de la sélection après transposition (pour les faire entendre). */
-  function choisiesApres(ids, demiTons) {
-    const sel = notesPiste().filter((n) => ids.includes(n.id));
-    const d0 = Math.min(...sel.map((n) => n.d));
-    return sel.filter((n) => n.d === d0).map((n) => n.h + demiTons);
-  }
-
-  /** La sélection, seule, comme une idée à part (calée au début). */
-  function extraire(ids) {
-    const sel = notesPiste().filter((n) => ids.includes(n.id));
-    const mesure = sq.pasParMesure(e.seq);
-    const d0 = Math.floor(Math.min(...sel.map((n) => n.d)) / mesure) * mesure;
-    const seq = sq.nouvelleSequence({ tempo: e.seq.tempo, mesure: e.seq.mesure, tonalite: e.seq.tonalite });
-    for (const n of sel) sq.poser(seq, 0, { d: n.d - d0, l: n.l, h: n.h, v: n.v });
-    return seq;
-  }
-
-  // --- Lecture, boucle, enregistrement -------------------------------------------
+  // --- Écouter, boucle, métronome ---------------------------------------------
 
   let cache = { version: -1 };
   /** Ce que le transport joue : toutes les voix (accompagnement compris), indexées par pas. */
@@ -497,193 +483,55 @@ export function creerEditeurIdee(deps) {
     return [0, sq.nbMesures(e.seq) * mesure];
   }
 
+  // Le micro et le piano ne marchent pas ensemble (le piano repasserait dans
+  // le micro) : le micro se tait tant que le piano joue, puis reprend.
+  function avantSon() { chant.pause(); }
+  function apresSon() { chant.reprendre(); }
+
+  function majJouer(enCours) {
+    const b = $("idee-jouer");
+    b.innerHTML = ico(enCours ? "pause" : "lire");
+    b.setAttribute("aria-label", enCours ? "Arrêter l'écoute" : "Écouter");
+    b.setAttribute("aria-pressed", String(enCours));
+  }
+
   async function jouer() {
     if (transport.actif) { transport.arreter(); return; }
     if (e.enregistrement) return;
-    if (micro.actif) arreterMicro();
+    avantSon();
     const s = source();
     const boucle = e.boucle ? etendueBoucle() : null;
     let depuis = 0;
     if (boucle) depuis = boucle[0];
     else if (e.selection.size) depuis = Math.min(...choisies().map((n) => n.d));
     else if (e.curseur > 0 && e.curseur < s.fin) depuis = e.curseur;
-    $("idee-jouer").textContent = "■";
-    $("idee-jouer").setAttribute("aria-label", "Arrêter");
+    majJouer(true);
     try {
       await transport.jouer(source, {
         depuis, boucle, metronome: e.metronome,
         surPosition: suivreLecture,
-        surFin: () => { $("idee-jouer").textContent = "▶"; $("idee-jouer").setAttribute("aria-label", "Écouter"); suivreLecture(null); },
+        surFin: () => { majJouer(false); suivreLecture(null); apresSon(); },
       });
     } catch (err) {
-      $("idee-jouer").textContent = "▶";
+      majJouer(false);
+      apresSon();
       toast(err.message || "Le piano n'a pas pu se charger.");
     }
   }
 
   let dernierJeton = null;
+  /** Suit la lecture : la tête dans la grille, ou la note jouée sur la partition. */
   function suivreLecture(pas) {
     if (e.affichage === "grille") grille.lecture(pas);
     else {
       const j = pas === null ? null : e.jetons.find((x) => x.voix === e.piste && x.couche === 0 && pas >= x.a && pas < x.a + x.l);
-      if (j === dernierJeton) return;
-      for (const el of (dernierJeton && e.elements.get(dernierJeton)) || []) el.classList.remove("joue");
-      for (const el of (j && e.elements.get(j)) || []) el.classList.add("joue");
-      dernierJeton = j;
+      if (j !== dernierJeton) {
+        for (const el of (dernierJeton && e.elements.get(dernierJeton)) || []) el.classList.remove("joue");
+        for (const el of (j && e.elements.get(j)) || []) el.classList.add("joue");
+        dernierJeton = j;
+      }
     }
-    if (e.enregistrement) {
-      const decompte = Math.ceil((e.enregistrement.depuis - pas) / sq.pasParTemps(e.seq));
-      $("idee-decompte").hidden = !(pas !== null && pas < e.enregistrement.depuis);
-      $("idee-decompte").textContent = decompte > 0 ? decompte : "";
-    }
-  }
-
-  async function enregistrer() {
-    if (e.enregistrement) { arreterEnregistrement(); return; }
-    transport.arreter();
-    if (micro.actif) arreterMicro();
-    const mesure = sq.pasParMesure(e.seq);
-    const depuis = Math.floor(Math.min(e.curseur, sq.finSequence(e.seq)) / mesure) * mesure;
-    e.selection.clear();
-    e.enregistrement = { depuis, notes: [], ouvertes: new Map() };
-    $("idee-enregistrer").setAttribute("aria-pressed", "true");
-    $("idee-mode").textContent = "Enregistrement : joue après le décompte";
-    rafraichir();
-    try {
-      await transport.jouer(source, { depuis, decompte: 1, metronome: true, sansFin: true, surPosition: suivreLecture, surFin: () => { if (e.enregistrement) arreterEnregistrement(); } });
-    } catch (err) {
-      e.enregistrement = null;
-      $("idee-enregistrer").setAttribute("aria-pressed", "false");
-      toast(err.message || "Le piano n'a pas pu se charger.");
-    }
-  }
-
-  function arreterEnregistrement() {
-    const r = e.enregistrement;
-    if (!r) return;
-    const fin = transport.position();
-    for (const [h, o] of r.ouvertes) r.notes.push({ h, debut: o.debut, fin, v: o.v });
-    e.enregistrement = null;
-    transport.arreter();
-    $("idee-enregistrer").setAttribute("aria-pressed", "false");
-    $("idee-decompte").hidden = true;
-    suivreLecture(null);
-    const notes = sq.quantifier(r.notes.map((n) => ({ ...n, debut: n.debut - r.depuis, fin: n.fin - r.depuis })), { grille: e.recalage, origine: r.depuis });
-    if (!notes.length) { rafraichir(); return; }
-    modifier(() => {
-      const ids = notes.map((n) => sq.poser(e.seq, e.piste, n));
-      e.selection = new Set(ids);
-      e.curseur = Math.max(...notes.map((n) => n.d + n.l));
-    });
-    toast(`${notes.length} note${notes.length > 1 ? "s" : ""} enregistrée${notes.length > 1 ? "s" : ""}. Touche « Annuler » pour recommencer.`);
-  }
-
-  // --- Les accords ------------------------------------------------------------------
-  //
-  // On touche la ligne des accords, au-dessus d'une mesure : Portée propose
-  // ceux qui vont avec les notes de la mesure (de la tonalité d'abord). On
-  // les essaie (ils sonnent), on passe à la mesure suivante. Le premier
-  // accord posé met l'accompagnement en route, pour qu'on les entende.
-
-  const accordsOuverts = { d: 0 };
-  let racineChoisie = null;
-
-  function ouvrirAccords(m, pas = 0) {
-    const mesure = sq.pasParMesure(e.seq);
-    const moitie = Math.floor(mesure / 2);
-    // Un accord à mi-mesure, s'il y en a un et qu'on touche la seconde moitié.
-    const milieu = pas - m * mesure >= moitie && e.seq.accords.some((a) => a.d === m * mesure + moitie);
-    accordsOuverts.d = m * mesure + (milieu ? moitie : 0);
-    $("idee-reglages").hidden = true;
-    $("idee-menu").hidden = true;
-    $("feuille-accords").hidden = false;
-    afficherAccords();
-  }
-
-  function afficherAccords() {
-    if ($("feuille-accords").hidden) return;
-    const mesure = sq.pasParMesure(e.seq);
-    const d = accordsOuverts.d;
-    const m = Math.floor(d / mesure);
-    const moitie = Math.floor(mesure / 2);
-    const fin = (e.seq.accords || []).filter((a) => a.d > d).reduce((x, a) => Math.min(x, a.d), (m + 1) * mesure);
-    const actuel = (e.seq.accords || []).find((a) => a.d === d);
-    $("accords-ou").textContent = `Mesure ${m + 1}${d % mesure ? ", 2ᵉ moitié" : ""}`;
-    const degres = new Map(accordsDeLaTonalite(e.seq.tonalite).map((a) => [a.nom, a.degre]));
-    const proposes = suggerer(e.seq, d, fin, 8);
-    if (actuel && !proposes.includes(actuel.nom)) proposes.unshift(actuel.nom);
-    $("accords-proposes").innerHTML = proposes.map((nom) => `<button class="btn" data-accord="${nom}" aria-pressed="${actuel && actuel.nom === nom}">${joliAccord(nom)}${degres.has(nom) ? ` <span class="degre">${degres.get(nom)}</span>` : ""}</button>`).join("");
-    const k = sq.lireTonalite(e.seq.tonalite);
-    const racines = Array.from({ length: 12 }, (_, i) => nomRacine(k.pc + i, e.seq.tonalite));
-    const lu = actuel ? lireAccord(actuel.nom) : null;
-    racineChoisie = racineChoisie ?? (lu ? nomRacine(lu.racine, e.seq.tonalite) : racines[0]);
-    $("accords-racines").innerHTML = racines.map((r) => `<button class="btn" data-racine="${r}" aria-pressed="${r === racineChoisie}">${joliAccord(r)}</button>`).join("");
-    $("accords-qualites").innerHTML = Object.keys(QUALITES).map((q) => `<button class="btn" data-accord="${racineChoisie}${q}" aria-pressed="${actuel && actuel.nom === racineChoisie + q}">${joliAccord(racineChoisie + q)}</button>`).join("");
-    $("accord-retirer").disabled = !actuel;
-    const aMilieu = (e.seq.accords || []).some((a) => a.d === m * mesure + moitie);
-    $("accord-milieu").textContent = d % mesure ? "Revenir au début de la mesure" : aMilieu ? "Accord du milieu de la mesure" : "Changer au milieu de la mesure";
-    $("accord-avant").disabled = d === 0;
-  }
-
-  /** Fait entendre un accord, comme l'accompagnement le jouera. */
-  function entendreAccord(nom) {
-    const a = lireAccord(nom);
-    if (!a) return;
-    entendre([36 + (a.basse ?? a.racine), ...a.intervalles.map((i) => 48 + a.racine + i)], 1.2);
-  }
-
-  function poserAccord(nom) {
-    const d = accordsOuverts.d;
-    const premier = !(e.seq.accords || []).length;
-    modifier(() => {
-      e.seq.accords = (e.seq.accords || []).filter((a) => a.d !== d);
-      e.seq.accords.push({ d, nom });
-      e.seq.accords.sort((a, b) => a.d - b.d);
-      if (premier && (!e.seq.accompagnement || e.seq.accompagnement === "aucun")) e.seq.accompagnement = "plaque";
-    });
-    entendreAccord(nom);
-    if (premier) toast("Les accords s'entendent en accords plaqués ; un autre style dans les réglages (♩).", 6000);
-    afficherAccords();
-  }
-
-  $("feuille-accords").addEventListener("click", (ev) => {
-    const b = ev.target.closest("button");
-    if (!b) return;
-    if (b.dataset.accord) { poserAccord(b.dataset.accord); return; }
-    if (b.dataset.racine) { racineChoisie = b.dataset.racine; afficherAccords(); }
-  });
-  $("accords-fermer").addEventListener("click", () => { $("feuille-accords").hidden = true; });
-  $("accord-avant").addEventListener("click", () => { const mesure = sq.pasParMesure(e.seq); accordsOuverts.d = Math.max(0, (Math.ceil(accordsOuverts.d / mesure) - 1) * mesure); racineChoisie = null; afficherAccords(); });
-  $("accord-apres").addEventListener("click", () => { const mesure = sq.pasParMesure(e.seq); accordsOuverts.d = (Math.floor(accordsOuverts.d / mesure) + 1) * mesure; racineChoisie = null; afficherAccords(); });
-  $("accord-milieu").addEventListener("click", () => {
-    const mesure = sq.pasParMesure(e.seq);
-    const debut = Math.floor(accordsOuverts.d / mesure) * mesure;
-    accordsOuverts.d = accordsOuverts.d % mesure ? debut : debut + Math.floor(mesure / 2);
-    racineChoisie = null;
-    afficherAccords();
-  });
-  $("accord-retirer").addEventListener("click", () => {
-    const d = accordsOuverts.d;
-    modifier(() => { e.seq.accords = (e.seq.accords || []).filter((a) => a.d !== d); });
-    afficherAccords();
-  });
-  $("accords-tout").addEventListener("click", () => {
-    if (!notesPiste().length && e.piste === 0) { toast("Écris d'abord une mélodie : les accords se proposent d'après ses notes."); return; }
-    modifier(() => {
-      e.seq.accords = harmoniser(e.seq);
-      if (!e.seq.accompagnement || e.seq.accompagnement === "aucun") e.seq.accompagnement = "plaque";
-    });
-    afficherAccords();
-    toast(`${e.seq.accords.length} accord${e.seq.accords.length > 1 ? "s" : ""} proposé${e.seq.accords.length > 1 ? "s" : ""} : écoute, puis change ceux qui ne te plaisent pas.`, 6000);
-  });
-
-  /** Ce qui empêche d'ouvrir le micro, dit simplement. */
-  function messageMicro(err) {
-    const nom = err && err.name;
-    if (nom === "NotAllowedError" || nom === "SecurityError") return "Portée n'a pas accès au micro : autorise-le dans les réglages du navigateur. (Dans la page claude.ai, il n'y a pas droit : ouvre Portée sur adrienvada.fr/Musique.)";
-    if (nom === "NotFoundError" || nom === "OverconstrainedError") return "Aucun micro trouvé sur cet appareil.";
-    if (nom === "NotReadableError") return "Le micro est déjà pris par une autre appli.";
-    return (err && err.message) || "Le micro n'a pas pu s'ouvrir.";
+    direct.suivre(pas);
   }
 
   // --- Le carnet : note, étiquettes, favori, mémo vocal ---------------------------
@@ -691,7 +539,8 @@ export function creerEditeurIdee(deps) {
   function afficherInfos() {
     $("info-note").value = e.note;
     $("info-favori").setAttribute("aria-pressed", String(e.favori));
-    $("info-favori").textContent = e.favori ? "★ Favori" : "☆ Favori";
+    $("info-favori").innerHTML = `${ico(e.favori ? "etoile-pleine" : "etoile", "s")}Favori`;
+    $("info-favori").setAttribute("aria-label", e.favori ? "Favori (toucher pour retirer)" : "Mettre en favori");
     const zone = $("info-etiquettes");
     zone.textContent = "";
     for (const t of e.etiquettes) {
@@ -699,7 +548,7 @@ export function creerEditeurIdee(deps) {
       span.className = "etiquette";
       span.textContent = t;
       const x = document.createElement("button");
-      x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", `Retirer l'étiquette ${t}`);
+      x.type = "button"; x.innerHTML = ico("fermer", "s"); x.setAttribute("aria-label", `Retirer l'étiquette ${t}`);
       x.addEventListener("click", () => { e.etiquettes = e.etiquettes.filter((y) => y !== t); afficherInfos(); planifierSauvegarde(0); });
       span.appendChild(x);
       zone.appendChild(span);
@@ -730,7 +579,8 @@ export function creerEditeurIdee(deps) {
     if (enregistreur) { enregistreur.stop(); return; }
     if (!window.MediaRecorder || !navigator.mediaDevices) { toast("Ce navigateur ne sait pas enregistrer de son."); return; }
     transport.arreter();
-    if (micro.actif) arreterMicro();
+    // Le mémo prend le micro : l'accordeur le rend (il reprendra en revenant au mode Chanter).
+    if (e.modeOuvert && e.mode === "chanter") choisirMode("clavier");
     let flux;
     try {
       flux = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -776,17 +626,18 @@ export function creerEditeurIdee(deps) {
     afficherInfos();
   }
 
+  const boutonMemo = (lit) => { $("memo-ecouter").innerHTML = `${ico(lit ? "stop" : "lire", "s")}<span>${lit ? "Arrêter" : "Écouter"}</span>`; };
   async function memoEcouter() {
-    if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; $("memo-ecouter").textContent = "▶ Écouter"; return; }
+    if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; boutonMemo(false); return; }
     const memo = e.id ? await deps.stockage().lireMemo(e.id).catch(() => null) : null;
     if (!memo) { toast("Le son de ce mémo n'est pas encore arrivé sur cet appareil (synchronisation)."); return; }
     lecteurMemo = new Audio(URL.createObjectURL(depuisBase64(memo)));
-    $("memo-ecouter").textContent = "■ Arrêter";
-    lecteurMemo.onended = () => { lecteurMemo = null; $("memo-ecouter").textContent = "▶ Écouter"; };
-    lecteurMemo.play().catch(() => { lecteurMemo = null; $("memo-ecouter").textContent = "▶ Écouter"; toast("Ce navigateur ne sait pas lire ce mémo."); });
+    boutonMemo(true);
+    lecteurMemo.onended = () => { lecteurMemo = null; boutonMemo(false); };
+    lecteurMemo.play().catch(() => { lecteurMemo = null; boutonMemo(false); toast("Ce navigateur ne sait pas lire ce mémo."); });
   }
 
-  $("info-fermer").addEventListener("click", () => { $("idee-infos").hidden = true; });
+  $("info-fermer").addEventListener("click", () => fermerFeuille($("idee-infos")));
   $("info-favori").addEventListener("click", () => { e.favori = !e.favori; afficherInfos(); planifierSauvegarde(0); });
   $("info-note").addEventListener("input", () => { e.note = $("info-note").value; planifierSauvegarde(); });
   $("info-etiquette-form").addEventListener("submit", (ev) => {
@@ -800,90 +651,18 @@ export function creerEditeurIdee(deps) {
   $("memo-ecouter").addEventListener("click", memoEcouter);
   $("memo-effacer").addEventListener("click", () => { if (window.confirm("Effacer le mémo vocal ?")) garderMemo(null); });
 
-  // --- Chanter une note -----------------------------------------------------------
-
-  let minuterieSilence = null;
-  const micro = new Micro({
-    surNote: (h) => {
-      // Comme une touche du clavier, sans le son (il repasserait dans le micro).
-      enfoncer(h, 90, { muet: true });
-      relever(h);
-      $("micro-note").textContent = "✓ " + sq.nomNote(h, e.seq.tonalite);
-      $("micro-note").classList.add("ecrite");
-      $("micro-aide").textContent = "Écrite. Chante la suivante (une même note : respire entre les deux).";
-    },
-    surEcoute: ({ h, cents, niveau }) => {
-      $("micro-niveau").style.width = `${Math.min(100, niveau * 400)}%`;
-      if (h === null) return;
-      clearTimeout(minuterieSilence);
-      minuterieSilence = setTimeout(() => { if (micro.actif) arreterMicro("Plus rien depuis 30 secondes : micro coupé."); }, 30000);
-      $("micro-note").classList.remove("ecrite");
-      $("micro-note").textContent = sq.nomNote(h, e.seq.tonalite);
-      $("micro-aiguille").style.left = `${50 + cents}%`;
-    },
-  });
-
-  async function basculerMicro() {
-    if (micro.actif) { arreterMicro(); return; }
-    transport.arreter();
-    if (e.enregistrement) arreterEnregistrement();
-    $("micro-panneau").hidden = false;
-    $("micro-note").textContent = "…";
-    $("micro-aide").textContent = "Chante une note et tiens-la : elle s'écrit. Puis la suivante.";
-    try {
-      await micro.demarrer();
-      $("idee-micro").setAttribute("aria-pressed", "true");
-      minuterieSilence = setTimeout(() => { if (micro.actif) arreterMicro("Plus rien depuis 30 secondes : micro coupé."); }, 30000);
-    } catch (err) {
-      $("micro-panneau").hidden = true;
-      toast(messageMicro(err), 9000);
-    }
-  }
-
-  function arreterMicro(message = null) {
-    clearTimeout(minuterieSilence);
-    micro.arreter();
-    $("idee-micro").setAttribute("aria-pressed", "false");
-    $("micro-panneau").hidden = true;
-    if (message) toast(message);
-  }
-
-  // --- Clavier MIDI ------------------------------------------------------------
-
-  let accesMidi = null;
-  async function brancherMidi(demande) {
-    if (!navigator.requestMIDIAccess) {
-      if (demande) toast("Ce navigateur ne lit pas les claviers MIDI (Safari, iPhone, iPad). Sur ordinateur ou Android, Chrome et Edge le font.", 8000);
-      return;
-    }
-    try {
-      accesMidi = accesMidi || await navigator.requestMIDIAccess();
-      const brancher = () => {
-        const entrees = [...accesMidi.inputs.values()];
-        for (const x of entrees) x.onmidimessage = surMessageMidi;
-        $("idee-midi-etat").textContent = entrees.length ? `Branché : ${entrees.map((x) => x.name).join(", ")}` : "Aucun clavier MIDI branché pour l'instant.";
-      };
-      accesMidi.onstatechange = brancher;
-      brancher();
-      ecrirePref("portee:midi", "1");
-    } catch {
-      if (demande) toast("Portée n'a pas eu accès au clavier MIDI.");
-    }
-  }
-
-  function surMessageMidi(m) {
-    const [statut, note, force] = m.data;
-    const type = statut & 0xf0;
-    if (type === 0x90 && force > 0) enfoncer(note, force);
-    else if (type === 0x80 || (type === 0x90 && force === 0)) relever(note);
-  }
-
   // --- Affichage ------------------------------------------------------------------
 
+  /** Grille ou partition ; le bouton de la barre montre l'autre. */
   function afficherAffichage() {
     $("idee-grille").hidden = e.affichage !== "grille";
     $("idee-partition").hidden = e.affichage !== "partition";
-    document.querySelectorAll("[data-affichage]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.affichage === e.affichage)));
+    const autre = e.affichage === "grille" ? "partition" : "grille";
+    const b = $("idee-affichage");
+    b.dataset.affichage = autre;
+    b.innerHTML = ico(autre === "partition" ? "vue-portee" : "vue-grille");
+    b.setAttribute("aria-label", autre === "partition" ? "Voir la partition" : "Voir la grille");
+    b.title = b.getAttribute("aria-label");
   }
 
   let image = null;
@@ -896,48 +675,53 @@ export function creerEditeurIdee(deps) {
 
   function dessiner() {
     if (e.affichage === "grille") {
-      grille.afficher({ seq: e.seq, piste: e.piste, selection: e.selection, curseur: e.curseur, boucle: e.boucle ? etendueBoucle() : null, pas: Math.min(dureeCourante(), sq.pasParTemps(e.seq)), accordsVisibles: true });
+      grille.afficher({
+        seq: e.seq, piste: e.piste, selection: e.selection, curseur: e.curseur,
+        // Avec une note choisie, le clavier la change : le curseur n'écrit plus, on le cache.
+        curseurVisible: !e.selection.size,
+        boucle: e.boucle ? etendueBoucle() : null, pas: Math.min(dureeCourante(), sq.pasParTemps(e.seq)),
+        mesureChoisie: e.mesureChoisie, accordsVisibles: true,
+      });
     } else graverPartition();
+    selection.placer();
   }
 
   function majCommandes() {
-    const sel = choisies();
     const k = e.seq;
-    $("idee-resume").textContent = `♩ ${k.tempo} · ${k.mesure.join("/")} · ${sq.nomTonalite(k.tonalite).replace(" majeur", "").replace(" mineur", " m")}`;
-    $("idee-resume").parentElement.title = `Tempo ${k.tempo}, mesure ${k.mesure.join("/")}, ${sq.nomTonalite(k.tonalite)}`;
-    $("idee-tempo").value = k.tempo;
-    $("idee-tempo-val").textContent = `♩ = ${k.tempo}`;
-    $("idee-mesure").value = k.mesure.join("/");
+    $("idee-resume").textContent = `${k.tempo} · ${k.mesure.join("/")} · ${sq.nomTonalite(k.tonalite)}`;
+    const dit = `Tempo ${k.tempo}, mesure ${k.mesure.join("/")}, ${sq.nomTonalite(k.tonalite)} : changer`;
+    $("idee-reglages-bouton").title = dit;
+    $("idee-reglages-bouton").setAttribute("aria-label", dit);
+    if (tempoEnAttente === null) { $("idee-tempo").value = k.tempo; $("idee-tempo-val").textContent = k.tempo; }
+    const mesure = k.mesure.join("/");
+    $("idee-mesure").value = mesure;
+    $("idee-mesures").querySelectorAll("[data-mesure]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mesure === mesure)));
     $("idee-tonalite").value = k.tonalite;
     $("idee-accomp").value = k.accompagnement || "aucun";
-    $("idee-recalage").value = String(e.recalage);
-    $("idee-durees").querySelectorAll("[data-pas]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.pas) === e.duree)));
-    $("idee-pointee").setAttribute("aria-pressed", String(e.pointee));
-    $("idee-pointee").disabled = e.duree === 1;
     $("idee-boucle").setAttribute("aria-pressed", String(e.boucle));
     $("idee-metronome").setAttribute("aria-pressed", String(e.metronome));
     $("idee-annuler").disabled = !e.annuler.length;
     $("idee-refaire").disabled = !e.refaire.length;
-    // Les pistes : « Mélodie », « Basse »…
-    const pistes = $("idee-pistes");
-    pistes.innerHTML = e.seq.pistes.length < 2 ? "" : e.seq.pistes.map((p, i) => `<button class="puce" data-piste="${i}" aria-pressed="${i === e.piste}">${p.nom}</button>`).join("");
-    $("idee-basse").hidden = e.seq.pistes.length >= 2;
-    // La sélection, et ce que fera le clavier.
-    $("idee-selection").hidden = !sel.length;
-    if (sel.length) {
-      const d0 = Math.min(...sel.map((n) => n.d));
-      const premieres = sel.filter((n) => n.d === d0);
-      const nom = premieres.map((n) => sq.nomNote(n.h, k.tonalite)).join("-");
-      const duree = DUREES.find((d) => d.pas === premieres[0].l || d.pas * 1.5 === premieres[0].l);
-      const dureeNom = duree ? duree.nom + (duree.pas === premieres[0].l ? "" : " pointée") : `${premieres[0].l} pas`;
-      $("idee-nom-choix").textContent = sel.length > premieres.length ? `${sel.length} notes` : `${premieres.length > 1 ? "accord " : ""}${nom} · ${dureeNom}`;
-      $("idee-mode").textContent = "Le clavier change la note choisie";
-    } else if (!e.enregistrement) {
-      const avant = notesPiste().filter((n) => n.d + n.l <= e.curseur).sort((a, b) => b.d + b.l - (a.d + a.l))[0];
-      $("idee-mode").textContent = avant ? `Le clavier écrit après ${sq.nomNote(avant.h, k.tonalite)}` : "Le clavier écrit au début";
+    // Les pistes : une puce dans la barre (dès qu'il y en a deux), le choix dans la feuille Tempo.
+    const plusieurs = k.pistes.length > 1;
+    $("idee-piste-puce").hidden = !plusieurs;
+    $("idee-piste-puce").textContent = k.pistes[e.piste].nom;
+    $("idee-piste-puce").setAttribute("aria-label", `Piste : ${k.pistes[e.piste].nom} (toucher pour changer)`);
+    $("idee-pistes").hidden = !plusieurs;
+    $("idee-pistes").innerHTML = plusieurs ? k.pistes.map((p, i) => `<button data-piste="${i}" aria-pressed="${i === e.piste}">${p.nom}</button>`).join("") : "";
+    $("idee-basse").hidden = plusieurs;
+    // Une note choisie : la rangée de la sélection se glisse au-dessus du
+    // mode, qui se resserre ; le pupitre garde sa hauteur, la grille ne bouge pas.
+    $("idee-pupitre").classList.toggle("avec-selection", e.selection.size > 0);
+    clavierMode.maj();
+    selection.maj();
+    accords.maj();
+    direct.maj();
+    chant.maj();
+    if (!e.enregistrement) {
+      const sel = choisies();
+      $("idee-mode").textContent = sel.length ? "Le clavier change la note choisie" : "";
     }
-    clavier.marquer(sel.map((n) => n.h));
-    afficherAccords();
   }
 
   // --- La partition (gravée par abcjs) ----------------------------------------------
@@ -947,14 +731,51 @@ export function creerEditeurIdee(deps) {
     const zone = $("idee-gravure");
     if (!lib) { zone.textContent = "La partition n'a pas pu se charger (connexion ?). La grille marche sans."; return; }
     const largeur = zone.clientWidth || 600;
-    const { abc, jetons } = sq.ecrireAbc(e.seq, { voix: voixCompletes(e.seq), mesuresParLigne: Math.max(1, Math.min(6, Math.floor(largeur / 180))) });
-    const [objet] = lib.renderAbc(zone, abc, {
-      responsive: "resize", add_classes: true, paddingtop: 4, paddingleft: 0, paddingright: 0,
-      clickListener: surClicPartition, selectTypes: ["note"],
-      selectionColor: getComputedStyle(document.documentElement).getPropertyValue("--stylo").trim() || "#2B48B0",
-    });
+    const hauteur = Math.max(160, ($("idee-partition").clientHeight || 400) - 36);
+    const toutes = voixCompletes(e.seq);
+    const couleur = getComputedStyle(document.body).getPropertyValue("--stylo").trim() || "#2B48B0";
+    // La gravure remplit la place de la grille. Au téléphone, deux mesures
+    // par ligne, assez grandes pour se lire et se toucher au doigt ; une
+    // idée courte en prend moins par ligne, ou se grave plus grand, plutôt
+    // que de laisser un grand vide sous la portée. Bornes : la portée
+    // agrandie deux fois au plus au téléphone (1,6 fois sur un grand écran),
+    // et assez de place par mesure pour que les notes ne se touchent pas.
+    const mesures = sq.nbMesures(e.seq);
+    const agrandiMax = largeur < 700 ? 2 : 1.6;
+    const etroite = largeur / agrandiMax; // la portée la plus étroite permise
+    let parLigne = Math.max(1, Math.min(6, Math.floor(largeur / 170)));
+    let largeurPortee = parLigne * 200, h = 0, objet = null, jetons = [];
+    const graver = () => {
+      const ecrit = sq.ecrireAbc(e.seq, { voix: toutes, mesuresParLigne: parLigne });
+      jetons = ecrit.jetons;
+      [objet] = lib.renderAbc(zone, ecrit.abc, {
+        responsive: "resize", add_classes: true, paddingtop: 6, paddingbottom: 6, paddingleft: 0, paddingright: 0,
+        staffwidth: largeurPortee,
+        clickListener: surClicPartition, selectTypes: ["note"], selectionColor: couleur,
+      });
+      h = zone.getBoundingClientRect().height;
+    };
+    graver();
+    // Pas plus de 420 px par mesure : sur un grand écran, une ligne de plus
+    // pour remplir la hauteur étalerait les notes d'un bord à l'autre.
+    const moinsParLigne = Math.max(1, Math.floor(largeur / 420));
+    while (parLigne > moinsParLigne && h < hauteur * 0.6) {
+      // La hauteur qu'aurait la gravure avec une mesure de moins par ligne.
+      const autre = Math.max((parLigne - 1) * 200, etroite);
+      const ensuite = h * (largeurPortee / autre) * (Math.ceil(mesures / (parLigne - 1)) / Math.ceil(mesures / parLigne));
+      if (ensuite > hauteur) break;
+      parLigne--;
+      largeurPortee = autre;
+      graver();
+    }
+    if (h < hauteur * 0.6) {
+      // Encore de la place : les mêmes lignes, gravées plus grand.
+      const voulue = Math.max(parLigne * 130, etroite, (largeurPortee * h) / (hauteur * 0.85));
+      if (voulue < largeurPortee - 10) { largeurPortee = Math.round(voulue); graver(); }
+    }
     e.jetons = jetons;
     e.elements = new Map();
+    dernierJeton = null;
     for (const ligne of (objet && objet.lines) || []) {
       for (const portee of ligne.staff || []) {
         for (const voix of portee.voices || []) {
@@ -996,7 +817,7 @@ export function creerEditeurIdee(deps) {
     caret.style.height = `${Math.max(40, r.height + 36)}px`;
   }
 
-  // --- Branchements -----------------------------------------------------------------
+  // --- La barre du haut ---------------------------------------------------------
 
   $("idee-titre").addEventListener("change", () => {
     e.titre = $("idee-titre").value.trim() || titreDuJour();
@@ -1004,30 +825,23 @@ export function creerEditeurIdee(deps) {
     if (deps.titreChange) deps.titreChange(e.titre);
     planifierSauvegarde(0);
   });
-  document.querySelectorAll("[data-affichage]").forEach((b) => b.addEventListener("click", () => {
-    e.affichage = b.dataset.affichage;
+  $("idee-titre").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("idee-titre").blur(); });
+  $("idee-affichage").addEventListener("click", () => {
+    e.affichage = $("idee-affichage").dataset.affichage;
     ecrirePref("portee:affichage-idee", e.affichage);
     transport.arreter();
     afficherAffichage();
     rafraichir();
-  }));
-  $("idee-reglages-bouton").addEventListener("click", () => {
-    const p = $("idee-reglages");
-    p.hidden = !p.hidden;
-    $("idee-reglages-bouton").setAttribute("aria-expanded", String(!p.hidden));
-    $("idee-menu").hidden = true;
   });
-  $("idee-plus").addEventListener("click", () => {
-    const m = $("idee-menu");
-    m.hidden = !m.hidden;
-    $("idee-plus").setAttribute("aria-expanded", String(!m.hidden));
-    $("idee-reglages").hidden = true;
-  });
+  $("idee-reglages-bouton").addEventListener("click", () => ouvrirFeuille($("idee-reglages")));
+  $("idee-plus").addEventListener("click", () => ouvrirFeuille($("idee-menu")));
+  $("idee-piste-puce").addEventListener("click", () => changerPiste((e.piste + 1) % e.seq.pistes.length));
   $("idee-menu").addEventListener("click", async (ev) => {
     const b = ev.target.closest("[data-menu]");
     if (!b) return;
-    $("idee-menu").hidden = true;
-    if (b.dataset.menu === "infos") { afficherInfos(); $("idee-infos").hidden = false; return; }
+    fermerFeuille($("idee-menu"));
+    if (b.dataset.menu === "infos") { afficherInfos(); ouvrirFeuille($("idee-infos")); return; }
+    if (b.dataset.menu === "reglages") { ouvrirFeuille($("idee-reglages")); return; }
     await sauverMaintenant();
     const p = partitionCourante();
     if (!p) { toast("L'idée est vide : joue au moins une note."); return; }
@@ -1040,73 +854,67 @@ export function creerEditeurIdee(deps) {
     deps.partager(p);
   });
 
-  // Réglages
+  // --- La feuille Tempo et mesure ---------------------------------------------------
+
   const reglage = (f) => { modifier(f); memoriserDefauts(); };
-  let minuterieTempo = null;
-  $("idee-tempo").addEventListener("input", () => {
-    const t = Number($("idee-tempo").value);
-    $("idee-tempo-val").textContent = `♩ = ${t}`;
+  function changerTempo(t) {
+    t = Math.max(40, Math.min(240, Math.round(t)));
+    tempoEnAttente = t;
+    $("idee-tempo-val").textContent = t;
+    $("idee-tempo").value = t;
     clearTimeout(minuterieTempo);
-    minuterieTempo = setTimeout(() => reglage(() => { e.seq.tempo = t; }), 250);
-  });
+    minuterieTempo = setTimeout(() => {
+      const v = tempoEnAttente;
+      tempoEnAttente = null;
+      if (v !== e.seq.tempo) reglage(() => { e.seq.tempo = v; });
+    }, 350);
+  }
+  const tempoAffiche = () => (tempoEnAttente ?? e.seq.tempo);
+  $("idee-tempo").addEventListener("input", () => changerTempo(Number($("idee-tempo").value)));
+  $("idee-tempo-moins").addEventListener("click", () => changerTempo(tempoAffiche() - 1));
+  $("idee-tempo-plus").addEventListener("click", () => changerTempo(tempoAffiche() + 1));
   const tapes = [];
   $("idee-taper").addEventListener("click", () => {
     const t = performance.now();
     if (tapes.length && t - tapes[tapes.length - 1] > 2000) tapes.length = 0;
     tapes.push(t);
     if (tapes.length > 6) tapes.shift();
-    if (tapes.length < 3) { $("idee-tempo-val").textContent = "Encore…"; return; }
+    if (tapes.length < 3) { $("idee-taper-texte").textContent = "Encore…"; return; }
+    $("idee-taper-texte").textContent = "Taper le tempo";
     const ecarts = tapes.slice(1).map((x, i) => x - tapes[i]);
-    const tempo = Math.max(40, Math.min(240, Math.round(60000 / (ecarts.reduce((a, b) => a + b, 0) / ecarts.length))));
-    reglage(() => { e.seq.tempo = tempo; });
+    changerTempo(60000 / (ecarts.reduce((a, b) => a + b, 0) / ecarts.length));
   });
-  $("idee-mesure").addEventListener("change", () => reglage(() => { e.seq.mesure = $("idee-mesure").value.split("/").map(Number); }));
+  const changerMesure = (m) => reglage(() => { e.seq.mesure = m.split("/").map(Number); });
+  $("idee-mesure").addEventListener("change", () => changerMesure($("idee-mesure").value));
+  $("idee-mesures").addEventListener("click", (ev) => { const b = ev.target.closest("[data-mesure]"); if (b) changerMesure(b.dataset.mesure); });
   $("idee-tonalite").addEventListener("change", () => reglage(() => { e.seq.tonalite = $("idee-tonalite").value; }));
   $("idee-transp-moins").addEventListener("click", () => modifier(() => transposerIdee(e.seq, -1)));
   $("idee-transp-plus").addEventListener("click", () => modifier(() => transposerIdee(e.seq, 1)));
   $("idee-accomp").addEventListener("change", () => modifier(() => { e.seq.accompagnement = $("idee-accomp").value; }));
-  $("idee-recalage").addEventListener("change", () => { e.recalage = Number($("idee-recalage").value); });
-  $("idee-midi").addEventListener("click", () => brancherMidi(true));
+  $("idee-zoom-moins").addEventListener("click", () => grille.zoom(1 / 1.3));
+  $("idee-zoom-plus").addEventListener("click", () => grille.zoom(1.3));
 
-  // Pistes
+  // Les pistes
+  function changerPiste(i) {
+    e.piste = i;
+    e.selection.clear();
+    e.curseur = Math.max(0, ...notesPiste().map((n) => n.d + n.l));
+    clavierMode.amener(notesPiste().length ? notesPiste()[notesPiste().length - 1].h : (e.seq.pistes[i].cle === "fa" ? 36 : 60));
+    rafraichir();
+  }
   $("idee-basse").addEventListener("click", () => {
     modifier(() => { e.seq.pistes.push({ nom: "Basse", cle: "fa", notes: [] }); e.piste = e.seq.pistes.length - 1; e.selection.clear(); e.curseur = 0; });
-    clavier.amener(36);
-    $("idee-reglages").hidden = true;
-    toast("Piste de basse : ce que tu joues va maintenant dans la basse. Touche « Mélodie » pour revenir.");
+    clavierMode.amener(36);
+    fermerFeuille($("idee-reglages"));
+    toast("Piste de basse : ce que tu joues va maintenant dans la basse. Touche « Basse », en haut, pour revenir à la mélodie.", 6000);
   });
   $("idee-pistes").addEventListener("click", (ev) => {
     const b = ev.target.closest("[data-piste]");
-    if (!b) return;
-    e.piste = Number(b.dataset.piste);
-    e.selection.clear();
-    e.curseur = Math.max(0, ...notesPiste().map((n) => n.d + n.l));
-    rafraichir();
+    if (b) changerPiste(Number(b.dataset.piste));
   });
 
-  // Saisie
-  $("idee-durees").addEventListener("click", (ev) => {
-    const b = ev.target.closest("button");
-    if (!b) return;
-    if (b.dataset.pas) choisirDuree(Number(b.dataset.pas));
-  });
-  $("idee-pointee").addEventListener("click", basculerPointee);
-  $("idee-silence").addEventListener("click", silence);
-  $("idee-effacer").addEventListener("click", effacer);
-  $("idee-selection").addEventListener("click", (ev) => {
-    const b = ev.target.closest("[data-action]");
-    if (!b) return;
-    const a = b.dataset.action;
-    if (a === "precedente") voisine(-1);
-    else if (a === "suivante") voisine(1);
-    else if (a === "deselectionner") { e.selection.clear(); rafraichir(); }
-    else if (a === "plus") { const r = b.getBoundingClientRect(); menuRadial.ouvrir(r.left + r.width / 2, r.top - 20); }
-    else if (a === "etendre") etendre();
-    else if (a === "tout") choisir(notesPiste().map((n) => n.id));
-    else transformer(a);
-  });
+  // --- Le transport -------------------------------------------------------------
 
-  // Transport
   $("idee-jouer").addEventListener("click", jouer);
   $("idee-boucle").addEventListener("click", () => {
     e.boucle = !e.boucle;
@@ -1118,22 +926,10 @@ export function creerEditeurIdee(deps) {
     transport.regler({ metronome: e.metronome });
     rafraichir();
   });
-  $("idee-enregistrer").addEventListener("click", enregistrer);
-  $("idee-micro").addEventListener("click", basculerMicro);
-  $("micro-fini").addEventListener("click", () => arreterMicro());
   $("idee-annuler").addEventListener("click", () => revenir(e.annuler, e.refaire));
   $("idee-refaire").addEventListener("click", () => revenir(e.refaire, e.annuler));
-  $("idee-zoom-moins").addEventListener("click", () => grille.zoom(1 / 1.3));
-  $("idee-zoom-plus").addEventListener("click", () => grille.zoom(1.3));
-  new ResizeObserver(() => { if (e.ouverte && e.affichage === "partition") rafraichir(); }).observe($("idee-partition"));
-  // Un volet ouvert (réglages, menu) se referme quand on touche ailleurs.
-  document.addEventListener("pointerdown", (ev) => {
-    for (const [volet, bouton] of [["idee-reglages", "idee-reglages-bouton"], ["idee-menu", "idee-plus"], ["feuille-accords", "idee-grille .g-regle"], ["idee-infos", "idee-plus"]]) {
-      if ($(volet).hidden || ev.target.closest(`#${volet}, #${bouton}`)) continue;
-      $(volet).hidden = true;
-      document.querySelector(`#${bouton}`).setAttribute("aria-expanded", "false");
-    }
-  });
+  new ResizeObserver(() => { if (e.ouverte) rafraichir(); }).observe($("idee-surface"));
+  $("idee-partition").addEventListener("scroll", () => selection.placer());
 
   function memoriserDefauts() {
     ecrirePref(CLE_DEFAUTS, JSON.stringify({ tempo: e.seq.tempo, mesure: e.seq.mesure, tonalite: e.seq.tonalite }));
@@ -1149,32 +945,30 @@ export function creerEditeurIdee(deps) {
     return { id: e.id, ...donnees(), creeLe: e.creeLe };
   }
 
-  // --- Clavier de l'ordinateur -----------------------------------------------------
+  // --- Le clavier de l'ordinateur -----------------------------------------------------
 
-  let octaveOrdi = 60;
   /** Rend true si la touche a servi. */
   function toucheBas(ev) {
     if (!e.ouverte) return false;
-    if (ev.repeat && TOUCHES_ORDI[ev.code] !== undefined) return true; // touche tenue : rien de plus
+    // Une feuille ouverte, ou le menu en cercle : les touches sont à eux.
+    if (document.querySelector("#vue-idee dialog[open]") || selection.menuOuvert) return false;
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z") { revenir(ev.shiftKey ? e.refaire : e.annuler, ev.shiftKey ? e.annuler : e.refaire); return true; }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y") { revenir(e.refaire, e.annuler); return true; }
-    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "a") { choisir(notesPiste().map((n) => n.id)); return true; }
-    if (ev.shiftKey && ev.code === "ArrowRight") { etendre(); return true; }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "a") { selection.tout(); return true; }
+    if (ev.shiftKey && ev.code === "ArrowRight") { selection.etendre(); return true; }
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
-    if (TOUCHES_ORDI[ev.code] !== undefined) { enfoncer(octaveOrdi + TOUCHES_ORDI[ev.code]); return true; }
+    if (clavierMode.toucheBas(ev)) return true;
     const actions = {
-      KeyZ: () => { octaveOrdi = Math.max(24, octaveOrdi - 12); clavier.amener(octaveOrdi); toast(`Clavier de l'ordinateur : à partir de ${sq.nomNote(octaveOrdi)}`, 1500); },
-      KeyX: () => { octaveOrdi = Math.min(96, octaveOrdi + 12); clavier.amener(octaveOrdi); toast(`Clavier de l'ordinateur : à partir de ${sq.nomNote(octaveOrdi)}`, 1500); },
       Space: jouer,
-      KeyR: enregistrer,
+      KeyR: direct.basculer,
       Digit1: () => choisirDuree(1), Digit2: () => choisirDuree(2), Digit3: () => choisirDuree(4), Digit4: () => choisirDuree(8), Digit5: () => choisirDuree(16),
       Period: basculerPointee, NumpadDecimal: basculerPointee,
       Digit0: silence, Numpad0: silence,
       Backspace: effacer, Delete: effacer,
-      ArrowLeft: () => voisine(-1), ArrowRight: () => voisine(1),
-      ArrowUp: () => transformer(ev.shiftKey ? "octave-haut" : "monter"),
-      ArrowDown: () => transformer(ev.shiftKey ? "octave-bas" : "descendre"),
-      Escape: () => { e.selection.clear(); rafraichir(); },
+      ArrowLeft: () => selection.voisine(-1), ArrowRight: () => selection.voisine(1),
+      ArrowUp: () => selection.transformer(ev.shiftKey ? "octave-haut" : "monter"),
+      ArrowDown: () => selection.transformer(ev.shiftKey ? "octave-bas" : "descendre"),
+      Escape: selection.aucune,
     };
     const f = actions[ev.code];
     if (!f) return false;
@@ -1183,19 +977,20 @@ export function creerEditeurIdee(deps) {
   }
 
   function toucheHaut(ev) {
-    if (TOUCHES_ORDI[ev.code] === undefined) return false;
-    const h = octaveOrdi + TOUCHES_ORDI[ev.code];
-    relever(h);
-    return true;
+    if (!e.ouverte) return false;
+    return clavierMode.toucheHaut(ev);
   }
 
   return {
-    ouvrir, fermer, recharger, toucheBas, toucheHaut, enfoncer, relever, transformer,
+    ouvrir, fermer, recharger, toucheBas, toucheHaut, enfoncer, relever,
+    transformer: (nom) => selection.transformer(nom),
+    choisirMode,
     get id() { return e.id; },
     get seq() { return e.seq; },
     get selection() { return e.selection; },
     get ouverte() { return e.ouverte; },
     get curseur() { return e.curseur; },
+    get mode() { return e.mode; },
     modifier, rafraichir, choisir,
     etat: e,
   };

@@ -1,0 +1,28 @@
+/* L'ÉDITEUR D'IDÉE, SÉLECTION (idee-selection.js) : la pilule au-dessus des
+ * notes choisies, la rangée « sélection » du pupitre, le menu en cercle. */
+
+/* La pilule : de l'encre sur la grille, posée par placer() */
+.idee-pilule { position: absolute; left: 0; top: 0; z-index: 5; display: flex; align-items: center; padding: 4px; border-radius: 16px; background: var(--encre); color: var(--papier); box-shadow: var(--ombre); }
+.idee-pilule .btn { background: transparent; border-color: transparent; color: var(--papier); }
+.idee-pilule .btn:hover { background: color-mix(in srgb, var(--papier) 16%, transparent); border-color: transparent; }
+.pilule-trait { width: 1px; height: 24px; margin: 0 2px; background: var(--papier); opacity: 0.25; }
+/* Pendant qu'une note se glisse, la pilule s'efface : elle cacherait où l'on va. */
+#idee-grille.en-geste ~ .idee-pilule, .idee-pilule.sous-le-menu { visibility: hidden; }
+
+/* La rangée du pupitre, au-dessus du mode tant qu'une note est choisie */
+.idee-selection { display: flex; align-items: center; gap: 2px; min-height: 46px; padding: 0 2px; border-radius: 13px; background: var(--surligneur-doux); }
+.idee-selection .nom { flex: 1 1 auto; min-width: 0; padding: 0 4px; font-size: 0.84rem; line-height: 1.2; color: var(--encre); }
+.idee-selection .nom .ligne { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.idee-selection .nom .ligne:first-child { font-weight: 600; }
+.idee-selection .nom .ligne + .sep + .ligne, .idee-selection .nom .sep + .ligne { color: var(--gris); font-size: 0.78rem; }
+.idee-selection .nom .sep { display: none; }
+.idee-selection .btn { color: var(--encre); }
+.idee-selection .btn:hover { background: color-mix(in srgb, var(--encre) 10%, transparent); }
+
+/* Le menu en cercle (menu-radial.js) */
+.radial { position: fixed; inset: 0; z-index: 30; background: var(--voile); touch-action: none; }
+.radial-cercle { position: absolute; width: 0; height: 0; }
+.radial-centre { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); display: grid; place-items: center; cursor: pointer; }
+.radial-geste { position: absolute; left: 0; top: 0; width: 64px; height: 64px; border-radius: 50%; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; box-shadow: var(--ombre); padding: 0; }
+.radial-geste.survole, .radial-geste:hover { background: var(--stylo); color: var(--sur-stylo); border-color: var(--stylo); }
+.radial-texte { font-size: 0.6rem; line-height: 1.1; max-width: 58px; text-align: center; }

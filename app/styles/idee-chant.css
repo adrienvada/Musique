@@ -1,0 +1,20 @@
+/* L'ÉDITEUR D'IDÉE, MODE CHANTER (idee-chant.js) : l'accordeur, dans le
+ * pupitre ; il n'écrase plus la grille. */
+
+.pupitre-chant { display: flex; align-items: center; gap: 16px; padding: 0 4px; }
+.chant-rond { height: min(132px, 100%); aspect-ratio: 1; flex: none; border-radius: 50%; border: 2px solid var(--trait-fort); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; transition: border-color 0.2s; }
+.pupitre-chant.ecoute .chant-rond { border-color: var(--stylo); }
+.micro-note { font-family: var(--f-titre); font-size: 2.5rem; line-height: 1; color: var(--encre); display: inline-flex; align-items: center; gap: 2px; min-height: 1em; }
+.micro-note:empty::before { content: "–"; color: var(--trait-fort); }
+.micro-note.ecrite { color: var(--ok); }
+.chant-justesse { font-size: 0.8rem; font-weight: 600; color: var(--gris); min-height: 1.2em; }
+.chant-justesse.juste { color: var(--ok); }
+.chant-justesse.haut, .chant-justesse.bas { color: var(--alerte); }
+.chant-droite { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.micro-justesse { position: relative; width: 100%; height: 16px; border-radius: 8px; background: linear-gradient(90deg, var(--surligneur-doux), var(--ok-doux) 40% 60%, var(--surligneur-doux)); }
+.micro-justesse i { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--ok); }
+.micro-justesse span { position: absolute; top: -4px; width: 4px; height: 24px; border-radius: 2px; background: var(--encre); left: 50%; transform: translateX(-2px); transition: left 80ms linear; }
+.micro-niveau { width: 100%; height: 4px; border-radius: 2px; background: var(--trait); overflow: hidden; }
+.micro-niveau span { display: block; height: 100%; width: 0; background: var(--stylo); }
+.chant-aide { font-size: 0.88rem; color: var(--gris); line-height: 1.35; }
+#micro-relancer { align-self: flex-start; }

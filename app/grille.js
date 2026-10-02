@@ -9,21 +9,33 @@
  *   - la glisser la déplace (temps et hauteur) ; tirer son bord droit
  *     l'allonge ou la raccourcit ;
  *   - toucher la règle place le curseur (là où le clavier écrit, là où la
- *     lecture part) ; toucher la ligne des accords en choisit un.
+ *     lecture part) et choisit la mesure (celle des accords) ; toucher
+ *     l'accord d'une mesure, ou « + accord » sur la mesure choisie, ouvre
+ *     les accords ;
+ *   - pincer à deux doigts (ou Ctrl + molette) zoome dans le temps.
  * Glisser sur le fond fait défiler, comme partout. Les notes des autres
  * pistes restent visibles, en pâle.
+ *
+ * La règle n'écrit « + accord » que sur la mesure choisie : répété dans
+ * chaque mesure, il couvrait la règle d'un texte gris qu'on ne lisait plus.
  */
 import { nomNote, pasParMesure, pasParTemps, nbMesures } from "./sequence.js";
 import { joliAccord } from "./harmonie.js";
+import { ico } from "./icones.js";
 
 const HAUT = 108, BAS = 21;
 const NOIRES = new Set([1, 3, 6, 8, 10]);
-const NS = "http://www.w3.org/2000/svg";
+const PX_MIN = 4, PX_MAX = 28;
+const borne = (x, a, b) => Math.max(a, Math.min(b, x));
 
 export function creerGrille(conteneur, rappels) {
-  let px = 11, rang = 17;
+  // Au doigt, des rangées plus hautes : une note de 20 px se touche sans viser.
+  const auDoigt = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  let px = 11, rang = auDoigt ? 20 : 17;
   let etat = null;
   let geste = null;
+  let pince = null;
+  const pointeurs = new Set();
   let dernierToucher = { id: null, t: 0 };
 
   conteneur.classList.add("grille-notes");
@@ -49,6 +61,7 @@ export function creerGrille(conteneur, rappels) {
   defil.addEventListener("scroll", () => {
     regle.style.transform = `translateX(${-defil.scrollLeft}px)`;
     touches.style.transform = `translateY(${-defil.scrollTop}px)`;
+    if (rappels.defile) rappels.defile();
   });
 
   // --- Dessin -------------------------------------------------------------
@@ -70,18 +83,25 @@ export function creerGrille(conteneur, rappels) {
     for (let h = HAUT; h >= BAS; h--) {
       const y = yDe(h);
       if (NOIRES.has(h % 12)) svg += `<rect class="g-rang-noir" x="0" y="${y}" width="${largeur}" height="${rang}"/>`;
-      if (h % 12 === 0) svg += `<line class="g-octave" x1="0" x2="${largeur}" y1="${y + rang}" y2="${y + rang}"/>`;
+      // Entre si et do (l'octave), et entre mi et fa : deux touches blanches côte à côte.
+      if (h % 12 === 0) svg += `<line class="g-octave" x1="0" x2="${largeur}" y1="${y + rang - 0.5}" y2="${y + rang - 0.5}"/>`;
+      else if (h % 12 === 5) svg += `<line class="g-mi-fa" x1="0" x2="${largeur}" y1="${y + rang - 0.5}" y2="${y + rang - 0.5}"/>`;
     }
     const pasLigne = px >= 9 ? 1 : 2;
     for (let p = 0; p <= total; p += pasLigne) {
       const classe = p % mesure === 0 ? "g-barre" : p % temps === 0 ? "g-temps" : "g-pas";
-      svg += `<line class="${classe}" x1="${p * px}" x2="${p * px}" y1="0" y2="${hauteur}"/>`;
+      const x = p * px + (classe === "g-barre" ? 0 : 0.5);
+      svg += `<line class="${classe}" x1="${x}" x2="${x}" y1="0" y2="${hauteur}"/>`;
     }
     fond.innerHTML = svg;
-    // Le petit clavier de gauche : on le touche pour entendre la note.
+    // La bande de gauche : un petit clavier qu'on touche pour entendre la
+    // note. Les do portent leur octave ; les autres touches blanches leur
+    // nom quand la rangée est assez haute pour le lire.
     let k = "";
     for (let h = HAUT; h >= BAS; h--) {
-      k += `<div class="g-touche${NOIRES.has(h % 12) ? " noire" : ""}" data-h="${h}" style="top:${yDe(h)}px;height:${rang}px">${h % 12 === 0 ? nomNote(h) : ""}</div>`;
+      const noire = NOIRES.has(h % 12);
+      const nom = noire ? "" : h % 12 === 0 ? nomNote(h) : rang >= 14 ? nomNote(h).replace(/-?\d+$/, "") : "";
+      k += `<div class="g-touche${noire ? " noire" : ""}${h % 12 === 0 ? " do" : ""}" data-h="${h}" style="top:${yDe(h)}px;height:${rang}px">${nom}</div>`;
     }
     touches.innerHTML = k;
   }
@@ -91,13 +111,12 @@ export function creerGrille(conteneur, rappels) {
     let r = "";
     if (etat.boucle) r += `<div class="g-boucle" style="left:${etat.boucle[0] * px}px;width:${(etat.boucle[1] - etat.boucle[0]) * px}px"></div>`;
     for (let m = 0; m * mesure < total; m++) {
-      const accord = (seq.accords || []).filter((a) => a.d >= m * mesure && a.d < (m + 1) * mesure);
-      const accords = accord.map((a) => `<span class="g-accord" style="left:${(a.d - m * mesure) * px}px">${joliAccord(a.nom)}</span>`).join("");
-      r += `<div class="g-mesure" data-mesure="${m}" style="left:${m * mesure * px}px;width:${mesure * px}px">
-        <div class="g-accords" role="button" tabindex="-1" data-mesure="${m}" aria-label="Accord de la mesure ${m + 1}">${accords || (etat.accordsVisibles ? '<span class="g-accord g-vide">+ accord</span>' : "")}</div>
-        <span class="g-numero">${m + 1}</span></div>`;
+      const accords = (seq.accords || []).filter((a) => a.d >= m * mesure && a.d < (m + 1) * mesure);
+      const noms = accords.map((a) => `<button type="button" class="g-accord" data-mesure="${m}" style="left:${a.d === m * mesure ? 22 : (a.d - m * mesure) * px + 4}px" aria-label="Accord ${joliAccord(a.nom)}, mesure ${m + 1}">${joliAccord(a.nom)}</button>`).join("");
+      const ajouter = !accords.length && etat.accordsVisibles ? `<button type="button" class="g-ajouter" data-mesure="${m}" aria-label="Poser un accord, mesure ${m + 1}">${ico("plus", "s")}accord</button>` : "";
+      r += `<div class="g-mesure${m === etat.mesureChoisie ? " choisie" : ""}" data-mesure="${m}" style="left:${m * mesure * px}px;width:${mesure * px}px"><span class="g-numero">${m + 1}</span>${noms}${ajouter}</div>`;
     }
-    r += `<div class="g-repere" style="left:${etat.curseur * px}px"></div>`;
+    r += `<div class="g-repere" style="left:${etat.curseur * px}px"${etat.curseurVisible === false ? " hidden" : ""}></div>`;
     regle.innerHTML = r;
   }
 
@@ -110,17 +129,18 @@ export function creerGrille(conteneur, rappels) {
     });
     for (const n of seq.pistes[piste].notes) {
       const choisie = selection.has(n.id);
-      const nom = n.l * px >= 34 ? `<span>${nomNote(n.h, seq.tonalite)}</span>` : "";
+      const nom = n.l * px >= 30 ? `<span>${nomNote(n.h, seq.tonalite)}</span>` : "";
       html += `<div class="g-note${choisie ? " choisie" : ""}" data-id="${n.id}" style="left:${n.d * px}px;top:${yDe(n.h)}px;width:${n.l * px - 1}px;height:${rang - 1}px">${nom}<i class="g-bord"></i></div>`;
     }
     calque.innerHTML = html;
     curseur.style.left = `${etat.curseur * px}px`;
+    curseur.hidden = etat.curseurVisible === false;
     invite.hidden = seq.pistes.some((p) => p.notes.length);
   }
 
   /**
-   * @param e { seq, piste, selection (Set d'ids), curseur, boucle, pas (grille
-   *   d'aimantation), duree (longueur d'une note posée), accordsVisibles }
+   * @param e { seq, piste, selection (Set d'ids), curseur, curseurVisible,
+   *   boucle, pas (grille d'aimantation), mesureChoisie, accordsVisibles }
    */
   function afficher(e) {
     const premiere = !etat;
@@ -150,6 +170,28 @@ export function creerGrille(conteneur, rappels) {
     if (y < defil.scrollTop || y > defil.scrollTop + defil.clientHeight - rang) defil.scrollTop = Math.max(0, y - defil.clientHeight / 2);
   }
 
+  /**
+   * Le cadre des notes `ids` de la piste, à l'écran (coordonnées du
+   * navigateur), et la partie visible des notes : la pilule de la
+   * sélection s'y place.
+   */
+  function boite(ids) {
+    if (!etat) return null;
+    const voulues = new Set(ids);
+    const notes = etat.seq.pistes[etat.piste].notes.filter((n) => voulues.has(n.id));
+    if (!notes.length) return null;
+    const r = plan.getBoundingClientRect();
+    return {
+      boite: {
+        left: r.left + Math.min(...notes.map((n) => n.d)) * px,
+        right: r.left + Math.max(...notes.map((n) => n.d + n.l)) * px,
+        top: r.top + Math.min(...notes.map((n) => yDe(n.h))),
+        bottom: r.top + Math.max(...notes.map((n) => yDe(n.h))) + rang,
+      },
+      zone: defil.getBoundingClientRect(),
+    };
+  }
+
   /** La tête de lecture (null : cachée) ; la vue la suit. */
   function lecture(pas) {
     tete.hidden = pas === null || pas < 0;
@@ -159,20 +201,42 @@ export function creerGrille(conteneur, rappels) {
     if (x > defil.scrollLeft + defil.clientWidth - 30 || x < defil.scrollLeft) defil.scrollLeft = Math.max(0, x - 30);
   }
 
-  function zoom(facteur) {
-    const centre = (defil.scrollLeft + defil.clientWidth / 2) / px;
-    px = Math.max(4, Math.min(28, Math.round(px * facteur)));
+  /**
+   * Zoom dans le temps. `ancre` (abscisse à l'écran) reste sous le doigt ;
+   * sans elle, c'est le milieu de la vue.
+   */
+  function zoomA(nouveau, ancre = null) {
+    if (!etat) return;
+    const r = defil.getBoundingClientRect();
+    const x = ancre === null ? defil.clientWidth / 2 : borne(ancre - r.left, 0, defil.clientWidth);
+    const instant = (defil.scrollLeft + x) / px;
+    const avant = px;
+    px = borne(nouveau, PX_MIN, PX_MAX);
+    if (px === avant) return;
     signature = "";
     afficher(etat);
-    defil.scrollLeft = Math.max(0, centre * px - defil.clientWidth / 2);
+    defil.scrollLeft = Math.max(0, instant * px - x);
   }
+  const zoom = (facteur, ancre = null) => zoomA(Math.round(px * facteur), ancre);
 
   // --- Gestes ---------------------------------------------------------------
 
   const aimanter = (pas) => Math.round(pas / etat.pas) * etat.pas;
   const noteDe = (id) => etat.seq.pistes[etat.piste].notes.find((n) => n.id === id);
 
+  /** Un geste interrompu (deuxième doigt, appel du système) : tout revient. */
+  function abandonner() {
+    if (geste && geste.long) clearTimeout(geste.long);
+    const bougeait = geste && geste.bouge;
+    geste = null;
+    conteneur.classList.remove("en-geste");
+    if (etat && bougeait) dessinerNotes();
+  }
+
   plan.addEventListener("pointerdown", (e) => {
+    pointeurs.add(e.pointerId);
+    // Deux doigts : c'est un pincement, pas une note qu'on pose ou qu'on tire.
+    if (pointeurs.size > 1) { abandonner(); return; }
     if (!etat || e.button > 0) return;
     const el = e.target.closest(".g-note:not(.autre)");
     const r = plan.getBoundingClientRect();
@@ -196,7 +260,7 @@ export function creerGrille(conteneur, rappels) {
     if (!geste || geste.type === "vide" || geste.type === "menu") return;
     const dx = e.clientX - geste.x0, dy = e.clientY - geste.y0;
     if (!geste.bouge && Math.hypot(dx, dy) < 5) return;
-    if (!geste.bouge) { geste.bouge = true; clearTimeout(geste.long); }
+    if (!geste.bouge) { geste.bouge = true; clearTimeout(geste.long); conteneur.classList.add("en-geste"); }
     const { n } = geste;
     if (geste.type === "deplacer") {
       const d = Math.max(0, aimanter(n.d + dx / px));
@@ -214,9 +278,12 @@ export function creerGrille(conteneur, rappels) {
     }
   });
 
+  const finPointeur = (e) => pointeurs.delete(e.pointerId);
   plan.addEventListener("pointerup", (e) => {
+    finPointeur(e);
     const g = geste;
     geste = null;
+    conteneur.classList.remove("en-geste");
     if (!g) return;
     clearTimeout(g.long);
     if (g.type === "menu") return;
@@ -237,30 +304,62 @@ export function creerGrille(conteneur, rappels) {
     else rappels.redimensionner(g.id, g.l);
   });
 
-  plan.addEventListener("pointercancel", () => {
-    if (geste && geste.long) clearTimeout(geste.long);
-    geste = null;
-    if (etat) dessinerNotes();
-  });
+  plan.addEventListener("pointercancel", (e) => { finPointeur(e); abandonner(); });
+  // Un doigt levé hors de la grille ne doit pas y rester compté.
+  for (const type of ["pointerup", "pointercancel"]) window.addEventListener(type, finPointeur);
   plan.addEventListener("contextmenu", (e) => e.preventDefault());
 
-  conteneur.querySelector(".g-regle").addEventListener("pointerdown", (e) => {
-    if (!etat) return;
+  const regleCadre = conteneur.querySelector(".g-regle");
+  regleCadre.addEventListener("pointerdown", (e) => {
+    if (!etat || e.target.closest(".g-accord, .g-ajouter")) return;
     const r = regle.getBoundingClientRect();
-    const accords = e.target.closest(".g-accords");
-    if (accords) { rappels.accord(Number(accords.dataset.mesure), (e.clientX - r.left) / px); return; }
-    rappels.curseur(Math.max(0, Math.round((e.clientX - r.left) / px / pasParTemps(etat.seq)) * pasParTemps(etat.seq)));
+    const pas = (e.clientX - r.left) / px;
+    const temps = pasParTemps(etat.seq);
+    rappels.curseur(Math.max(0, Math.round(pas / temps) * temps), Math.max(0, Math.floor(pas / pasParMesure(etat.seq))));
+  });
+  // Les accords s'ouvrent au clic, pas à l'appui : la feuille qui monte
+  // recevrait sinon le clic du même doigt sur son voile, et se refermerait.
+  regleCadre.addEventListener("click", (e) => {
+    const accord = etat && e.target.closest(".g-accord, .g-ajouter");
+    if (!accord) return;
+    const r = regle.getBoundingClientRect();
+    rappels.accord(Number(accord.dataset.mesure), (e.clientX - r.left) / px);
   });
   touches.addEventListener("pointerdown", (e) => {
     const t = e.target.closest(".g-touche");
     if (t) rappels.ecouter(Number(t.dataset.h));
   });
-  // Ctrl + molette : zoom, comme dans un logiciel de musique.
+  // Ctrl + molette (et le pincement du pavé tactile, que le navigateur
+  // envoie ainsi) : zoom, comme dans un logiciel de musique.
   defil.addEventListener("wheel", (e) => {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15);
+    zoomA(px * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX);
   }, { passive: false });
+  // Pincer à deux doigts : le temps s'étire ou se resserre entre les doigts.
+  // La grille garde son défilement au doigt (touch-action) ; seul le
+  // mouvement à deux doigts est pris ici.
+  let imagePince = null;
+  defil.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 2) return;
+    const [a, b] = e.touches;
+    pince = { ecart: Math.max(20, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)), px, centre: (a.clientX + b.clientX) / 2 };
+    abandonner();
+  }, { passive: true });
+  defil.addEventListener("touchmove", (e) => {
+    if (!pince || e.touches.length !== 2) return;
+    if (e.cancelable) e.preventDefault();
+    const [a, b] = e.touches;
+    const ecart = Math.max(20, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY));
+    cancelAnimationFrame(imagePince);
+    imagePince = requestAnimationFrame(() => { if (pince) zoomA(pince.px * (ecart / pince.ecart), pince.centre); });
+  }, { passive: false });
+  const finPince = (e) => { if (e.touches.length < 2) pince = null; };
+  defil.addEventListener("touchend", finPince);
+  defil.addEventListener("touchcancel", finPince);
 
-  return { afficher, lecture, zoom, centrer, montrer };
+  return {
+    afficher, lecture, zoom, centrer, montrer, boite,
+    get px() { return px; },
+  };
 }

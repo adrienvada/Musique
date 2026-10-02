@@ -183,6 +183,35 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · L'écran Idée en studio de poche (refonte 3).** Une seule barre
+  en haut : le titre, et dessous le tempo, la mesure et la tonalité, qu'on
+  touche pour ouvrir « Tempo et mesure ». La grille passe de 41 % à 52 % de
+  l'écran du téléphone : trois rangées de commandes et des volets posés sur
+  les notes la mangeaient. Les réglages, « ••• », le carnet et les accords
+  passent dans des feuilles du bas. Le pupitre reste sous le pouce : le
+  transport, puis trois modes, Clavier, Chanter (l'accordeur dans le
+  pupitre ; le micro écoute tant que le mode est ouvert et se tait quand le
+  piano joue) et Accords (les six accords de la tonalité, posés sur la
+  mesure choisie). Le dernier mode est retenu ; l'accueil ouvre une idée
+  directement en Chanter.
+  - **La sélection** : une pilule au-dessus des notes choisies, qui ne sort
+    jamais de l'écran, et une rangée dans le pupitre pour le reste. La barre
+    qui défilait de côté cachait la moitié de ses gestes. La rangée s'ajoute
+    au-dessus du mode au lieu de remplacer les durées : la durée est la
+    correction la plus fréquente, et changer de mode ne doit pas obliger à
+    désélectionner.
+  - **La règle** n'écrit « + accord » que sur la mesure choisie : répété
+    partout, c'était du bruit. La note choisie est jaune avec un anneau du
+    fond, sans bord brun. La partition remplit la place de la grille.
+  - **Un module par refonte à venir** : `idee.js` garde le cœur (état,
+    annuler, sauvegarde, dessin, transport, barre, feuilles) ; le mode
+    Clavier, le chant, les accords, la sélection et le jeu en direct vivent
+    chacun dans un `idee-*.js` (et un `idee-*.css`) qui reçoit un contexte
+    explicite.
+  - Pièges : une feuille du bas ouverte au `pointerdown` se referme aussitôt
+    (le clic du même doigt tombe sur son voile) : on l'ouvre au `click`. Hors
+    d'un geste, Safari peut garder le son du micro endormi : au bout d'une
+    seconde et demie, on demande un toucher.
 - **02/10 · Pages manuscrites : la page d'abord, les doutes un par un
   (refonte 10).** Un doute en prose, sous une page de boutons grisés, ne se
   règle pas quand on ne lit pas l'ABC. « Corriger » et « Écouter » ont

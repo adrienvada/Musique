@@ -1,0 +1,25 @@
+/* L'ÉDITEUR D'IDÉE, ACCORDS (idee-accords.js) : les six accords de la
+ * tonalité dans le pupitre, et la feuille de tous les accords. */
+
+.pupitre-accords { display: flex; flex-direction: column; gap: 6px; }
+.accords-ou-pupitre { flex: none; display: flex; align-items: center; gap: 2px; }
+.accords-mesure { min-width: 6.5em; text-align: center; font-weight: 600; font-size: 0.92rem; }
+.accords-lien { margin-left: auto; color: var(--stylo); padding: 0 8px; }
+.accords-pads { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(48px, 1fr); gap: 8px; }
+.accord-pad { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; padding: 6px 10px 8px; border: 1px solid transparent; border-radius: 14px; background: var(--creux); color: var(--encre); text-align: left; cursor: pointer; }
+.accord-pad:hover { border-color: var(--trait-fort); }
+.accord-pad .degre { font-size: 0.72rem; color: var(--gris); }
+.accord-pad .nom { font-family: var(--f-titre); font-size: 1.4rem; line-height: 1; }
+.accord-pad[aria-pressed="true"] { background: var(--surligneur); color: var(--sur-surligneur); }
+.accord-pad[aria-pressed="true"] .degre { color: var(--sur-surligneur); opacity: 0.7; }
+
+/* La feuille de tous les accords */
+.accords-tete h2 { text-align: center; }
+.accords-choix { display: flex; flex-wrap: wrap; gap: 6px; }
+.accords-choix .btn { min-width: 3.6em; justify-content: center; font-weight: 600; font-size: 1rem; }
+.accords-choix .btn[aria-pressed="true"] { background: var(--stylo); color: var(--sur-stylo); border-color: var(--stylo); }
+.accords-choix .degre { font-weight: 400; font-size: 0.72rem; color: var(--gris); }
+.accords-choix .btn[aria-pressed="true"] .degre { color: var(--sur-stylo); opacity: 0.75; }
+.accords-choix.petits .btn { min-width: 2.8em; font-size: 0.88rem; font-weight: 500; }
+.accords-autres summary { cursor: pointer; color: var(--gris); font-size: 0.88rem; padding: 8px 0; }
+.accords-autres[open] { display: flex; flex-direction: column; gap: 8px; }
