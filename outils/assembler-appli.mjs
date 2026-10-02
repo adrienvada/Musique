@@ -11,6 +11,14 @@
  * par package.json) et des pages d'essai (tests/pages/), qu'on peut
  * importer d'un clic. En autonome s'ajoutent le manifeste, les icônes et
  * le service worker (hors ligne), dont le cache change avec le contenu.
+ *
+ * En autonome encore, chaque module et chaque feuille de style porte la
+ * version dans son adresse (`idee.js?v=…`). GitHub Pages laisse les fichiers
+ * dix minutes dans le cache du navigateur, et un rechargement reprend même
+ * les modules gardés en mémoire sans rien demander : juste après une mise
+ * en ligne, la page neuve tournait avec des modules anciens, et l'éditeur
+ * plantait (02/10). Une adresse neuve à chaque version, et aucun cache ne
+ * peut plus mélanger deux versions.
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -56,9 +64,25 @@ if (autonome) {
   const empreinte = crypto.createHash("sha256");
   for (const f of [...fichiers].sort()) empreinte.update(fs.readFileSync(path.join(dist, f)));
   empreinte.update(page);
-  const sw = fs.readFileSync(path.join(racine, "app/sw.js"), "utf8").replace("__VERSION__", empreinte.digest("hex").slice(0, 12));
+  const version = empreinte.digest("hex").slice(0, 12);
+  const sw = fs.readFileSync(path.join(racine, "app/sw.js"), "utf8").replace("__VERSION__", version);
   fs.writeFileSync(path.join(dist, "sw.js"), sw);
   fichiers.push("sw.js");
+  // La version dans l'adresse des modules : tous les imports relatifs, sans
+  // exception (un module importé sous deux adresses serait chargé deux fois,
+  // avec deux états). pdf.js (.mjs, figé par package.json) n'en a pas besoin.
+  const IMPORT = /((?:\bfrom|\bimport)\s*\(?\s*)(["'])(\.\.?\/[^"']+?\.js)\2/g;
+  for (const f of fichiers.filter((f) => f.endsWith(".js") && f !== "sw.js")) {
+    const cible = path.join(dist, f);
+    const texte = fs.readFileSync(cible, "utf8").replace(IMPORT, `$1$2$3?v=${version}$2`);
+    const oublie = /(?:\bfrom|\bimport)\s*\(?\s*["']\.\.?\/[^"'?]+?\.js["']/.exec(texte);
+    if (oublie) throw new Error(`${f} : un import sans version (${oublie[0]})`);
+    fs.writeFileSync(cible, texte);
+  }
+  page = page
+    .replace(/(<script type="module" src=")(app\.js)(")/, `$1$2?v=${version}$3`)
+    .replace(/(<link rel="stylesheet" href=")(styles\/[^"]+\.css)(")/g, `$1$2?v=${version}$3`);
+  if (!page.includes(`app.js?v=${version}`)) throw new Error("index.html : app.js sans version");
   page = [
     "<!doctype html>",
     '<html lang="fr"><head><meta charset="utf-8">',

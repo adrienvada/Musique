@@ -6,6 +6,15 @@
  * immuable, se garde à part et ne se retélécharge jamais. abcjs et les
  * polices viennent de CDN : gardés aussi, pour la gravure hors ligne.
  * Le connecteur reMarkable n'est jamais mis en cache.
+ *
+ * Juste après une mise en ligne, la page arrivait neuve et ses modules
+ * anciens (GitHub Pages les laisse dix minutes dans le cache du navigateur) :
+ * l'éditeur plantait sur un bouton disparu et la grille restait vide (02/10).
+ * Les modules et les feuilles de style portent maintenant la version dans
+ * leur adresse (`?v=…`, voir outils/assembler-appli.mjs) : aucun cache ne
+ * peut en rendre un ancien. La page, elle, et les fichiers sans version sont
+ * redemandés au serveur, pas au cache du navigateur (`no-cache` : un
+ * aller-retour court, rien de retéléchargé s'ils n'ont pas changé).
  */
 const VERSION = "portee-__VERSION__";
 const PIANO = "portee-piano-1";
@@ -38,7 +47,12 @@ self.addEventListener("fetch", (e) => {
     }
     const cache = await caches.open(VERSION);
     try {
-      const r = await fetch(req);
+      // Une navigation ne se recopie pas avec des options : on la redemande par
+      // son adresse, sans suivre une redirection (c'est au navigateur de le faire).
+      const frais = url.searchParams.has("v") ? req
+        : req.mode === "navigate" ? new Request(req.url, { cache: "no-cache", credentials: "same-origin", redirect: "manual" })
+        : new Request(req, { cache: "no-cache" });
+      const r = await fetch(frais);
       if (r.ok) cache.put(req, r.clone());
       return r;
     } catch (erreur) {
