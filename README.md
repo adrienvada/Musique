@@ -33,7 +33,8 @@ enregistrée sur ton compte claude.ai).
    Laisse le doigt dessus : une bulle dit ce qu'elle fait. La pilule au-dessus des notes choisies les monte, les
    descend ou les efface ; « ••• » range le reste (durées, plus lent, à
    l'envers, miroir…). Une note choisie prend la hauteur de la touche que tu
-   joues. Tout s'annule.
+   joues. Tout s'annule. Pour supprimer une idée, une partition ou un
+   morceau : « ••• » sur sa ligne, puis Supprimer.
 5. **Envoie le MIDI** (bouton Partager) : AirDrop, Fichiers, mail… ou un
    téléchargement. Une piste par voix, au tempo de l'idée. Aussi en
    MusicXML pour MuseScore.
