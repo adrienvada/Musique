@@ -15,10 +15,6 @@
       Portée
     </button>
     <div class="fil" id="fil" hidden><span aria-hidden="true">/</span><b id="fil-titre"></b></div>
-    <div class="seg onglets" id="onglets" role="tablist" aria-label="Écrans de la partition" hidden>
-      <button role="tab" id="onglet-atelier" aria-selected="false">Corriger</button>
-      <button role="tab" id="onglet-lecteur" aria-selected="false">Écouter et exporter</button>
-    </div>
     <!-- Les quatre onglets de l'accueil : dans la barre du haut à l'ordinateur ;
          au téléphone, la feuille de style les fixe en bas, sous le pouce. La barre
          n'apparaît que dans l'accueil, comme tout ce qu'elle contient. -->
@@ -209,108 +205,165 @@
   </section>
 
   <!-- ===== Atelier ===== -->
-  <section class="vue" id="vue-atelier" hidden>
-    <div class="rangee">
-      <input class="titre-edit" id="titre" aria-label="Titre de la partition">
+  <!-- La page d'abord, les doutes un par un : sa barre, ta page et la partition lue, et en bas un panneau
+       fixé (doute, ou outils de la note choisie). Les doutes s'y posent en questions fermées (doutes.js). -->
+  <section class="vue vue-partition vue-atelier" id="vue-atelier" hidden>
+    <header class="barre-ecran">
+      <button class="btn btn-fantome rond" data-retour aria-label="Retour à la bibliothèque"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
+      <div class="barre-titre">
+        <input class="titre-edit" id="titre" aria-label="Titre de la partition">
+        <p class="barre-sous" id="infos-atelier"></p>
+      </div>
       <span id="statut-atelier"></span>
-      <button class="btn btn-petit btn-danger" id="supprimer">Supprimer</button>
-    </div>
+      <button class="btn btn-fantome rond" id="plus-atelier" aria-label="Plus d'actions" aria-haspopup="dialog"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
+      <!-- Corriger ↔ Écouter : un seul jeu de boutons, que l'appli range sous la barre de l'écran ouvert. -->
+      <div class="seg onglets" id="onglets-partition" role="tablist" aria-label="Écrans de la partition">
+        <button role="tab" id="onglet-atelier" aria-selected="false">Corriger</button>
+        <button role="tab" id="onglet-lecteur" aria-selected="false">Écouter et exporter</button>
+      </div>
+    </header>
     <div class="confirmer" id="confirmer" hidden>
       <span>Supprimer cette partition et ses pages ? C'est définitif.</span>
       <button class="btn btn-petit btn-danger" id="confirmer-oui">Supprimer</button>
       <button class="btn btn-petit" id="confirmer-non">Garder</button>
     </div>
-    <div class="guide" id="guide">
-      <span><strong>Touche une note</strong> de la partition pour la corriger, ou <strong>glisse-la</strong> vers le haut ou le bas.</span>
-      <span class="remarque">Au clavier : <kbd>↑</kbd> <kbd>↓</kbd> hauteur, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>.</kbd> point, <kbd>Suppr</kbd>, <kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler.</span>
+    <div class="regle-vues">
+      <div class="seg" id="vues-atelier" role="group" aria-label="Ce que tu vois">
+        <button data-vue="page" aria-pressed="false">Ta page</button>
+        <button data-vue="lue" aria-pressed="false">Lue</button>
+        <button data-vue="deux" aria-pressed="false">Les deux</button>
+      </div>
+      <span class="pages-nav" id="pages-nav"></span>
     </div>
-    <div class="deux">
-      <div class="panneau">
-        <div class="surtitre">Ce que Portée a lu</div>
-        <div class="outils-note" id="outils-note">
-          <span class="note-choisie" id="note-choisie">Aucune note choisie</span>
-          <span class="groupe">
-            <button class="btn btn-petit" data-geste="haut" aria-label="Un degré plus haut">▲ Plus haut</button>
-            <button class="btn btn-petit" data-geste="bas" aria-label="Un degré plus bas">▼ Plus bas</button>
-          </span>
-          <span class="groupe" id="durees">
-            <button class="btn btn-petit" data-duree="0.5">double croche</button>
-            <button class="btn btn-petit" data-duree="1">croche</button>
-            <button class="btn btn-petit" data-duree="2">noire</button>
-            <button class="btn btn-petit" data-duree="4">blanche</button>
-            <button class="btn btn-petit" data-duree="8">ronde</button>
-            <button class="btn btn-petit" data-geste="point" aria-label="Note pointée">pointée</button>
-          </span>
-          <span class="groupe">
-            <button class="btn btn-petit" data-alteration="^" aria-label="Dièse">♯</button>
-            <button class="btn btn-petit" data-alteration="_" aria-label="Bémol">♭</button>
-            <button class="btn btn-petit" data-alteration="=" aria-label="Bécarre">♮</button>
-          </span>
-          <span class="groupe">
-            <button class="btn btn-petit" data-geste="silence" id="bouton-silence">en silence</button>
-            <button class="btn btn-petit" data-geste="dupliquer">+ une de plus</button>
-            <button class="btn btn-petit btn-danger" data-geste="supprimer">supprimer</button>
-          </span>
+    <div class="zones" id="zones-atelier" data-vue="deux">
+      <section class="zone zone-page" id="zone-page" aria-label="Ta page">
+        <p class="surtitre">Ta page</p>
+        <div class="page-cadre">
+          <svg class="page-svg" id="page" role="img" aria-label="Ta page manuscrite"></svg>
+          <div class="reperes" id="reperes"></div>
         </div>
-        <div class="gravure gravure-edit" id="gravure-atelier"></div>
+      </section>
+      <section class="zone zone-lue" id="zone-lue" aria-label="Ce que Portée a lu">
+        <div class="zone-tete">
+          <p class="surtitre">Ce que Portée a lu</p>
+          <button class="btn btn-petit" id="ecouter-atelier"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Écouter</button>
+        </div>
+        <div class="page-cadre gravure-cadre"><div class="gravure gravure-edit" id="gravure-atelier"></div></div>
+        <p class="guide" id="guide">Touche une note pour la corriger, ou glisse-la vers le haut ou le bas.<span class="raccourcis"> Au clavier : <kbd>↑</kbd> <kbd>↓</kbd> hauteur, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>.</kbd> point, <kbd>Suppr</kbd>, <kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler.</span></p>
         <p class="etat" id="etat-abc" role="status"></p>
-      </div>
-      <div class="panneau">
-        <div class="surtitre">Ta page <span class="pages-nav" id="pages-nav"></span></div>
-        <svg class="page-svg" id="page" role="img" aria-label="Ta page manuscrite"></svg>
-      </div>
+      </section>
     </div>
-    <div class="panneau">
-      <div class="surtitre">À vérifier</div>
-      <div class="doutes" id="doutes"></div>
-      <div class="rangee">
-        <button class="btn" id="ecouter-atelier"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Écouter</button>
-        <button class="btn" id="annuler" disabled><svg class="ico s" aria-hidden="true"><use href="#i-annuler"></use></svg>Annuler</button>
-        <span class="remarque" id="enregistre"></span>
-        <button class="btn btn-plein pousse" id="valider">C'est bon : écouter et exporter</button>
-      </div>
-    </div>
-    <details class="panneau">
-      <summary class="surtitre" style="cursor:pointer">Mode avancé : le texte ABC</summary>
-      <p class="remarque">La partition est écrite en ABC, une notation en texte. Tu n'as pas besoin d'y toucher : les boutons ci-dessus le réécrivent pour toi.</p>
+    <details class="avance">
+      <summary>Mode avancé : le texte ABC</summary>
+      <p class="remarque">La partition est écrite en ABC, une notation en texte. Tu n'as pas besoin d'y toucher : les boutons la réécrivent pour toi.</p>
       <textarea class="abc" id="abc" spellcheck="false" aria-label="Texte ABC de la partition"></textarea>
       <div class="rangee">
         <button class="btn btn-petit" id="relire">Revenir à la lecture de Portée</button>
       </div>
       <p class="remarque">Une lettre = une note : <code>C D E F G A B</code> pour l'octave du do central, <code>c d e</code> une octave au-dessus, <code>C,</code> une octave en dessous. Le chiffre qui suit est la durée en croches : <code>C2</code> noire, <code>C</code> croche, <code>C/</code> double croche, <code>C3</code> noire pointée, <code>C4</code> blanche. <code>z</code> est un silence. <code>^C</code> dièse, <code>_B</code> bémol, <code>=F</code> bécarre. Des notes collées sont liées par une ligature. <code>|</code> barre de mesure, <code>|:</code> et <code>:|</code> reprises.</p>
     </details>
+
+    <!-- Le panneau du bas, fixé : un doute à la fois, ou les outils de la note choisie. -->
+    <aside class="dock" id="dock-atelier" aria-label="Doutes et corrections">
+      <div class="dock-tete">
+        <div class="dock-gauche" id="tete-doutes">
+          <span class="surtitre" id="dock-titre"></span>
+          <span class="pas" id="pas-doutes"></span>
+        </div>
+        <div class="dock-gauche" id="tete-note" hidden>
+          <span class="note-choisie" id="note-choisie"></span>
+        </div>
+        <span class="remarque pousse" id="enregistre" role="status"></span>
+        <button class="btn btn-fantome rond" id="annuler" disabled aria-label="Annuler le dernier geste"><svg class="ico" aria-hidden="true"><use href="#i-annuler"></use></svg></button>
+        <button class="btn btn-fantome rond" id="fermer-note" hidden aria-label="Terminer cette note"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+        <button class="btn btn-fantome rond" id="replier-dock" aria-label="Replier le panneau" aria-expanded="true"><svg class="ico" aria-hidden="true"><use href="#i-chevron-bas"></use></svg></button>
+      </div>
+      <div class="dock-manuel" id="dock-manuel" hidden>
+        <button class="btn btn-petit" id="manuel-retour">Retour au doute</button>
+        <button class="btn btn-petit btn-plein" id="manuel-fini">C'est réglé</button>
+      </div>
+      <div class="doutes" id="doutes"></div>
+      <div class="outils-note" id="outils-note" role="toolbar" aria-label="Corriger la note choisie" hidden>
+        <button class="btn outil" data-geste="haut" aria-label="Un degré plus haut" title="Un degré plus haut"><svg class="ico" aria-hidden="true"><use href="#i-haut"></use></svg></button>
+        <button class="btn outil" data-geste="bas" aria-label="Un degré plus bas" title="Un degré plus bas"><svg class="ico" aria-hidden="true"><use href="#i-bas"></use></svg></button>
+        <button class="btn outil signe" data-alteration="^" aria-label="Dièse" title="Dièse">♯</button>
+        <button class="btn outil signe" data-alteration="_" aria-label="Bémol" title="Bémol">♭</button>
+        <button class="btn outil signe" data-alteration="=" aria-label="Bécarre" title="Bécarre">♮</button>
+        <button class="btn outil" data-geste="silence" id="bouton-silence" aria-label="Changer en silence" title="Note ou silence"><svg class="ico" aria-hidden="true"><use href="#i-silence"></use></svg></button>
+        <button class="btn outil" data-geste="dupliquer" aria-label="Une note de plus, juste après" title="Une de plus"><svg class="ico" aria-hidden="true"><use href="#i-repeter"></use></svg></button>
+        <span class="separe" aria-hidden="true"></span>
+        <button class="btn outil" data-duree="0.5" aria-label="Double croche" title="Double croche"><svg class="ico" aria-hidden="true"><use href="#i-d1"></use></svg></button>
+        <button class="btn outil" data-duree="1" aria-label="Croche" title="Croche"><svg class="ico" aria-hidden="true"><use href="#i-d2"></use></svg></button>
+        <button class="btn outil" data-duree="2" aria-label="Noire" title="Noire"><svg class="ico" aria-hidden="true"><use href="#i-d4"></use></svg></button>
+        <button class="btn outil" data-duree="4" aria-label="Blanche" title="Blanche"><svg class="ico" aria-hidden="true"><use href="#i-d8"></use></svg></button>
+        <button class="btn outil" data-duree="8" aria-label="Ronde" title="Ronde"><svg class="ico" aria-hidden="true"><use href="#i-d16"></use></svg></button>
+        <button class="btn outil" data-geste="point" aria-label="Note pointée" title="Pointée"><svg class="ico" aria-hidden="true"><use href="#i-point"></use></svg></button>
+        <button class="btn outil btn-danger" data-geste="supprimer" aria-label="Supprimer la note" title="Supprimer"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg></button>
+      </div>
+    </aside>
+
+    <dialog class="feuille-bas" id="feuille-atelier" aria-labelledby="feuille-atelier-titre">
+      <div class="feuille-tete"><h2 id="feuille-atelier-titre">Cette partition</h2></div>
+      <div class="liste-actions">
+        <button class="btn" id="valider-menu"><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg>C'est bon : écouter et exporter<span class="remarque">même s'il reste des doutes</span></button>
+        <button class="btn" id="voir-abc"><svg class="ico s" aria-hidden="true"><use href="#i-page"></use></svg>Mode avancé : le texte ABC</button>
+        <button class="btn btn-danger" id="supprimer"><svg class="ico s" aria-hidden="true"><use href="#i-corbeille"></use></svg>Supprimer</button>
+      </div>
+    </dialog>
   </section>
 
   <!-- ===== Lecteur ===== -->
-  <section class="vue" id="vue-lecteur" hidden>
-    <div class="rangee">
-      <div>
-        <h2 id="titre-lecteur" style="font-size:clamp(1.4rem,3vw,1.9rem)"></h2>
-        <p class="remarque mono" id="meta-lecteur"></p>
+  <section class="vue vue-partition vue-lecteur" id="vue-lecteur" hidden>
+    <header class="barre-ecran">
+      <button class="btn btn-fantome rond" data-retour aria-label="Retour à la bibliothèque"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
+      <div class="barre-titre">
+        <h2 id="titre-lecteur"></h2>
+        <p class="barre-sous" id="meta-lecteur"></p>
       </div>
-      <div class="rangee pousse exports">
-        <button class="btn btn-plein" id="export-midi"><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg>Télécharger le MIDI</button>
-        <button class="btn" id="imprimer"><svg class="ico s" aria-hidden="true"><use href="#i-imprimer"></use></svg>Imprimer ou PDF</button>
-        <button class="btn btn-petit" id="export-musicxml" title="Pour MuseScore, Sibelius, Dorico">MusicXML</button>
-        <button class="btn btn-petit" id="export-abc">Texte ABC</button>
-        <button class="btn btn-petit" id="continuer-idee" title="Une copie modifiable au clavier, avec accords et enregistrement">Continuer en idée</button>
+      <span id="statut-lecteur"></span>
+      <button class="btn btn-fantome rond" id="plus-lecteur" aria-label="Plus d'actions" aria-haspopup="dialog"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
+    </header>
+    <div class="confirmer" id="confirmer-lecteur" hidden>
+      <span>Supprimer cette partition et ses pages ? C'est définitif.</span>
+      <button class="btn btn-petit btn-danger" id="confirmer-lecteur-oui">Supprimer</button>
+      <button class="btn btn-petit" id="confirmer-lecteur-non">Garder</button>
+    </div>
+    <div class="exports">
+      <button class="btn" id="export-midi"><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg>Télécharger le MIDI</button>
+      <button class="btn" id="imprimer" aria-label="Imprimer ou enregistrer en PDF"><svg class="ico s" aria-hidden="true"><use href="#i-imprimer"></use></svg>Imprimer</button>
+    </div>
+    <div class="page-cadre gravure-cadre"><div class="gravure" id="gravure-lecteur"></div></div>
+    <p class="remarque aide-export">Le MIDI garde le tempo et la transposition choisis ici, avec une piste par main au piano : glisse-le dans Ableton, MuseScore ou GarageBand.<span class="raccourcis"> <kbd>Espace</kbd> lance ou arrête l'écoute.</span></p>
+
+    <aside class="dock dock-transport" id="transport-lecteur" aria-label="Écoute">
+      <div class="transport-haut">
+        <button class="btn btn-plein" id="ecouter" title="Espace"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Écouter</button>
+        <label class="tempo" for="tempo"><span class="remarque">Tempo</span><input type="range" id="tempo" min="30" max="200" value="90"><span class="val" id="tempo-val">♩ = 90</span></label>
       </div>
-    </div>
-    <div class="panneau"><div class="gravure" id="gravure-lecteur"></div></div>
-    <div class="transport">
-      <button class="btn btn-plein" id="ecouter" title="Espace"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Écouter</button>
-      <label for="tempo">Tempo <input type="range" id="tempo" min="30" max="200" value="90"><span class="val" id="tempo-val">♩ = 90</span></label>
-      <span class="rangee" style="gap:6px"><span class="remarque">Transposer</span>
-        <button class="btn btn-petit" id="transp-moins" aria-label="Un demi-ton plus bas"><svg class="ico s" aria-hidden="true"><use href="#i-moins"></use></svg></button>
-        <span class="val" id="transp-val">0</span>
-        <button class="btn btn-petit" id="transp-plus" aria-label="Un demi-ton plus haut"><svg class="ico s" aria-hidden="true"><use href="#i-plus"></use></svg></button></span>
-      <span class="rangee" id="mains" hidden>
-        <label class="bascule"><input type="checkbox" id="main-droite" checked> Main droite</label>
-        <label class="bascule"><input type="checkbox" id="main-gauche" checked> Main gauche</label>
-      </span>
-      <span class="remarque" id="etat-son"></span>
-    </div>
-    <p class="remarque aide-export">Le MIDI garde le tempo et la transposition choisis ici, avec une piste par main au piano : glisse-le dans Ableton, MuseScore ou GarageBand. <kbd>Espace</kbd> lance ou arrête l'écoute.</p>
+      <div class="transport-bas">
+        <span class="transposer" role="group" aria-label="Transposer">
+          <span class="remarque">Transposer</span>
+          <button class="btn rond" id="transp-moins" aria-label="Un demi-ton plus bas"><svg class="ico s" aria-hidden="true"><use href="#i-moins"></use></svg></button>
+          <span class="val" id="transp-val">0</span>
+          <button class="btn rond" id="transp-plus" aria-label="Un demi-ton plus haut"><svg class="ico s" aria-hidden="true"><use href="#i-plus"></use></svg></button>
+        </span>
+        <span class="rangee" id="mains" hidden>
+          <label class="bascule"><input type="checkbox" id="main-droite" checked> Main droite</label>
+          <label class="bascule"><input type="checkbox" id="main-gauche" checked> Main gauche</label>
+        </span>
+        <span class="remarque" id="etat-son"></span>
+      </div>
+    </aside>
+
+    <dialog class="feuille-bas" id="feuille-lecteur" aria-labelledby="feuille-lecteur-titre">
+      <div class="feuille-tete"><h2 id="feuille-lecteur-titre">Autres formats</h2></div>
+      <div class="liste-actions">
+        <button class="btn" id="export-musicxml"><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg>MusicXML<span class="remarque">pour MuseScore, Sibelius, Dorico</span></button>
+        <button class="btn" id="export-abc"><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg>Texte ABC</button>
+        <button class="btn" id="continuer-idee"><svg class="ico s" aria-hidden="true"><use href="#i-clavier"></use></svg>Continuer en idée<span class="remarque">une copie modifiable au clavier, avec accords et enregistrement</span></button>
+        <button class="btn btn-danger" id="supprimer-lecteur"><svg class="ico s" aria-hidden="true"><use href="#i-corbeille"></use></svg>Supprimer</button>
+      </div>
+    </dialog>
   </section>
   <!-- ===== Morceau ===== -->
   <section class="vue vue-morceau" id="vue-morceau" hidden>

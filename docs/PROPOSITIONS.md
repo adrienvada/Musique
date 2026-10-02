@@ -183,6 +183,30 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · Pages manuscrites : la page d'abord, les doutes un par un
+  (refonte 10).** Un doute en prose, sous une page de boutons grisés, ne se
+  règle pas quand on ne lit pas l'ABC. « Corriger » et « Écouter » ont
+  désormais leur barre, et les doutes passent dans un panneau fixé en bas
+  (pas une fenêtre : la page reste sous les yeux).
+  - **Corriger** : « Ta page | Lue | Les deux » (côte à côte à
+    l'ordinateur), des repères numérotés sur la page, un doute à la fois
+    avec une loupe sur le passage, une question fermée (« Croche ou
+    noire ? », « Il manque une croche ») et de gros boutons. Une réponse
+    applique le vrai geste d'`edition.js` sur la bonne note et règle le
+    doute dans le même pas : « Annuler » défait les deux. « Je corrige
+    moi-même » et « C'est voulu » restent possibles. Les outils d'une note
+    n'apparaissent qu'avec une note choisie.
+  - **Pourquoi ça marche sans lire l'ABC** : le lecteur écrit pour chaque
+    doute son `type` et sa `cible` (où tombe la note ou la mesure dans l'ABC
+    produit), sans changer l'ABC (les tests du lecteur n'ont pas bougé).
+    `app/doutes.js` fait suivre ces places à chaque correction ; si la note
+    disparaît, la question se pose sans réponse fermée. Les pages lues avant
+    retrouvent leurs cibles en relisant leurs traits, tant qu'on n'y a pas
+    touché. Les réponses se calculent sur l'ABC d'aujourd'hui.
+  - **Écouter** : transport fixé en bas, MIDI et impression en haut, les
+    autres formats et « Supprimer » dans « ••• ».
+  - Pas fait : « Non, sans armure » pour le doute d'armure, qu'aucun geste
+    d'`edition.js` ne sait écrire.
 - **02/10 · L'accueil en quatre onglets (refonte 2).** L'accueil se lit comme
   un carnet : on note d'abord, on retrouve ensuite. Il avait ~520 px
   d'en-tête, de filtres et de boutons avant la première partition, et quatre

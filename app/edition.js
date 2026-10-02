@@ -99,9 +99,15 @@ function ecrireJeton(j) {
   return ecrireNote(j.notes[0]) + d;
 }
 
+/**
+ * Chaque geste rend le nouvel ABC, la place de la note touchée (debut, fin) et
+ * `modif` : le morceau d'ABC remplacé, [de, a[, par un texte de `longueur`
+ * caractères. L'atelier s'en sert pour suivre les doutes (doutes.js) : une
+ * correction ne doit pas décaler la note qu'un autre doute vise.
+ */
 function remplacer(abc, j, nouveau) {
   const texte = typeof nouveau === "string" ? nouveau : ecrireJeton(nouveau);
-  return { abc: abc.slice(0, j.debut) + texte + abc.slice(j.fin), debut: j.debut, fin: j.debut + texte.length };
+  return { abc: abc.slice(0, j.debut) + texte + abc.slice(j.fin), debut: j.debut, fin: j.debut + texte.length, modif: { de: j.debut, a: j.fin, longueur: texte.length } };
 }
 
 /** Monte (pas > 0) ou descend d'autant de degrés ; l'altération écrite tombe. */
@@ -150,14 +156,31 @@ export function dupliquer(abc, j) {
   // Collée à la suivante si elles étaient liées par une ligature, séparée sinon.
   const colle = /^[\^_=A-Ga-g[]/.test(suite);
   const ajout = colle ? texte : " " + texte;
-  return { abc: abc.slice(0, j.fin) + ajout + suite, debut: j.fin + (colle ? 0 : 1), fin: j.fin + ajout.length };
+  return { abc: abc.slice(0, j.fin) + ajout + suite, debut: j.fin + (colle ? 0 : 1), fin: j.fin + ajout.length, modif: { de: j.fin, a: j.fin, longueur: ajout.length } };
 }
 
 /** Supprime le jeton (et l'espace qui le suivait, pour ne pas en laisser deux). */
 export function supprimer(abc, j) {
   let fin = j.fin;
   if (abc[j.debut - 1] === " " && abc[fin] === " ") fin++;
-  return { abc: abc.slice(0, j.debut) + abc.slice(fin), debut: j.debut, fin: j.debut };
+  return { abc: abc.slice(0, j.debut) + abc.slice(fin), debut: j.debut, fin: j.debut, modif: { de: j.debut, a: fin, longueur: 0 } };
+}
+
+/**
+ * Une durée exacte, en croches, sans toucher au point : la réponse à
+ * « il manque une croche » rallonge ou raccourcit la dernière note de ce qui
+ * manque, qu'elle soit pointée ou non.
+ */
+export function fixerDuree(abc, j, croches) {
+  if (!(croches > 0)) return null;
+  return remplacer(abc, j, { ...j, croches });
+}
+
+/** Un silence de cette durée juste après le jeton (le plus souvent, la fin d'une mesure). */
+export function ajouterSilence(abc, j, croches) {
+  if (!(croches > 0)) return null;
+  const ajout = " z" + dureeABC(croches);
+  return { abc: abc.slice(0, j.fin) + ajout + abc.slice(j.fin), debut: j.fin + 1, fin: j.fin + ajout.length, modif: { de: j.fin, a: j.fin, longueur: ajout.length } };
 }
 
 /** « sol croche », « la♭ noire pointée », « accord do-mi-sol, blanche », « soupir ». */
