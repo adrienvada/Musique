@@ -183,6 +183,29 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     du système, et plusieurs refontes avancent sans se marcher dessus.
   - **Les messages passagers en haut** : en bas, ils cachaient le clavier
     et la liste, là où va le pouce.
+- **02/10 · Le clavier montre la gamme (refonte 4).** Le clavier à l'écran ne
+  disait rien de l'idée : neuf touches sans repère, aucune idée de la gamme,
+  une octave invisible qu'on changeait à l'aveugle.
+  - Une pastille bleue marque les touches de la gamme de l'idée (la tonique
+    cerclée ; les autres restent jouables, atténuées), et chaque touche
+    blanche porte son nom (do4 pour le do). En mineur, la gamme est le
+    mineur naturel, celui de l'armure.
+  - **Piano ou Gamme** (retenu) : en Gamme, huit grosses touches, les sept
+    degrés et l'octave, épelées dans la tonalité (Fa♯, Si♭) : pas de fausse
+    note possible. Elles écrivent par le même chemin que le piano, donc le
+    jeu en direct et la note choisie marchent pareil.
+  - **La carte des octaves** (do2 à do6) montre l'octave affichée et y saute
+    d'un toucher ou d'un glissé ; Z / X la suivent, et les touches de
+    l'ordinateur jouent l'octave montrée (avant, Z / X bougeaient une octave
+    invisible).
+  - Le pupitre garde sa hauteur, pour que la grille ne rétrécisse pas : le
+    choix Piano / Gamme et la carte tiennent sur une rangée, et les chevrons
+    quittent les flancs du clavier, dont les touches passent de 34 à 46 px de
+    large (mais de 155 à 113 px de haut au téléphone, 78 px sur un écran de
+    667 px). Quand une note est choisie, la rangée de sélection prend la
+    place de cette barre, et le clavier montre de lui-même sa hauteur.
+  - Réglage : « Montrer la gamme sur le clavier » (Réglages › Éditeur, oui
+    par défaut) coupe les pastilles, pas le mode Gamme ni les noms.
 - **02/10 · L'écran Idée en studio de poche (refonte 3).** Une seule barre
   en haut : le titre, et dessous le tempo, la mesure et la tonalité, qu'on
   touche pour ouvrir « Tempo et mesure ». La grille passe de 41 % à 52 % de

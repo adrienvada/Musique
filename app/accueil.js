@@ -484,6 +484,23 @@ export function creerAccueil(deps) {
     montrer();
   }
 
+  /**
+   * Montrer la gamme de l'idée sur le clavier de l'éditeur : oui par défaut (idee-clavier.js
+   * le relit à chaque ouverture d'une idée ; seul "0" la coupe).
+   */
+  function brancherGammeClavier() {
+    const b = $("reglage-gamme");
+    const actif = () => lirePref("portee:clavier-gamme") !== "0";
+    const montrer = () => b.setAttribute("aria-checked", String(actif()));
+    b.addEventListener("click", () => {
+      const voulu = !actif();
+      ecrirePref("portee:clavier-gamme", voulu ? "1" : "0");
+      montrer();
+      if (actif() !== voulu) toast("Ce navigateur ne garde pas les réglages : la gamme reste " + (actif() ? "affichée" : "masquée") + " sur le clavier.");
+    });
+    montrer();
+  }
+
   /** L'icône de la barre du haut : l'état de la synchronisation d'un coup d'œil. */
   function montrerSynchro({ nuage, ton, titre }) {
     const b = $("etat-synchro");
@@ -523,6 +540,7 @@ export function creerAccueil(deps) {
   brancherFeuilleActions();
   brancherDepot();
   brancherAmbiance();
+  brancherGammeClavier();
 
   // Noter une idée : trois entrées, dans l'éditeur. Le mode « chanter » est une option
   // que l'éditeur sait lire ; sans lui, l'éditeur s'ouvre comme pour « Jouer ».

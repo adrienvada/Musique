@@ -176,6 +176,12 @@
             </div>
           </div>
           <p class="reglages-texte">Studio : sombre, pour jouer sans éblouir le soir. Papier : clair, comme le reste de Portée.</p>
+          <!-- Clavier · l'interrupteur de la gamme sur les touches (accueil.js ; lu par idee-clavier.js) -->
+          <button class="reglages-ligne" id="reglage-gamme" role="switch" aria-checked="true">
+            <span>Montrer la gamme sur le clavier</span>
+            <span class="interrupteur" aria-hidden="true"></span>
+          </button>
+          <p class="reglages-texte">Les notes de la gamme de l'idée portent une pastille bleue, la tonique est cerclée. Les autres restent jouables, un peu plus pâles.</p>
         </div>
       </section>
 
@@ -513,7 +519,9 @@
       </div>
 
       <div class="idee-mode-dedans">
-        <!-- Pupitre · Clavier : les durées et le clavier à l'écran (idee-clavier.js, clavier.js) -->
+        <!-- Pupitre · Clavier : les durées et le clavier à l'écran (idee-clavier.js, clavier.js).
+             #idee-clavier reçoit, écrits par clavier.js : la barre (Piano / Gamme, ‹ la carte des
+             octaves ›), le piano et les huit touches de gamme. -->
         <div class="pupitre-clavier" id="pupitre-clavier" role="tabpanel" aria-label="Clavier" hidden>
           <div class="idee-durees" id="idee-durees" role="group" aria-label="Durée des notes">
             <button class="duree" data-pas="1" aria-pressed="false" title="Double croche (1)"><svg class="ico" aria-hidden="true"><use href="#i-d1"></use></svg><span>double</span></button>

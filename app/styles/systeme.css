@@ -123,6 +123,13 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 .seg > button { flex: 1 1 0; min-height: 36px; border: 0; background: transparent; border-radius: 10px; padding: 0 14px; color: var(--gris); font-weight: 500; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
 .seg > button[aria-selected="true"], .seg > button[aria-pressed="true"] { background: var(--feuille); color: var(--encre); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14); }
 
+/* Interrupteur : un <button role="switch" aria-checked> qui contient
+   <span class="interrupteur"></span> (réglages oui / non). */
+.interrupteur { flex: none; position: relative; width: 46px; height: 28px; border-radius: 999px; background: var(--trait-fort); transition: background 0.15s; }
+.interrupteur::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--feuille); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 0.15s; }
+[aria-checked="true"] > .interrupteur { background: var(--stylo); }
+[aria-checked="true"] > .interrupteur::after { transform: translateX(18px); background: var(--sur-stylo); }
+
 /* Filtres et étiquettes */
 .puce { min-height: 34px; border: 1px solid var(--trait-fort); background: transparent; color: var(--encre); border-radius: 999px; padding: 0 14px; cursor: pointer; font-size: 0.88rem; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .puce[aria-pressed="true"] { background: var(--encre); color: var(--papier); border-color: var(--encre); }
