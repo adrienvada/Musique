@@ -91,8 +91,12 @@ function toast(texte, duree = 4000) {
   const t = $("toast");
   t.textContent = texte;
   t.hidden = false;
+  // En « popover », le message passe au-dessus d'une feuille du bas ouverte
+  // (un <dialog> est dans la couche du dessus) au lieu d'être grisé dessous.
+  // Le rouvrir le remet au premier plan ; sans popover, il s'affiche comme avant.
+  if (t.showPopover) { try { if (t.matches(":popover-open")) t.hidePopover(); t.showPopover(); } catch { /* sans popover */ } }
   clearTimeout(minuterieToast);
-  minuterieToast = setTimeout(() => (t.hidden = true), duree);
+  minuterieToast = setTimeout(() => { t.hidden = true; if (t.hidePopover) try { t.hidePopover(); } catch { /* déjà fermé */ } }, duree);
 }
 
 function dateCourte(iso) {

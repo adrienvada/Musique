@@ -18,6 +18,8 @@
   --trait: #D3D5CF; --trait-fort: #A9ACA5; --stylo: #2F4BC2; --stylo-doux: #DDE3F6; --sur-stylo: #FFFFFF;
   --surligneur: #F2D04B; --surligneur-doux: #FBF1B0; --rouge: #D93A3F; --ok: #2F7A4D; --ok-doux: #DCEFE2;
   --alerte: #9A5B00; --danger: #A5281B;
+  /* Le surligneur reste clair dans toutes les ambiances : on y écrit toujours en sombre. */
+  --sur-surligneur: #1C1E21;
   /* Le piano reste un piano, mais n'éblouit pas en sombre. */
   --touche-blanche: #FAFAF7; --touche-noire: #1C1E21; --touche-texte: #565A61; --touche-bord: #A9ACA5;
   --voile: rgba(28, 30, 33, 0.34);
@@ -88,6 +90,9 @@ code, .mono { font-family: var(--f-code); font-size: 0.9em; }
 main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex; flex-direction: column; gap: 18px; }
 .vue { display: flex; flex-direction: column; gap: 18px; }
 
+/* Pour les lecteurs d'écran seulement (un état annoncé, pas affiché). */
+.visuellement-cache { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
 /* Les boutons. Une action principale par écran (.btn-plein) ; le reste
    discret. Au doigt, rien ne fait moins de 44 px. */
 .btn { min-height: 40px; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); padding: 0 14px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.94rem; font-weight: 500; white-space: nowrap; text-decoration: none; }
@@ -157,7 +162,7 @@ dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: 1.35rem; }
 
 /* Les messages passagers s'affichent en haut : en bas, ils cachaient le
    clavier et la liste, là où va le pouce. */
-.toast { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + var(--barre) + 10px); background: var(--encre); color: var(--papier); padding: 10px 16px; border-radius: 12px; font-size: 0.92rem; font-weight: 500; max-width: min(92vw, 560px); z-index: 40; box-shadow: var(--ombre); }
+.toast { inset: auto; margin: 0; border: 0; overflow: visible; position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + var(--barre) + 10px); background: var(--encre); color: var(--papier); padding: 10px 16px; border-radius: 12px; font-size: 0.92rem; font-weight: 500; max-width: min(92vw, 560px); z-index: 40; box-shadow: var(--ombre); }
 
 @media (pointer: coarse) {
   .btn, .btn-petit, .puce, .champ { min-height: 44px; }
