@@ -176,9 +176,8 @@ const NOTABLES = [24, 16, 12, 8, 6, 4, 3, 2, 1];
  *   le plus grand signe cachait un temps : quatre croches en tête d'un 6/8
  *   devenaient une blanche, qui ne se termine pas sur le deuxième temps.
  */
-function fragmenter(a, b, mesure, temps) {
+function fragmenter(a, b, debutMesure, temps) {
   const morceaux = [];
-  const debutMesure = Math.floor(a / mesure) * mesure;
   const compose = temps === 6;
   let x = a;
   while (x < b) {
@@ -235,26 +234,62 @@ function couches(notes) {
 /**
  * Une couche, mesure par mesure : des jetons { a, l, silence, notes, lie }.
  * `lie` : l'accord continue au jeton suivant ; `suite` (par note) : il
- * vient du jeton précédent.
+ * vient du jeton précédent. `mesures` : la liste des mesures (lesMesures).
  */
-function decouperCouche(evenements, { mesure, temps, total, coupures, epellation }) {
-  const bornes = new Set([0, total, ...coupures]);
-  for (let x = 0; x <= total; x += mesure) bornes.add(x);
+function decouperCouche(evenements, { mesures, total, coupures, epellation }) {
+  const bornes = new Set([0, total, ...coupures, ...mesures.map((m) => m.debut)]);
   for (const e of evenements) { bornes.add(e.d); bornes.add(e.d + e.l); }
   const liste = [...bornes].filter((x) => x >= 0 && x <= total).sort((a, b) => a - b);
-  const mesures = Array.from({ length: Math.round(total / mesure) }, () => []);
+  const parMesure = mesures.map(() => []);
+  let im = 0;
   for (let i = 0; i + 1 < liste.length; i++) {
     const a = liste[i], b = liste[i + 1];
+    while (im + 1 < mesures.length && mesures[im + 1].debut <= a) im++;
     const e = evenements.find((x) => x.d <= a && x.d + x.l > a);
-    for (const [x, y] of fragmenter(a, b, mesure, temps)) {
-      mesures[Math.floor(x / mesure)].push({
+    for (const [x, y] of fragmenter(a, b, mesures[im].debut, mesures[im].temps)) {
+      parMesure[im].push({
         a: x, l: y - x, silence: !e, lie: !!e && e.d + e.l > y,
         // L'épellation est celle de la note entière : un morceau lié garde la même.
         notes: e ? e.notes.map((n) => ({ id: n.id, h: n.h, suite: e.d < x, e: epellation.get(n) })) : [],
       });
     }
   }
+  return parMesure;
+}
+
+/**
+ * Les mesures de la partition, de 0 à `total` : [{ debut, longueur, mesure,
+ * temps, ligature, tonalite, k, change: { mesure, tonalite } }]. `sections` :
+ * [{ d, mesure, tonalite }], triées, la première en 0 ; une idée n'en a
+ * qu'une, un morceau une par bloc qui change de mesure ou de tonalité.
+ * `change` dit ce qu'une mesure change par rapport à la précédente (pour le
+ * MusicXML) ; la toute première change tout.
+ */
+function lesMesures(sections, total) {
+  const mesures = [];
+  sections.forEach((s, i) => {
+    const jusque = i + 1 < sections.length ? Math.min(total, sections[i + 1].d) : total;
+    const longueur = (s.mesure[0] * 16) / s.mesure[1];
+    const info = { mesure: s.mesure, temps: pasParTemps(s), ligature: groupeDeLigature(s), tonalite: s.tonalite, k: lireTonalite(s.tonalite) };
+    for (let x = s.d; x < jusque; x += longueur) {
+      const avant = mesures.at(-1);
+      mesures.push({
+        debut: x, longueur: Math.min(longueur, jusque - x), ...info,
+        change: {
+          mesure: !avant || avant.mesure.join("/") !== s.mesure.join("/"),
+          tonalite: !avant || avant.tonalite !== s.tonalite,
+        },
+      });
+    }
+  });
   return mesures;
+}
+
+/** Où finissent les mesures qui contiennent `derniere` (pas), d'après les sections. */
+function finDesMesures(sections, derniere) {
+  const s = [...sections].reverse().find((x) => x.d <= Math.max(0, derniere - 1)) || sections[0];
+  const longueur = (s.mesure[0] * 16) / s.mesure[1];
+  return s.d + Math.max(1, Math.ceil((derniere - s.d) / longueur)) * longueur;
 }
 
 /**
@@ -263,14 +298,16 @@ function decouperCouche(evenements, { mesure, temps, total, coupures, epellation
  * de sa ligne. L'accompagnement, fait des notes des accords, s'écrit donc
  * comme ses accords.
  */
-function epellationsDesVoix(seq, voix) {
-  const accords = (seq.accords || []).filter((a) => epellationsDeLAccord(a.nom).length).sort((a, b) => a.d - b.d)
-    .map((a) => ({ d: a.d, notes: epellationsDeLAccord(a.nom) }));
-  const accordA = (d) => {
+function epellationsDesVoix(seq, voix, sections) {
+  // Ce qui vaut au pas `d` : le dernier élément de la liste (triée) qui commence avant.
+  const enVigueur = (liste) => (d) => {
     let r = null;
-    for (const a of accords) { if (a.d > d) break; r = a; }
-    return r && r.notes;
+    for (const x of liste) { if (x.d > d) break; r = x; }
+    return r;
   };
+  const accordA = enVigueur((seq.accords || []).filter((a) => epellationsDeLAccord(a.nom).length).sort((a, b) => a.d - b.d)
+    .map((a) => ({ d: a.d, notes: epellationsDeLAccord(a.nom) })));
+  const sectionA = enVigueur(sections);
   const epellation = new Map();
   for (const v of voix) {
     const parDebut = new Map();
@@ -280,7 +317,10 @@ function epellationsDesVoix(seq, voix) {
     }
     const groupes = [...parDebut.values()];
     groupes.forEach((g, i) => {
-      for (const n of g) epellation.set(n, epeler(n.h, seq.tonalite, { accord: accordA(n.d), sens: sensDeLaLigne(groupes, i, n) }));
+      for (const n of g) {
+        const accord = accordA(n.d);
+        epellation.set(n, epeler(n.h, (sectionA(n.d) || sections[0]).tonalite, { accord: accord && accord.notes, sens: sensDeLaLigne(groupes, i, n) }));
+      }
     });
   }
   return epellation;
@@ -303,26 +343,41 @@ function cleDe(voix, rang) {
  * L'épellation se fait note par note, avec l'accord en cours et le sens de
  * la ligne (epeler) : la même hauteur peut s'écrire fa♯ sous un ré 7 et
  * sol♭ dans une ligne qui descend vers fa.
+ *
+ * Les voix qui partagent une `portee` (l'accompagnement : ses accords et sa
+ * basse) se gravent ensemble, sur une seule portée. `sections` (un morceau
+ * dont les blocs changent de mesure ou de tonalité) : [{ d, mesure,
+ * tonalite }], la première en 0 ; par défaut, celles de l'idée.
  */
-export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0 } = {}) {
-  const k = lireTonalite(seq.tonalite);
-  const mesure = pasParMesure(seq), temps = pasParTemps(seq);
-  const total = (nbMesures(seq) + mesuresEnPlus) * mesure;
-  const nb = Math.round(total / mesure);
+export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0, sections = null } = {}) {
+  const lesSections = sections && sections.length ? sections : [{ d: 0, mesure: seq.mesure, tonalite: seq.tonalite }];
+  let total = finDesMesures(lesSections, finSequence(seq));
+  const derniereSection = lesSections.at(-1);
+  total += mesuresEnPlus * ((derniereSection.mesure[0] * 16) / derniereSection.mesure[1]);
+  const mesures = lesMesures(lesSections, total);
+  const nb = mesures.length;
   const accords = new Map((seq.accords || []).filter((a) => a.d < total).map((a) => [a.d, a.nom]));
   const coupures = [...accords.keys()];
-  const epellation = epellationsDesVoix(seq, voix);
+  const epellation = epellationsDesVoix(seq, voix, lesSections);
+  // Les voix d'une même portée se rassemblent (leurs notes passent par les mêmes couches).
+  const portees = [];
+  for (const v of voix) {
+    const p = v.portee !== undefined && portees.find((x) => x.portee === v.portee);
+    if (p) p.notes = [...p.notes, ...v.notes];
+    else portees.push({ ...v, notes: [...v.notes] });
+  }
   // Les changements d'accord ne coupent que la couche qui porte leurs symboles.
-  const parVoix = voix.map((v, iv) => couches(v.notes).map((c, ic) => decouperCouche(c, { mesure, temps, total, coupures: iv === 0 && ic === 0 ? coupures : [], epellation })));
+  const parVoix = portees.map((v, iv) => couches(v.notes).map((c, ic) => decouperCouche(c, { mesures, total, coupures: iv === 0 && ic === 0 ? coupures : [], epellation })));
   for (const lesCouches of parVoix) {
     for (let m = 0; m < nb; m++) {
+      const k = mesures[m].k;
       // Une altération vaut jusqu'à la barre, pour la même note à la même
       // octave. abcjs l'oublie d'une couche à l'autre : une note déjà
       // altérée dans une autre couche redit la sienne.
       const dejaAlterees = new Set();
-      for (const mesures of lesCouches) {
+      for (const couche of lesCouches) {
         const ecrites = new Map([...dejaAlterees].map((cle) => [cle, NaN]));
-        for (const t of mesures[m]) {
+        for (const t of couche[m]) {
           for (const n of t.notes) {
             const cle = n.e.lettre + n.e.octave;
             n.signe = null;
@@ -340,7 +395,11 @@ export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0 } = 
       }
     }
   }
-  return { k, mesure, temps, ligature: groupeDeLigature(seq), total, nb, accords, cles: voix.map((v, i) => cleDe(v, i)), parVoix };
+  const premiere = mesures[0];
+  return {
+    k: premiere.k, mesure: premiere.longueur, temps: premiere.temps, ligature: premiere.ligature,
+    mesures, total, nb, accords, portees: portees.map((p) => ({ nom: p.nom, cle: p.cle })), cles: portees.map((v, i) => cleDe(v, i)), parVoix,
+  };
 }
 
 /**
@@ -352,12 +411,12 @@ export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0 } = 
  * première voix.
  */
 export function ecrireAbc(seq, { voix = seq.pistes, titre = "", mesuresParLigne = 4, mesuresEnPlus = 0 } = {}) {
-  const { mesure, ligature: groupe, nb, accords, cles, parVoix } = mettreEnMesures(seq, { voix, mesuresEnPlus });
+  const { mesures, nb, accords, cles, parVoix } = mettreEnMesures(seq, { voix, mesuresEnPlus });
   const entete = ["X:1"];
   if (titre) entete.push("T:" + titre.replace(/\n/g, " "));
   entete.push(`M:${seq.mesure[0]}/${seq.mesure[1]}`, "L:1/8", `Q:1/4=${seq.tempo}`, `K:${seq.tonalite}`);
-  const avecVoix = voix.length > 1 || cles[0] !== "sol";
-  if (avecVoix) voix.forEach((v, i) => entete.push(`V:${i + 1} clef=${cles[i] === "fa" ? "bass" : "treble"}`));
+  const avecVoix = parVoix.length > 1 || cles[0] !== "sol";
+  if (avecVoix) parVoix.forEach((_, i) => entete.push(`V:${i + 1} clef=${cles[i] === "fa" ? "bass" : "treble"}`));
   let abc = entete.join("\n") + "\n";
   const jetons = [];
 
@@ -367,15 +426,16 @@ export function ecrireAbc(seq, { voix = seq.pistes, titre = "", mesuresParLigne 
       let debutLigne = abc.length;
       if (avecVoix) abc += `[V:${iv + 1}] `;
       for (let m = m0; m < Math.min(nb, m0 + mesuresParLigne); m++) {
-        lesCouches.forEach((mesures, ic) => {
+        lesCouches.forEach((couche, ic) => {
           // Une couche s'écrit dans toutes les mesures, même vide : sinon
           // abcjs y invente un silence qui ne renvoie à rien.
           if (ic > 0) abc += " &";
           let precedent = null;
-          for (const t of mesures[m]) {
-            const dedans = t.a - m * mesure;
+          const { debut: debutMesure, ligature: groupe } = mesures[m];
+          for (const t of couche[m]) {
+            const dedans = t.a - debutMesure;
             const ligature = precedent && !t.silence && !precedent.silence && t.l < 4 && precedent.l < 4
-              && Math.floor(dedans / groupe) === Math.floor((precedent.a - m * mesure) / groupe);
+              && Math.floor(dedans / groupe) === Math.floor((precedent.a - debutMesure) / groupe);
             // abcjs fait commencer l'élément à l'espace, ou au symbole d'accord, qui le précède.
             const avant = debutLigne ?? abc.length;
             debutLigne = null;

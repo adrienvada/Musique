@@ -618,6 +618,30 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     chromatique en do donne C D7 G E7 Am G7 C. La roue, elle, ne montre
     toujours que ses sept accords : une dominante secondaire n'y apparaît
     pas (à voir avec l'écran des accords, si tu veux la proposer là aussi).
+- **N5 · Le MIDI, pensé pour Live.** Relu avec mido, @tonejs/midi et
+  music21, comme pendant l'audit :
+  - **la basse et les accords sur deux pistes** : l'accompagnement devient
+    deux voix, « Accords » et « Basse des accords » (pas « Basse » : ta
+    propre piste de basse ne s'y mélange pas, dans un morceau non plus).
+    Dans Live, la basse part vers une vraie basse. La partition et le
+    MusicXML les gardent sur une seule portée en clé de fa, comme avant
+    (les voix partagent une `portee`) ;
+  - **des noms lisibles partout : en ASCII** (« Melodie »). Un fichier
+    MIDI ne dit pas l'encodage de ses textes, chaque logiciel devine :
+    mido et @tonejs/midi lisaient « MÃ©lodie » (Latin-1), music21 l'UTF-8,
+    et Live, impossible à essayer ici, dépend de son système. L'ASCII est
+    le seul texte lu pareil par tous ; perdre l'accent vaut mieux qu'un nom
+    illisible. Les signes se traduisent (♯ → #), les emoji partent ;
+  - **chaque piste finit à la barre** de la dernière mesure, piste de tempo
+    comprise : un clip tombe juste et boucle sans trou ;
+  - **une même note n'est jamais rejouée pendant qu'elle sonne** : la
+    première s'arrête où la suivante commence (deux do posés qui se
+    chevauchent sur la grille) ;
+  - **un morceau garde le chiffrage et l'armure de chaque bloc**, au début
+    du bloc (un refrain en 3/4 et en sol dans un morceau en 4/4 et en do) ;
+  - le zip (claude.ai) est daté du jour, plus du « 0 janvier 1980 » ;
+  - l'en-tête de `midi.js` dit vrai : « Basse » n'existe que si tu as
+    ajouté une piste de basse.
 - **B9 · L'arrondi traite la dernière note comme les autres.** Ta règle du
   jeu lié ne change pas (une note relâchée au plus un pas de grille avant la
   suivante tient jusqu'à elle). Mais la dernière note d'une prise n'a pas de

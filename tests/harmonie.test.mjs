@@ -114,9 +114,15 @@ test("l'accompagnement : une voix de plus, dans la mesure, gravée en clé de fa
   const arpege = h.accompagnement(seq);
   assert.equal(arpege.length, 16);
   assert.ok(arpege.every((n) => n.l === 2));
+  // Deux voix d'accompagnement (pour le MIDI : les accords, et la basse sur sa propre piste),
+  // gravées ensemble sur une seule portée en clé de fa.
   const voix = h.voixCompletes(seq);
-  assert.equal(voix.length, 2);
-  assert.match(ecrireAbc(seq, { voix }).abc, /V:2 clef=bass/);
+  assert.deepEqual(voix.map((v) => v.nom), ["Mélodie", "Accords", "Basse des accords"]);
+  assert.deepEqual(voix[2].notes.map((n) => n.h), [36, 47]);
+  assert.ok(voix[1].notes.every((n) => n.h > 47));
+  const { abc } = ecrireAbc(seq, { voix });
+  assert.match(abc, /V:2 clef=bass/);
+  assert.doesNotMatch(abc, /V:3/);
   seq.accompagnement = "aucun";
   assert.equal(h.voixCompletes(seq).length, 1);
 });

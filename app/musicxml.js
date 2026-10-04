@@ -40,7 +40,7 @@ function harmonie(nom) {
  * @returns le texte du fichier .musicxml
  */
 export function ecrireMusicXml(seq, { voix = seq.pistes, titre = "Idée" } = {}) {
-  const { k, mesure, nb, accords, cles, parVoix } = mettreEnMesures(seq, { voix });
+  const { k, mesure, nb, accords, portees, cles, parVoix } = mettreEnMesures(seq, { voix });
   const lignes = [
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',
     '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">',
@@ -48,7 +48,7 @@ export function ecrireMusicXml(seq, { voix = seq.pistes, titre = "Idée" } = {})
     `<work><work-title>${echapper(titre)}</work-title></work>`,
     '<identification><encoding><software>Portée</software></encoding></identification>',
     "<part-list>",
-    ...voix.map((v, i) => `<score-part id="P${i + 1}"><part-name>${echapper(v.nom || `Voix ${i + 1}`)}</part-name><score-instrument id="P${i + 1}-I1"><instrument-name>Piano</instrument-name></score-instrument><midi-instrument id="P${i + 1}-I1"><midi-channel>${i + 1}</midi-channel><midi-program>1</midi-program></midi-instrument></score-part>`),
+    ...portees.map((v, i) => `<score-part id="P${i + 1}"><part-name>${echapper(v.nom || `Voix ${i + 1}`)}</part-name><score-instrument id="P${i + 1}-I1"><instrument-name>Piano</instrument-name></score-instrument><midi-instrument id="P${i + 1}-I1"><midi-channel>${i + 1}</midi-channel><midi-program>1</midi-program></midi-instrument></score-part>`),
     "</part-list>",
   ];
   parVoix.forEach((lesCouches, iv) => {

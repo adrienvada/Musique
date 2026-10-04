@@ -520,7 +520,8 @@ export function accompagnement(seq, style = seq.accompagnement) {
   });
   const choix = conduire(possibles);
   const notes = [];
-  const ajouter = (d, l, h, v = 70) => { if (l > 0 && d < total) notes.push({ id: -(notes.length + 1), d, l: Math.min(l, total - d), h, v }); };
+  // Chaque note dit si elle est la basse ou l'accord : le MIDI les met sur deux pistes (voixCompletes).
+  const ajouter = (d, l, h, v, role) => { if (l > 0 && d < total) notes.push({ id: -(notes.length + 1), d, l: Math.min(l, total - d), h, v, role }); };
   accords.forEach((ac, i) => {
     const { a, fin } = ac;
     const voix = choix[i];
@@ -531,7 +532,8 @@ export function accompagnement(seq, style = seq.accompagnement) {
       // Un accord par mesure (rejoué à chaque barre, pour qu'on l'entende).
       for (let d = ac.d; d < fin; d = Math.min(fin, (Math.floor(d / mesure) + 1) * mesure)) {
         const l = Math.min(fin, (Math.floor(d / mesure) + 1) * mesure) - d;
-        for (const h of [basse, ...voix]) ajouter(d, l, h);
+        ajouter(d, l, basse, 70, "basse");
+        for (const h of voix) ajouter(d, l, h, 70, "accord");
       }
     } else if (style === "basse") {
       // La basse sur le premier temps, l'accord (sans sa racine, que la basse vient de dire) sur les autres.
@@ -539,8 +541,8 @@ export function accompagnement(seq, style = seq.accompagnement) {
       const dessus = sansRacine.length >= 2 ? sansRacine : voix;
       for (let d = ac.d; d < fin; d += temps) {
         const l = Math.min(temps, fin - d);
-        if ((d % mesure) === 0 || d === ac.d) ajouter(d, l, basse, 80);
-        else for (const h of dessus) ajouter(d, l, h, 60);
+        if ((d % mesure) === 0 || d === ac.d) ajouter(d, l, basse, 80, "basse");
+        else for (const h of dessus) ajouter(d, l, h, 60, "accord");
       }
     } else if (style === "arpege") {
       // Des croches : la basse, puis l'accord qui monte et redescend, toutes
@@ -553,7 +555,8 @@ export function accompagnement(seq, style = seq.accompagnement) {
       let k = 0;
       for (let d = ac.d; d < fin; d += 2, k++) {
         if (d % mesure === 0) k = 0;
-        ajouter(d, Math.min(2, fin - d), k === 0 ? basse : vague[(k - 1) % vague.length], k === 0 ? 75 : 62);
+        if (k === 0) ajouter(d, Math.min(2, fin - d), basse, 75, "basse");
+        else ajouter(d, Math.min(2, fin - d), vague[(k - 1) % vague.length], 62, "accord");
       }
     }
   });
@@ -573,11 +576,20 @@ export function motifAccompagnement(style, mesure = [4, 4]) {
   return { pas, notes: accompagnement(seq, style).map(({ d, l, h }) => ({ d, l, h })) };
 }
 
-/** Les voix à graver, jouer et exporter : les pistes, plus l'accompagnement s'il y en a un. */
+/**
+ * Les voix à graver, jouer et exporter : les pistes, plus l'accompagnement
+ * s'il y en a un, en deux voix, « Accords » et « Basse des accords ». Le MIDI
+ * les sépare (dans Live, la basse va sur sa propre piste, vers une basse) ;
+ * la partition et le MusicXML les gardent sur une seule portée en clé de fa
+ * (`portee`), comme la main gauche d'un pianiste. « Basse des accords » et
+ * pas « Basse » : une piste de basse jouée par toi ne s'y mélange pas.
+ */
 export function voixCompletes(seq) {
   const voix = seq.pistes.map((p) => ({ ...p }));
   const acc = accompagnement(seq);
-  if (acc.length) voix.push({ nom: "Accords", cle: "fa", notes: acc });
+  const accords = acc.filter((n) => n.role !== "basse"), basses = acc.filter((n) => n.role === "basse");
+  if (accords.length) voix.push({ nom: "Accords", cle: "fa", portee: "accompagnement", notes: accords });
+  if (basses.length) voix.push({ nom: "Basse des accords", cle: "fa", portee: "accompagnement", notes: basses });
   return voix;
 }
 

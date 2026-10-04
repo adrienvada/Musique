@@ -6,7 +6,8 @@
  * bibliothèque (on ne la recopie pas : la corriger corrige le morceau), avec
  * un nom de section et un nombre de fois. On réordonne les blocs au doigt,
  * on écoute l'enchaînement, on l'envoie en MIDI (une piste par voix : la
- * mélodie de tous les blocs, la basse, les accords).
+ * mélodie de tous les blocs, les accords et leur basse, les pistes des
+ * idées) ou en MusicXML.
  *
  * Chaque bloc dure un nombre entier de mesures de son idée. Le tempo est
  * celui du morceau (celui de la première idée, au départ).
@@ -18,15 +19,18 @@ import { fichierMidi } from "./midi.js";
 export const SECTIONS = ["Intro", "Couplet", "Pré-refrain", "Refrain", "Pont", "Solo", "Outro"];
 
 /**
- * Le morceau à plat : ses voix (notes décalées bloc après bloc), et où
- * commence et finit chaque passage d'un bloc.
+ * Le morceau à plat : ses voix (notes décalées bloc après bloc), ses
+ * accords, où commence et finit chaque passage d'un bloc, et ses sections :
+ * un bloc peut être en 3/4 et en sol dans un morceau qui commence en 4/4 et
+ * en do. Chaque section dit où elle commence, sa mesure et sa tonalité ; le
+ * MIDI et le MusicXML les reprennent.
  * @param morceau { blocs: [{ id, idee, nom, fois }], tempo }
  * @param idees   Map id → partition (type idee) ; un bloc dont l'idée a disparu est sauté
  */
 export function assembler(morceau, idees) {
-  const voix = new Map(); // nom → notes
-  const passages = [];
-  let debut = 0, premiere = null;
+  const voix = new Map(); // nom → { nom, cle, portee, notes }
+  const passages = [], accords = [], sections = [];
+  let debut = 0, premiere = null, id = 1;
   for (const bloc of morceau.blocs || []) {
     const p = idees.get(bloc.idee);
     if (!p || !p.sequence) continue;
@@ -37,17 +41,24 @@ export function assembler(morceau, idees) {
     for (let fois = 0; fois < Math.max(1, bloc.fois || 1); fois++) {
       lesVoix.forEach((v, i) => {
         const nom = i === 0 ? "Mélodie" : v.nom || `Voix ${i + 1}`;
-        if (!voix.has(nom)) voix.set(nom, []);
-        for (const n of v.notes) voix.get(nom).push({ d: n.d + debut, l: n.l, h: n.h, v: n.v });
+        if (!voix.has(nom)) voix.set(nom, { nom, cle: v.cle, portee: v.portee, notes: [] });
+        for (const n of v.notes) voix.get(nom).notes.push({ id: id++, d: n.d + debut, l: n.l, h: n.h, v: n.v });
       });
+      for (const a of seq.accords || []) if (a.d < longueur) accords.push({ d: a.d + debut, nom: a.nom });
+      const avant = sections.at(-1);
+      if (!avant || avant.mesure.join("/") !== seq.mesure.join("/") || avant.tonalite !== seq.tonalite) {
+        sections.push({ d: debut, mesure: [...seq.mesure], tonalite: seq.tonalite });
+      }
       passages.push({ bloc: bloc.id, debut, fin: debut + longueur, fois });
       debut += longueur;
     }
   }
   const seq0 = premiere || { tempo: 90, mesure: [4, 4], tonalite: "C" };
   return {
-    voix: [...voix].map(([nom, notes]) => ({ nom, notes: notes.sort((a, b) => a.d - b.d) })),
+    voix: [...voix.values()].map((v) => ({ ...v, notes: v.notes.sort((a, b) => a.d - b.d) })),
+    accords,
     passages,
+    sections: sections.length ? sections : [{ d: 0, mesure: seq0.mesure, tonalite: seq0.tonalite }],
     fin: debut,
     tempo: morceau.tempo || seq0.tempo,
     mesure: seq0.mesure,
@@ -55,11 +66,15 @@ export function assembler(morceau, idees) {
   };
 }
 
-/** Le MIDI de l'enchaînement. */
+/** Le MIDI de l'enchaînement : le chiffrage et l'armure de chaque bloc, au début du bloc. */
 export function midiDuMorceau(morceau, idees) {
   const a = assembler(morceau, idees);
   const k = lireTonalite(a.tonalite);
-  return fichierMidi(a.voix, { tempo: a.tempo, mesure: a.mesure, quintes: k.quintes, mineur: k.mineur, titre: morceau.titre });
+  const changements = a.sections.slice(1).map((s) => {
+    const ks = lireTonalite(s.tonalite);
+    return { d: s.d, mesure: s.mesure, quintes: ks.quintes, mineur: ks.mineur };
+  });
+  return fichierMidi(a.voix, { tempo: a.tempo, mesure: a.mesure, quintes: k.quintes, mineur: k.mineur, titre: morceau.titre, changements, fin: a.fin });
 }
 
 /** Ce que le transport joue (transport.js). */
