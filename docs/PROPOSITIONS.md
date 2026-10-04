@@ -538,6 +538,20 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     répond « Invalid JWT ». L'ancienne clé garde ses deux en-têtes.
   - Le faux stockage des tests refuse une clé secrète en `Bearer`, comme
     la plateforme : un retour en arrière ne passerait pas les tests.
+- **La porte du connecteur (S4, côté HTTP).** Trois gardes avant le
+  protocole (`http.js`) :
+  - **la clé se compare à temps constant** : `!==` s'arrête au premier
+    caractère faux, et le temps de réponse disait combien étaient justes.
+    On compare les empreintes SHA-256 jusqu'au bout ;
+  - **l'en-tête `Origin` est vérifié**, comme la spécification MCP l'exige :
+    une page d'ailleurs reçoit 403, même avec la bonne clé (avant, elle
+    faisait agir le connecteur, le navigateur lui cachait seulement la
+    réponse). Passent : sans `Origin` (les serveurs de claude.ai, le
+    script de déploiement), ton site (et `PORTEE_ORIGINES`), et les
+    origines de Claude (`claude.ai`, `claude.com`, `anthropic.com` et leurs
+    sous-domaines) au cas où ses serveurs en mettraient une ;
+  - **le corps est borné à 6 Mo** (413 au-delà), compté en lisant : la
+    longueur annoncée peut manquer ou mentir. Une page dense pèse 60 Ko.
 
 ### Données et synchronisation (S6, D1 à D10)
 
