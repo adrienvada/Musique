@@ -543,6 +543,19 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   message clair à la place d'une erreur JavaScript. La ligne du bas de
   chaque portée se lit d'après son nom (« fa3 ») plutôt que dans une table
   de deux clés : un modèle en clé d'ut se lirait sans toucher au lecteur.
+- **Les traits de la tablette suivent les règles du PDF (C7).** Le PDF
+  exporté ne garde que l'encre noire ; `traitsDePage` (`rm.js`) écarte
+  désormais aussi le gris, le blanc, les couleurs, le surligneur et l'outil
+  « ombrage » (23). Sinon une page lue par le connecteur et la même page
+  lue par son PDF pouvaient différer. `lireLignes` rend toujours tout ce que
+  rmscene rend, pour le diagnostic.
+  - Un point non fini ou absurde est écarté ; une ligne dont les points
+    débordent de leur bloc est sautée (elle lisait le bloc suivant comme des
+    coordonnées) ; un bloc plus long que le fichier arrête la lecture. Les
+    9 000 fichiers abîmés de l'audit se lisent sans un point invalide.
+  - `lirePageRm` rend `{ traits, erreur }` sans jamais lever d'erreur : à
+    `remarkable.js` (lot connecteur) de s'en servir pour qu'une page
+    illisible ne fasse plus échouer tout le document.
 
 ### Connecteur (S3 à S5, C1 à C6)
 
