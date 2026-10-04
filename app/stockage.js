@@ -251,7 +251,6 @@ const VERSION_BASE = 3;
 const MAGASINS = ["partitions", "pages", "envois", "meta", "bases"];
 const QUARANTAINE = "quarantaine:";
 
-const requete = (r) => new Promise((ok, ko) => { r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); });
 let compteurEnvois = 0;
 /** Un numéro neuf à chaque envoi noté : la synchro n'efface que l'envoi qu'elle a fait partir (D3). */
 const numeroEnvoi = () => `${Date.now().toString(36)}-${(++compteurEnvois).toString(36)}-${Math.random().toString(36).slice(2, 7)}`;

@@ -25,16 +25,6 @@ function baseAncienne(nomBase, version, remplir) {
     r.onerror = () => ko(r.error);
   });
 }
-const lireMagasin = (nomBase, magasin) => new Promise((ok, ko) => {
-  const r = indexedDB.open(nomBase);
-  r.onsuccess = () => {
-    const t = r.result.transaction(magasin).objectStore(magasin);
-    const k = t.getAllKeys(), v = t.getAll();
-    v.onsuccess = () => { ok(Object.fromEntries(k.result.map((c, i) => [c, v.result[i]]))); r.result.close(); };
-  };
-  r.onerror = () => ko(r.error);
-});
-
 test("migration v2 → v3 : tout est gardé, et chaque fiche déjà synchronisée devient sa propre base", async () => {
   const b = nom();
   await baseAncienne(b, 2, (db) => {
@@ -195,7 +185,7 @@ test("D5 · restaurer : les absentes reviennent datées d'aujourd'hui dans l'ord
     assert.equal(r.ajoutees, 4);
     assert.equal(r.ignorees, 2);
     assert.equal(r.differentes, 1);
-    assert.deepEqual(r.echecs.map((x) => [x.titre, x.raison]), [["Sans titre", "fiche illisible"], ["Refusée", "le stockage est plein"]].sort((x, y) => (x[0] === "Refusée" ? 1 : -1)));
+    assert.deepEqual(r.echecs.map((x) => [x.titre, x.raison]), [["Sans titre", "fiche illisible"], ["Refusée", "le stockage est plein"]].sort((x, _y) => (x[0] === "Refusée" ? 1 : -1)));
     const l = await liste(cible);
     assert.equal((await cible.lire("d")).titre, "Déjà là, et modifiée ici", "une partition présente n'est pas écrasée");
     const revenues = l.filter((p) => p.modifieLe >= avant).sort((x, y) => x.modifieLe.localeCompare(y.modifieLe)).map((p) => p.titre);

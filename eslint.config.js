@@ -25,7 +25,7 @@ import globals from "globals";
 const inutilisees = { args: "after-used", argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true, caughtErrors: "none" };
 
 export default [
-  { ignores: ["dist/**", "node_modules/**", "modeles/**", "**/*.ts"] },
+  { ignores: ["dist/**", "node_modules/**", "modeles/**", "**/*.ts", ".claude/**"] },
   js.configs.recommended,
   {
     languageOptions: { ecmaVersion: "latest", sourceType: "module" },
@@ -46,6 +46,8 @@ export default [
   { files: ["app/sw.js"], languageOptions: { sourceType: "script", globals: globals.serviceworker } },
   { files: ["lecteur/**/*.js", "supabase/functions/**/*.js"], languageOptions: { globals: globals["shared-node-browser"] } },
   { files: ["outils/**/*.{js,mjs}", "tests/**/*.mjs", "*.js"], languageOptions: { globals: globals.node } },
+  // `import "fake-indexeddb/auto"` pose dans Node ce que le navigateur donne d'office.
+  { files: ["tests/**/*.mjs"], languageOptions: { globals: { indexedDB: "readonly", IDBDatabase: "readonly", IDBKeyRange: "readonly", IDBFactory: "readonly" } } },
   // Les essais dans Chromium (tests/e2e/, tests/*navigateur*) passent des
   // fonctions à la page (page.evaluate) : elles y voient le navigateur.
   { files: ["tests/e2e/**/*.mjs", "tests/*navigateur*.mjs"], languageOptions: { globals: { ...globals.node, ...globals.browser } } },

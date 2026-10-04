@@ -264,6 +264,8 @@ export class Bibliotheque {
   async versions(id) {
     verifierId(id);
     const [tete, liste] = await Promise.all([this.objets.lire(`bibliotheque/${id}.json`), this.objets.lister(`versions/${id}`)]);
+    // Une version gardée ne dit pas, par son nom, si c'était une suppression : `supprime` est facultatif.
+    /** @type {Array<{ modifieLe: string, rev: number | null, ecritLe?: string, supprime?: boolean, actuelle: boolean }>} */
     const sortie = tete ? [{ modifieLe: tete.modifieLe, rev: Number.isInteger(tete.rev) ? tete.rev : null, supprime: !!tete.supprime, actuelle: true }] : [];
     for (const o of liste) {
       const v = lireNomDeVersion(o.nom);
