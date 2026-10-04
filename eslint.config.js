@@ -39,10 +39,14 @@ export default [
   // En attendant le lot du lecteur (L19, le code mort) : `cal` ne sert plus
   // dans assembler() (lecteur/lecteur.js:548). À retirer avec lui.
   { files: ["lecteur/lecteur.js"], rules: { "no-unused-vars": ["warn", inutilisees] } },
+  // Le connecteur refuse exprès les caractères de contrôle dans ce qu'il
+  // reçoit (CONTROLE, conversation.js) : l'expression les nomme, c'est voulu.
+  { files: ["supabase/functions/portee-remarkable/conversation.js"], rules: { "no-control-regex": "off" } },
   { files: ["app/**/*.js"], languageOptions: { globals: globals.browser } },
   { files: ["app/sw.js"], languageOptions: { sourceType: "script", globals: globals.serviceworker } },
   { files: ["lecteur/**/*.js", "supabase/functions/**/*.js"], languageOptions: { globals: globals["shared-node-browser"] } },
   { files: ["outils/**/*.{js,mjs}", "tests/**/*.mjs", "*.js"], languageOptions: { globals: globals.node } },
-  // Les essais de bout en bout passent des fonctions à la page (page.evaluate) : elles y voient le navigateur.
-  { files: ["tests/e2e/**/*.mjs"], languageOptions: { globals: { ...globals.node, ...globals.browser } } },
+  // Les essais dans Chromium (tests/e2e/, tests/*navigateur*) passent des
+  // fonctions à la page (page.evaluate) : elles y voient le navigateur.
+  { files: ["tests/e2e/**/*.mjs", "tests/*navigateur*.mjs"], languageOptions: { globals: { ...globals.node, ...globals.browser } } },
 ];

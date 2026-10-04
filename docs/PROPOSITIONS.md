@@ -878,12 +878,16 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     celui de l'audit (`app.js:1427`, la double lecture pendant le
     chargement du piano). L'argument `cal` inutilisé de `lecteur.js:548`
     n'est qu'un avertissement le temps que le lot du lecteur le retire.
+    `conversation.js` nomme exprès des caractères de contrôle (il les
+    refuse dans ce qu'il reçoit) : la règle qui s'en méfie s'y tait.
   - Les types ne couvrent d'abord que des modules sans DOM qui passent à
     zéro erreur : le lecteur (sauf l'extraction), l'édition de l'ABC, les
-    doutes, le zip, `echapper` et le connecteur. Ils sont vérifiés avec la
+    doutes, le zip, `echapper` et le connecteur (sauf `conversation.js`, et
+    `mcp.js` et `http.js` qui l'importent). Ils sont vérifiés avec la
     bibliothèque « WebWorker » : un de ces modules qui toucherait à la page
     le dirait. Attendent une JSDoc corrigée : `extraction`, `sequence` (et
-    avec lui `harmonie` et `musicxml`), `midi`, `morceau`, `synchro`. Les
+    avec lui `harmonie` et `musicxml`), `midi`, `morceau`, `synchro` ; et
+    `conversation.js`, une fiche dont TypeScript ne devine pas le genre. Les
     écrans attendraient un typage du DOM que le mode normal ne devine pas,
     pour aucun bogue trouvé : pas maintenant. Le mode strict n'en vaut pas
     la peine.

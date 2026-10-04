@@ -5,8 +5,9 @@
   // TypeScript lit les JSDoc (@param, @returns) et devine le reste. On ne
   // vérifie d'abord que des modules sans DOM qui passent à zéro erreur (audit
   // du 04/10, T2) : le lecteur, l'édition de l'ABC, les doutes, le zip,
-  // `echapper` et le connecteur. Les autres attendent qu'on corrige leurs
-  // JSDoc écrites en prose (la liste est dans docs/PROPOSITIONS.md) ; les
+  // `echapper` et le connecteur (sauf conversation.js, et mcp.js et http.js
+  // qui l'importent). Les autres attendent qu'on corrige leurs JSDoc
+  // écrites en prose ou un type mal deviné (docs/PROPOSITIONS.md) ; les
   // écrans (app.js, idee.js…) attendraient un typage du DOM que le mode
   // normal ne sait pas deviner (`.value`, `.dataset`), pour aucun bogue
   // trouvé : pas tout de suite. Le mode strict n'en vaut pas la peine.
@@ -34,12 +35,14 @@
     "app/doutes.js",
     "app/zip.js",
     "app/ui.js",
+    "supabase/functions/portee-remarkable/abc.js",
     "supabase/functions/portee-remarkable/bibliotheque.js",
     "supabase/functions/portee-remarkable/coffre.js",
-    "supabase/functions/portee-remarkable/http.js",
-    "supabase/functions/portee-remarkable/mcp.js",
     "supabase/functions/portee-remarkable/objets.js",
     "supabase/functions/portee-remarkable/remarkable.js",
-    "supabase/functions/portee-remarkable/rm.js"
+    "supabase/functions/portee-remarkable/rm.js",
+    "supabase/functions/portee-remarkable/suggestions.js",
+    "supabase/functions/portee-remarkable/supabase.js",
+    "supabase/functions/portee-remarkable/vue-partition.js"
   ]
 }
