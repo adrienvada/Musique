@@ -85,3 +85,13 @@ test("une idée avec syncopes, accord tenu, altérations et symboles d'accords",
   assert.match(xml, /<fifths>1<\/fifths><mode>major<\/mode>/);
   assert.match(xml, /<per-minute>90<\/per-minute>/);
 });
+
+test("12/8 : la mesure entière en ronde pointée, et chaque temps visible", () => {
+  const seq = idee([[0, 24, 63], [24, 16, 66], [40, 8, 65]], { mesure: [12, 8], tonalite: "Ebm" });
+  const score = lireXml(ecrireMusicXml(seq));
+  const [m1, m2] = enfants(enfants(score, "part")[0], "measure");
+  const notes = (m) => enfants(m, "note").map((n) => [Number(enfant(n, "duration").texte), enfant(n, "type").texte + (enfant(n, "dot") ? "." : "")]);
+  assert.deepEqual(notes(m1), [[24, "whole."]]);
+  // Trois temps (blanche pointée) liés à une noire, puis une croche liée au dernier temps.
+  assert.deepEqual(notes(m2), [[12, "half."], [4, "quarter"], [2, "eighth"], [6, "quarter."]]);
+});

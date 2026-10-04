@@ -41,6 +41,35 @@ test("syncopes et notes longues : coupées au temps, liées, et toujours justes"
   assert.deepEqual(entendu(abc), attendu(seq));
 });
 
+test("mesures composées : chaque temps se voit, la ronde pointée remplit un 12/8", () => {
+  const corps = (abc) => abc.split("\n").slice(5).join("\n").trim();
+  // 6/8 : quatre croches en tête de mesure, noire pointée liée à une croche (pas une blanche,
+  // qui cacherait le 2ᵉ temps) ; cinq croches, noire pointée liée à une noire.
+  const six = idee([[0, 8, 66], [8, 4, 69], [12, 10, 74], [22, 2, 73], [24, 12, 74]], { mesure: [6, 8], tonalite: "D" });
+  assert.equal(corps(sq.ecrireAbc(six).abc), "F3- F A2 | d3- d2 c | d6 |]");
+  assert.deepEqual(entendu(sq.ecrireAbc(six).abc), attendu(six));
+  // 12/8 : une mesure entière est une ronde pointée, pas ronde + croche + noire pointée.
+  const douze = idee([[0, 24, 63], [24, 16, 66], [40, 8, 65], [48, 18, 70], [66, 6, 62]], { mesure: [12, 8], tonalite: "Ebm" });
+  assert.equal(corps(sq.ecrireAbc(douze).abc), "E12 | G6- G2 F- F3 | B6- B3 =D3 |]");
+  assert.deepEqual(entendu(sq.ecrireAbc(douze).abc), attendu(douze));
+  // 9/8 : trois temps n'ont pas de signe unique (blanche pointée liée à une noire pointée).
+  const neuf = idee([[0, 18, 60], [18, 4, 62], [22, 2, 64], [24, 12, 65]], { mesure: [9, 8] });
+  assert.equal(corps(sq.ecrireAbc(neuf).abc), "C6- C3 | D2 E F6 |]");
+  assert.deepEqual(entendu(sq.ecrireAbc(neuf).abc), attendu(neuf));
+  // Ailleurs, rien ne change : la blanche pointée d'un 3/4, la ronde d'un 4/4.
+  assert.equal(corps(sq.ecrireAbc(idee([[0, 12, 60]], { mesure: [3, 4] })).abc), "C6 |]");
+  assert.equal(corps(sq.ecrireAbc(idee([[0, 16, 60]])).abc), "C8 |]");
+});
+
+test("en 3/8, les trois croches d'une mesure se lient ensemble", () => {
+  const seq = idee([[0, 2, 60], [2, 2, 62], [4, 2, 64], [6, 1, 65], [7, 1, 67], [8, 4, 69]], { mesure: [3, 8] });
+  const { abc } = sq.ecrireAbc(seq);
+  assert.equal(abc.split("\n")[5], "CDE | F/G/ A2 |]");
+  assert.deepEqual(entendu(abc), attendu(seq));
+  // En 2/4, la ligature suit toujours la noire.
+  assert.equal(sq.ecrireAbc(idee([[0, 2, 60], [2, 2, 62], [4, 2, 64], [6, 2, 65]], { mesure: [2, 4] })).abc.split("\n")[5], "CD EF |]");
+});
+
 test("altérations : armure, bécarre dans la mesure, note liée par-dessus la barre", () => {
   // En sol majeur : fa♯ (armure), fa bécarre, fa♯ à nouveau, fa♯ lié par-dessus la barre, puis fa, fa♯.
   const seq = idee([[0, 2, 66], [2, 2, 65], [4, 2, 66], [8, 12, 66], [20, 4, 65], [24, 4, 66]], { tonalite: "G" });

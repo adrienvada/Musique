@@ -543,7 +543,18 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Notation, harmonie et exports (N1 à N7)
 
-<!-- lot notation -->
+- **N1 · En 6/8, 9/8 et 12/8, chaque temps se voit.** Une note posée sur
+  un temps n'y prend d'abord qu'un nombre entier de temps (noire, blanche ou
+  ronde pointée), puis le reste, lié. Avant, le plus grand signe gagnait :
+  quatre croches en tête d'un 6/8 devenaient une blanche, qui finit au
+  milieu du deuxième temps, et une mesure entière de 12/8 s'écrivait ronde,
+  croche et noire pointée. La ronde pointée (24 pas) rejoint les durées
+  écrites. La partition et le MusicXML passent par la même mise en mesures
+  (`mettreEnMesures`) : MuseScore reçoit la même chose. Les mesures simples
+  (2/4, 3/4, 4/4, 2/2) ne changent pas.
+- **B8 · En 3/8, les trois croches de la mesure se lient**, comme on les
+  écrit à la main. Le temps reste la croche pour le métronome et le
+  découpage : seule la ligature change (`groupeDeLigature`).
 
 ### Architecture (T3 à T5)
 

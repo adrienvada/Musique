@@ -131,28 +131,46 @@ function lettreAbc({ lettre, octave }) {
 // Des notes à la partition : mesures, liaisons, ligatures
 // ------------------------------------------------------------------------
 
-// Les durées qu'on sait écrire d'un seul signe, en pas : ronde, blanche
-// pointée, blanche, noire pointée, noire, croche pointée, croche, double.
-const NOTABLES = [16, 12, 8, 6, 4, 3, 2, 1];
+// Les durées qu'on sait écrire d'un seul signe, en pas : ronde pointée
+// (la mesure entière d'un 12/8), ronde, blanche pointée, blanche, noire
+// pointée, noire, croche pointée, croche, double.
+const NOTABLES = [24, 16, 12, 8, 6, 4, 3, 2, 1];
 
 /**
- * Coupe [a, b[ (dans une seule mesure) en durées notables. Une note qui
- * commence à contretemps s'arrête au temps suivant, puis repart liée :
- * c'est ce qui rend une syncope lisible.
+ * Coupe [a, b[ (dans une seule mesure) en durées notables.
+ * - Une note qui commence à contretemps s'arrête au temps suivant, puis
+ *   repart liée : c'est ce qui rend une syncope lisible.
+ * - En mesure composée (6/8, 9/8, 12/8 : le temps est une noire pointée,
+ *   6 pas), une note qui part sur un temps n'y prend d'abord qu'un nombre
+ *   entier de temps (noire, blanche ou ronde pointée), puis le reste. Sinon
+ *   le plus grand signe cachait un temps : quatre croches en tête d'un 6/8
+ *   devenaient une blanche, qui ne se termine pas sur le deuxième temps.
  */
 function fragmenter(a, b, mesure, temps) {
   const morceaux = [];
   const debutMesure = Math.floor(a / mesure) * mesure;
+  const compose = temps === 6;
   let x = a;
   while (x < b) {
     let y = b;
     const dedans = x - debutMesure;
     if (dedans % temps !== 0) y = Math.min(y, debutMesure + (Math.floor(dedans / temps) + 1) * temps);
-    const l = NOTABLES.find((d) => d <= y - x);
+    let l = NOTABLES.find((d) => d <= y - x);
+    if (compose && dedans % temps === 0 && y - x >= temps) l = NOTABLES.find((d) => d % temps === 0 && d <= y - x);
     morceaux.push([x, x + l]);
     x += l;
   }
   return morceaux;
+}
+
+/**
+ * La ligature : les croches d'un même groupe se lient. Le groupe est le
+ * temps, sauf en 3/8, où les trois croches de la mesure se lient ensemble
+ * (le temps y reste la croche, pour le métronome et le découpage).
+ */
+function groupeDeLigature(seq) {
+  const [n, d] = seq.mesure;
+  return n === 3 && d === 8 ? 6 : pasParTemps(seq);
 }
 
 /**
@@ -260,7 +278,7 @@ export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0 } = 
       }
     }
   }
-  return { k, mesure, temps, total, nb, accords, cles: voix.map((v, i) => cleDe(v, i)), parVoix };
+  return { k, mesure, temps, ligature: groupeDeLigature(seq), total, nb, accords, cles: voix.map((v, i) => cleDe(v, i)), parVoix };
 }
 
 /**
@@ -272,7 +290,7 @@ export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0 } = 
  * première voix.
  */
 export function ecrireAbc(seq, { voix = seq.pistes, titre = "", mesuresParLigne = 4, mesuresEnPlus = 0 } = {}) {
-  const { mesure, temps, nb, accords, cles, parVoix } = mettreEnMesures(seq, { voix, mesuresEnPlus });
+  const { mesure, ligature: groupe, nb, accords, cles, parVoix } = mettreEnMesures(seq, { voix, mesuresEnPlus });
   const entete = ["X:1"];
   if (titre) entete.push("T:" + titre.replace(/\n/g, " "));
   entete.push(`M:${seq.mesure[0]}/${seq.mesure[1]}`, "L:1/8", `Q:1/4=${seq.tempo}`, `K:${seq.tonalite}`);
@@ -295,7 +313,7 @@ export function ecrireAbc(seq, { voix = seq.pistes, titre = "", mesuresParLigne 
           for (const t of mesures[m]) {
             const dedans = t.a - m * mesure;
             const ligature = precedent && !t.silence && !precedent.silence && t.l < 4 && precedent.l < 4
-              && Math.floor(dedans / temps) === Math.floor((precedent.a - m * mesure) / temps);
+              && Math.floor(dedans / groupe) === Math.floor((precedent.a - m * mesure) / groupe);
             // abcjs fait commencer l'élément à l'espace, ou au symbole d'accord, qui le précède.
             const avant = debutLigne ?? abc.length;
             debutLigne = null;

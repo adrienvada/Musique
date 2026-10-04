@@ -12,7 +12,7 @@
 import { mettreEnMesures } from "./sequence.js";
 import { lireAccord } from "./harmonie.js";
 
-const TYPES = { 1: ["16th", 0], 2: ["eighth", 0], 3: ["eighth", 1], 4: ["quarter", 0], 6: ["quarter", 1], 8: ["half", 0], 12: ["half", 1], 16: ["whole", 0] };
+const TYPES = { 1: ["16th", 0], 2: ["eighth", 0], 3: ["eighth", 1], 4: ["quarter", 0], 6: ["quarter", 1], 8: ["half", 0], 12: ["half", 1], 16: ["whole", 0], 24: ["whole", 1] };
 const SIGNES = { "-2": "flat-flat", "-1": "flat", 0: "natural", 1: "sharp", 2: "double-sharp" };
 const SORTES = {
   "": "major", m: "minor", 7: "dominant", maj7: "major-seventh", m7: "minor-seventh", dim: "diminished",
