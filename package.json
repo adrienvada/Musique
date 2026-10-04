@@ -5,16 +5,22 @@
   "description": "Portée : des partitions écrites sur la reMarkable à la partition jouée au piano.",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "lint": "eslint .",
+    "types": "tsc -p tsconfig.json",
     "lire": "node outils/lire.mjs",
     "appli": "node outils/assembler-appli.mjs",
     "connecteur": "node outils/deployer-connecteur.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@fontsource/ibm-plex-mono": "5.3.0",
     "@fontsource/ibm-plex-sans": "5.3.0",
     "@fontsource/young-serif": "5.3.0",
     "abcjs": "6.7.1",
+    "eslint": "10.12.0",
     "fake-indexeddb": "6.2.5",
-    "pdfjs-dist": "6.4.299"
+    "globals": "17.13.0",
+    "pdfjs-dist": "6.4.299",
+    "typescript": "7.0.2"
   }
 }

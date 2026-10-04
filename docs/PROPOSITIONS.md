@@ -820,6 +820,30 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     hors ligne : pages d'essai lues, gravées, jouées) ; un 503 sur abcjs
     n'est plus gardé. Le service worker s'inscrit aussi sur l'ordinateur
     lui-même (`isSecureContext` plutôt que `https:`), pour ces essais.
+- **Lint et types (T2).** `npm run lint` (ESLint, ses règles recommandées)
+  et `npm run types` (TypeScript lit les JSDoc et vérifie, sans rien
+  compiler : le code reste du JavaScript pur).
+  - Chaque dossier a les globales de l'endroit où il tourne : navigateur,
+    service worker, Node, et « navigateur et Node à la fois » pour le
+    lecteur et le connecteur (Deno et Node les lisent tous deux : rien de
+    propre à l'un des deux n'y est permis). Les deux faux positifs de
+    l'audit disparaissent.
+  - Deux avertissements de plus, `require-atomic-updates` (une valeur lue
+    avant un `await` et écrite après) et `no-throw-literal`. Ils ne
+    bloquent pas : ils montrent un endroit à relire. Il y en a 29, dont
+    celui de l'audit (`app.js:1427`, la double lecture pendant le
+    chargement du piano). L'argument `cal` inutilisé de `lecteur.js:548`
+    n'est qu'un avertissement le temps que le lot du lecteur le retire.
+  - Les types ne couvrent d'abord que des modules sans DOM qui passent à
+    zéro erreur : le lecteur (sauf l'extraction), l'édition de l'ABC, les
+    doutes, le zip, `echapper` et le connecteur. Ils sont vérifiés avec la
+    bibliothèque « WebWorker » : un de ces modules qui toucherait à la page
+    le dirait. Attendent une JSDoc corrigée : `extraction`, `sequence` (et
+    avec lui `harmonie` et `musicxml`), `midi`, `morceau`, `synchro`. Les
+    écrans attendraient un typage du DOM que le mode normal ne devine pas,
+    pour aucun bogue trouvé : pas maintenant. Le mode strict n'en vaut pas
+    la peine.
+  - TypeScript 7, la version native : moins d'une seconde pour tout.
 
 ### Notation, harmonie et exports (N1 à N7)
 
