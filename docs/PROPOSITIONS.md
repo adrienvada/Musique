@@ -541,6 +541,10 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 <!-- lot outillage -->
 
+### Notation, harmonie et exports (N1 à N7)
+
+<!-- lot notation -->
+
 ### Architecture (T3 à T5)
 
 <!-- lot architecture -->
