@@ -1033,7 +1033,10 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 
 1. **Déployer le connecteur** dans le projet Supabase du site. GitHub Actions
    s'en charge (`.github/workflows/connecteur.yml`) à chaque changement du
-   connecteur fusionné sur `main`. Il faut deux secrets du dépôt :
+   connecteur fusionné sur `main`. Il faut deux secrets, rangés dans
+   l'environnement `supabase` du dépôt (Settings → Environments → supabase,
+   avec `main` seule autorisée ; des secrets du dépôt marchent aussi, mais
+   tout workflow de n'importe quelle branche peut les lire) :
    - `SUPABASE_ACCESS_TOKEN` : un jeton d'accès Supabase
      (supabase.com/dashboard/account/tokens) ;
    - `PORTEE_CLE` : la clé de l'adresse, au moins 24 caractères aléatoires.

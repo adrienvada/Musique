@@ -210,7 +210,7 @@ export const VERSIONS_ANCIENNES = ["2025-11-25", "2025-06-18", "2025-03-26"];
 export const VERSIONS = [VERSION_MODERNE, ...VERSIONS_ANCIENNES];
 
 const SERVEUR = { name: "portee-remarkable", version: "2.0.0" };
-const INSTRUCTIONS = "La reMarkable d'Adrien pour l'appli Portée : arborescence, puis document. relier ne sert qu'à relier la tablette, avec un code de my.remarkable.com. Les outils bibliotheque_* tiennent la bibliothèque de partitions synchronisée entre ses appareils : ne t'en sers pas dans une conversation. Pour parler musique avec Adrien : partitions_lister et partition_lire lisent sa bibliothèque ; idee_ecrire note une idée neuve, seulement s'il le demande ; suggestion_ecrire range une proposition qu'il appliquera lui-même dans Portée. Adrien ne lit pas l'ABC : parle-lui en noms de notes, en mesures et en temps.";
+const INSTRUCTIONS = "La reMarkable d'Adrien pour l'appli Portée : arborescence, puis document. relier ne sert qu'à relier la tablette, avec un code de my.remarkable.com. Les outils bibliotheque_* tiennent la bibliothèque de partitions synchronisée entre ses appareils : ne t'en sers pas dans une conversation. Pour parler musique avec Adrien : partitions_lister et partition_lire lisent sa bibliothèque ; partition_montrer la montre, gravée et jouable ; idee_ecrire note une idée neuve, seulement s'il le demande ; suggestion_ecrire range une proposition qu'il appliquera lui-même dans Portée. Adrien ne lit pas l'ABC : parle-lui en noms de notes, en mesures et en temps.";
 
 const CLE_VERSION = "io.modelcontextprotocol/protocolVersion";
 const CLE_SERVEUR = "io.modelcontextprotocol/serverInfo";

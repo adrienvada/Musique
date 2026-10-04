@@ -77,6 +77,7 @@ test("partitions_lister : titres, types et doutes, sans les supprimées ; recher
     assert.deepEqual((await outil("partitions_lister", { recherche: "ETE" })).structuredContent.partitions.map((p) => p.id), ["valse"]);
     assert.deepEqual((await outil("partitions_lister", { recherche: "valse" })).structuredContent.partitions.map((p) => p.id), ["valse"]); // l'étiquette aussi
     assert.deepEqual((await outil("partitions_lister", { type: "idee" })).structuredContent.partitions.map((p) => p.id), ["pluie"]);
+    assert.equal((await outil("partitions_lister", { recherche: "" })).structuredContent.total, 3);
     assert.equal((await outil("partitions_lister", { type: "dessin" })).isError, true);
     assert.equal((await outil("partitions_lister", { tri: "titre" })).isError, true);
   } finally {

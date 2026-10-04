@@ -316,7 +316,8 @@ function vue(f, toutes) {
 
 async function lister(bibliotheque, args) {
   champs(args, ["recherche", "type"], "partitions_lister");
-  const recherche = args.recherche === undefined ? "" : sansAccents(texte(args.recherche, 100, "recherche"));
+  // Une recherche vide veut dire « tout », pas une erreur.
+  const recherche = args.recherche === undefined || args.recherche === "" ? "" : sansAccents(texte(args.recherche, 100, "recherche"));
   const type = args.type === undefined ? null : parmi(args.type, ["page", "idee", "morceau"], "type");
   const choisies = (await fiches(bibliotheque))
     .filter((f) => !type || typeDe(f.donnees) === type)

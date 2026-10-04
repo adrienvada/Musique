@@ -76,10 +76,13 @@ async function principal() {
   const enCI = !!process.env.GITHUB_ACTIONS;
   const cleFournie = process.env.PORTEE_CLE || "";
 
-  async function api(chemin, options = {}) {
+  // `discret` : en cas d'erreur, on tait la réponse de l'API (pour l'envoi des
+  // secrets : une réponse qui recopierait une valeur refusée finirait dans un
+  // journal public).
+  async function api(chemin, options = {}, { discret = false } = {}) {
     const r = await fetch(`${API}${chemin}`, { ...options, headers: { authorization: `Bearer ${jeton}`, ...options.headers } });
     const texte = await r.text();
-    if (!r.ok) throw new Error(`API Supabase ${options.method || "GET"} ${chemin} → HTTP ${r.status} ${texte.slice(0, 300)}`);
+    if (!r.ok) throw new Error(`API Supabase ${options.method || "GET"} ${chemin} → HTTP ${r.status}${discret ? "" : ` ${texte.slice(0, 300)}`}`);
     return texte ? JSON.parse(texte) : null;
   }
 
@@ -103,7 +106,7 @@ async function principal() {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(plan.aPoser),
-    });
+    }, { discret: true });
   }
   if (plan.cle && enCI && !cleFournie) {
     console.log("::warning::Pas de secret GitHub PORTEE_CLE : connecteur verrouillé (clé inconnue de tous). Voir docs/PROPOSITIONS.md, « Brancher la reMarkable ».");
