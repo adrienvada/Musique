@@ -109,14 +109,19 @@ test("les lignes grises du modèle sont relues, exactes à la calibration", asyn
   }
 });
 
-test("un modèle inconnu est refusé avec un message clair (et plus un ENOENT)", async () => {
+test("un modèle inconnu n'est plus un ENOENT : ses lignes grises le reconnaissent, sinon un message clair", async () => {
   const texte = fs.readFileSync(MELODIE).toString("latin1").replace("portee:melodie-standard:v1", "portee:melodie-geante--:v1");
   const dossier = fs.mkdtempSync(path.join(os.tmpdir(), "portee-"));
   const chemin = path.join(dossier, "modele-inconnu.pdf");
   fs.writeFileSync(chemin, Buffer.from(texte, "latin1"));
   try {
-    await assert.rejects(lireFichier(chemin), /modèle « melodie-geante-- », que cette version de Portée ne connaît pas/);
+    // Les lignes de la page sont celles de « melodie-standard » : elle se lit, et l'avertissement le dit (L9).
+    const lu = await lireFichier(chemin);
+    assert.match(lu.avertissement, /« melodie-geante-- », mais ses lignes sont celles de « melodie-standard »/);
   } finally {
     fs.rmSync(dossier, { recursive: true, force: true });
   }
+  // Sans lignes reconnaissables (une page venue d'ailleurs), le refus est clair.
+  const { chargerCalibration } = await import("../outils/lire.mjs");
+  assert.throws(() => chargerCalibration("melodie-geante--", 1), /modèle « melodie-geante-- », que cette version de Portée ne connaît pas/);
 });
