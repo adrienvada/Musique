@@ -149,20 +149,28 @@ export function basculerSilence(abc, j, noteParDefaut = { alteration: "", lettre
   return remplacer(abc, j, { type: "silence", notes: [], croches: j.croches });
 }
 
+/**
+ * Où écrire juste après un jeton : après sa liaison de durée (« c2- »), s'il
+ * en a une, pour qu'elle reste entre ses deux notes (L11).
+ */
+const apresJeton = (abc, j) => j.fin + (abc[j.fin] === "-" ? 1 : 0);
+
 /** Une copie juste après : pour la note oubliée d'une mesure. */
 export function dupliquer(abc, j) {
   const texte = abc.slice(j.debut, j.fin);
-  const suite = abc.slice(j.fin);
+  const fin = apresJeton(abc, j);
+  const suite = abc.slice(fin);
   // Collée à la suivante si elles étaient liées par une ligature, séparée sinon.
   const colle = /^[\^_=A-Ga-g[]/.test(suite);
   const ajout = colle ? texte : " " + texte;
-  return { abc: abc.slice(0, j.fin) + ajout + suite, debut: j.fin + (colle ? 0 : 1), fin: j.fin + ajout.length, modif: { de: j.fin, a: j.fin, longueur: ajout.length } };
+  return { abc: abc.slice(0, fin) + ajout + suite, debut: fin + (colle ? 0 : 1), fin: fin + ajout.length, modif: { de: fin, a: fin, longueur: ajout.length } };
 }
 
-/** Supprime le jeton (et l'espace qui le suivait, pour ne pas en laisser deux). */
+/** Supprime le jeton (sa liaison de durée, et l'espace qui le suivait, pour ne pas en laisser deux). */
 export function supprimer(abc, j) {
-  let fin = j.fin;
-  if (abc[j.debut - 1] === " " && abc[fin] === " ") fin++;
+  let fin = apresJeton(abc, j);
+  // En début de ligne aussi : sinon la ligne commençait par une espace.
+  if (abc[fin] === " " && (j.debut === 0 || abc[j.debut - 1] === " " || abc[j.debut - 1] === "\n")) fin++;
   return { abc: abc.slice(0, j.debut) + abc.slice(fin), debut: j.debut, fin: j.debut, modif: { de: j.debut, a: fin, longueur: 0 } };
 }
 
@@ -180,7 +188,8 @@ export function fixerDuree(abc, j, croches) {
 export function ajouterSilence(abc, j, croches) {
   if (!(croches > 0)) return null;
   const ajout = " z" + dureeABC(croches);
-  return { abc: abc.slice(0, j.fin) + ajout + abc.slice(j.fin), debut: j.fin + 1, fin: j.fin + ajout.length, modif: { de: j.fin, a: j.fin, longueur: ajout.length } };
+  const fin = apresJeton(abc, j);
+  return { abc: abc.slice(0, fin) + ajout + abc.slice(fin), debut: fin + 1, fin: fin + ajout.length, modif: { de: fin, a: fin, longueur: ajout.length } };
 }
 
 /** « sol croche », « la♭ noire pointée », « accord do-mi-sol, blanche », « soupir ». */
@@ -196,47 +205,89 @@ export function decrire(j) {
   return `${nom(j.notes[0])}, ${duree}`;
 }
 
-/** Hauteur MIDI de chaque note (pour la faire entendre), d'après l'armure `K:`. */
-export function hauteursMidi(j, armure = {}) {
+const DECALAGES = { "^": 1, "^^": 2, _: -1, __: -2, "=": 0 };
+
+/**
+ * Hauteur MIDI de chaque note (pour la faire entendre), d'après l'armure `K:`
+ * et, si on les donne, les altérations écrites plus tôt dans la mesure
+ * (`mesure` : { "F4": "^" } ; voir alterationsAvant).
+ */
+export function hauteursMidi(j, armure = {}, mesure = {}) {
   const pas = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-  const decal = { "^": 1, "^^": 2, _: -1, __: -2, "=": 0 };
   return j.notes.map((n) => {
-    const alt = n.alteration ? decal[n.alteration] : (armure[n.lettre] || 0);
+    const reprise = mesure[`${n.lettre}${n.octave}`];
+    const alt = n.alteration ? DECALAGES[n.alteration] : reprise !== undefined ? DECALAGES[reprise] : (armure[n.lettre] || 0);
     return 12 * (n.octave + 1) + pas[n.lettre] + alt;
   });
 }
 
 /**
- * La tonalité écrite (« Eb », « C ») en vigueur à la position `pos` : le K:
- * de l'en-tête, puis le dernier [K:] de la même voix ([V:1], [V:2]) avant `pos`.
+ * Les altérations écrites dans la mesure avant la position `pos` : en ABC
+ * (comme sur la partition), un dièse vaut pour la même note jusqu'à la barre.
+ * Sans elles, le deuxième fa d'une mesure « ^F2 F2 » se faisait entendre en
+ * fa naturel quand on le touchait (audit du 04/10).
  */
-export function cleA(abc, pos) {
+export function alterationsAvant(abc, pos) {
+  const debutLigne = abc.lastIndexOf("\n", pos - 1) + 1;
+  const debut = Math.max(debutLigne, abc.lastIndexOf("|", pos - 1) + 1);
+  const vues = {};
+  let p = debut;
+  while (p < pos) {
+    const j = lireJeton(abc, p);
+    if (!j) { p++; continue; }
+    for (const n of j.notes) if (n.alteration) vues[`${n.lettre}${n.octave}`] = n.alteration;
+    p = Math.max(j.fin, p + 1);
+  }
+  return vues;
+}
+
+/** Les hauteurs MIDI du jeton tel qu'il sonne à sa place : armure et altérations de la mesure. */
+export function hauteursMidiA(abc, j) {
+  return hauteursMidi(j, armureA(abc, j.debut), alterationsAvant(abc, j.debut));
+}
+
+// ------------------------------------------------------------------------
+// Armure et chiffrage d'une ligne
+// ------------------------------------------------------------------------
+
+const VALEUR = { K: "[A-G][b#]?(?:m|min)?", M: "(?:\\d+\\/\\d+|C\\|?|none)" };
+
+/**
+ * La valeur d'un champ (K: la tonalité « Eb », M: le chiffrage « 3/4 ») en
+ * vigueur à la position `pos` : celle de l'en-tête, puis le dernier [K:] ou
+ * [M:] de la même voix ([V:1], [V:2]) avant `pos`.
+ */
+export function champA(abc, pos, lettre) {
   const avant = abc.slice(0, pos);
   const voixDe = (ligne) => (/^\[V:\s*([^\]\s]+)/.exec(ligne) || [])[1] || null;
   const lignes = avant.split("\n");
   const voix = voixDe(lignes[lignes.length - 1]);
-  let cle = "C";
+  let valeur = lettre === "K" ? "C" : "none";
+  const enTete = new RegExp(`^${lettre}:\\s*(${VALEUR[lettre]})`), dedans = new RegExp(`\\[${lettre}:\\s*(${VALEUR[lettre]})`, "g");
   for (const l of lignes) {
-    const h = /^K:\s*([A-G][b#]?(?:m|min)?)/.exec(l);
-    if (h) { cle = h[1]; continue; }
+    const h = enTete.exec(l);
+    if (h) { valeur = h[1]; continue; }
     if (/^[A-Za-z]:|^%/.test(l)) continue;
     const v = voixDe(l);
     if (voix && v && v !== voix) continue;
-    for (const m of l.matchAll(/\[K:\s*([A-G][b#]?(?:m|min)?)/g)) cle = m[1];
+    for (const m of l.matchAll(dedans)) valeur = m[1];
   }
-  return cle;
+  return valeur;
 }
 
+/** La tonalité écrite (« Eb », « C ») en vigueur à la position `pos`. */
+export const cleA = (abc, pos) => champA(abc, pos, "K");
+
 /**
- * L'armure d'une ligne, ou des deux voix d'un système de piano : `ligne` est
- * le morceau d'ABC [debut, fin[ qui couvre ces lignes entières (la cible
- * d'un doute d'armure). Les lignes suivantes gardent leur armure : si elles
- * la tenaient de celle-ci, elles reçoivent la leur ([K:…]). La première ligne
- * de la pièce change le K: de l'en-tête plutôt que d'écrire deux armures de suite.
- * C'est le geste qui manquait pour « Non, sans armure » (refonte 10).
+ * Un champ (K: ou M:) d'une ligne, ou des deux voix d'un système de piano :
+ * `ligne` est le morceau d'ABC [debut, fin[ qui couvre ces lignes entières
+ * (la cible d'un doute d'armure ou de chiffrage). Les lignes suivantes
+ * gardent le leur : si elles le tenaient de celles-ci, elles reçoivent le
+ * leur ([K:…], [M:…]). La première ligne de la pièce change l'en-tête plutôt
+ * que d'écrire deux armures de suite.
  */
-export function changerArmure(abc, ligne, cle) {
-  if (!ligne || !/^[A-G][b#]?(m|min)?$/.test(cle || "")) return null;
+function changerChamp(abc, ligne, lettre, valeur) {
+  if (!ligne || !new RegExp(`^${VALEUR[lettre]}$`).test(valeur || "")) return null;
   const lignes = [];
   let p = 0;
   for (const texte of abc.split("\n")) { lignes.push({ debut: p, fin: p + texte.length, texte }); p += texte.length + 1; }
@@ -244,32 +295,36 @@ export function changerArmure(abc, ligne, cle) {
   const corps = lignes.filter((l) => !entete(l));
   const dans = corps.filter((l) => l.debut >= ligne.debut && l.fin <= ligne.fin && l.fin > l.debut);
   if (!dans.length) return null;
-  const n = dans.length;
-  const apres = corps.filter((l) => l.debut > dans[n - 1].fin).slice(0, n);
+  const n = Math.min(dans.length, Math.max(1, new Set(dans.map((l) => (/^\[V:\s*([^\]\s]+)/.exec(l.texte) || [])[1] || "")).size));
+  const apres = corps.filter((l) => l.debut > dans[dans.length - 1].fin).slice(0, n);
   const PREFIXE = /^(\[V:[^\]]*\]\s*)?((?:\[[A-Za-z]:[^\]]*\])*)/;
   const champs = (l) => { const m = PREFIXE.exec(l.texte); return { voix: (m[1] || "").length, longueur: (m[2] || "").length, texte: m[2] || "" }; };
+  const ce = new RegExp(`\\[${lettre}:[^\\]]*\\]`, "g");
   const editions = [];
-  // Les lignes suivantes gardent la tonalité qu'elles avaient.
+  // Les lignes suivantes gardent la valeur qu'elles avaient.
   for (const l of apres) {
     const c = champs(l);
-    if (/\[K:/.test(c.texte)) continue;
-    const ancienne = cleA(abc, l.debut + c.voix);
-    if (ancienne !== cle) editions.push({ de: l.debut + c.voix, a: l.debut + c.voix, texte: `[K:${ancienne}]` });
+    if (new RegExp(`\\[${lettre}:`).test(c.texte)) continue;
+    const ancienne = champA(abc, l.debut + c.voix, lettre);
+    if (ancienne !== valeur) editions.push({ de: l.debut + c.voix, a: l.debut + c.voix, texte: `[${lettre}:${ancienne}]` });
   }
   const premiere = corps[0] === dans[0];
-  const k = lignes.find((l) => /^K:/.test(l.texte));
+  const tete = lignes.find((l) => new RegExp(`^${lettre}:`).test(l.texte));
   for (const l of dans) {
     const c = champs(l);
-    const sansK = c.texte.replace(/\[K:[^\]]*\]/g, "");
-    let nouveaux = sansK;
-    if (premiere && k) {
-      // La première ligne : on change l'en-tête, la ligne n'a pas besoin de [K:].
-    } else if (cleA(abc, l.debut + c.voix) !== cle) nouveaux = `[K:${cle}]` + sansK; // la tonalité qu'elle reçoit de sa voix
+    const sans = c.texte.replace(ce, "");
+    let nouveaux = sans;
+    if (premiere && tete) {
+      // La première ligne : on change l'en-tête, la ligne n'a pas besoin du champ.
+    } else if (champA(abc, l.debut + c.voix, lettre) !== valeur) {
+      // L'armure avant le chiffrage, comme les écrit le lecteur.
+      nouveaux = lettre === "K" ? `[K:${valeur}]` + sans : sans.replace(/^((?:\[K:[^\]]*\])?)/, `$1[M:${valeur}]`);
+    }
     if (nouveaux !== c.texte) editions.push({ de: l.debut + c.voix, a: l.debut + c.voix + c.longueur, texte: nouveaux });
   }
-  if (premiere && k) {
-    const m = /^K:\s*([A-G][b#]?(?:m|min)?)?/.exec(k.texte);
-    if ((m[1] || "C") !== cle) editions.push({ de: k.debut, a: k.debut + m[0].length, texte: `K:${cle}` });
+  if (premiere && tete) {
+    const m = new RegExp(`^${lettre}:\\s*(${VALEUR[lettre]})?`).exec(tete.texte);
+    if ((m[1] || (lettre === "K" ? "C" : "none")) !== valeur) editions.push({ de: tete.debut, a: tete.debut + m[0].length, texte: `${lettre}:${valeur}` });
   }
   if (!editions.length) return { abc, debut: ligne.debut, fin: ligne.fin, modif: [] };
   // De la fin vers le début : chaque modification se lit dans le texte d'avant elle, sans décalage.
@@ -283,6 +338,55 @@ export function changerArmure(abc, ligne, cle) {
   const delta = editions.filter((e) => e.de < ligne.fin).reduce((t, e) => t + e.texte.length - (e.a - e.de), 0);
   const avant = editions.filter((e) => e.a <= ligne.debut).reduce((t, e) => t + e.texte.length - (e.a - e.de), 0);
   return { abc: texte, debut: ligne.debut + avant, fin: ligne.fin + delta, modif };
+}
+
+/**
+ * L'armure d'une ligne (ou d'un système de piano), sans toucher aux suivantes.
+ * C'est le geste qui manquait pour « Non, sans armure » (refonte 10).
+ */
+export const changerArmure = (abc, ligne, cle) => changerChamp(abc, ligne, "K", cle);
+
+/** Le chiffrage d'une ou plusieurs lignes (une section), sans toucher aux suivantes. */
+export const changerChiffrage = (abc, ligne, m) => changerChamp(abc, ligne, "M", m);
+
+// ------------------------------------------------------------------------
+// Accords et triolets
+// ------------------------------------------------------------------------
+
+const rangNote = (n) => n.octave * 7 + LETTRES.indexOf(n.lettre);
+
+/**
+ * Une note rejoint l'accord (ou la note) `voisin` : un seul jeton, à la durée
+ * du voisin. La réponse à « tête sans hampe » d'un accord à hampe courte.
+ */
+export function joindreAccord(abc, j, voisin) {
+  if (!j || !voisin || j.type === "silence" || voisin.type === "silence" || j.debut === voisin.debut) return null;
+  const vues = new Set();
+  const notes = [...voisin.notes, ...j.notes].filter((n) => {
+    const k = `${n.alteration}${n.lettre}${n.octave}`;
+    if (vues.has(k)) return false;
+    vues.add(k);
+    return true;
+  }).sort((a, b) => rangNote(a) - rangNote(b));
+  const accord = ecrireJeton({ type: notes.length > 1 ? "accord" : "note", notes, croches: voisin.croches });
+  if (j.debut > voisin.debut) {
+    const s = supprimer(abc, j);
+    const r = remplacer(s.abc, voisin, accord);
+    return { abc: r.abc, debut: r.debut, fin: r.fin, modif: [s.modif, r.modif] };
+  }
+  const r = remplacer(abc, voisin, accord);
+  const s = supprimer(r.abc, j);
+  const decale = s.modif.a - s.modif.de;
+  return { abc: s.abc, debut: r.debut - decale, fin: r.fin - decale, modif: [r.modif, s.modif] };
+}
+
+/**
+ * Un triolet : « (3 » devant trois notes, qui durent alors deux croches à
+ * elles trois. `groupe` : le morceau d'ABC des trois notes (la cible du doute).
+ */
+export function faireTriolet(abc, groupe) {
+  if (!groupe || abc.slice(Math.max(0, groupe.debut - 2), groupe.debut) === "(3") return null;
+  return { abc: abc.slice(0, groupe.debut) + "(3" + abc.slice(groupe.debut), debut: groupe.debut, fin: groupe.fin + 2, modif: { de: groupe.debut, a: groupe.debut, longueur: 2 } };
 }
 
 /** Altérations de l'armure en vigueur à la position `pos` (K: ou [K:] le plus proche avant). */

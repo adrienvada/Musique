@@ -30,7 +30,9 @@ test("la lecture dit où est chaque doute dans l'ABC, sans changer l'ABC", async
   const [crochet, mesure] = r.doutes;
   assert.equal(r.abc.slice(crochet.cible.debut, crochet.cible.fin), "c2");
   assert.equal(r.abc.slice(mesure.cible.debut, mesure.cible.fin), "c2 c edc g2 z GG");
-  assert.deepEqual([mesure.ligne, mesure.rang, mesure.trouve, mesure.attendu], [2, 3, 11, 12]);
+  // La levée (le sol seul, devant la reprise) n'est pas une mesure : la mesure
+  // de 11 croches est la 2ᵉ de la ligne, plus la 3ᵉ (audit du 04/10, L19).
+  assert.deepEqual([mesure.ligne, mesure.rang, mesure.trouve, mesure.attendu], [2, 2, 11, 12]);
   // Rien d'interne ne sort de la lecture : les doutes se rangent tels quels.
   assert.equal(JSON.stringify(r.doutes), JSON.stringify(JSON.parse(JSON.stringify(r.doutes))));
   assert.ok(r.doutes.every((d) => !("_ev" in d) && !("_mes" in d)));
@@ -57,7 +59,7 @@ test("répondre « croche » puis « ajouter un silence » : la note change, la 
 
   const q = poser(doutes[1], abc);
   assert.equal(q.titre, "Il manque une croche");
-  assert.equal(q.detail, "Ligne 2, 3ᵉ mesure : j'en compte 11 au lieu de 12.");
+  assert.equal(q.detail, "Ligne 2, 2ᵉ mesure : j'en compte 11 au lieu de 12."); // la levée ne compte pas
   assert.deepEqual(q.reponses.map((x) => x.texte), ["Ajouter un silence", "Allonger la dernière note"]);
   assert.ok(q.voulu && q.manuel);
 

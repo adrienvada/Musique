@@ -139,6 +139,71 @@ test("une hampe sans tête n'est plus un soupir : elle demande s'il manque une n
   assert.equal(res.abc.slice(d.cible.debut, d.cible.fin), "F2"); // la note d'avant
 });
 
+test("les durées que tes pages n'ont pas : blanches, ronde, doubles croches, notes pointées", async () => {
+  const f = await chargerFabrique();
+  const blanches = new Page(f);
+  blanches.hampe(blanches.teteVide(260, 2), "haut"); blanches.hampe(blanches.teteVide(420, 4), "bas"); blanches.barre(560); blanches.teteVide(700, 5); blanches.barre(900);
+  assert.equal(lire(blanches).abc, "M:4/4 K:C | G4 B4 | c8 |");
+  const doubles = new Page(f);
+  const hs = [2, 3, 4, 5].map((p, i) => doubles.haut(240 + i * 50, p)); doubles.ligature(hs[0], hs[3]); doubles.ligature(hs[0], hs[3], 0.6);
+  doubles.haut(470, 2); doubles.hampe(doubles.teteVide(580, 5), "bas"); doubles.barre(720);
+  assert.equal(lire(doubles).abc, "M:4/4 K:C | G/A/B/c/ G2 c4 |");
+  const pointees = new Page(f);
+  pointees.haut(240, 2); pointees.point(240 + 0.9 * f.IL, 2.5); pointees.crochet(pointees.haut(380, 3)); pointees.hampe(pointees.teteVide(480, 4), "bas"); pointees.barre(600);
+  pointees.hampe(pointees.teteVide(680, 5), "bas"); pointees.point(680 + 0.9 * f.IL, 5); pointees.bas(880, 5); pointees.barre(1000);
+  const r = lire(pointees);
+  assert.equal(r.abc, "M:4/4 K:C | G3 A B4 | c6 c2 |");
+  assert.deepEqual(r.doutes, []);
+});
+
+test("un accord à hampe courte reste un accord ; une tête au-dessus du bout de la hampe se rejoint d'un geste", async () => {
+  const f = await chargerFabrique();
+  const pg = new Page(f);
+  const t1 = pg.tete(260, 0); pg.tete(260, 2); pg.tete(260, 5); pg.hampe(t1, "haut", 3.5); // la hampe dépasse le do de 1 interligne
+  const t2 = pg.tete(380, 1); pg.tete(380, 3); pg.tete(380, 6); pg.hampe(t2, "haut", 4.5);
+  const t3 = pg.teteVide(520, 0); pg.teteVide(520, 2); pg.teteVide(520, 5); pg.hampe(t3, "haut", 4.5); pg.barre(680);
+  assert.equal(lire(pg).corps, "[EGc]2 [FAd]2 [EGc]4 |");
+  // Une hampe trop courte : la tête du haut est au-dessus de son bout.
+  const court = new Page(f);
+  const t = court.tete(260, 0); court.tete(260, 4); court.hampe(t, "haut", 1.6);
+  court.haut(380, 2); court.haut(480, 3); court.bas(580, 4); court.barre(700);
+  const r = lire(court);
+  assert.equal(r.corps, "B2 E2 G2 A2 B2 |"); // la tête sans hampe, un peu à gauche de la hampe, vient en premier
+  const [d] = r.r.doutes.filter((x) => x.type === "sans-hampe");
+  const { poser, preparerDoutes } = await import("../app/doutes.js");
+  const [p] = preparerDoutes([d]);
+  const q = poser(p, r.r.abc);
+  assert.deepEqual(q.reponses.map((x) => x.id), ["noire", "accord", "enlever"]);
+  const res = q.reponses[1].geste(r.r.abc);
+  assert.match(res.abc, /\n\[EB\]2 G2 A2 B2 \|$/);
+});
+
+test("une liaison de durée entre deux notes de même hauteur s'écrit « - » ; un legato ne change rien", async () => {
+  const f = await chargerFabrique();
+  const liee = new Page(f);
+  liee.bas(260, 5); liee.bas(400, 5); liee.arc(270, 390, liee.p.y(5) + 0.5 * f.IL, 0.5); liee.hampe(liee.teteVide(560, 5), "bas"); liee.barre(720);
+  const r = lire(liee);
+  assert.equal(r.corps, "c2- c2 c4 |");
+  assert.deepEqual(r.doutes, []);
+  const legato = new Page(f);
+  legato.bas(260, 5); legato.bas(400, 6); legato.arc(270, 390, legato.p.y(5) + 0.5 * f.IL, 0.5); legato.hampe(legato.teteVide(560, 5), "bas"); legato.barre(720);
+  assert.equal(lire(legato).corps, "c2 d2 c4 |");
+});
+
+test("pause et demi-pause, par leur place : la pause dure toute la mesure", async () => {
+  const f = await chargerFabrique();
+  const pg = new Page(f);
+  pg.rectangle(350, 6, true); pg.barre(520); pg.rectangle(640, 4, false); pg.hampe(pg.teteVide(800, 2), "haut"); pg.barre(950);
+  const r = lire(pg);
+  assert.equal(r.abc, "M:4/4 K:C | z8 | z4 G4 |");
+  assert.deepEqual(r.doutes, []);
+  // En 3/4, la même pause fait six croches.
+  const trois = new Page(f);
+  [2, 3, 4].forEach((p, i) => trois.note(240 + i * 80, p)); trois.barre(470); trois.rectangle(560, 6, true); trois.barre(680);
+  [2, 3, 4].forEach((p, i) => trois.note(740 + i * 80, p)); trois.barre(980);
+  assert.equal(lire(trois).abc, "M:3/4 K:C | G2 A2 B2 | z6 | G2 A2 B2 |");
+});
+
 test("une armure mêlée de bémols et de dièses : les plus nombreux, et un doute", async () => {
   const f = await chargerFabrique();
   const pg = new Page(f);

@@ -26,9 +26,7 @@ import { preparerTraits } from "./traits.js";
 
 const NOMS = ["C", "D", "E", "F", "G", "A", "B"];
 const NOMS_FR = ["do", "ré", "mi", "fa", "sol", "la", "si"];
-// Ordre des bémols et des dièses à l'armure.
-const ORDRE_BEMOLS = ["B", "E", "A", "D", "G", "C", "F"];
-const ORDRE_DIESES = ["F", "C", "G", "D", "A", "E", "B"];
+// Tonalités selon le nombre de bémols ou de dièses à l'armure.
 const TONALITES_BEMOLS = ["C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"];
 const TONALITES_DIESES = ["C", "G", "D", "A", "E", "B", "F#", "C#"];
 
@@ -275,19 +273,43 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     p.s.role = "hampe";
     hampes.push({ id: hampes.length, seg: p.s, dir: p.dir, tetes: [p.t], pied: p.bout, bout: p.loin, x: (p.s.a[0] + p.s.b[0]) / 2, crochets: 0, ligatures: [] });
   }
-  // Accords : d'autres têtes empilées le long de la même hampe.
+  // Accords : d'autres têtes empilées le long de la même hampe. La hampe doit
+  // dépasser la note du haut d'un peu plus d'une tête (0,8 interligne) : il
+  // fallait plus de 2 interlignes, et un accord à hampe courte se lisait en
+  // notes séparées (L10). Une tête qui a sa propre hampe n'est jamais prise.
   for (const h of hampes) {
     const [ya, yb] = [h.pied[1], h.bout[1]].sort((a, b) => a - b);
     for (const t of tetes) {
       if (tetePrise.has(t.id)) continue;
       const dx = xA(h.seg.a, h.seg.b, t.cy) - t.cx;
-      const dansHampe = t.cy > ya - 0.8 * il && t.cy < yb + 0.8 * il && Math.abs(t.cy - h.bout[1]) > 2 * il;
+      const dansHampe = t.cy > ya - 0.8 * il && t.cy < yb + 0.8 * il && Math.abs(t.cy - h.bout[1]) > 0.8 * il;
       if (Math.abs(dx) < 1.35 * il && dansHampe && h.tetes.some((u) => Math.abs(u.cx - t.cx) < 1.2 * il)) {
         h.tetes.push(t); tetePrise.add(t.id);
       }
     }
   }
   for (const t of tetes) t.hampe = hampes.find((h) => h.tetes.includes(t)) || null;
+
+  // Pauses et demi-pauses (L12) : un petit pavé noirci, nettement plus large
+  // que haut, pendu sous la 4ᵉ ligne (pause) ou posé sur la 3ᵉ (demi-pause).
+  // Il ressemble à une tête pleine sans hampe, et était lu comme une noire :
+  // c'est sa forme et sa place qui le distinguent. Tes têtes ne sont jamais
+  // plus larges qu'une fois et quart leur hauteur (pages du 30/09).
+  const repos = [];
+  for (let i = tetes.length - 1; i >= 0; i--) {
+    const t = tetes[i];
+    if (t.hampe || !t.pleine) continue;
+    const l = t.x1 - t.x0, h = t.y1 - t.y0;
+    if (l < 1.4 * h || h > 0.6 * il || l < 0.5 * il || l > 1.6 * il) continue;
+    const p = portees[t.portee];
+    const pendue = Math.abs(t.y0 - p.lignes[1]) < 0.25 * il && t.y1 > p.lignes[1];
+    const posee = Math.abs(t.y1 - p.lignes[2]) < 0.25 * il && t.y0 < p.lignes[2];
+    if (!pendue && !posee) continue;
+    const pause = pendue && (!posee || Math.abs(t.y0 - p.lignes[1]) < Math.abs(t.y1 - p.lignes[2]));
+    repos.push({ nature: pause ? "pause" : "demi-pause", portee: p.index, traits: t.traits, x0: t.x0, y0: t.y0, x1: t.x1, y1: t.y1, cx: t.cx, cy: t.cy });
+    for (const id of t.traits) classe[id] = "silence";
+    tetes.splice(i, 1);
+  }
 
   // Retouches : un trait repassé sur une hampe ou une barre, ou qui la
   // prolonge de quelques millimètres, n'est pas un nouveau signe.
@@ -646,7 +668,7 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     hesitations.push({ portee: p.index, signe: A, tete, lue: alteration ? "alteration" : "armure", alteration: type === "bemol" ? "_" : "^" });
   }
 
-  return { page: numeroPage, il, portees, traits, classe, tetes, hampes, barres, ligatures, signes, debutMusique, hesitations };
+  return { page: numeroPage, il, portees, traits, classe, tetes, hampes, barres, ligatures, signes, debutMusique, hesitations, repos };
 }
 
 // Place habituelle des altérations d'armure, en demi-interlignes au-dessus de
@@ -865,11 +887,21 @@ export function assembler(lue, cal) {
     if (vues.has(t.id)) continue;
     const duree = dureeNote(t, null);
     const ev = { type: "note", x: t.cx, tetes: [t], hampe: null, duree: duree ?? 2, points: 0, ligature: null };
-    if (duree === null) doutes.push(doute(lue, t.portee, t, "Tête pleine sans hampe : lue comme une noire.", { type: "sans-hampe", _ev: ev }));
+    // Une tête pleine sans hampe, juste au-dessus (ou au-dessous) d'une note à
+    // hampe : sans doute une note de l'accord dont la hampe est courte (L10).
+    // La réponse « C'est une note de l'accord » le refait d'un geste.
+    const voisin = parPortee[t.portee].find((e) => e.hampe && e.tetes.some((u) => Math.abs(u.cx - t.cx) < 1.2 * il && Math.abs(u.cy - t.cy) < 4 * il));
+    if (duree === null) doutes.push(doute(lue, t.portee, t, "Tête pleine sans hampe : lue comme une noire.", { type: "sans-hampe", _ev: ev, ...(voisin ? { _accord: voisin } : {}) }));
     // Une tête vide sans hampe est une ronde ; loin de la portée, sans ligne
     // supplémentaire, c'est peut-être du texte (L6) : on le demande.
     else if (t.loin) doutes.push(doute(lue, t.portee, t, "Tête vide sans hampe, loin de la portée : lue comme une ronde.", { type: "sans-hampe", _ev: ev }));
     parPortee[t.portee].push(ev);
+  }
+
+  // Pauses (toute la mesure, quelle qu'elle soit : partition.js en fixe la
+  // durée une fois le chiffrage connu) et demi-pauses (L12).
+  for (const r of lue.repos || []) {
+    parPortee[r.portee].push({ type: "silence", x: r.cx, duree: r.nature === "pause" ? 8 : 4, pause: r.nature === "pause", signe: r });
   }
 
   // Points de durée et points de reprise.
@@ -914,6 +946,61 @@ export function assembler(lue, cal) {
   }
 
   for (const evs of parPortee) evs.sort((a, b) => a.x - b.x);
+
+  // Liaisons de durée (L11) : un arc qui part d'une tête et arrive à la note
+  // suivante, de même hauteur, l'allonge (« - » en ABC). Détectées, elles
+  // étaient jetées. Un arc entre deux hauteurs différentes est un legato :
+  // il ne change pas le rythme, il reste ignoré.
+  for (const g of signes) {
+    if (!["liaison", "inconnu", "articulation", "hors-portee"].includes(g.nature) || g.partiel) continue;
+    if (g.l < 0.8 * il || g.h > 1.1 * il || g.l < 1.5 * g.h) continue;
+    const gauche = g.points.reduce((a, b) => (b[0] < a[0] ? b : a)), droite = g.points.reduce((a, b) => (b[0] > a[0] ? b : a));
+    const fleche = Math.max(...g.points.map((q) => distSegment(q, gauche, droite)));
+    if (fleche < 0.12 * il) continue; // droit : une ligne, pas un arc
+    const p = porteeDe(portees, g.cy);
+    const notes = parPortee[p.index].filter((e) => e.type === "note");
+    const bout = (pt, versLaDroite) => notes
+      .map((e) => ({ e, d: Math.min(...e.tetes.map((t) => (Math.abs(t.cy - pt[1]) < 1.2 * il && (versLaDroite ? t.cx - pt[0] > -0.5 * il : pt[0] - t.cx > -0.5 * il) ? Math.hypot(t.cx - pt[0], t.cy - pt[1]) : Infinity))) }))
+      .filter((x) => x.d < 1.6 * il).sort((a, b) => a.d - b.d)[0];
+    const a = bout(gauche, false), b = bout(droite, true);
+    if (!a || !b || a.e === b.e || a.e.x >= b.e.x) continue;
+    const suivante = notes.find((e) => e.x > a.e.x);
+    if (suivante !== b.e || !a.e.tetes.some((t) => b.e.tetes.some((u) => u.pas === t.pas))) continue;
+    a.e.liee = true;
+    g.nature = "liaison-duree";
+  }
+
+  // Triolet (L12) : un petit signe au-dessus ou au-dessous d'un groupe de
+  // trois notes liées. Sans gabarits, le lecteur ne sait pas lire ce « 3 » :
+  // il le demande, et la réponse écrit le triolet (avant : un 9/8 deviné).
+  const groupesDe = (evs) => {
+    const g = new Map();
+    for (const e of evs) if (e.type === "note" && e.ligature !== null) (g.get(e.ligature) || g.set(e.ligature, []).get(e.ligature)).push(e);
+    return [...g.values()];
+  };
+  // Le « 3 » est plus haut que large et fait deux bosses (au moins deux
+  // allers-retours) : un accent « > » au-dessus des mêmes notes ne compte pas.
+  // En mesure composée (6/8, 12/8…), trois croches liées sont la règle :
+  // partition.js y retire ces doutes.
+  for (const [pi, evs] of parPortee.entries()) {
+    for (const groupe of groupesDe(evs)) {
+      if (groupe.length !== 3) continue;
+      const xs = groupe.map((e) => e.x);
+      const bouts = groupe.map((e) => e.hampe.bout[1]), cys = groupe.flatMap((e) => e.tetes.map((t) => t.cy));
+      const montantes = bouts[0] < cys[0];
+      const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+      const cote = (g) => montantes
+        ? (g.cy < Math.max(...bouts) + 0.3 * il && g.cy > Math.min(...bouts) - 2.5 * il) || (g.cy > Math.max(...cys) + 0.5 * il && g.cy < Math.max(...cys) + 2.5 * il)
+        : (g.cy > Math.min(...bouts) - 0.3 * il && g.cy < Math.max(...bouts) + 2.5 * il) || (g.cy < Math.min(...cys) - 0.5 * il && g.cy > Math.min(...cys) - 2.5 * il);
+      const trois = signes.find((g) => ["hors-portee", "articulation", "inconnu"].includes(g.nature) && !g.partiel
+        && g.h >= 0.3 * il && g.h <= 1.6 * il && g.h >= 1.1 * g.l && retournements(g.points, 0.08 * il) >= 2
+        && g.cx > x0 - 0.5 * il && g.cx < x1 + 0.5 * il && cote(g));
+      if (!trois) continue;
+      trois.nature = "triolet?";
+      groupe[0].triolet = true; // la mesure compte une croche de moins pour deviner le chiffrage
+      doutes.push(doute(lue, pi, trois, "Un petit signe au-dessus de trois notes liées : un triolet ?", { type: "triolet", _ev: groupe[0], _evFin: groupe[2] }));
+    }
+  }
 
   // En-tête de chaque portée : armure et chiffrage.
   const entetes = portees.map((p) => {
@@ -984,13 +1071,6 @@ export function tonalite(bemols, dieses) {
   if (bemols && !dieses) return TONALITES_BEMOLS[Math.min(bemols, 7)];
   if (dieses && !bemols) return TONALITES_DIESES[Math.min(dieses, 7)];
   return "C";
-}
-
-export function alterationsArmure(bemols, dieses) {
-  const a = {};
-  ORDRE_BEMOLS.slice(0, bemols).forEach((l) => (a[l] = "_"));
-  ORDRE_DIESES.slice(0, dieses).forEach((l) => (a[l] = "^"));
-  return a;
 }
 
 export { nomDePas, porteeDe, listerPortees };

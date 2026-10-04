@@ -2,13 +2,21 @@
  * DE LA PAGE LUE À LA PARTITION ABC
  *
  * lirePartition(pages, cal, {titre}) enchaîne la lecture de chaque page
- * (lecteur.js), range les événements par système et par main, devine le
+ * (lecteur.js), range les événements par système et par main, trouve le
  * chiffrage d'après la durée des mesures, et écrit l'ABC.
  *
  * Les durées sont comptées en croches : c'est l'unité de l'ABC produit
  * (L:1/8). Une noire vaut 2, une blanche 4, une croche pointée 1,5.
  */
-import { assembler, alterationsArmure, lirePage, nomDePas, tonalite, verifierCalibration } from "./lecteur.js";
+import { assembler, lirePage, nomDePas, tonalite, verifierCalibration } from "./lecteur.js";
+
+/**
+ * La version du lecteur. Elle change quand une même page se lit autrement :
+ * une partition lue par une version plus ancienne, et pas encore corrigée,
+ * peut être relue (son ABC et ses doutes en profitent). L'appli la range
+ * avec chaque partition lue (versionLecteur).
+ */
+export const VERSION_LECTEUR = 2;
 
 // ------------------------------------------------------------------------
 // Durées et hauteurs en ABC
@@ -38,21 +46,50 @@ function hauteurABC(portee, tete) {
 // Chiffrage
 // ------------------------------------------------------------------------
 
-/** Durées des mesures complètes d'une voix (sans la première ni la dernière). */
-function dureesMesures(mesures) {
-  const pleines = mesures.filter((m) => m.fermee);
-  return pleines.slice(pleines.length > 2 ? 1 : 0).map((m) => m.duree);
+/**
+ * Les chiffrages que le lecteur peut deviner, du plus courant au plus rare.
+ * Avant, n'importe quelle durée de mesure devenait un chiffrage : une mesure
+ * fausse sur deux donnait 5/4, un point manqué 7/8, un triolet 9/8, sans
+ * aucun doute (audit du 04/10, C1). 2/2 a la durée de 4/4 : il ne se devine
+ * pas, il se lit (gabarits, L16). 5/4 et 7/8 ne sont retenus que si toutes
+ * les mesures de la pièce les confirment.
+ */
+const USUELS = [
+  { croches: 8, m: "4/4" }, { croches: 6, m: "3/4" }, { croches: 4, m: "2/4" }, { croches: 12, m: "12/8", compose: true },
+  { croches: 6, m: "6/8", compose: true }, { croches: 3, m: "3/8" }, { croches: 9, m: "9/8", compose: true },
+  { croches: 10, m: "5/4", rare: true }, { croches: 7, m: "7/8", rare: true },
+];
+
+/** Le chiffrage usuel d'une durée de mesure (en croches), ou null. */
+function usuel(croches, par3) {
+  const c = USUELS.filter((u) => Math.abs(u.croches - croches) < 1e-6);
+  if (!c.length) return null;
+  return c.find((u) => !!u.compose === !!par3) || c[0];
 }
 
-function deviner(durees, groupesPar3) {
-  if (!durees.length) return null;
-  const compte = new Map();
-  for (const d of durees) compte.set(d, (compte.get(d) || 0) + 1);
-  const [d] = [...compte.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0];
-  if (d <= 0) return null;
-  if (groupesPar3 && Number.isInteger(d) && d % 3 === 0) return { m: `${d}/8`, croches: d };
-  if (Number.isInteger(d) && d % 2 === 0) return { m: `${d / 2}/4`, croches: d };
-  if (Number.isInteger(d)) return { m: `${d}/8`, croches: d };
+/**
+ * Le chiffrage d'une section (des lignes qui partagent la même mesure),
+ * d'après la durée de ses mesures : le chiffrage usuel qui en explique le
+ * plus. `premieres` : la durée des premières mesures de la section, qui
+ * peuvent être des levées ; elles votent quand elles tombent juste, et ne
+ * contredisent rien sinon. Rend aussi combien de mesures le confirment.
+ */
+export function devinerChiffrage(durees, par3, premieres = []) {
+  if (!durees.length && !premieres.length) return null;
+  const votes = new Map();
+  for (const d of [...durees, ...premieres]) {
+    const u = usuel(d, par3);
+    if (u) votes.set(u, (votes.get(u) || 0) + 1);
+  }
+  const total = (u) => durees.length + premieres.filter((d) => Math.abs(d - u.croches) < 1e-6).length;
+  const classes = [...votes.entries()].filter(([u]) => !u.rare).sort((a, b) => b[1] - a[1] || USUELS.indexOf(a[0]) - USUELS.indexOf(b[0]));
+  if (classes.length) {
+    const [u, n] = classes[0];
+    return { m: u.m, croches: u.croches, appuis: n, total: total(u), autres: classes.slice(1).map(([x]) => x.m) };
+  }
+  // 5/4 ou 7/8 : seulement si toutes les mesures (au moins deux) le disent.
+  const rares = [...votes.entries()].filter(([u, n]) => u.rare && n >= 2 && n === total(u));
+  if (rares.length) return { m: rares[0][0].m, croches: rares[0][0].croches, appuis: rares[0][1], total: rares[0][1], autres: [] };
   return null;
 }
 
@@ -75,7 +112,11 @@ function mesuresDe(evs) {
     } else m.evs.push(e);
   }
   if (m.evs.length) mesures.push(m);
-  for (const x of mesures) x.duree = x.evs.reduce((a, e) => a + dureeEv(e), 0);
+  for (const x of mesures) {
+    x.duree = x.evs.reduce((a, e) => a + dureeEv(e), 0);
+    // Une pause dit « toute la mesure », quelle qu'elle soit : elle ne vote pas pour le chiffrage.
+    x.pause = x.evs.some((e) => e.pause);
+  }
   return mesures;
 }
 
@@ -97,7 +138,8 @@ function barreABC(b, derniere) {
 /**
  * L'ABC d'une mesure. Chaque événement retient au passage où son jeton tombe
  * dans ce texte (`pos`) : c'est ce qui permet à l'atelier de viser la note
- * d'un doute sans relire l'ABC.
+ * d'un doute sans relire l'ABC. Une note liée à la suivante (liaison de
+ * durée, L11) est suivie d'un « - », hors de son jeton.
  */
 function mesureABC(m, portee) {
   let texte = "";
@@ -114,7 +156,7 @@ function mesureABC(m, portee) {
     const lie = e.type === "note" && e.ligature !== null && e.ligature === groupe;
     if (!lie && texte) texte += " ";
     e.pos = [texte.length, texte.length + j.length];
-    texte += j;
+    texte += j + (e.liee ? "-" : "");
     groupe = e.type === "note" ? e.ligature : null;
   }
   return texte;
@@ -149,6 +191,44 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
   });
 
   const piano = cal.systemes[0].portees.length === 2;
+
+  // 1. Les mesures de chaque voix, puis les sections : une section commence
+  //    à la première ligne, et à chaque ligne où un chiffrage est écrit. Le
+  //    chiffrage ne change plus qu'à une telle ligne : avant, une ligne dont
+  //    les mesures étaient fausses changeait de chiffrage sans rien demander.
+  const sections = [];
+  systemes.forEach((sys, n) => {
+    sys.voix = sys.voix.map((v) => ({ ...v, mesures: mesuresDe(v.evs) }));
+    sys.ecrit = sys.entetes.some((e) => e.chiffrage);
+    if (n === 0 || sys.ecrit) sections.push({ systemes: [], ecrit: sys.ecrit });
+    sections[sections.length - 1].systemes.push(sys);
+    sys.section = sections[sections.length - 1];
+  });
+  let precedent = null;
+  for (const s of sections) {
+    // Votent les mesures fermées par une barre, sauf les pauses (elles
+    // durent ce que dure la mesure). La première de la section peut être une
+    // levée : elle vote à part. Une mesure qui a peut-être un triolet (un
+    // « 3 » sur trois croches liées) vote avec une croche de moins.
+    const durees = [], premieres = [];
+    const duree = (m) => m.duree - (m.evs.some((e) => e.triolet) ? 1 : 0);
+    s.systemes.forEach((sys, k) => sys.voix.forEach((v) => {
+      for (const m of v.mesures.filter((m) => m.fermee && !m.pause)) (k === 0 && m === v.mesures[0] ? premieres : durees).push(duree(m));
+    }));
+    const groupes = s.systemes.flatMap((sys) => sys.voix.flatMap((v) => groupesLigatures(v.evs)));
+    const par3 = groupes.length > 0 && groupes.filter((g) => g % 3 === 0).length / groupes.length >= 0.5;
+    s.devine = devinerChiffrage(durees, par3, premieres);
+    s.m = s.devine ? { m: s.devine.m, croches: s.devine.croches } : precedent;
+    precedent = s.m;
+  }
+  // En mesure composée, trois croches liées sont la règle, pas un triolet.
+  const systemeDe = (d) => systemes.find((s) => s.page === d.page && s.voix.some((v) => v.portee.index === d.portee));
+  for (let i = doutes.length - 1; i >= 0; i--) {
+    if (doutes[i].type !== "triolet") continue;
+    const s = systemeDe(doutes[i]);
+    if (s && s.section.m && /\/8$/.test(s.section.m.m)) doutes.splice(i, 1);
+  }
+
   let cle = null, chiffrage = null;
   const lignes = [];
   const enTete = { M: null, K: null };
@@ -182,16 +262,28 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
       d._sys = sys;
     }
 
-    // Mesures de chaque voix et chiffrage.
-    const voix = sys.voix.map((v) => ({ ...v, mesures: mesuresDe(v.evs) }));
-    const durees = voix.flatMap((v) => dureesMesures(v.mesures));
-    const groupes = voix.flatMap((v) => groupesLigatures(v.evs));
-    const par3 = groupes.length > 0 && groupes.filter((g) => g % 3 === 0).length / groupes.length >= 0.5;
-    const devine = deviner(durees, par3);
-    let m = chiffrage;
-    if (devine && (!chiffrage || e0.chiffrage || devine.m !== chiffrage.m)) m = devine;
-    if (e0.chiffrage && !devine) {
-      doutes.push({ type: "chiffrage", page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), message: "Chiffrage écrit mais pas de mesure complète pour le vérifier." });
+    // Chiffrage : celui de la section.
+    const section = sys.section;
+    const debutSection = section.systemes[0] === sys;
+    const m = section.m;
+    const voix = sys.voix;
+    // Une pause dure toute la mesure, quelle qu'elle soit.
+    for (const v of voix) for (const mes of v.mesures) {
+      if (!mes.pause) continue;
+      for (const e of mes.evs) if (e.pause) e.duree = m ? m.croches : 8;
+      mes.duree = mes.evs.reduce((a, e) => a + dureeEv(e), 0);
+    }
+    if (debutSection) {
+      if (sys.ecrit && !section.devine) {
+        doutes.push({ type: "chiffrage", page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), message: "Chiffrage écrit mais pas de mesure complète pour le vérifier." });
+      } else if (section.devine && section.devine.appuis < section.devine.total / 2) {
+        // Moins de la moitié des mesures tombent juste : le chiffrage lui-même est douteux.
+        doutes.push({
+          type: "chiffrage", variante: "contredit", m: section.devine.m, autres: section.devine.autres, appuis: section.devine.appuis, total: section.devine.total,
+          page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), _section: section,
+          message: `Chiffrage deviné : ${section.devine.m}, mais seules ${section.devine.appuis} mesures sur ${section.devine.total} le confirment.`,
+        });
+      }
     }
 
     const champs = [];
@@ -203,28 +295,43 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
     cle = k; chiffrage = m;
 
     // Contrôle des temps, mesure par mesure. Une ligne finit toujours une
-    // mesure, barre écrite ou non. Seules exceptions : la levée en tête de
-    // pièce (ou après un changement de chiffrage), et la dernière mesure
-    // quand elle complète cette levée (fin de pièce ou reprise).
+    // mesure, barre écrite ou non.
+    //  - Une levée n'est acceptée qu'en tête de pièce, ou en tête d'une section
+    //    dont le chiffrage est écrit (ta page de mélodie : la gamme, puis la
+    //    pièce en 12/8 avec sa levée) ; de même durée dans toutes les voix ; et
+    //    suivie d'une mesure complète. Avant, toute première mesure plus courte
+    //    d'une ligne passait pour une levée (un soupir retiré à la main gauche
+    //    ne levait rien).
+    //  - La dernière mesure peut compléter la levée (fin de pièce ou reprise),
+    //    ou rester inachevée en fin de pièce.
     const nbMesures = Math.max(...voix.map((v) => v.mesures.length));
-    const nouveauChiffrage = !chiffrage || n === 0 || (m && champs.some((c) => c.startsWith("[M:")));
+    const enTeteDePiece = n === 0 || (debutSection && section.ecrit);
+    const premieres = voix.map((v) => v.mesures[0]).filter(Boolean);
+    const estLevee = !!m && enTeteDePiece && premieres.length === voix.length
+      && premieres.every((p) => p.duree < m.croches - 1e-6 && Math.abs(p.duree - premieres[0].duree) < 1e-6)
+      && voix.every((v) => v.mesures[1] && Math.abs(v.mesures[1].duree - m.croches) < 1e-6);
+    if (estLevee) leveeCourante = premieres[0].duree;
+    else if (enTeteDePiece) leveeCourante = 0;
+    const decalage = estLevee ? 1 : 0; // la levée n'est pas une mesure : elle ne se compte pas
     voix.forEach((v, iv) => {
       v.mesures.forEach((mes, i) => {
         if (!m) return;
         const premiere = i === 0, derniere = i === v.mesures.length - 1;
-        if (premiere && nouveauChiffrage && mes.duree < m.croches) { if (iv === 0) leveeCourante = mes.duree; return; }
+        if (premiere && estLevee) return;
         const finDeReprise = mes.barreApres && mes.barreApres.reprise && mes.barreApres.reprise.gauche;
         const finDePiece = derniere && n === systemes.length - 1;
         if ((finDeReprise || finDePiece) && leveeCourante && Math.abs(mes.duree + leveeCourante - m.croches) < 1e-6) return;
         if (finDePiece && !mes.fermee && mes.duree < m.croches) return;
         const ecart = Math.abs(mes.duree - m.croches) > 1e-6;
         if (ecart) {
+          const rang = i + 1 - decalage;
+          const lieu = rang > 0 ? `${rang}ᵉ mesure` : "levée";
           doutes.push({
-            type: "mesure", page: sys.page, portee: v.portee.index, mesure: numeroMesure + i,
+            type: "mesure", page: sys.page, portee: v.portee.index, mesure: numeroMesure + i - decalage,
             // Pour poser la question : où (ligne, main, rang dans la ligne) et combien de croches.
-            ligne: n + 1, ...(piano ? { main: iv ? "gauche" : "droite" } : {}), rang: i + 1, trouve: mes.duree, attendu: m.croches,
+            ligne: n + 1, ...(piano ? { main: iv ? "gauche" : "droite" } : {}), rang, trouve: mes.duree, attendu: m.croches,
             boite: boiteMesure(mes, v.portee, cal),
-            message: `Ligne ${n + 1}${piano ? (iv ? ", main gauche" : ", main droite") : ""}, ${i + 1}ᵉ mesure : ${temps(mes.duree)} au lieu de ${temps(m.croches)}.`,
+            message: `Ligne ${n + 1}${piano ? (iv ? ", main gauche" : ", main droite") : ""}, ${lieu} : ${temps(mes.duree)} au lieu de ${temps(m.croches)}.`,
             _mes: mes,
           });
         }
@@ -257,7 +364,7 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
       voix.forEach((v, i) => lignes.push(ecrireVoix(v, `[V:${i + 1}] `)));
     } else lignes.push(ecrireVoix(voix[0]));
     sys.derniereLigne = lignes.length - 1;
-    numeroMesure += nbMesures;
+    numeroMesure += nbMesures - decalage;
   });
 
   const composees = enTete.M && /^(6|9|12)\/8$/.test(enTete.M);
@@ -280,18 +387,23 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
   // la réponse sur la bonne note ; l'ABC, lui, n'en dépend pas.
   let debutLigne = entete.join("\n").length + 1;
   const debutsLignes = lignes.map((l) => { const d = debutLigne; debutLigne += l.length + 1; return d; });
+  const absolu = (place) => (place ? { debut: debutsLignes[place.ligne] + place.debut, fin: debutsLignes[place.ligne] + place.fin } : null);
+  const lignesDe = (a, b) => ({ debut: debutsLignes[a], fin: debutsLignes[b] + lignes[b].length });
   for (const d of doutes) {
     const place = (d._ev || d._mes || {}).place;
-    if (place) d.cible = { debut: debutsLignes[place.ligne] + place.debut, fin: debutsLignes[place.ligne] + place.fin };
+    if (place) d.cible = absolu(place);
+    // Un triolet vise ses trois notes, de la première à la dernière.
+    if (d._evFin && d.cible && d._evFin.place) d.cible = { debut: d.cible.debut, fin: absolu(d._evFin.place).fin };
+    // La note à hampe dont une tête sans hampe ferait partie (accord à hampe courte, L10).
+    if (d._accord && d._accord.place) d.cibleAccord = absolu(d._accord.place);
     // Les lignes d'un système (ses deux voix au piano) : ce que réécrit un changement d'armure.
-    if (d._sys && d._sys.premiereLigne !== undefined) {
-      const { premiereLigne: a, derniereLigne: b } = d._sys;
-      d.cibleLigne = { debut: debutsLignes[a], fin: debutsLignes[b] + lignes[b].length };
+    if (d._sys && d._sys.premiereLigne !== undefined) d.cibleLigne = lignesDe(d._sys.premiereLigne, d._sys.derniereLigne);
+    // Les lignes d'une section : ce que réécrit un changement de chiffrage.
+    if (d._section) {
+      const s = d._section.systemes;
+      d.cibleLigne = lignesDe(s[0].premiereLigne, s[s.length - 1].derniereLigne);
     }
-    delete d._ev;
-    delete d._mes;
-    delete d._sys;
-    delete d._hesitation;
+    for (const k of ["_ev", "_evFin", "_mes", "_sys", "_section", "_hesitation", "_accord"]) delete d[k];
   }
 
   return { abc, doutes, lues, piano, nbSystemes: systemes.length };
@@ -323,5 +435,3 @@ function boiteMesure(mes, portee, cal) {
   const x1 = mes.barreApres ? mes.barreApres.x : Math.max(...xs) + cal.interligne;
   return { x0, y0: portee.haut - cal.interligne, x1, y1: portee.bas + cal.interligne };
 }
-
-export { alterationsArmure };

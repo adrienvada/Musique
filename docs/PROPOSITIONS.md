@@ -622,6 +622,52 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   allers-retours d'un dixième d'interligne et n'est pas droit. Un trait seul,
   droit et vertical, sans tête, lève le doute « Il manque une note ? », qui
   vise la note d'avant (« Je corrige moi-même » la choisit).
+- **Plus d'erreur de rythme qui se cache (L1, critique).** Le chiffrage
+  acceptait n'importe quelle durée de mesure : une mesure fausse sur deux
+  donnait 5/4, un point oublié 7/8, un triolet 9/8, sans un doute ; une
+  ligne aux mesures fausses changeait de chiffrage sans rien demander.
+  - Il se choisit maintenant parmi les mesures usuelles (2/4, 3/4, 4/4,
+    3/8, 6/8, 9/8, 12/8), celle qui explique le plus de mesures. 5/4 et 7/8
+    ne sont retenus que si toutes les mesures (au moins deux) le disent ; 2/2
+    a la durée de 4/4, il se lira (L16), il ne se devine pas.
+  - Il ne change qu'à une ligne où un chiffrage est écrit (une « section »).
+    Une mesure qui ne tombe pas juste est un doute ; si moins de la moitié
+    des mesures tombent juste, le chiffrage lui-même en est un, et ses
+    réponses proposent les autres (`changerChiffrage`).
+  - Une levée n'est acceptée qu'en tête de pièce, de même durée dans toutes
+    les voix, et suivie d'une mesure complète. Pourquoi aussi en tête d'une
+    section dont le chiffrage est écrit : ta page de mélodie commence par
+    une gamme sans mesure, puis la pièce en 12/8 avec sa levée. Avant, toute
+    première mesure plus courte d'une ligne passait (un soupir retiré à la
+    main gauche du piano ne levait rien : c'est maintenant un doute).
+  - La levée n'est plus comptée comme une mesure (L19) : la mesure de
+    11 croches de ta mélodie est la « 2ᵉ mesure » de sa ligne, plus la 3ᵉ.
+    `tests/doutes.test.mjs` suit.
+- **Accords à hampe courte (L10).** La hampe devait dépasser la note du haut
+  de plus de 2 interlignes : il suffit maintenant d'un peu plus d'une tête.
+  Une tête sans hampe juste au-dessus d'une note à hampe propose « Une note
+  de l'accord », qui refait l'accord d'un geste (`joindreAccord`).
+- **Liaisons de durée (L11).** Un arc qui part d'une tête et arrive à la
+  note suivante, de même hauteur, s'écrit « - » ; il était détecté puis
+  jeté. Entre deux hauteurs différentes (un legato), il reste ignoré : il
+  ne change pas le rythme. Les gestes d'`edition.js` gardent la liaison à sa
+  place (copier, supprimer, compléter la mesure).
+- **Pauses, demi-pauses et triolets (L12).** Un pavé noirci pendu sous la
+  4ᵉ ligne est une pause (toute la mesure, quel que soit le chiffrage), posé
+  sur la 3ᵉ une demi-pause ; ils étaient lus comme des noires sans hampe. Tes
+  têtes ne sont jamais plus larges qu'une fois et quart leur hauteur : le
+  pavé, si. Un petit signe plus haut que large, à deux bosses, sur trois
+  notes liées lève « Un triolet ? » ; la réponse écrit « (3 » (`faireTriolet`)
+  et la mesure se recompte. En 6/8, 9/8 ou 12/8, trois croches liées sont la
+  règle : pas de doute. Le chiffre lui-même se lira avec les gabarits (L16).
+- **Petits défauts (L19).** Le deuxième fa d'une mesure « ^F2 F2 » se
+  faisait entendre naturel quand on le touchait : `hauteursMidiA` tient
+  compte des altérations de la mesure (à brancher dans l'atelier).
+  Supprimer la première note d'une ligne laissait une espace en tête.
+  `alterationsArmure`, jamais appelée, est retirée. `dureeABC` reste en
+  double (le lecteur et `edition.js` n'importent rien l'un de l'autre :
+  chacun doit tourner seul dans `dist/`) ; un test vérifie qu'ils écrivent
+  la même chose.
 
 ### Connecteur (S3 à S5, C1 à C6)
 

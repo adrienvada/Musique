@@ -22,21 +22,34 @@
  */
 import * as ed from "./edition.js";
 
+/**
+ * Les autres places qu'un doute peut viser, en plus de sa note ou de sa
+ * mesure : la ligne (ou les lignes) que réécrit une réponse d'armure ou de
+ * chiffrage, et la note à hampe d'un accord à refaire. [cible, visée, contenant].
+ */
+const SECONDAIRES = [["cibleLigne", "viseLigne", true], ["cibleAccord", "viseAccord", false]];
+
 /** Les doutes d'une lecture neuve : aucun n'est levé, et chacun vise sa cible. */
 export function preparerDoutes(doutes) {
-  return doutes.map((d) => ({ ...d, leve: false, vise: d.cible ? { ...d.cible } : null, ...(d.cibleLigne ? { viseLigne: { ...d.cibleLigne } } : {}) }));
+  return doutes.map((d) => {
+    const p = { ...d, leve: false, vise: d.cible ? { ...d.cible } : null };
+    for (const [c, v] of SECONDAIRES) if (d[c]) p[v] = { ...d[c] };
+    for (const prop of p.propositions || []) for (const ch of prop.changements || []) ch.vise = ch.cible ? { ...ch.cible } : null;
+    return p;
+  });
 }
 
 /**
  * Donne à chaque doute sa visée au premier regard de l'atelier : la cible de la
  * lecture, si l'ABC n'a pas bougé depuis. Sinon (corrigé avant, ou lu avant que
  * les doutes aient une cible), il n'a pas de visée : question sans réponse fermée.
- * `viseLigne` (la ligne d'un doute d'armure) suit la même règle.
+ * Les autres visées (ligne, accord, propositions) suivent la même règle.
  */
 export function initialiserVise(doutes, abc, abcLu) {
   for (const d of doutes) {
     if (d.vise === undefined) d.vise = d.cible && abc === abcLu ? { ...d.cible } : null;
-    if (d.cibleLigne && d.viseLigne === undefined) d.viseLigne = abc === abcLu ? { ...d.cibleLigne } : null;
+    for (const [c, v] of SECONDAIRES) if (d[c] && d[v] === undefined) d[v] = abc === abcLu ? { ...d[c] } : null;
+    for (const prop of d.propositions || []) for (const ch of prop.changements || []) if (ch.vise === undefined) ch.vise = ch.cible && abc === abcLu ? { ...ch.cible } : null;
   }
 }
 
@@ -102,7 +115,7 @@ export function suivre(doutes, modif) {
   for (const m of Array.isArray(modif) ? modif : [modif]) {
     for (const d of doutes) {
       if (d.vise) d.vise = deplacerVise(d.vise, m, typeDe(d) === "mesure");
-      if (d.viseLigne) d.viseLigne = deplacerVise(d.viseLigne, m, true);
+      for (const [, v, contenant] of SECONDAIRES) if (d[v]) d[v] = deplacerVise(d[v], m, contenant);
       for (const p of d.propositions || []) for (const c of p.changements || []) if (c.vise) c.vise = deplacerVise(c.vise, m);
     }
   }
@@ -150,30 +163,49 @@ export function modifEntre(ancien, nouveau) {
 
 /** La note visée par un doute, ou null si elle n'est plus là telle quelle. */
 export function noteVisee(d, abc) {
-  if (!d.vise) return null;
-  const j = ed.lireJeton(abc, d.vise.debut);
-  return j && j.fin === d.vise.fin ? j : null;
+  return jetonVise(d.vise, abc);
 }
 
-/** Les notes et silences d'une mesure visée, dans l'ordre, ou null si le texte est autre chose (triolet, décoration…). */
+/** Le jeton qui occupe exactement la place `vise`, ou null. */
+function jetonVise(vise, abc) {
+  if (!vise) return null;
+  const j = ed.lireJeton(abc, vise.debut);
+  return j && j.fin === vise.fin ? j : null;
+}
+
+/**
+ * Les notes et silences d'une mesure visée, dans l'ordre, ou null si le texte
+ * est autre chose (décoration…). Une liaison de durée (« - ») ne compte pas ;
+ * dans un triolet (« (3 »), chaque note compte pour les deux tiers de sa
+ * durée écrite : c'est sa `duree` (sa durée écrite reste `croches`).
+ */
 export function jetonsDeLaMesure(d, abc) {
-  if (!d.vise) return null;
+  return d.vise ? jetonsEntre(abc, d.vise.debut, d.vise.fin) : null;
+}
+
+/** Les jetons de [debut, fin[ (voir jetonsDeLaMesure), ou null. */
+export function jetonsEntre(abc, debut, fin) {
   const jetons = [];
-  let pos = d.vise.debut;
-  while (pos < d.vise.fin) {
-    if (abc[pos] === " ") { pos++; continue; }
+  let pos = debut, triolet = 0;
+  while (pos < fin) {
+    if (abc[pos] === " " || abc[pos] === "-") { pos++; continue; }
+    if (abc.startsWith("(3", pos)) { triolet = 3; pos += 2; continue; }
     const j = ed.lireJeton(abc, pos);
-    if (!j || j.fin <= pos || j.fin > d.vise.fin) return null;
-    jetons.push(j);
+    if (!j || j.fin <= pos || j.fin > fin) return null;
+    jetons.push({ ...j, duree: triolet ? (j.croches * 2) / 3 : j.croches });
+    if (triolet) triolet--;
     pos = j.fin;
   }
   return jetons.length ? jetons : null;
 }
 
+/** La durée d'une liste de jetons, triolets compris. */
+const somme = (jetons) => jetons.reduce((t, j) => t + (j.duree ?? j.croches), 0);
+
 /** Où regarder dans la partition lue : { debut, fin, genre } ou null. */
 export function cibleVisible(d, abc) {
   const t = typeDe(d);
-  if (t === "mesure") return jetonsDeLaMesure(d, abc) ? { ...d.vise, genre: "mesure" } : null;
+  if (t === "mesure" || t === "triolet") return jetonsDeLaMesure(d, abc) ? { ...d.vise, genre: "mesure" } : null;
   if (["crochet", "sans-hampe", "tete-manquante"].includes(t) || (t === "armure" && d.variante === "premiere-note")) return noteVisee(d, abc) ? { ...d.vise, genre: "note" } : null;
   return null;
 }
@@ -293,7 +325,7 @@ export function poser(d, abc) {
   if (type === "mesure") {
     const jetons = jetonsDeLaMesure(d, abc);
     const [trouveMsg, attenduMsg] = ((d.message || "").match(/: ([\d,]+) croches? au lieu de ([\d,]+) croche/) || []).slice(1).map((x) => Number(x.replace(",", ".")));
-    const trouve = jetons ? jetons.reduce((t, j) => t + j.croches, 0) : (d.trouve ?? trouveMsg);
+    const trouve = jetons ? somme(jetons) : (d.trouve ?? trouveMsg);
     const attendu = d.attendu ?? attenduMsg;
     const lieu = endroit(d);
     const detail = (trouve !== undefined && attendu !== undefined)
@@ -333,7 +365,22 @@ export function poser(d, abc) {
       detail: ronde ? "Je vois une tête de note vide, sans queue ni ligne supplémentaire, loin de la portée : je l'ai lue comme une ronde. C'est peut-être une lettre." : "Je vois une tête de note pleine, sans queue : je l'ai lue comme une noire.",
       reponses: !j ? [] : [
         ronde ? reponse("ronde", "Oui, une ronde", "d16", null, "La note reste une ronde.") : reponse("noire", "Oui, une noire", "d4", null, "La note reste une noire."),
+        // Juste au-dessus d'une note à hampe : la note d'un accord à hampe courte (L10).
+        ...(!ronde && jetonVise(d.viseAccord, abc) ? [reponse("accord", "Une note de l'accord", "accords", (a) => ed.joindreAccord(a, noteVisee(d, a), jetonVise(d.viseAccord, a)), "La note rejoint l'accord.")] : []),
         reponse("enlever", "Non, l'enlever", "corbeille", (a) => ed.supprimer(a, noteVisee(d, a)), "La note est enlevée."),
+      ],
+    };
+  }
+
+  if (type === "triolet") {
+    const jetons = d.vise ? jetonsEntre(abc, d.vise.debut, d.vise.fin) : null;
+    const deja = d.vise && abc.slice(Math.max(0, d.vise.debut - 2), d.vise.debut) === "(3";
+    return {
+      ...base, manuel: true, titre: "Un triolet ?",
+      detail: "Je vois un petit signe sur trois notes liées, peut-être un « 3 » : trois notes dans le temps de deux.",
+      reponses: [
+        ...(jetons && jetons.length === 3 && !deja ? [reponse("triolet", "Oui, un triolet", "d2", (a) => ed.faireTriolet(a, d.vise), "Les trois notes forment un triolet.")] : []),
+        reponse("non", "Non, trois notes", "ok", null, "Les trois notes restent telles quelles."),
       ],
     };
   }
@@ -359,6 +406,18 @@ export function poser(d, abc) {
   if (type === "armure") return poserArmure(d, abc, base);
 
   if (type === "chiffrage") {
+    if (d.variante === "contredit") {
+      // Le chiffrage deviné n'explique pas la moitié des mesures (L1) : les autres en réponses.
+      const autres = (d.autres || []).slice(0, 3);
+      return {
+        ...base, manuel: true, titre: "Le chiffrage est-il bon ?",
+        detail: `J'ai deviné ${d.m}, mais seules ${d.appuis} mesures sur ${d.total} tombent juste.`,
+        reponses: [
+          reponse("ok", `Oui, ${d.m}`, "ok", null, "Le chiffrage est gardé."),
+          ...(d.viseLigne ? autres.map((m) => reponse(`m-${m}`, m, "metronome", (a) => ed.changerChiffrage(a, d.viseLigne, m), `Le chiffrage devient ${m}.`)) : []),
+        ],
+      };
+    }
     return {
       ...base,
       titre: "Le chiffrage est-il bon ?",
