@@ -805,9 +805,9 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     l'ancien part (`portee-piano-1` n'était jamais remplacé).
   - La navigation garde la règle du 02/10 : la page est redemandée au
     serveur, la copie ne sert que s'il manque, s'il est en panne ou s'il
-    tarde (plus bas). La copie de la page n'est jamais remplacée en route : une page
-    plus récente, venue du réseau, n'irait pas avec les modules copiés ;
-    elle entre dans la copie avec sa version.
+    tarde (plus bas). La copie de la page n'est jamais remplacée en
+    route : une page plus récente, venue du réseau, n'irait pas avec les
+    modules copiés ; elle entre dans la copie avec sa version.
   - Quand une nouvelle version prend la main, une page ouverte d'une autre
     version dit « Une nouvelle version de Portée est prête » et propose
     « Recharger » : rien ne se recharge tout seul, tu peux être au milieu
@@ -840,10 +840,11 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - Mesuré dans les mêmes conditions (8 s par réponse, téléphone simulé,
     médiane de trois) : premier affichage 24,1 s → 2,6 s, appli prête
     80,1 s → 2,6 s.
-- **Un démarrage plus rapide au téléphone, une page bien rangée (B1).** Mesuré avec le script de
-  l'audit de l'interface (téléphone simulé, processeur ×4, « Slow 4G »,
-  serveur qui imite GitHub Pages, médiane de cinq chargements à froid) :
-  icônes visibles 5,34 s → 2,17 s, appli prête 5,40 s → 3,96 s.
+- **Un démarrage plus rapide au téléphone, une page bien rangée (B1).**
+  Mesuré avec le script de l'audit de l'interface (téléphone simulé,
+  processeur ×4, « Slow 4G », serveur qui imite GitHub Pages, médiane de
+  cinq chargements à froid) : icônes visibles 5,34 s → 2,17 s, appli
+  prête 5,40 s → 3,96 s.
   - Le jeu d'icônes est écrit dans la page à l'assemblage (`jeuDIcones()` ;
     `app/icones.js` reste la seule source, et `injecterIcones()` ne le
     double pas) : les icônes arrivent avec le premier affichage, au lieu
@@ -952,8 +953,8 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     actions, que les mêmes vérifications jugent. Sauf Playwright, qui va
     avec les navigateurs installés là où Claude travaille (Chromium 1194) :
     il se monte à la main, avec eux.
-  - `engines` : Node 22 au moins, la version de la CI (ESLint 10 et
-    TypeScript 7 ne tournent pas plus bas).
+  - `engines` : Node 22 au moins, la version de la CI et des essais
+    (ESLint 10 demande déjà au moins Node 20.19).
 
 ### Notation, harmonie et exports (N1 à N7)
 
