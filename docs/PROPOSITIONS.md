@@ -557,7 +557,7 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 <!-- lot écrans des données -->
 
-### Interface (I1 à I4)
+### Interface (I1 à I4, I6 à I15)
 
 <!-- lot interface -->
 
