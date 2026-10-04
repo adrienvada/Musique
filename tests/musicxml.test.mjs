@@ -86,6 +86,22 @@ test("une idée avec syncopes, accord tenu, altérations et symboles d'accords",
   assert.match(xml, /<per-minute>90<\/per-minute>/);
 });
 
+test("les notes de l'accompagnement s'épellent comme leur accord", () => {
+  // Ré 7 en fa majeur, E7 et B7 en do : fa♯, sol♯, ré♯ (MuseScore recevait sol♭, la♭, mi♭).
+  const hauteurs = (xml) => [...xml.matchAll(/<step>([A-G])<\/step>(?:<alter>(-?\d)<\/alter>)?/g)].map((m) => m[1] + ({ "-1": "b", 1: "#" }[m[2]] || ""));
+  const enFa = idee([[0, 16, 72]], { tonalite: "F" });
+  enFa.accords = [{ d: 0, nom: "D7" }];
+  enFa.accompagnement = "plaque";
+  const fa = hauteurs(ecrireMusicXml(enFa, { voix: voixCompletes(enFa) }));
+  assert.ok(fa.includes("F#") && !fa.includes("Gb"), fa.join(" "));
+  const enDo = idee([[0, 16, 76], [16, 16, 75]]);
+  enDo.accords = [{ d: 0, nom: "E7" }, { d: 16, nom: "B7" }];
+  enDo.accompagnement = "arpege";
+  const ut = hauteurs(ecrireMusicXml(enDo, { voix: voixCompletes(enDo) }));
+  assert.ok(ut.includes("G#") && ut.includes("D#") && ut.includes("F#"), ut.join(" "));
+  assert.ok(!ut.some((n) => n.endsWith("b")), ut.join(" "));
+});
+
 test("12/8 : la mesure entière en ronde pointée, et chaque temps visible", () => {
   const seq = idee([[0, 24, 63], [24, 16, 66], [40, 8, 65]], { mesure: [12, 8], tonalite: "Ebm" });
   const score = lireXml(ecrireMusicXml(seq));

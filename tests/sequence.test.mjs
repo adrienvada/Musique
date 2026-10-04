@@ -85,6 +85,39 @@ test("altérations : armure, bécarre dans la mesure, note liée par-dessus la b
   assert.equal(sq.nomNote(71, "Gb"), "do♭5");
 });
 
+test("orthographe : les notes d'un accord s'écrivent comme l'accord, les autres suivent la ligne", () => {
+  // Une voix d'accompagnement (les notes de l'accord) et une mélodie, sous des accords posés.
+  const epel = (tonalite, accords, voix) => {
+    const seq = sq.nouvelleSequence({ tonalite });
+    seq.accords = accords.map(([d, nom]) => ({ d, nom }));
+    const lesVoix = voix.map((notes, i) => ({ nom: `V${i}`, notes: notes.map(([d, l, h], j) => ({ id: i * 100 + j, d, l, h })) }));
+    seq.pistes = lesVoix;
+    const { parVoix } = sq.mettreEnMesures(seq, { voix: lesVoix });
+    const noms = parVoix.map((couches) => couches.flatMap((mesures) => mesures.flat().flatMap((t) => t.notes.filter((n) => !n.suite).map((n) => n.e.lettre + ({ "-1": "b", 0: "", 1: "#" })[n.e.alt]))));
+    // Et abcjs relit les mêmes hauteurs.
+    const { abc } = sq.ecrireAbc(seq, { voix: lesVoix });
+    assert.deepEqual(entendu(abc), lesVoix.flatMap((v) => v.notes.map((n) => [n.d, n.l, n.h])).sort(trier), abc);
+    return noms;
+  };
+  // Ré 7 en fa majeur : fa♯ (MuseScore recevait un sol♭).
+  assert.deepEqual(epel("F", [[0, "D7"]], [[[0, 16, 50], [0, 16, 54], [0, 16, 57], [0, 16, 60]]])[0], ["D", "F#", "A", "C"]);
+  // En do : mi 7 a son sol♯, si 7 son ré♯ et son fa♯, ré♭ son ré♭ et son la♭.
+  const enDo = epel("C", [[0, "E7"], [16, "B7"], [32, "Db"]], [[[0, 16, 56]], [[16, 16, 63], [16, 16, 66]], [[32, 16, 61], [32, 16, 68]]].map((x) => x));
+  assert.deepEqual(enDo, [["G#"], ["D#", "F#"], ["Db", "Ab"]]);
+  // En sol : si♭ et fa bécarre dans B♭ (pas la♯), mi♭ dans Cm (pas ré♯).
+  assert.deepEqual(epel("G", [[0, "Bb"], [16, "Cm"]], [[[0, 16, 58], [0, 16, 65], [16, 16, 63]]])[0], ["Bb", "F", "Eb"]);
+  // Sans accord, une note de passage montante prend le dièse, descendante le bémol, en do comme en si♭.
+  assert.deepEqual(epel("C", [], [[[0, 4, 60], [4, 4, 61], [8, 4, 62], [12, 4, 62], [16, 4, 61], [20, 4, 60]]])[0], ["C", "C#", "D", "D", "Db", "C"]);
+  assert.deepEqual(epel("Bb", [], [[[0, 4, 65], [4, 4, 66], [8, 4, 67], [12, 4, 67], [16, 4, 66], [20, 4, 65]]])[0], ["F", "F#", "G", "G", "Gb", "F"]);
+  // La broderie inférieure revient vers le haut : ré♯, pas mi♭, entre deux mi.
+  assert.deepEqual(epel("C", [], [[[0, 4, 64], [4, 4, 63], [8, 4, 64]]])[0], ["E", "D#", "E"]);
+  // La mélodie suit l'accord avant la ligne : sol♯ sous E7, même s'il descend vers sol.
+  assert.deepEqual(epel("C", [[0, "E7"]], [[[0, 4, 68], [4, 4, 67]]])[0], ["G#", "G"]);
+  // Hors contexte, l'épellation de la tonalité ne change pas (nomNote).
+  assert.equal(sq.nomNote(66, "F"), "sol♭4");
+  assert.equal(sq.nomNote(68, "Am"), "sol♯4");
+});
+
 test("accords, symboles d'accords et deux voix", () => {
   const seq = idee([[0, 8, 60], [0, 8, 64], [0, 4, 67], [4, 4, 69], [8, 8, 72]]);
   seq.accords = [{ d: 0, nom: "C" }, { d: 12, nom: "Am" }];

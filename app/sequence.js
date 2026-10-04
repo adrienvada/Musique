@@ -19,6 +19,7 @@
  * il faut lire un ABC (sequenceDepuisAbc), est passé en paramètre.
  */
 import { dureeABC } from "./edition.js";
+import { epellationsDeLAccord } from "./accords.js";
 
 export const PAS_PAR_NOIRE = 4;
 const LETTRES = "CDEFGAB";
@@ -89,8 +90,18 @@ export function nomTonalite(t) {
 // En do majeur (et la mineur), les notes étrangères les plus courantes.
 const PREFERENCE_DO = { 1: 1, 3: -1, 6: 1, 8: -1, 10: -1 };
 
-/** Comment écrire la hauteur `h` dans la tonalité : { lettre, alt, octave } (do4 = 60). */
-export function epeler(h, tonalite = "C") {
+/**
+ * Comment écrire la hauteur `h` dans la tonalité : { lettre, alt, octave }
+ * (do4 = 60). Dans l'ordre :
+ *   1. la note de la gamme, telle que l'armure l'écrit ;
+ *   2. la note de l'accord en cours (`accord` : epellationsDeLAccord), comme
+ *      l'accord l'écrit : fa♯ dans un ré 7 en fa majeur, pas sol♭ ;
+ *   3. en mineur, la sixte et la sensible haussées (sol♯ en la mineur) ;
+ *   4. une note étrangère : le bécarre d'abord, puis le sens de la ligne
+ *      (`sens` : +1 si elle monte, −1 si elle descend : do ré♭ do mais do do♯
+ *      ré), et à défaut celui de l'armure.
+ */
+export function epeler(h, tonalite = "C", { accord = null, sens = 0 } = {}) {
   const k = lireTonalite(tonalite);
   const pc = mod12(h);
   let choix = null;
@@ -98,7 +109,10 @@ export function epeler(h, tonalite = "C") {
     const alt = k.armure[l] || 0;
     if (mod12(NATUREL[l] + alt) === pc) { choix = { lettre: l, alt }; break; }
   }
-  // En mineur, la sensible et la sixte haussées gardent leur lettre (sol♯ en la mineur).
+  if (!choix && accord) {
+    const a = accord.find((x) => x.pc === pc && Math.abs(x.alt) <= 2);
+    if (a) choix = { lettre: a.lettre, alt: a.alt };
+  }
   if (!choix && k.mineur) {
     const iTonique = LETTRES.indexOf(k.tonique[0]);
     for (const [degre, ecart] of [[6, 11], [5, 9]]) {
@@ -107,14 +121,30 @@ export function epeler(h, tonalite = "C") {
       choix = { lettre: l, alt: (k.armure[l] || 0) + 1 };
     }
   }
-  // Note étrangère : le bécarre d'abord, puis le dièse ou le bémol de l'armure.
   if (!choix) {
-    const sens = k.quintes > 0 ? 1 : k.quintes < 0 ? -1 : (k.mineur && pc === 8 ? 1 : PREFERENCE_DO[pc] ?? 1);
+    const s = sens || (k.quintes > 0 ? 1 : k.quintes < 0 ? -1 : (k.mineur && pc === 8 ? 1 : PREFERENCE_DO[pc] ?? 1));
     const candidats = [];
-    for (const alt of [0, sens, -sens]) for (const l of LETTRES) if (mod12(NATUREL[l] + alt) === pc) candidats.push({ lettre: l, alt });
+    for (const alt of [0, s, -s]) for (const l of LETTRES) if (mod12(NATUREL[l] + alt) === pc) candidats.push({ lettre: l, alt });
     choix = candidats[0];
   }
   return { ...choix, octave: Math.round((h - NATUREL[choix.lettre] - choix.alt) / 12) - 1 };
+}
+
+/**
+ * Le sens de la ligne autour de la note `n` : +1 si elle monte vers la
+ * suivante (ou vient d'en dessous), −1 si elle descend, 0 si rien ne le dit.
+ * La suivante est la note la plus proche en hauteur parmi celles qui
+ * commencent juste après (une mélodie au-dessus d'un accord tenu suit sa
+ * propre ligne). `groupes` : les notes de la voix par début, dans l'ordre ;
+ * `i` : le groupe de `n`.
+ */
+function sensDeLaLigne(groupes, i, n) {
+  const voisine = (g) => g && g.reduce((m, x) => (!m || Math.abs(x.h - n.h) < Math.abs(m.h - n.h) ? x : m), null);
+  const s = voisine(groupes[i + 1]);
+  if (s && s.h !== n.h) return Math.sign(s.h - n.h);
+  const p = voisine(groupes[i - 1]);
+  if (p && p.h !== n.h) return Math.sign(n.h - p.h);
+  return 0;
 }
 
 /** « sol4 », « si♭3 » : le nom d'une hauteur, dans la tonalité. */
@@ -207,7 +237,7 @@ function couches(notes) {
  * `lie` : l'accord continue au jeton suivant ; `suite` (par note) : il
  * vient du jeton précédent.
  */
-function decouperCouche(evenements, { mesure, temps, total, coupures }) {
+function decouperCouche(evenements, { mesure, temps, total, coupures, epellation }) {
   const bornes = new Set([0, total, ...coupures]);
   for (let x = 0; x <= total; x += mesure) bornes.add(x);
   for (const e of evenements) { bornes.add(e.d); bornes.add(e.d + e.l); }
@@ -219,11 +249,41 @@ function decouperCouche(evenements, { mesure, temps, total, coupures }) {
     for (const [x, y] of fragmenter(a, b, mesure, temps)) {
       mesures[Math.floor(x / mesure)].push({
         a: x, l: y - x, silence: !e, lie: !!e && e.d + e.l > y,
-        notes: e ? e.notes.map((n) => ({ id: n.id, h: n.h, suite: e.d < x })) : [],
+        // L'épellation est celle de la note entière : un morceau lié garde la même.
+        notes: e ? e.notes.map((n) => ({ id: n.id, h: n.h, suite: e.d < x, e: epellation.get(n) })) : [],
       });
     }
   }
   return mesures;
+}
+
+/**
+ * L'épellation de chaque note des voix (Map note → { lettre, alt, octave }),
+ * d'après la tonalité, l'accord posé au moment où elle commence et le sens
+ * de sa ligne. L'accompagnement, fait des notes des accords, s'écrit donc
+ * comme ses accords.
+ */
+function epellationsDesVoix(seq, voix) {
+  const accords = (seq.accords || []).filter((a) => epellationsDeLAccord(a.nom).length).sort((a, b) => a.d - b.d)
+    .map((a) => ({ d: a.d, notes: epellationsDeLAccord(a.nom) }));
+  const accordA = (d) => {
+    let r = null;
+    for (const a of accords) { if (a.d > d) break; r = a; }
+    return r && r.notes;
+  };
+  const epellation = new Map();
+  for (const v of voix) {
+    const parDebut = new Map();
+    for (const n of [...v.notes].sort((a, b) => a.d - b.d)) {
+      if (!parDebut.has(n.d)) parDebut.set(n.d, []);
+      parDebut.get(n.d).push(n);
+    }
+    const groupes = [...parDebut.values()];
+    groupes.forEach((g, i) => {
+      for (const n of g) epellation.set(n, epeler(n.h, seq.tonalite, { accord: accordA(n.d), sens: sensDeLaLigne(groupes, i, n) }));
+    });
+  }
+  return epellation;
 }
 
 /** La clé d'une voix : celle qu'on lui a donnée, sinon d'après sa hauteur moyenne. */
@@ -239,6 +299,10 @@ function cleDe(voix, rang) {
  * pour chaque voix, ses couches, mesure par mesure, en jetons notables.
  * Chaque note porte son épellation (`e`) et l'altération à écrire
  * (`signe`, null si l'armure ou la mesure la donnent déjà).
+ *
+ * L'épellation se fait note par note, avec l'accord en cours et le sens de
+ * la ligne (epeler) : la même hauteur peut s'écrire fa♯ sous un ré 7 et
+ * sol♭ dans une ligne qui descend vers fa.
  */
 export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0 } = {}) {
   const k = lireTonalite(seq.tonalite);
@@ -247,10 +311,9 @@ export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0 } = 
   const nb = Math.round(total / mesure);
   const accords = new Map((seq.accords || []).filter((a) => a.d < total).map((a) => [a.d, a.nom]));
   const coupures = [...accords.keys()];
-  const epellations = new Map();
-  const epeler1 = (h) => { if (!epellations.has(h)) epellations.set(h, epeler(h, seq.tonalite)); return epellations.get(h); };
+  const epellation = epellationsDesVoix(seq, voix);
   // Les changements d'accord ne coupent que la couche qui porte leurs symboles.
-  const parVoix = voix.map((v, iv) => couches(v.notes).map((c, ic) => decouperCouche(c, { mesure, temps, total, coupures: iv === 0 && ic === 0 ? coupures : [] })));
+  const parVoix = voix.map((v, iv) => couches(v.notes).map((c, ic) => decouperCouche(c, { mesure, temps, total, coupures: iv === 0 && ic === 0 ? coupures : [], epellation })));
   for (const lesCouches of parVoix) {
     for (let m = 0; m < nb; m++) {
       // Une altération vaut jusqu'à la barre, pour la même note à la même
@@ -261,7 +324,6 @@ export function mettreEnMesures(seq, { voix = seq.pistes, mesuresEnPlus = 0 } = 
         const ecrites = new Map([...dejaAlterees].map((cle) => [cle, NaN]));
         for (const t of mesures[m]) {
           for (const n of t.notes) {
-            n.e = epeler1(n.h);
             const cle = n.e.lettre + n.e.octave;
             n.signe = null;
             if (n.suite) {

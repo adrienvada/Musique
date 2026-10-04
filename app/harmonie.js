@@ -12,32 +12,13 @@
  * Sans dépendance (appli et tests).
  */
 import { lireTonalite, pasParMesure, pasParTemps, nbMesures } from "./sequence.js";
+import { RACINES, FORME, lireAccord, epellationsDeLAccord } from "./accords.js";
 
-const RACINES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+// La lecture des noms d'accords vit dans accords.js (la partition s'en sert
+// aussi) ; on la redonne ici, où l'appli l'a toujours cherchée.
+export { lireAccord, QUALITES } from "./accords.js";
+
 const mod12 = (x) => ((x % 12) + 12) % 12;
-
-/** Les sortes d'accords qu'on sait lire et jouer : suffixe → intervalles (demi-tons). */
-export const QUALITES = {
-  "": [0, 4, 7], m: [0, 3, 7], 7: [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10],
-  dim: [0, 3, 6], dim7: [0, 3, 6, 9], m7b5: [0, 3, 6, 10], aug: [0, 4, 8],
-  sus2: [0, 2, 7], sus4: [0, 5, 7], "7sus4": [0, 5, 7, 10], 6: [0, 4, 7, 9], m6: [0, 3, 7, 9],
-  9: [0, 4, 7, 10, 14], add9: [0, 4, 7, 14], madd9: [0, 3, 7, 14], m9: [0, 3, 7, 10, 14],
-};
-const FORME = /^([A-G])([#b]?)(maj7|m7b5|dim7|7sus4|madd9|add9|sus2|sus4|dim|aug|maj|m9|m7|m6|m|7|6|9)?(?:\/([A-G])([#b]?))?$/;
-
-/** « F#m7/E » → { racine: 6, qualite: "m7", intervalles, basse: 4 } ; null si illisible. */
-export function lireAccord(nom) {
-  const m = FORME.exec((nom || "").trim());
-  if (!m) return null;
-  const alt = (a) => (a === "#" ? 1 : a === "b" ? -1 : 0);
-  const qualite = m[3] === "maj" ? "" : m[3] || "";
-  return {
-    racine: mod12(RACINES[m[1]] + alt(m[2])),
-    qualite,
-    intervalles: QUALITES[qualite],
-    basse: m[4] ? mod12(RACINES[m[4]] + alt(m[5])) : null,
-  };
-}
 
 /** « F#m7b5 » → « F♯m7b5 », « Bb » → « B♭ » : pour l'affichage. */
 export const joliAccord = (nom) => nom.replace(/#/g, "♯").replace(/([A-G])b/g, "$1♭");
@@ -244,27 +225,13 @@ export function accordsDeLaMelodie(seq, debut, fin, combien = 3) {
 
 const SIGNES = { "-2": "𝄫", "-1": "♭", 0: "", 1: "♯", 2: "𝄪" };
 const NOTES_FR = { C: "do", D: "ré", E: "mi", F: "fa", G: "sol", A: "la", B: "si" };
-// Combien de lettres au-dessus de la racine chaque intervalle s'écrit (tierce
-// = deux lettres plus haut, quinte = quatre…) : c'est ce qui donne mi♭ et non ré♯.
-const LETTRES_DE = { 0: 0, 2: 1, 3: 2, 4: 2, 5: 3, 6: 4, 7: 4, 8: 4, 9: 5, 10: 6, 11: 6, 14: 1 };
 
 /**
  * Les notes d'un accord, en clair, du grave à l'aigu : « C » → ["do", "mi",
  * "sol"], « F#m7/E » → ["mi", "fa♯", "la", "do♯"] (la basse d'abord).
  */
 export function notesDeLAccord(nom) {
-  const m = FORME.exec((nom || "").trim());
-  const a = lireAccord(nom);
-  if (!m || !a) return [];
-  const iRacine = LETTRES.indexOf(m[1]);
-  const ecrire = (lettre, pc) => NOTES_FR[lettre] + (SIGNES[((mod12(pc - RACINES[lettre]) + 6) % 12) - 6] ?? "");
-  const notes = a.intervalles.map((i) => {
-    // Dans l'accord diminué de septième, le 9 est une septième diminuée, pas une sixte.
-    const pas = a.qualite === "dim7" && i === 9 ? 6 : LETTRES_DE[i];
-    return { pc: mod12(a.racine + i), nom: ecrire(LETTRES[(iRacine + pas) % 7], a.racine + i) };
-  });
-  if (a.basse === null) return notes.map((n) => n.nom);
-  return [ecrire(m[4], a.basse), ...notes.filter((n) => n.pc !== a.basse).map((n) => n.nom)];
+  return epellationsDeLAccord(nom).map((n) => NOTES_FR[n.lettre] + (SIGNES[n.alt] ?? ""));
 }
 
 /**

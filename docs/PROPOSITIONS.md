@@ -555,6 +555,22 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 - **B8 · En 3/8, les trois croches de la mesure se lient**, comme on les
   écrit à la main. Le temps reste la croche pour le métronome et le
   découpage : seule la ligature change (`groupeDeLigature`).
+- **N2 · Les notes s'épellent d'après l'accord, puis d'après la ligne.**
+  Une note hors de la tonalité s'écrivait d'après l'armure seule : ré 7 en
+  fa donnait sol♭ au lieu de fa♯, mi 7 en do un la♭, si♭ en sol un la♯. Dans
+  l'ordre, maintenant (`epeler`) : la gamme, puis la note de l'accord posé à
+  ce moment, telle que l'accord l'écrit, puis la sixte et la sensible du
+  mineur, puis, pour une note étrangère à tout cela, le sens de la ligne :
+  dièse si elle monte (do do♯ ré), bémol si elle descend (ré ré♭ do).
+  L'accompagnement, fait des notes de ses accords, s'écrit donc toujours
+  comme eux ; la partition et le MusicXML aussi (music21 relit fa♯, sol♯,
+  ré♯, mi♭ là où il lisait sol♭, la♭, mi♭, ré♯).
+  - La lecture des noms d'accords passe dans `app/accords.js` : la
+    partition en a besoin, et `harmonie.js` importe déjà `sequence.js` (un
+    import dans l'autre sens aurait fait un cycle). `harmonie.js` redonne
+    `lireAccord` et `QUALITES` : rien ne change pour les écrans.
+  - Hors partition (le nom d'une note sur la grille, `nomNote`), rien ne
+    change : sans accord ni ligne, c'est l'armure qui décide.
 - **B9 · L'arrondi traite la dernière note comme les autres.** Ta règle du
   jeu lié ne change pas (une note relâchée au plus un pas de grille avant la
   suivante tient jusqu'à elle). Mais la dernière note d'une prise n'a pas de
