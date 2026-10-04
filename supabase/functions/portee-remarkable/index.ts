@@ -15,7 +15,9 @@
 //  SECRET (posé par outils/deployer-connecteur.mjs) :
 //    PORTEE_CLE  longue chaîne aléatoire, dernier segment de
 //                l'adresse du connecteur
-//  SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont fournis d'office.
+//  SUPABASE_URL et la clé de service sont fournis d'office : la nouvelle
+//  (SUPABASE_SECRET_KEYS) d'abord, l'ancienne (SUPABASE_SERVICE_ROLE_KEY)
+//  à défaut (supabase.js).
 //
 //  POURQUOI UNE CLÉ DANS L'ADRESSE. claude.ai appelle le connecteur
 //  sans identifiant (connecteur « sans authentification ») : c'est
@@ -30,6 +32,7 @@ import { coffreSupabase } from "./coffre.js";
 import { ORIGINES, repondreHttp } from "./http.js";
 import { objetsSupabase } from "./objets.js";
 import { CloudRemarkable } from "./remarkable.js";
+import { cleDeService } from "./supabase.js";
 
 const CLE = Deno.env.get("PORTEE_CLE") ?? "";
 // Origines supplémentaires autorisées à appeler depuis un navigateur
@@ -37,7 +40,7 @@ const CLE = Deno.env.get("PORTEE_CLE") ?? "";
 const EN_PLUS = (Deno.env.get("PORTEE_ORIGINES") ?? "").split(",").map((o) => o.trim()).filter(Boolean);
 
 const URL_SUPABASE = Deno.env.get("SUPABASE_URL");
-const CLE_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const CLE_SERVICE = cleDeService((nom: string) => Deno.env.get(nom));
 
 // Une instance chaude garde le jeton utilisateur et les métadonnées déjà lues.
 let cloud: CloudRemarkable | null = null;

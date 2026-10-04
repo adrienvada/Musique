@@ -2,16 +2,19 @@
  * LE STOCKAGE SUPABASE, EN OBJETS JSON
  *
  * Un petit client du stockage Supabase (compartiment privé, clé de service
- * donnée d'office à la fonction) : lire, écrire, supprimer un objet JSON,
- * lister un dossier avec la date de dernière écriture de chaque objet.
- * La bibliothèque synchronisée s'en sert (bibliotheque.js). Aucun schéma à
- * créer dans la base du site : juste des fichiers dans un compartiment privé.
+ * donnée d'office à la fonction, supabase.js) : lire, écrire, supprimer un
+ * objet JSON, lister un dossier avec la date de dernière écriture de chaque
+ * objet. La bibliothèque synchronisée s'en sert (bibliotheque.js). Aucun
+ * schéma à créer dans la base du site : juste des fichiers dans un
+ * compartiment privé.
  */
+import { entetesSupabase, MANQUE_CLE } from "./supabase.js";
+
 const COMPARTIMENT = "portee-remarkable";
 
 export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
-  if (!url || !cle) throw new Error("Il manque SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY à la fonction.");
-  const entetes = { apikey: cle, authorization: `Bearer ${cle}` };
+  if (!url || !cle) throw new Error(MANQUE_CLE);
+  const entetes = entetesSupabase(cle);
   const adresse = (chemin) => `${url}/storage/v1/object/${compartiment}/${chemin}`;
   let compartimentPret = false;
 

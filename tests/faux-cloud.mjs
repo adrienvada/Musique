@@ -9,6 +9,7 @@
  */
 import crypto from "node:crypto";
 import http from "node:http";
+import { estJwt } from "../supabase/functions/portee-remarkable/supabase.js";
 
 /** Écrit une page .rm v6 minimale : un bloc « ligne » par trait. */
 export function ecrireRm(traits, outil = 4) {
@@ -111,14 +112,28 @@ const lireCorps = (req) => new Promise((ok) => {
  * Un faux stockage Supabase : créer un compartiment, y ranger, relire,
  * supprimer et lister des objets, avec les réponses du vrai (400
  * « introuvable », 409…) et une date d'écriture par objet (updated_at).
+ *
+ * Il contrôle la clé comme la plateforme : toujours dans `apikey` ; une clé
+ * secrète (`sb_secret_…`, pas un JWT) glissée dans `Authorization: Bearer`
+ * reçoit « Invalid JWT » ; l'ancienne clé (un JWT) doit voyager dans les
+ * deux en-têtes, comme le connecteur l'a toujours envoyée.
  */
 export async function demarrerFauxStockage(cle = "cle-de-service-de-test") {
   const compartiments = new Map();
   let derniere = 0;
   const maintenant = () => { derniere = Math.max(Date.now(), derniere + 1); return new Date(derniere).toISOString(); };
+  const refus = (req) => {
+    if (req.headers.apikey !== cle) return [403, { statusCode: "403", error: "Unauthorized" }];
+    const auth = req.headers.authorization;
+    if (auth === undefined) return estJwt(cle) ? [403, { statusCode: "403", error: "Unauthorized" }] : null;
+    const jeton = auth.replace(/^Bearer\s+/i, "");
+    if (!estJwt(jeton)) return [401, { message: "Invalid JWT" }];
+    return jeton === cle ? null : [403, { statusCode: "403", error: "Unauthorized" }];
+  };
   const serveur = http.createServer(async (req, res) => {
     const json = (statut, corps) => { res.writeHead(statut, { "content-type": "application/json" }); res.end(JSON.stringify(corps)); };
-    if (req.headers.apikey !== cle || req.headers.authorization !== `Bearer ${cle}`) return json(403, { statusCode: "403", error: "Unauthorized" });
+    const refuse = refus(req);
+    if (refuse) return json(...refuse);
     const corps = await lireCorps(req);
     if (req.method === "POST" && req.url === "/storage/v1/bucket") {
       const { id, public: publique } = JSON.parse(corps);

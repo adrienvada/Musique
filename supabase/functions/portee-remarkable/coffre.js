@@ -4,15 +4,17 @@
  * Quand Adrien relie sa tablette depuis l'appli (code à 8 lettres), le
  * connecteur obtient un jeton d'appareil reMarkable et le range ici : un
  * compartiment privé du stockage Supabase, que seule la clé de service
- * (donnée d'office à la fonction) peut lire. Le jeton ne passe ainsi ni
- * par la conversation, ni par l'appli, ni par le dépôt.
+ * (donnée d'office à la fonction, supabase.js) peut lire. Le jeton ne passe
+ * ainsi ni par la conversation, ni par l'appli, ni par le dépôt.
  */
+import { entetesSupabase, MANQUE_CLE } from "./supabase.js";
+
 const COMPARTIMENT = "portee-remarkable";
 const OBJET = "jeton-appareil";
 
 export function coffreSupabase(url, cle) {
-  if (!url || !cle) throw new Error("Il manque SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY à la fonction.");
-  const entetes = { apikey: cle, authorization: `Bearer ${cle}` };
+  if (!url || !cle) throw new Error(MANQUE_CLE);
+  const entetes = entetesSupabase(cle);
   const adresse = `${url}/storage/v1/object/${COMPARTIMENT}/${OBJET}`;
   return {
     async lire() {

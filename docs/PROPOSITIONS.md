@@ -527,7 +527,17 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Connecteur (S3 à S5, C1 à C6)
 
-<!-- lot connecteur -->
+- **Les nouvelles clés de Supabase (C1).** Supabase retire les clés
+  `service_role` d'ici fin 2026, et un projet réveillé peut déjà revenir
+  sans elles : plus de tablette ni de synchro. La fonction lit maintenant
+  `SUPABASE_SECRET_KEYS` (la clé `default`), et l'ancienne clé seulement à
+  défaut (`supabase.js`). Rien à faire de ton côté : Supabase donne les deux
+  à la fonction.
+  - Une clé `sb_secret_…` n'est pas un JWT : elle part dans l'en-tête
+    `apikey`, et seulement là. En `Authorization: Bearer`, la plateforme
+    répond « Invalid JWT ». L'ancienne clé garde ses deux en-têtes.
+  - Le faux stockage des tests refuse une clé secrète en `Bearer`, comme
+    la plateforme : un retour en arrière ne passerait pas les tests.
 
 ### Données et synchronisation (S6, D1 à D10)
 
