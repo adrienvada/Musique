@@ -12,6 +12,13 @@ import fs from "node:fs";
 import { Piano, plusProche, coucheDe, coupure, gainDeForce, GAIN_SORTIE, LIMITEUR } from "../app/piano.js";
 import { FauxContexte, fauxServeur, indexEssai } from "./faux-audio.mjs";
 
+/** Le navigateur qui crée le contexte du premier toucher : un faux, le temps d'un essai ; rend de quoi remettre le vrai. */
+function poserContexte(C) {
+  const vrai = globalThis.AudioContext;
+  globalThis.AudioContext = C;
+  return () => { globalThis.AudioContext = vrai; };
+}
+
 /** Un piano branché sur un faux contexte, la couche de base chargée. */
 async function pianoEssai(options = {}) {
   const ctx = new FauxContexte();
@@ -153,15 +160,14 @@ test("à l'ouverture d'une idée, les sons de l'octave montrée se téléchargen
   const avance = serveur.demandes.filter((u) => u.endsWith(".mp3")).sort();
   assert.deepEqual(avance, ["piano/060-mf.mp3", "piano/064-mf.mp3", "piano/067-mf.mp3", "piano/072-mf.mp3"]);
   // Le premier toucher : le contexte se crée, l'échantillon déjà téléchargé se décode, sans le redemander.
-  const vrai = globalThis.AudioContext;
-  globalThis.AudioContext = class extends FauxContexte {};
+  const remettre = poserContexte(class extends FauxContexte {});
   try {
     const v = p.debut(64, 90);
     await serveur.servir();
     await new Promise((ok) => setTimeout(ok, 10));
     assert.ok(v.attend ? v.vraie : v, "la note a sonné");
     assert.equal(serveur.demandes.filter((u) => u.includes("064-mf")).length, 1);
-  } finally { globalThis.AudioContext = vrai; }
+  } finally { remettre(); }
 });
 
 test("le registre du clavier affiché passe devant le reste", async () => {
@@ -261,15 +267,14 @@ test("réveil : un contexte qui ne reprend pas est remplacé, les sons décodés
   // Safari garde le contexte « interrompu » : la reprise ne vient jamais.
   ctx.state = "interrupted";
   ctx.resume = () => new Promise(() => {});
-  const vrai = globalThis.AudioContext;
-  globalThis.AudioContext = class extends FauxContexte {};
+  const remettre = poserContexte(class extends FauxContexte {});
   try {
     await p.reveiller();
     assert.notEqual(p.ctx, ctx);
     assert.equal(prevenu, 1);
     assert.deepEqual(p.echantillons.map((e) => e.buffer), tampons);
     assert.ok(p.debut(60, 90));
-  } finally { globalThis.AudioContext = vrai; }
+  } finally { remettre(); }
 });
 
 test("les vrais échantillons : trois couches, des gains raisonnables, des fichiers présents, PP et FF sous 3 Mo", () => {

@@ -217,16 +217,18 @@ export function creerChant(ctx) {
       return;
     }
     etat(true);
-    demarrage = micro.demarrer();
+    const moi = micro.demarrer();
+    demarrage = moi;
     try {
-      await demarrage;
+      await moi;
       if (e.mode !== "chanter" || !e.ouverte) { micro.arreter(); return; }
       relancerSilence();
     } catch (err) {
       etat(false);
       aide(messageMicro(err));
     } finally {
-      demarrage = null;
+      // Relu après l'attente : seul le démarrage en cours se retire.
+      if (demarrage === moi) demarrage = null;
     }
   }
 

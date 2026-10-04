@@ -1456,7 +1456,7 @@ function arreterLecture() {
  * transport, sur l'horloge du son (ecoute-page.js, audit du 04/10, M5) ;
  * TimingCallbacks ne sert plus qu'à surligner ce qui joue.
  */
-async function ecouter({ objet, abc, zone, bouton, qpm, transposition = 0, voixMuettes = new Set(), titre = "" }) {
+async function ecouter({ objet, abc, bouton, qpm, transposition = 0, voixMuettes = new Set(), titre = "" }) {
   if (lecture) { const meme = lecture.bouton === bouton; arreterLecture(); if (meme) return; }
   if (!objet) return;
   const { source } = notesDePage(objet, pourGravure(abc), { tempo: qpm, transposition, voixMuettes });
@@ -1751,7 +1751,7 @@ function brancher() {
   $("manuel-retour").addEventListener("click", () => finirManuel(false));
   $("manuel-fini").addEventListener("click", () => finirManuel(true));
   $("ecouter-atelier").addEventListener("click", () => ecouter({
-    objet: objetAtelier, abc: $("abc").value, zone: $("gravure-atelier"), bouton: $("ecouter-atelier"), qpm: tempoInitial(objetAtelier),
+    objet: objetAtelier, abc: $("abc").value, bouton: $("ecouter-atelier"), qpm: tempoInitial(objetAtelier),
     titre: (etat.courante && etat.courante.titre) || "Partition",
   }));
   // Le panneau du bas est fixé : chaque écran lui laisse sa hauteur.
@@ -1781,7 +1781,7 @@ function brancher() {
   // Lecteur
   const voixMuettes = () => new Set([...($("main-droite").checked ? [] : [1]), ...($("main-gauche").checked ? [] : [2])]);
   $("ecouter").addEventListener("click", () => ecouter({
-    objet: objetLecteur, abc: etat.courante.abc, zone: $("gravure-lecteur"), bouton: $("ecouter"),
+    objet: objetLecteur, abc: etat.courante.abc, bouton: $("ecouter"),
     qpm: Number($("tempo").value), transposition: etat.transposition, voixMuettes: voixMuettes(),
     titre: (etat.courante && etat.courante.titre) || "Partition",
   }));

@@ -52,6 +52,12 @@ doc.visibilityState = "visible";
 globalThis.document = doc;
 globalThis.window = new EventTarget();
 
+/** La page se cache ou revient. */
+function voir(etat) {
+  doc.visibilityState = etat;
+  doc.dispatchEvent(new Event("visibilitychange"));
+}
+
 /** Laisse passer les promesses en cours (la demande du verrou). */
 const derouler = () => new Promise((ok) => setTimeout(ok, 0));
 const tenus = () => verrous.filter((v) => !v.released);
@@ -108,14 +114,12 @@ test("le verrou relâché par le navigateur (page cachée) revient au retour sur
   await derouler();
   assert.equal(tenus().length, 1);
   // La page passe en arrière-plan : le navigateur rend le verrou de lui-même.
-  doc.visibilityState = "hidden";
-  doc.dispatchEvent(new Event("visibilitychange"));
+  voir("hidden");
   await tenus()[0].release();
   assert.equal(tenus().length, 0);
   assert.equal(reveils, 0, "caché, rien ne se réveille");
   // Elle revient : le son se réveille, le verrou est redemandé.
-  doc.visibilityState = "visible";
-  doc.dispatchEvent(new Event("visibilitychange"));
+  voir("visible");
   await derouler();
   assert.equal(reveils, 1);
   assert.equal(tenus().length, 1);
@@ -123,7 +127,7 @@ test("le verrou relâché par le navigateur (page cachée) revient au retour sur
   await tenus()[0].release();
   const retour = new Event("pageshow");
   Object.defineProperty(retour, "persisted", { value: true });
-  window.dispatchEvent(retour);
+  globalThis.window.dispatchEvent(retour);
   await derouler();
   assert.equal(reveils, 2);
   assert.equal(tenus().length, 1);

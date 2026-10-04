@@ -1124,6 +1124,14 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     se chevaucherait. Seules les notes que la capture a vues s'écrire (et
     qui sont encore là) partent ; une note choisie qui change de hauteur au
     clavier n'est pas une phrase jouée, et n'y entre pas.
+- **Après la fusion des autres lots (lint, essais dans Chromium).**
+  `npm run lint` ne trouve aucune erreur dans les fichiers du lot ; le
+  démarrage du micro (`idee-chant.js`) relit la promesse en cours avant de
+  l'effacer, ce qui règle son avertissement `require-atomic-updates` sans
+  rien changer d'autre. `npm run e2e` : les 21 essais restent verts, dont
+  l'écoute, le chant au faux micro, le mémo et « hors ligne dès la première
+  visite », qui garde les 82 fichiers du piano par la liste de
+  l'assembleur.
 
 <!-- lot musique -->
 
