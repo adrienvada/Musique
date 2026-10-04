@@ -272,7 +272,11 @@ function ouvrirIdee(p = null, options = {}) {
 /** Toutes les étiquettes de la bibliothèque, les plus employées d'abord. */
 function toutesEtiquettes() {
   const compte = new Map();
-  for (const p of etat.partitions) for (const t of p.etiquettes || []) compte.set(t, (compte.get(t) || 0) + 1);
+  // Une fiche abîmée (des étiquettes qui ne sont pas une liste) vidait tout le
+  // carnet (audit, S6) : le stockage les remet en forme, et ceci ne casse plus.
+  for (const p of etat.partitions) {
+    for (const t of Array.isArray(p.etiquettes) ? p.etiquettes : []) if (typeof t === "string" && t) compte.set(t, (compte.get(t) || 0) + 1);
+  }
   return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
 }
 
@@ -487,12 +491,32 @@ async function sauvegarderBibliotheque() {
 async function restaurerBibliotheque(fichier) {
   try {
     const contenu = JSON.parse(await fichier.text());
-    const { ajoutees, ignorees } = await restaurer(etat.stockage, contenu, new Set(etat.partitions.map((p) => p.id)));
-    const deja = ignorees ? ` (${ignorees} déjà dans ta bibliothèque)` : "";
-    toast(ajoutees ? `${ajoutees} partition${ajoutees > 1 ? "s" : ""} restaurée${ajoutees > 1 ? "s" : ""}${deja}.` : `Rien à restaurer : tout est déjà dans ta bibliothèque.`);
+    const bilan = await restaurer(etat.stockage, contenu, new Set(etat.partitions.map((p) => p.id)));
+    toast(bilanRestauration(bilan), bilan.echecs.length ? 10000 : 5000);
   } catch (e) {
     toast(e instanceof SyntaxError ? "Ce fichier n'est pas une sauvegarde de Portée." : (e.message || "La restauration n'a pas abouti."), 7000);
   }
+}
+
+/**
+ * Ce que la restauration a fait, en une phrase : combien sont revenues
+ * (même supprimées ailleurs depuis), combien étaient déjà là (gardées telles
+ * quelles), et lesquelles n'ont pas pu revenir, avec la raison.
+ */
+function bilanRestauration({ revenues = 0, ignorees = 0, differentes = 0, echecs = [] }) {
+  const pluriel = (n, un, plusieurs) => (n > 1 ? plusieurs : un);
+  if (!revenues && !echecs.length) return ignorees ? "Rien à restaurer : tout est déjà dans ta bibliothèque." : "Cette sauvegarde est vide.";
+  const morceaux = [];
+  if (revenues) morceaux.push(`${revenues} ${pluriel(revenues, "partition revenue", "partitions revenues")}`);
+  if (ignorees) {
+    const changees = differentes ? ` (dont ${differentes} ${pluriel(differentes, "modifiée depuis, gardée telle quelle", "modifiées depuis, gardées telles quelles")})` : "";
+    morceaux.push(`${ignorees} déjà là${changees}`);
+  }
+  if (echecs.length) {
+    const lesquelles = echecs.slice(0, 3).map((x) => `« ${x.titre} » (${x.raison})`).join(", ") + (echecs.length > 3 ? "…" : "");
+    morceaux.push(`${echecs.length} ${pluriel(echecs.length, "n'a pas pu revenir", "n'ont pas pu revenir")} : ${lesquelles}`);
+  }
+  return morceaux.join(" · ") + ".";
 }
 
 function nomModele(m) {
@@ -1982,7 +2006,23 @@ async function demarrer() {
   creerEditeur();
   creerVueDuMorceau();
   afficherBibliotheque();
-  etat.stockage = await ouvrirStockage();
+  let bloquee = false;
+  try {
+    etat.stockage = await ouvrirStockage({
+      // Un autre onglet garde la base ouverte sur une version précédente : on
+      // le dit, et la bibliothèque s'ouvre dès qu'il la lâche (audit, S13).
+      surBloque: (message) => { bloquee = true; $("mode").textContent = message; toast(message, 120000); },
+    });
+  } catch (e) {
+    // Base déjà passée à une version plus récente : pas de bibliothèque vide en douce.
+    const message = (e && e.message) || "La bibliothèque ne s'ouvre pas : recharge la page.";
+    $("mode").textContent = message;
+    toast(message, 120000);
+    return;
+  }
+  if (bloquee) toast("Ta bibliothèque est ouverte.");
+  // Une version plus récente de Portée, ouverte dans un autre onglet, a besoin de la base : celle-ci la lâche.
+  if (etat.stockage.surFermeture) etat.stockage.surFermeture(() => toast("Portée a été mise à jour dans un autre onglet : recharge cette page pour continuer.", 120000));
   // Le bouton « précédent » du téléphone recule dans l'appli au lieu de la quitter.
   creerHistorique({ racine: aLaRacine, reculer }).synchroniser();
   // Raccourci de l'appli installée (« Nouvelle idée ») : on y va tout droit.

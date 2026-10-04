@@ -740,7 +740,174 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Données et synchronisation (S6, D1 à D10)
 
-<!-- lot données -->
+- **Chaque fiche est vérifiée et remise en forme (S6, `app/fiche.js`).**
+  Une sauvegarde abîmée, ou une fiche venue d'un autre appareil, dont les
+  étiquettes n'étaient pas une liste, vidait le carnet partout.
+  `normaliserFiche` redonne à chaque champ son type et ses bornes : titre,
+  étiquettes, favori, note, mémo, notes et accords d'une idée, mesure,
+  tonalité, tempo, transposition, doutes, blocs d'un morceau, dates. Une
+  idée écrite sans ABC (par Claude, avec `idee_ecrire`) le retrouve d'après
+  ses notes, comme dans l'éditeur.
+  - Un champ inconnu reste, s'il est du JSON raisonnable : une version plus
+    récente de l'appli a pu l'ajouter, et l'effacer ici l'effacerait partout.
+  - Les dates sortent toujours sur 24 caractères : l'appli les trie comme
+    des textes, et « +275760-… » passait avant « 1970-… ».
+  - Le coût : 26 ms pour 300 fiches lourdes, dix fois moins que leur
+    lecture dans IndexedDB. Pas besoin de cache.
+- **Fusionner deux versions au lieu d'écraser la plus ancienne (D4,
+  `fusionnerFiches`).** Une étoile posée sur le téléphone effaçait les
+  notes ajoutées sur l'ordinateur : la fiche entière la plus récente
+  gagnait (« le plus récent gagne », décision du 30/09). Maintenant, à
+  partir de la dernière version que les deux connaissaient (la « base »),
+  chaque champ garde le côté qui l'a changé. Changé des deux côtés : les
+  étiquettes se réunissent (ajouts et retraits des deux côtés), les notes se
+  fusionnent une par une (un retrait d'un côté s'applique si l'autre n'a pas
+  touché la note ; changée des deux côtés, la plus récente), les accords
+  position par position, le reste au plus récent. Le texte d'une page lue
+  (son ABC et ses doutes) ne se mélange pas : la fiche garde celui d'ici,
+  et l'autre devient une copie « titre (version de l'autre appareil) ».
+  - Pourquoi une base plutôt qu'une horloge par champ (HLC) : l'éditeur
+    d'idée, le morceau et l'accueil enregistrent la fiche entière. Dater
+    chaque champ et chaque note aurait demandé de toucher tous les écrans ;
+    la base marche avec ce qui s'écrit déjà. Une fiche sans base (d'avant)
+    fusionne comme avant : la plus récente, entière.
+  - Deux appareils ont pu donner le même numéro à deux notes différentes :
+    les deux restent, l'une renumérotée. La même note posée des deux côtés
+    n'en fait qu'une, la plus longue, comme quand on la pose deux fois.
+- **La bibliothèque commune vérifie ce qu'elle range (S4, S6,
+  `bibliotheque.js`).** Elle acceptait 20 Mo de pages, une date « zzz », et
+  une pierre tombale datée de l'an 9999, qu'aucune correction ne pouvait
+  plus défaire. Maintenant : 256 Ko de fiche au plus (comme un document de
+  claude.ai : une fiche passe partout ou nulle part), 5 Mo de pages (un
+  mémo d'une minute, même quand Safari ignore le débit demandé ; avec la
+  fiche, sous les 6 Mo que `http.js` laisse entrer), une date ISO à moins
+  d'un jour dans le futur, et les types de base des champs (des étiquettes
+  en liste de mots, une séquence avec ses pistes…).
+  - Un refus n'est plus une erreur : `{ accepte: false, refus }` dit
+    pourquoi, et l'appareil met la partition de côté sans bloquer les
+    autres. Un appareil d'avant le prend pour un succès : il garde la fiche
+    chez lui au lieu de tout bloquer.
+- **Une écriture dit d'où elle part, et une seule passe à la fois (D4,
+  S9).** L'appareil envoie la version d'où part sa modification (`base`,
+  et son numéro `baseRev`) : si la bibliothèque a changé entre-temps, elle
+  refuse et rend la sienne ; l'appareil fusionne et renvoie. Un verrou par
+  partition (`verrous/<id>.json`, créé « seulement s'il n'existe pas » : le
+  stockage n'en laisse réussir qu'un, `objets.creer`) empêche deux
+  écritures de se croiser ; avant, la plus ancienne pouvait passer en
+  dernier.
+  - Pourquoi un numéro de révision (`rev`) en plus de la date : deux
+    appareils dont l'horloge retarde datent tous deux « la version d'avant
+    + 1 ms ». Trouvé en écrivant les tests : sans lui, un appareil prenait
+    la version de l'autre pour la sienne.
+  - Sans `base`, un appareil d'avant (et `idee_ecrire`) garde « le plus
+    récent gagne ». `base: null` veut dire « elle ne doit pas exister ».
+    Un verrou abandonné (une coupure en route) se lève au bout de 30 s.
+- **Versions et corbeille (D6).** Un effacement par erreur partait partout
+  en quelques secondes, sans retour. À chaque écriture acceptée, la version
+  d'avant est gardée (`versions/<id>/<date>-r<rev>.json`) : 20 au plus par
+  partition, 30 jours. Une partition supprimée garde 30 jours sa dernière
+  version et ses traits (`corbeille/<id>.json`), puis part pour de bon ; sa
+  pierre tombale reste, pour les appareils qui ne l'ont pas encore vue.
+  Trois outils : `bibliotheque_versions`, `bibliotheque_version`,
+  `bibliotheque_corbeille`.
+  - On élague en écrivant (toutes les cinq versions, et à chaque
+    suppression) : l'historique reste loin du quota gratuit (1 Go), sans
+    tâche planifiée à part.
+- **Le curseur relit dix secondes (D10, S10).** Une écriture datée juste
+  avant le curseur mais visible juste après n'arrivait jamais sur un
+  appareil. `bibliotheque_changements` relit les dix dernières secondes ;
+  l'appareil reconnaît ce qu'il a déjà.
+- **Recevoir avant d'envoyer, à partir d'une base (D1, D4, `synchro.js`).**
+  Une synchro reçoit d'abord, puis envoie : une modification d'ici part de
+  la dernière version au lieu de l'écraser. Chaque appareil garde, pour
+  chaque partition, la dernière version convenue avec la bibliothèque
+  commune (magasin `bases`, IndexedDB version 3) : la fusion part d'elle.
+  La migration garde tout ; une fiche déjà synchronisée (rien en attente)
+  devient sa propre base, et la première fusion se fait déjà champ par
+  champ.
+  - Une correction enregistrée pendant la synchro n'est plus écrasée (S7) :
+    ce que la synchro range vérifie, dans la même transaction, que la
+    partition n'a pas bougé depuis qu'elle l'a lue ; sinon, elle recommence.
+    `modifier` lit et écrit aussi dans une seule transaction.
+  - Son propre envoi, dont la réponse s'est perdue, est reconnu à sa date
+    et à l'empreinte de son contenu : pas de fusion avec soi-même.
+- **Un refus ne bloque plus rien (D2).** Un envoi refusé (l'identifiant
+  d'une vieille sauvegarde, une date absente) levait une erreur : plus rien
+  ne partait ni n'arrivait, pour toujours. Il est maintenant mis de côté (la
+  « quarantaine », dans `meta`, avec la raison), compté dans l'état de la
+  synchro, et repart quand la fiche change, à la session suivante, ou avec
+  `synchro.reessayer()`. Une réception qu'on ne peut pas ranger (stockage
+  plein) aussi : le curseur avance, elle réessaie à chaque passage, et une
+  version plus récente la remplace.
+  - Une panne passagère du connecteur (son stockage) laisse l'envoi en file ;
+    à la cinquième dans la session, il est mis de côté. Le réseau coupé,
+    lui, arrête le passage sans rien mettre de côté : tout attend.
+  - Trop lourd pour le connecteur (plus de 6 Mo, HTTP 413) : mis de côté
+    avant même l'envoi, sinon il aurait été refusé à chaque passage.
+- **Suppressions et mémos (D3).** Une suppression refusée (la partition a
+  changé ailleurs entre-temps) rend la version gagnante, au lieu d'une
+  partition disparue ici et vivante ailleurs. La pierre tombale est datée
+  après la version d'ici, même quand l'horloge retarde. Une modification pas
+  encore partie l'emporte sur une suppression faite ailleurs : rien de ce
+  que tu as écrit ne disparaît sans toi, et la corbeille rattrape l'inverse.
+  Un mémo enregistré avance la date de sa fiche, et la synchro n'efface plus
+  que l'envoi qu'elle a fait partir (un numéro par envoi, plus la date) :
+  un mémo enregistré pendant une synchro, ou sans autre changement, ne
+  restait jamais sur l'appareil (S6, S14).
+- **Restaurer (D5).** La restauration disait « 1 partition restaurée »,
+  puis la synchro la re-supprimait. Une partition absente revient
+  maintenant datée d'aujourd'hui (dans l'ordre d'origine), même supprimée
+  ailleurs depuis ; une partition déjà là reste telle quelle ; une erreur
+  sur l'une n'arrête plus les autres. Le message dit combien sont revenues,
+  combien étaient déjà là (dont modifiées depuis), et lesquelles n'ont pas
+  pu revenir, avec la raison. Un identifiant que la bibliothèque refuserait
+  (sauvegarde bricolée) est remplacé, et les morceaux qui le citent suivent.
+- **Plusieurs onglets (D7).** Un seul synchronise à la fois
+  (`navigator.locks`, « portee-synchro »). Une partition changée dans un
+  onglet rafraîchit la liste des autres (`BroadcastChannel("portee")`). Une
+  version plus récente de Portée, ouverte ailleurs, reçoit la base : cet
+  onglet la lâche et dit de recharger. Un vieil onglet qui ne la lâche pas
+  ne fait plus démarrer l'appli sur une bibliothèque vide (le repli sur
+  localStorage) : un message dit « Ferme l'autre onglet de Portée », et la
+  bibliothèque s'ouvre dès qu'il l'est.
+  - La reprise d'une bibliothèque rangée dans localStorage garde les mémos
+    et met tout à envoyer : ce qui avait été noté pendant un repli ne
+    quittait jamais l'appareil (S16).
+  - `stockage.modifier(id, donnees, { depuis })` fusionne au lieu d'écraser
+    quand la partition a changé depuis que l'écran l'a ouverte. L'éditeur
+    d'idée et le morceau, qui enregistrent la fiche entière, pourront s'en
+    servir (voir la fin de cette section).
+- **Le mémo en morceaux sur claude.ai (D8).** Un document de la base de
+  claude.ai ne dépasse pas 256 Kio ; un mémo d'une minute en fait environ
+  320 en base64 : sa restauration échouait. Le son se range par morceaux de
+  180 000 caractères (`partitions/<id>/memo/audio-0…`, et un index là où
+  était le document) ; l'ancien format se lit toujours, et les morceaux
+  partent avec la partition. Essayé dans Chromium avec une fausse base qui
+  a la même limite : un mémo de 700 Ko revient d'une sauvegarde.
+- **L'état du stockage (D9).** `etatStockage()` dit si le navigateur a
+  promis de garder la bibliothèque (`persisted()`), la place prise et le
+  quota, si Portée est installée (écran d'accueil), et s'il y a un risque :
+  Safari efface au bout de 7 jours sans visite tout ce qu'un site non
+  installé garde. `demanderProtection()` redemande, et rend la réponse
+  (avant, `persist()` était appelé sans la lire).
+- **Les seize scénarios de perte de données de l'audit deviennent des
+  tests** (`tests/synchro-scenarios.test.mjs`). L'audit les avait écrits
+  pour montrer chaque défaut, avec les vrais modules ; ils vérifient
+  maintenant le comportement corrigé, avec deux cas trouvés en chemin (une
+  réception mise de côté puis dépassée, deux versions de même date). Les
+  tests d'origine de l'audit, rejoués sur ce code, ne reproduisent plus
+  aucun défaut ; S11, son contrôle positif, passe toujours. Essayé aussi
+  dans Chromium sur le site assemblé : deux appareils synchronisés par le
+  vrai code du connecteur, la sauvegarde empoisonnée de l'audit, deux
+  onglets, une base tenue par un vieil onglet, la migration 2 → 3, et la
+  version claude.ai simulée.
+- **Ce qui reste à brancher** (lot « Écrans des données ») : les écrans de
+  la quarantaine (`synchro.quarantaine()`, `reessayer`), des copies de
+  conflit (champ `conflitDe`), de la corbeille et des versions
+  (`synchro.corbeille()`, `versions`, `recupererSupprimee`,
+  `recupererVersion`), de l'état du stockage ; et, dans l'éditeur d'idée et
+  le morceau, `{ depuis }` à l'enregistrement et un rechargement quand un
+  autre onglet change la partition (`stockage.surAutreOnglet`).
 
 ### Son, temps, notation et exports (M1 à M12, N1 à N7)
 
@@ -1345,10 +1512,16 @@ ou supprimer la fonction dans Supabase.
   recevoir, et la bibliothèque commune refuserait sa correction.
   `stockage.modifier` rend donc chaque `modifieLe` strictement plus récent que
   le précédent. Un envoi refusé applique aussitôt la version gagnante.
-- **IndexedDB `portee`, version 2** : magasins `partitions`, `pages`, `envois`
-  (file à synchroniser) et `meta` (curseur, adresse, « rejoint »). Changer
-  l'adresse du connecteur remet le curseur à zéro : une autre adresse, c'est
-  une autre bibliothèque commune.
+- **IndexedDB `portee`, version 3** : magasins `partitions`, `pages`,
+  `envois` (file à synchroniser, un numéro par envoi), `meta` (curseur,
+  adresse, « rejoint », et la quarantaine : `quarantaine:<envoi|reception>:<id>`)
+  et `bases` (depuis la version 3 : la dernière version de chaque partition
+  convenue avec la bibliothèque commune, d'où part la fusion). La migration
+  2 → 3 garde tout. Changer l'adresse du connecteur remet le curseur à zéro
+  et vide les bases et la quarantaine : une autre adresse, c'est une autre
+  bibliothèque commune. Une version plus récente de la base fait lâcher la
+  base aux onglets ouverts (`onversionchange`) ; un vieil onglet qui ne la
+  lâche pas bloque l'ouverture : l'appli le dit, et attend.
 - **Domaine du site** : GitHub Pages sert le site sous le domaine personnalisé
   d'Adrien (`adrienvada.fr/Musique/`). Le navigateur envoie donc l'origine
   `https://adrienvada.fr`, qui doit figurer dans `ORIGINES` (`http.js`).

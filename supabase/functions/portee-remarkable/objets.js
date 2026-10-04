@@ -68,6 +68,24 @@ export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
       await r.body?.cancel();
       if (!r.ok) throw new Error(`Le stockage Supabase refuse d'écrire ${chemin} (HTTP ${r.status}).`);
     },
+    /**
+     * Crée l'objet seulement s'il n'existe pas encore (sans « x-upsert ») :
+     * rend false s'il existe déjà. Le stockage ne laisse réussir qu'une
+     * création à la fois : c'est le verrou de la bibliothèque (bibliotheque.js).
+     */
+    async creer(chemin, objet) {
+      await creerCompartiment();
+      const r = await fetch(adresse(chemin), {
+        method: "POST",
+        headers: { ...entetes, "content-type": "application/json" },
+        body: JSON.stringify(objet),
+      });
+      if (r.ok) { await r.body?.cancel(); return true; }
+      const texte = await r.text().catch(() => "");
+      // Déjà là : HTTP 409, ou 400 avec « 409 / Duplicate » dans la réponse (versions plus anciennes du stockage).
+      if (r.status === 409 || (r.status === 400 && /"409"|Duplicate|already exists/i.test(texte))) return false;
+      throw new Error(`Le stockage Supabase refuse de créer ${chemin} (HTTP ${r.status}).`);
+    },
     async supprimer(chemin) {
       const r = await fetch(adresse(chemin), { method: "DELETE", headers: entetes });
       await r.body?.cancel();
