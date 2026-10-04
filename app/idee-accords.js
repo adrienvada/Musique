@@ -41,6 +41,7 @@ import {
   lireAccord, nomRacine, joliAccord, QUALITES,
 } from "./harmonie.js";
 import { ico } from "./icones.js";
+import { echapper } from "./ui.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 
 /** Les six accords du pupitre : ceux de la roue, sans l'accord diminué (qui sonne rarement seul). */
@@ -50,8 +51,6 @@ export function accordsDuPupitre(tonalite) {
 
 // La roue : le rayon sur lequel se posent les accords, et la hauteur de son centre (px).
 const RAYON = 100, CENTRE_Y = 131;
-
-const echapper = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 /**
  * Remplace le contenu d'une zone sans perdre le doigt : le défilement et le

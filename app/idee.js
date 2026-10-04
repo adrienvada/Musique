@@ -38,6 +38,7 @@ import { fichierMidi } from "./midi.js";
 import { voixCompletes, transposerIdee, STYLES } from "./harmonie.js";
 import { creerGrille } from "./grille.js";
 import { ico } from "./icones.js";
+import { echapper } from "./ui.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { creerModeClavier } from "./idee-clavier.js";
 import { creerChant, messageMicro } from "./idee-chant.js";
@@ -558,7 +559,7 @@ export function creerEditeurIdee(deps) {
       zone.appendChild(span);
     }
     const connues = deps.etiquettes ? deps.etiquettes().filter((t) => !e.etiquettes.includes(t)) : [];
-    $("info-etiquettes-connues").innerHTML = connues.map((t) => `<option value="${t.replace(/"/g, "&quot;")}">`).join("");
+    $("info-etiquettes-connues").innerHTML = connues.map((t) => `<option value="${echapper(t)}">`).join("");
     $("memo-ecouter").hidden = $("memo-effacer").hidden = !e.memo || !!enregistreur;
     if (!enregistreur) {
       $("memo-enregistrer-texte").textContent = e.memo ? "Refaire le mémo" : "Enregistrer un mémo";
@@ -711,7 +712,7 @@ export function creerEditeurIdee(deps) {
     $("idee-piste-puce").textContent = k.pistes[e.piste].nom;
     $("idee-piste-puce").setAttribute("aria-label", `Piste : ${k.pistes[e.piste].nom} (toucher pour changer)`);
     $("idee-pistes").hidden = !plusieurs;
-    $("idee-pistes").innerHTML = plusieurs ? k.pistes.map((p, i) => `<button data-piste="${i}" aria-pressed="${i === e.piste}">${p.nom}</button>`).join("") : "";
+    $("idee-pistes").innerHTML = plusieurs ? k.pistes.map((p, i) => `<button data-piste="${i}" aria-pressed="${i === e.piste}">${echapper(p.nom)}</button>`).join("") : "";
     $("idee-basse").hidden = plusieurs;
     // Une note choisie : la rangée de la sélection se glisse au-dessus du
     // mode, qui se resserre ; le pupitre garde sa hauteur, la grille ne bouge pas.

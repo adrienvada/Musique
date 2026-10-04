@@ -23,6 +23,7 @@ import { dessinerApercuMorceau } from "./vue-morceau.js";
 import { dessinerPage } from "./manuscrit.js";
 import { assembler } from "./morceau.js";
 import { ico } from "./icones.js";
+import { echapper } from "./ui.js";
 import { ambianceStudio, lirePref, ecrirePref } from "./preferences.js";
 import { brancherFeuille, fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 
@@ -253,7 +254,7 @@ export function creerAccueil(deps) {
   function ligneAide(p) {
     if (!((p.etiquettes || []).length || p.memo || p.note)) return null;
     const l = el("span", "ligne-aide");
-    if (p.memo) { const m = el("span", "aide-memo"); m.innerHTML = `${ico("micro", "s")}${p.memo.duree} s`; l.appendChild(m); }
+    if (p.memo) { const m = el("span", "aide-memo"); m.innerHTML = `${ico("micro", "s")}${echapper(p.memo.duree)} s`; l.appendChild(m); }
     for (const t of p.etiquettes || []) l.appendChild(el("span", "aide-etiquette", "# " + t));
     if (p.note) l.appendChild(el("span", "aide-note", p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note));
     return l;

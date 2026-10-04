@@ -26,6 +26,7 @@
 import { nomNote, pasParMesure, pasParTemps, nbMesures } from "./sequence.js";
 import { joliAccord } from "./harmonie.js";
 import { ico } from "./icones.js";
+import { echapper } from "./ui.js";
 import { lirePref, ecrirePref } from "./preferences.js";
 
 const HAUT = 108, BAS = 21;
@@ -147,7 +148,7 @@ export function creerGrille(conteneur, rappels) {
     if (etat.boucle) r += `<div class="g-boucle" style="left:${etat.boucle[0] * px}px;width:${(etat.boucle[1] - etat.boucle[0]) * px}px"></div>`;
     for (let m = 0; m * mesure < total; m++) {
       const accords = (seq.accords || []).filter((a) => a.d >= m * mesure && a.d < (m + 1) * mesure);
-      const noms = accords.map((a) => `<button type="button" class="g-accord" data-mesure="${m}" style="left:${a.d === m * mesure ? 22 : (a.d - m * mesure) * px + 4}px" aria-label="Accord ${joliAccord(a.nom)}, mesure ${m + 1}">${joliAccord(a.nom)}</button>`).join("");
+      const noms = accords.map((a) => `<button type="button" class="g-accord" data-mesure="${m}" style="left:${a.d === m * mesure ? 22 : (a.d - m * mesure) * px + 4}px" aria-label="Accord ${echapper(joliAccord(a.nom))}, mesure ${m + 1}">${echapper(joliAccord(a.nom))}</button>`).join("");
       const ajouter = !accords.length && etat.accordsVisibles ? `<button type="button" class="g-ajouter" data-mesure="${m}" aria-label="Poser un accord, mesure ${m + 1}">${ico("plus", "s")}accord</button>` : "";
       r += `<div class="g-mesure${m === etat.mesureChoisie ? " choisie" : ""}" data-mesure="${m}" style="left:${m * mesure * px}px;width:${mesure * px}px"><span class="g-numero">${m + 1}</span>${noms}${ajouter}</div>`;
     }
@@ -165,7 +166,7 @@ export function creerGrille(conteneur, rappels) {
     for (const n of seq.pistes[piste].notes) {
       const choisie = selection.has(n.id);
       const nom = n.l * px >= 30 && rang >= RANG_NOM ? `<span>${nomNote(n.h, seq.tonalite)}</span>` : "";
-      html += `<div class="g-note${choisie ? " choisie" : ""}" data-id="${n.id}" style="left:${n.d * px}px;top:${yDe(n.h)}px;width:${n.l * px - 1}px;height:${rang - 1}px">${nom}<i class="g-bord"></i></div>`;
+      html += `<div class="g-note${choisie ? " choisie" : ""}" data-id="${echapper(n.id)}" style="left:${n.d * px}px;top:${yDe(n.h)}px;width:${n.l * px - 1}px;height:${rang - 1}px">${nom}<i class="g-bord"></i></div>`;
     }
     calque.innerHTML = html;
     curseur.style.left = `${etat.curseur * px}px`;

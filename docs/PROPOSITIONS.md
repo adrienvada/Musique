@@ -508,7 +508,18 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Sécurité de base (S1)
 
-<!-- lot base -->
+- **Tout texte inséré en HTML passe par `echapper` (`app/ui.js`).** L'audit
+  a fait exécuter du code par une sauvegarde piégée, à quatre endroits : la
+  durée du mémo dans le carnet, le nom d'une piste, le nom d'un accord sur la
+  règle de la grille, l'identifiant d'une note. Le code lisait l'adresse du
+  connecteur, et la fiche repartait par la synchro vers les autres appareils.
+  Corrigé, puis vérifié avec les mêmes essais dans Chromium : plus rien ne
+  s'exécute. La fonction locale d'`idee-accords.js` devient la fonction
+  commune ; celle de `musicxml.js` reste à part (c'est du XML).
+  - Pourquoi pas tout en `textContent` : ces morceaux de page mêlent des
+    icônes (`ico()`) et du texte, et sont reconstruits souvent ; échapper la
+    seule partie variable garde le code tel qu'il est. La CSP (S2) et la
+    vérification des fiches (S6) ferment la porte une seconde fois.
 
 ### Lecteur (L1 à L19, C7)
 
