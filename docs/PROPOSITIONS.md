@@ -667,6 +667,43 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - Supabase compte surtout l'activité de la base : si le projet s'endort
     quand même, la sentinelle te le dira dès le lundi ; on pourra alors
     passer à un appel par jour.
+- **Claude dans tes conversations (C5).** Les outils `bibliotheque_*`
+  servent la synchro : ils lisent ou réécrivent des fiches entières.
+  Dans une conversation, Claude ne pouvait que tout lire ou tout écraser.
+  Nouveaux outils (`conversation.js`), aux schémas stricts et aux
+  descriptions écrites pour lui :
+  - `partitions_lister` (titre, type, doutes à lever ; recherche sans
+    accents) et `partition_lire` : une partition sans ses traits (titre,
+    ABC, doutes encore ouverts, tempo, mesure, tonalité ; les notes d'une
+    idée ; les blocs d'un morceau). `partitions_lister` n'était pas dans la
+    liste de l'audit, mais sans lui Claude ne peut pas trouver
+    l'identifiant de « Pluie ».
+  - `idee_ecrire` : une **nouvelle** idée, avec un identifiant neuf (le
+    format de `nouvelId()`), jamais par-dessus une autre
+    (`destructiveHint: false`). Elle a exactement la forme d'une idée de
+    l'appli (vérifié : l'appli l'écrit en partition, et sa vraie synchro
+    la reçoit), plus `source: { claude: true }`. Son `abc` reste vide :
+    l'appli le réécrit d'après les notes. Les entrées sont bornées (hauteur
+    21 à 108, durées positives, 4 000 notes et 256 mesures au plus, deux
+    notes de même hauteur sans chevauchement, chiffrages que l'appli sait
+    jouer) et une erreur dit à Claude quel champ corriger.
+  - `suggestion_ecrire` (accords, suite, variation, ou un mot : titre,
+    étiquettes, réponse à un doute), `suggestions_lister`,
+    `suggestion_retirer` : la proposition est rangée à part,
+    `suggestions/<partition>/<sid>.json`, sans toucher la partition ni la
+    synchro (`suggestions.js`). C'est toi qui l'appliques d'un geste dans
+    Portée (l'écran viendra avec H3).
+  - Le prompt `relire_page` (argument `id`) : lire la page, regarder les
+    doutes, proposer chaque réponse par `suggestion_ecrire`, ne jamais
+    écrire dans la bibliothèque sans que tu l'aies demandé, et te parler en
+    noms de notes, pas en ABC.
+  - Les listes de l'appli (tonalités, mesures, chiffrages) sont recopiées
+    dans le connecteur, qui est déployé seul ; un test vérifie qu'elles ne
+    s'écartent pas.
+  - Pour lire une seule fiche, ces outils passent par
+    `changements(null)` (toute la bibliothèque) : c'est l'API publique de
+    la bibliothèque, et quelques centaines de fiches se lisent en une ou
+    deux secondes.
 
 ### Données et synchronisation (S6, D1 à D10)
 

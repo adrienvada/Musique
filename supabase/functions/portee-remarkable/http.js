@@ -103,11 +103,11 @@ const erreurSansId = (code, message) => ({ jsonrpc: "2.0", error: { code, messag
 
 /**
  * @param {Request} req
- * @param {{ cle: string, cloud: () => object, bibliotheque?: () => object, origines?: string[] }} options
- *   `cloud` et `bibliotheque` ne sont appelés que quand il faut répondre
- *   (création paresseuse).
+ * @param {{ cle: string, cloud: () => object, bibliotheque?: () => object, suggestions?: () => object, origines?: string[] }} options
+ *   `cloud`, `bibliotheque` et `suggestions` ne sont appelés que quand un
+ *   outil en a besoin (création paresseuse).
  */
-export async function repondreHttp(req, { cle, cloud, bibliotheque = () => null, origines = ORIGINES }) {
+export async function repondreHttp(req, { cle, cloud, bibliotheque = () => null, suggestions = () => null, origines = ORIGINES }) {
   const cors = entetesCors(req, origines);
   // Le préflight du navigateur passe quelle que soit la clé (il ne dit rien) :
   // sinon, une clé fausse ressemblerait à un connecteur injoignable, et le
@@ -137,7 +137,7 @@ export async function repondreHttp(req, { cle, cloud, bibliotheque = () => null,
   } catch {
     return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON illisible" } }, { status: 400, headers: cors });
   }
-  const { statut, corps } = await repondreMcp(message, { entetes: req.headers, cloud, bibliotheque });
+  const { statut, corps } = await repondreMcp(message, { entetes: req.headers, cloud, bibliotheque, suggestions });
   if (corps === null) return new Response(null, { status: statut, headers: cors });
   return Response.json(corps, { status: statut, headers: cors });
 }

@@ -20,6 +20,7 @@
  * l'appli) : une page dense tient ainsi dans une soixantaine de kilo-octets.
  */
 import { NonReliee } from "./remarkable.js";
+import { appelerConversation, INVITES, NOMS_CONVERSATION, OUTILS_CONVERSATION, texteConversation, texteInvite } from "./conversation.js";
 
 const OUTILS = [
   {
@@ -208,7 +209,7 @@ export const VERSIONS_ANCIENNES = ["2025-11-25", "2025-06-18", "2025-03-26"];
 export const VERSIONS = [VERSION_MODERNE, ...VERSIONS_ANCIENNES];
 
 const SERVEUR = { name: "portee-remarkable", version: "2.0.0" };
-const INSTRUCTIONS = "La reMarkable d'Adrien pour l'appli Portée : arborescence, puis document. relier ne sert qu'à relier la tablette, avec un code de my.remarkable.com. Les outils bibliotheque_* tiennent la bibliothèque de partitions synchronisée entre ses appareils.";
+const INSTRUCTIONS = "La reMarkable d'Adrien pour l'appli Portée : arborescence, puis document. relier ne sert qu'à relier la tablette, avec un code de my.remarkable.com. Les outils bibliotheque_* tiennent la bibliothèque de partitions synchronisée entre ses appareils : ne t'en sers pas dans une conversation. Pour parler musique avec Adrien : partitions_lister et partition_lire lisent sa bibliothèque ; idee_ecrire note une idée neuve, seulement s'il le demande ; suggestion_ecrire range une proposition qu'il appliquera lui-même dans Portée. Adrien ne lit pas l'ABC : parle-lui en noms de notes, en mesures et en temps.";
 
 const CLE_VERSION = "io.modelcontextprotocol/protocolVersion";
 const CLE_SERVEUR = "io.modelcontextprotocol/serverInfo";
@@ -294,11 +295,12 @@ function lireEpoque(msg, entetes) {
 
 /** Ce que sait faire le serveur. `extensions` n'existe qu'à partir de 2026-07-28. */
 function capacites(moderne) {
-  const c = { tools: { listChanged: false } };
+  const c = { tools: { listChanged: false }, prompts: { listChanged: false } };
   return moderne ? { ...c, extensions: {} } : c;
 }
 
-const outils = () => OUTILS;
+// La tablette et la synchro d'abord, puis ce qui sert dans une conversation.
+const outils = () => [...OUTILS, ...OUTILS_CONVERSATION];
 const resoudre = (x) => (typeof x === "function" ? x() : x ?? null);
 
 async function appelOutil(params, ctx) {
@@ -312,6 +314,10 @@ async function appelOutil(params, ctx) {
   try {
     // Créés seulement maintenant : sans stockage configuré, `initialize` et
     // `tools/list` répondent quand même, et l'outil dit ce qui manque.
+    if (NOMS_CONVERSATION.has(nom)) {
+      const resultat = await appelerConversation(nom, args, { bibliotheque: resoudre(ctx.bibliotheque), suggestions: resoudre(ctx.suggestions) });
+      return { content: [{ type: "text", text: texteConversation(nom, resultat) }], structuredContent: resultat };
+    }
     const resultat = await appeler(nom, args, resoudre(ctx.cloud), resoudre(ctx.bibliotheque));
     return { content: [{ type: "text", text: texteDe(nom, resultat) }], structuredContent: resultat };
   } catch (e) {
@@ -344,6 +350,15 @@ async function executer(msg, epoque, ctx) {
       return { tools: outils() };
     case "tools/call":
       return appelOutil(p, ctx);
+    case "prompts/list":
+      return { prompts: INVITES };
+    case "prompts/get":
+      if (typeof p.name !== "string" || !INVITES.some((i) => i.name === p.name)) throw new ErreurMcp(-32602, `Prompt inconnu : ${p.name}`);
+      try {
+        return texteInvite(p.name, p.arguments || {});
+      } catch (e) {
+        throw new ErreurMcp(-32602, e.message);
+      }
     default:
       throw inconnue();
   }

@@ -29,6 +29,26 @@ export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
     compartimentPret = true;
   }
 
+  /** Tout ce que le stockage range sous `dossier`, objets et sous-dossiers, page par page. */
+  async function listerTout(dossier) {
+    const sortie = [];
+    for (let decalage = 0; ; decalage += 1000) {
+      const r = await fetch(`${url}/storage/v1/object/list/${compartiment}`, {
+        method: "POST",
+        headers: { ...entetes, "content-type": "application/json" },
+        body: JSON.stringify({ prefix: dossier, limit: 1000, offset: decalage, sortBy: { column: "name", order: "asc" } }),
+      });
+      if (!r.ok) {
+        await r.body?.cancel();
+        if (r.status === 400 || r.status === 404) return sortie; // pas encore de compartiment
+        throw new Error(`Le stockage Supabase refuse de lister ${dossier} (HTTP ${r.status}).`);
+      }
+      const page = await r.json();
+      sortie.push(...page);
+      if (page.length < 1000) return sortie;
+    }
+  }
+
   return {
     /** L'objet JSON, ou null s'il n'existe pas. */
     async lire(chemin) {
@@ -55,23 +75,12 @@ export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
     },
     /** Les objets d'un dossier : [{ nom, maj }] (maj : date ISO de la dernière écriture). */
     async lister(dossier) {
-      const sortie = [];
-      for (let decalage = 0; ; decalage += 1000) {
-        const r = await fetch(`${url}/storage/v1/object/list/${compartiment}`, {
-          method: "POST",
-          headers: { ...entetes, "content-type": "application/json" },
-          body: JSON.stringify({ prefix: dossier, limit: 1000, offset: decalage, sortBy: { column: "name", order: "asc" } }),
-        });
-        if (!r.ok) {
-          await r.body?.cancel();
-          if (r.status === 400 || r.status === 404) return sortie; // pas encore de compartiment
-          throw new Error(`Le stockage Supabase refuse de lister ${dossier} (HTTP ${r.status}).`);
-        }
-        const page = await r.json();
-        // Les sous-dossiers reviennent avec un id nul : on ne garde que les objets.
-        for (const o of page) if (o.id) sortie.push({ nom: o.name, maj: o.updated_at || o.created_at });
-        if (page.length < 1000) return sortie;
-      }
+      // Les sous-dossiers reviennent avec un id nul : on ne garde que les objets.
+      return (await listerTout(dossier)).filter((o) => o.id).map((o) => ({ nom: o.name, maj: o.updated_at || o.created_at }));
+    },
+    /** Les sous-dossiers d'un dossier : leurs noms (les suggestions, rangées par partition). */
+    async listerDossiers(dossier) {
+      return (await listerTout(dossier)).filter((o) => !o.id).map((o) => o.name);
     },
   };
 }

@@ -66,7 +66,10 @@ test("du faux cloud à l'ABC : même lecture que le PDF exporté", async () => {
     assert.equal(init.result.serverInfo.name, "portee-remarkable");
     assert.equal(await traiter({ jsonrpc: "2.0", method: "notifications/initialized" }, c), null);
     const liste = await traiter({ jsonrpc: "2.0", id: 2, method: "tools/list" }, c);
-    assert.deepEqual(liste.result.tools.map((t) => t.name), ["arborescence", "document", "relier", "bibliotheque_changements", "bibliotheque_pages", "bibliotheque_ecrire"]);
+    // La tablette et la synchro d'abord, puis les outils de Claude dans une conversation.
+    const noms = liste.result.tools.map((t) => t.name);
+    assert.deepEqual(noms.slice(0, 6), ["arborescence", "document", "relier", "bibliotheque_changements", "bibliotheque_pages", "bibliotheque_ecrire"]);
+    assert.ok(["partitions_lister", "partition_lire", "idee_ecrire", "suggestion_ecrire"].every((n) => noms.includes(n)));
     const r = await traiter({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "document", arguments: { id: "doc-piano" } } }, c);
     const doc = r.result.structuredContent;
     assert.equal(doc.modele, "piano-standard");

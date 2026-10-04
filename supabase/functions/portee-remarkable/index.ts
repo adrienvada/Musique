@@ -10,7 +10,9 @@
 //  privé du stockage Supabase (coffre.js). Les outils
 //  « bibliotheque_* » tiennent la bibliothèque de partitions,
 //  synchronisée entre les appareils (bibliotheque.js), dans ce même
-//  compartiment.
+//  compartiment. D'autres servent Claude dans une conversation
+//  (conversation.js) : lire une partition, noter une idée neuve,
+//  ranger une suggestion à côté (suggestions.js).
 //
 //  SECRETS (posés par outils/deployer-connecteur.mjs) :
 //    PORTEE_CLE     longue chaîne aléatoire, dernier segment de
@@ -38,6 +40,7 @@ import { coffreSupabase } from "./coffre.js";
 import { ORIGINES, repondreHttp } from "./http.js";
 import { objetsSupabase } from "./objets.js";
 import { CloudRemarkable, hoteDeSynchro } from "./remarkable.js";
+import { Suggestions } from "./suggestions.js";
 import { cleDeService } from "./supabase.js";
 
 const CLE = Deno.env.get("PORTEE_CLE") ?? "";
@@ -54,6 +57,7 @@ const SECRET_COFFRE = Deno.env.get("PORTEE_COFFRE") || null;
 // Une instance chaude garde le jeton utilisateur et les métadonnées déjà lues.
 let cloud: CloudRemarkable | null = null;
 let bibliotheque: Bibliotheque | null = null;
+let suggestions: Suggestions | null = null;
 
 Deno.serve((req: Request) =>
   repondreHttp(req, {
@@ -61,5 +65,6 @@ Deno.serve((req: Request) =>
     origines: [...ORIGINES, ...EN_PLUS],
     cloud: () => (cloud ??= new CloudRemarkable(coffreSupabase(URL_SUPABASE, CLE_SERVICE, { secret: SECRET_COFFRE }), { sync: HOTE_SYNC })),
     bibliotheque: () => (bibliotheque ??= new Bibliotheque(objetsSupabase(URL_SUPABASE, CLE_SERVICE))),
+    suggestions: () => (suggestions ??= new Suggestions(objetsSupabase(URL_SUPABASE, CLE_SERVICE))),
   })
 );
