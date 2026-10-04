@@ -936,8 +936,11 @@ function niveauLigature(h) {
   return h.niveaux || 0;
 }
 
-/** Assemble une page lue en événements rangés par portée. */
-export function assembler(lue, cal) {
+/**
+ * Assemble une page lue en événements rangés par portée. La calibration n'y
+ * sert plus (lirePage a tout mesuré) : elle n'est plus demandée (L19).
+ */
+export function assembler(lue) {
   const { il, portees, tetes, hampes, barres, signes } = lue;
   const doutes = [];
   const parPortee = portees.map(() => []);

@@ -67,8 +67,10 @@ export function lireSujet(sujet) {
 
 /**
  * Lit un document PDF déjà ouvert par pdf.js.
- * @returns {{ modele: string|null, version: number|null,
- *             pages: { traits: number[][][], lignes: number[], verticales: number[] }[] }}
+ * @param {any} pdfjs  la bibliothèque pdf.js (son `OPS`)
+ * @param {any} doc    le document ouvert par pdf.js
+ * @returns {Promise<{ modele: string|null, version: number|null,
+ *             pages: { traits: number[][][], lignes: number[], verticales: number[] }[] }>}
  *   Chaque trait est une liste de points [x, y] en pixels de l'écran ;
  *   `lignes` (ordonnées) et `verticales` (abscisses) sont les traits gris du modèle.
  */

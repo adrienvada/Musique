@@ -27,6 +27,7 @@ import * as ed from "./edition.js";
  * mesure : la ligne (ou les lignes) que réécrit une réponse d'armure ou de
  * chiffrage, et la note à hampe d'un accord à refaire. [cible, visée, contenant].
  */
+/** @type {[string, string, boolean][]} */
 const SECONDAIRES = [["cibleLigne", "viseLigne", true], ["cibleAccord", "viseAccord", false]];
 
 /** Les doutes d'une lecture neuve : aucun n'est levé, et chacun vise sa cible. */
@@ -330,8 +331,7 @@ export function recalculerDoutes(doutes, abc) {
         cible: null, vise: { debut: m.debut, fin: m.fin }, leve: false,
       };
       const propositions = proposerPourMesure(doutes, abc, m);
-      if (propositions.length) d.propositions = propositions;
-      nouveaux.push(d);
+      nouveaux.push(propositions.length ? { ...d, propositions } : d);
     });
   }
   return [...doutes, ...nouveaux];

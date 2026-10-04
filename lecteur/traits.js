@@ -24,8 +24,8 @@ const arrondir = (v) => Math.round(v / PAS_ARRONDI) * PAS_ARRONDI;
 
 /**
  * Les traits d'une page, au demi-pixel, sans point invalide.
- * @param traits  listes de points [x, y] en pixels de l'écran
- * @param page    { largeur, hauteur } de la calibration : un point à plus
+ * @param {any} traits  listes de points [x, y] en pixels de l'écran
+ * @param {{ largeur?: number, hauteur?: number }} [page]  la taille de la page de la calibration : un point à plus
  *                d'une demi-page du bord n'a pas pu être écrit sur la page
  */
 export function preparerTraits(traits, page = {}) {

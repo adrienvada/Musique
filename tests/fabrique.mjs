@@ -15,12 +15,9 @@ import { lirePartition } from "../lecteur/partition.js";
 
 let chargee = null;
 
-/** La page de mélodie, ses traits et sa calibration (lus une fois). */
-export async function chargerFabrique() {
-  if (!chargee) {
-    const r = await lireFichier("tests/pages/2026-09-30-melodie-standard.pdf");
-    chargee = { T: r.pages[0].traits, CAL: r.cal, IL: r.cal.interligne };
-  }
+/** La page de mélodie, ses traits et sa calibration (lus une fois : la promesse est gardée, pas son résultat). */
+export function chargerFabrique() {
+  chargee ||= lireFichier("tests/pages/2026-09-30-melodie-standard.pdf").then((r) => ({ T: r.pages[0].traits, CAL: r.cal, IL: r.cal.interligne }));
   return chargee;
 }
 

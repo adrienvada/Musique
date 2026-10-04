@@ -63,7 +63,7 @@ export async function lireFichier(chemin, { gabarits = null } = {}) {
   }
   if (!modele) throw new Error(`${chemin} n'a pas été écrit sur un modèle Portée`);
   let cal;
-  try { cal = chargerCalibration(modele, version); } catch (e) { throw new Error(`${chemin} : ${e.message}`); }
+  try { cal = chargerCalibration(modele, version); } catch (e) { throw new Error(`${chemin} : ${e.message}`, { cause: e }); }
   const titre = path.basename(chemin, ".pdf");
   const traits = lu.pages.map((p) => { const t = ajuster(p, cal); return t && t.ecart < 1.5 ? recaler(p.traits, t) : p.traits; });
   return { ...lirePartition(traits, cal, { titre, gabarits }), cal, pages: lu.pages, modele, version, avertissement };

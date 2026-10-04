@@ -174,7 +174,7 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
   const systemes = []; // { page, index, voix: [{portee, evs}], entetes }
   pages.forEach((traits, i) => {
     const lue = lirePage(traits, cal, i + 1);
-    const asm = assembler(lue, cal);
+    const asm = assembler(lue);
     // Nom de chaque tête, pour les images de contrôle et l'atelier.
     for (const t of lue.tetes) {
       const n = nomDePas(lue.portees[t.portee], t.pas);

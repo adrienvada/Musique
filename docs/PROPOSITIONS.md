@@ -738,6 +738,12 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   `cadrePage(cal)` les calcule. Le README des modèles ne promet plus qu'un
   point appuyé fait une tête pleine : le lecteur ne le lit pas, et c'est
   voulu (il se confondrait avec un point de durée).
+- **Le lecteur passe le lint et la vérification des types (L19, T2).**
+  `assembler` ne demande plus la calibration, dont il ne se servait plus :
+  l'exception provisoire d'ESLint qui le tolérait est retirée. Les JSDoc
+  disent vrai (`lireDocument` rend une promesse, la page de `preparerTraits`
+  est facultative), et `extraction.js`, `modeles.js` et `traits.js`
+  rejoignent les fichiers vérifiés, sans erreur.
 
 ### Connecteur (S3 à S5, C1 à C6)
 
