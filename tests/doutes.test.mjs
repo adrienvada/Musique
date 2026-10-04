@@ -11,6 +11,7 @@ import { completerDoutes, deplacerVise, jetonsDeLaMesure, modifEntre, noteVisee,
 
 const MELODIE = "tests/pages/2026-09-30-melodie-standard.pdf";
 const total = (d, abc) => jetonsDeLaMesure(d, abc).reduce((t, j) => t + j.croches, 0);
+const corpsDe = (abc) => abc.split("\n").filter((l) => !/^[A-Za-z]:|^%%/.test(l)).join("\n");
 
 /** Applique une réponse comme l'atelier : le geste, puis le suivi des autres doutes. */
 function repondre(abc, doutes, i, id) {
@@ -141,6 +142,44 @@ test("les autres doutes : une question fermée chacun", () => {
   assert.equal(poser({ type: "signe" }, "").reponses.length, 1);
   assert.equal(poser({ type: "chiffrage" }, "").reponses.length, 1);
   assert.equal(poser({ message: "?" }, "").titre, "À vérifier");
+});
+
+test("armure ou altération de la première note : chaque réponse réécrit la ligne en un seul geste", async () => {
+  const { chargerFabrique, Page, lire } = await import("./fabrique.mjs");
+  const f = await chargerFabrique();
+  const pg = new Page(f);
+  pg.diese(220, 1); pg.haut(270, 1); pg.haut(380, 2); pg.haut(490, 3); pg.bas(600, 4); pg.barre(720);
+  const { r } = lire(pg);
+  const doutes = preparerDoutes(r.doutes);
+  const q = poser(doutes[0], r.abc);
+  assert.equal(q.titre, "Armure ou altération ?");
+  assert.deepEqual(q.reponses.map((x) => x.texte), ["Cette note seulement", "Toute la ligne : sol majeur"]);
+  assert.equal(q.cible.genre, "note");
+  // « Toute la ligne » : sol majeur à l'armure, et le fa n'a plus son dièse.
+  const abc = repondre(r.abc, doutes, 0, "ligne");
+  assert.match(abc, /^K:G$/m);
+  assert.equal(corpsDe(abc), "F2 G2 A2 B2 |");
+  assert.equal(abc.slice(doutes[0].vise.debut, doutes[0].vise.fin), "F2"); // la note suivie à travers les deux modifications
+  const [tune] = abcjs.parseOnly(abc);
+  assert.equal((tune.warnings || []).length, 0);
+});
+
+test("armure mêlée et armure reprise : des réponses qui écrivent l'armure choisie", () => {
+  const abc = "X:1\nT:x\nM:4/4\nL:1/8\nK:C\nG2 A2 B2 c2 |\nc2 B2 A2 G2 |";
+  const ligne = { debut: abc.indexOf("G2 A2"), fin: abc.indexOf("\n", abc.indexOf("G2 A2")) };
+  const melee = preparerDoutes([{ type: "armure", variante: "melee", cle: "Bb", autres: ["G", "C"], bemols: 2, dieses: 1, cible: null, cibleLigne: ligne }]);
+  // La lecture avait choisi si♭ (deux bémols, un dièse) : le K: est déjà là, la réponse « Sol majeur » le change.
+  const avecBb = abc.replace("K:C", "K:Bb");
+  melee[0].viseLigne = { debut: ligne.debut + 1, fin: ligne.fin + 1 };
+  const q = poser(melee[0], avecBb);
+  assert.equal(q.titre, "Bémols ou dièses ?");
+  assert.deepEqual(q.reponses.map((x) => x.texte), ["Si♭ majeur", "Sol majeur", "Sans armure"]);
+  assert.match(repondre(avecBb, melee, 0, "cle-G"), /^K:G$/m);
+  const reprise = preparerDoutes([{ type: "armure", cle: "Eb", message: "Pas d'armure en début de ligne…", cibleLigne: { debut: abc.indexOf("c2 B2"), fin: abc.length } }]);
+  const texte = abc.replace("K:C", "K:Eb");
+  reprise[0].viseLigne = { debut: texte.indexOf("c2 B2"), fin: texte.length };
+  assert.deepEqual(poser(reprise[0], texte).reponses.map((x) => x.texte), ["Oui, la même", "Non, sans armure"]);
+  assert.equal(repondre(texte, reprise, 0, "sans").split("\n").pop(), "[K:C]c2 B2 A2 G2 |");
 });
 
 test("quand la page a été lue : des mots, pas une horloge", async () => {

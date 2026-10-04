@@ -206,6 +206,85 @@ export function hauteursMidi(j, armure = {}) {
   });
 }
 
+/**
+ * La tonalité écrite (« Eb », « C ») en vigueur à la position `pos` : le K:
+ * de l'en-tête, puis le dernier [K:] de la même voix ([V:1], [V:2]) avant `pos`.
+ */
+export function cleA(abc, pos) {
+  const avant = abc.slice(0, pos);
+  const voixDe = (ligne) => (/^\[V:\s*([^\]\s]+)/.exec(ligne) || [])[1] || null;
+  const lignes = avant.split("\n");
+  const voix = voixDe(lignes[lignes.length - 1]);
+  let cle = "C";
+  for (const l of lignes) {
+    const h = /^K:\s*([A-G][b#]?(?:m|min)?)/.exec(l);
+    if (h) { cle = h[1]; continue; }
+    if (/^[A-Za-z]:|^%/.test(l)) continue;
+    const v = voixDe(l);
+    if (voix && v && v !== voix) continue;
+    for (const m of l.matchAll(/\[K:\s*([A-G][b#]?(?:m|min)?)/g)) cle = m[1];
+  }
+  return cle;
+}
+
+/**
+ * L'armure d'une ligne, ou des deux voix d'un système de piano : `ligne` est
+ * le morceau d'ABC [debut, fin[ qui couvre ces lignes entières (la cible
+ * d'un doute d'armure). Les lignes suivantes gardent leur armure : si elles
+ * la tenaient de celle-ci, elles reçoivent la leur ([K:…]). La première ligne
+ * de la pièce change le K: de l'en-tête plutôt que d'écrire deux armures de suite.
+ * C'est le geste qui manquait pour « Non, sans armure » (refonte 10).
+ */
+export function changerArmure(abc, ligne, cle) {
+  if (!ligne || !/^[A-G][b#]?(m|min)?$/.test(cle || "")) return null;
+  const lignes = [];
+  let p = 0;
+  for (const texte of abc.split("\n")) { lignes.push({ debut: p, fin: p + texte.length, texte }); p += texte.length + 1; }
+  const entete = (l) => /^[A-Za-z]:|^%/.test(l.texte);
+  const corps = lignes.filter((l) => !entete(l));
+  const dans = corps.filter((l) => l.debut >= ligne.debut && l.fin <= ligne.fin && l.fin > l.debut);
+  if (!dans.length) return null;
+  const n = dans.length;
+  const apres = corps.filter((l) => l.debut > dans[n - 1].fin).slice(0, n);
+  const PREFIXE = /^(\[V:[^\]]*\]\s*)?((?:\[[A-Za-z]:[^\]]*\])*)/;
+  const champs = (l) => { const m = PREFIXE.exec(l.texte); return { voix: (m[1] || "").length, longueur: (m[2] || "").length, texte: m[2] || "" }; };
+  const editions = [];
+  // Les lignes suivantes gardent la tonalité qu'elles avaient.
+  for (const l of apres) {
+    const c = champs(l);
+    if (/\[K:/.test(c.texte)) continue;
+    const ancienne = cleA(abc, l.debut + c.voix);
+    if (ancienne !== cle) editions.push({ de: l.debut + c.voix, a: l.debut + c.voix, texte: `[K:${ancienne}]` });
+  }
+  const premiere = corps[0] === dans[0];
+  const k = lignes.find((l) => /^K:/.test(l.texte));
+  for (const l of dans) {
+    const c = champs(l);
+    const sansK = c.texte.replace(/\[K:[^\]]*\]/g, "");
+    let nouveaux = sansK;
+    if (premiere && k) {
+      // La première ligne : on change l'en-tête, la ligne n'a pas besoin de [K:].
+    } else if (cleA(abc, l.debut + c.voix) !== cle) nouveaux = `[K:${cle}]` + sansK; // la tonalité qu'elle reçoit de sa voix
+    if (nouveaux !== c.texte) editions.push({ de: l.debut + c.voix, a: l.debut + c.voix + c.longueur, texte: nouveaux });
+  }
+  if (premiere && k) {
+    const m = /^K:\s*([A-G][b#]?(?:m|min)?)?/.exec(k.texte);
+    if ((m[1] || "C") !== cle) editions.push({ de: k.debut, a: k.debut + m[0].length, texte: `K:${cle}` });
+  }
+  if (!editions.length) return { abc, debut: ligne.debut, fin: ligne.fin, modif: [] };
+  // De la fin vers le début : chaque modification se lit dans le texte d'avant elle, sans décalage.
+  editions.sort((x, y) => y.de - x.de);
+  let texte = abc;
+  const modif = [];
+  for (const e of editions) {
+    texte = texte.slice(0, e.de) + e.texte + texte.slice(e.a);
+    modif.push({ de: e.de, a: e.a, longueur: e.texte.length });
+  }
+  const delta = editions.filter((e) => e.de < ligne.fin).reduce((t, e) => t + e.texte.length - (e.a - e.de), 0);
+  const avant = editions.filter((e) => e.a <= ligne.debut).reduce((t, e) => t + e.texte.length - (e.a - e.de), 0);
+  return { abc: texte, debut: ligne.debut + avant, fin: ligne.fin + delta, modif };
+}
+
 /** Altérations de l'armure en vigueur à la position `pos` (K: ou [K:] le plus proche avant). */
 export function armureA(abc, pos) {
   const avant = abc.slice(0, pos);

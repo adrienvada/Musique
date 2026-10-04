@@ -24,16 +24,20 @@ import * as ed from "./edition.js";
 
 /** Les doutes d'une lecture neuve : aucun n'est levé, et chacun vise sa cible. */
 export function preparerDoutes(doutes) {
-  return doutes.map((d) => ({ ...d, leve: false, vise: d.cible ? { ...d.cible } : null }));
+  return doutes.map((d) => ({ ...d, leve: false, vise: d.cible ? { ...d.cible } : null, ...(d.cibleLigne ? { viseLigne: { ...d.cibleLigne } } : {}) }));
 }
 
 /**
  * Donne à chaque doute sa visée au premier regard de l'atelier : la cible de la
  * lecture, si l'ABC n'a pas bougé depuis. Sinon (corrigé avant, ou lu avant que
  * les doutes aient une cible), il n'a pas de visée : question sans réponse fermée.
+ * `viseLigne` (la ligne d'un doute d'armure) suit la même règle.
  */
 export function initialiserVise(doutes, abc, abcLu) {
-  for (const d of doutes) if (d.vise === undefined) d.vise = d.cible && abc === abcLu ? { ...d.cible } : null;
+  for (const d of doutes) {
+    if (d.vise === undefined) d.vise = d.cible && abc === abcLu ? { ...d.cible } : null;
+    if (d.cibleLigne && d.viseLigne === undefined) d.viseLigne = abc === abcLu ? { ...d.cibleLigne } : null;
+  }
 }
 
 /** Le genre d'un doute, aussi pour les partitions lues avant qu'il soit écrit (on le déduit du message). */
@@ -87,10 +91,48 @@ export function deplacerVise(vise, { de, a, longueur }, contenant = false) {
   return null;
 }
 
-/** Décale la visée de chaque doute après une modification de l'ABC (change les doutes sur place). */
+/**
+ * Décale la visée de chaque doute après une modification de l'ABC (change les
+ * doutes sur place). `modif` peut être une liste : un geste qui touche
+ * plusieurs endroits (une armure et une note) la rend dans l'ordre où il les a
+ * faites, chacune dans le texte laissé par la précédente.
+ */
 export function suivre(doutes, modif) {
   if (!modif) return;
-  for (const d of doutes) if (d.vise) d.vise = deplacerVise(d.vise, modif, typeDe(d) === "mesure");
+  for (const m of Array.isArray(modif) ? modif : [modif]) {
+    for (const d of doutes) {
+      if (d.vise) d.vise = deplacerVise(d.vise, m, typeDe(d) === "mesure");
+      if (d.viseLigne) d.viseLigne = deplacerVise(d.viseLigne, m, true);
+      for (const p of d.propositions || []) for (const c of p.changements || []) if (c.vise) c.vise = deplacerVise(c.vise, m);
+    }
+  }
+}
+
+/** Une visée après plusieurs modifications. */
+function apres(vise, modifs, contenant = false) {
+  let v = vise;
+  for (const m of modifs) v = deplacerVise(v, m, contenant);
+  return v;
+}
+
+/**
+ * Plusieurs gestes de suite, comme un seul : chacun reçoit le texte laissé par
+ * le précédent et la liste des modifications déjà faites (pour retrouver sa
+ * cible). Le résultat se lit comme celui d'un geste d'edition.js.
+ */
+function enchainer(abc, gestes) {
+  let texte = abc, premier = null, depuis = 0;
+  const modifs = [];
+  for (const g of gestes) {
+    const r = g(texte, modifs);
+    if (!r) return null;
+    texte = r.abc;
+    modifs.push(...(Array.isArray(r.modif) ? r.modif : r.modif ? [r.modif] : []));
+    if (!premier) { premier = { debut: r.debut, fin: r.fin }; depuis = modifs.length; }
+  }
+  // La place du premier geste (pour l'éclat de l'atelier), suivie à travers les suivants.
+  const place = premier ? apres(premier, modifs.slice(depuis)) || premier : { debut: 0, fin: 0 };
+  return { abc: texte, debut: place.debut, fin: place.fin, modif: modifs };
 }
 
 /** La modification entre deux textes, quand on ne la connaît pas (saisie dans le mode avancé). */
@@ -132,7 +174,7 @@ export function jetonsDeLaMesure(d, abc) {
 export function cibleVisible(d, abc) {
   const t = typeDe(d);
   if (t === "mesure") return jetonsDeLaMesure(d, abc) ? { ...d.vise, genre: "mesure" } : null;
-  if (["crochet", "sans-hampe"].includes(t)) return noteVisee(d, abc) ? { ...d.vise, genre: "note" } : null;
+  if (["crochet", "sans-hampe"].includes(t) || (t === "armure" && d.variante === "premiere-note")) return noteVisee(d, abc) ? { ...d.vise, genre: "note" } : null;
   return null;
 }
 
@@ -154,6 +196,66 @@ export function enCroches(n) {
   if (Math.abs(n - 1) < 1e-9) return "une croche";
   if (Math.abs(n - 0.5) < 1e-9) return "une double croche";
   return `${nb(n)} croche${n > 1 ? "s" : ""}`;
+}
+
+/** « Mi♭ majeur », ou « Sans armure » pour do majeur : le texte d'un bouton. */
+function libelleCle(cle) {
+  if (!cle || cle === "C") return "Sans armure";
+  const n = nomCle(cle);
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
+
+const SIGNES = { "^": "♯", _: "♭", "=": "♮" };
+
+/**
+ * Les doutes d'armure. Trois cas : la ligne reprend l'armure de la ligne
+ * d'avant ; l'armure mêle bémols et dièses ; une altération collée à la
+ * première note (armure de la ligne, ou altération de cette note ?). Les
+ * réponses réécrivent l'armure de la ligne entière (edition.changerArmure),
+ * et l'altération de la note quand il le faut, en un seul geste.
+ */
+function poserArmure(d, abc, base) {
+  const ligne = d.viseLigne || null;
+  const versCle = (cle) => (a, modifs) => (ligne ? ed.changerArmure(a, apres(ligne, modifs, true), cle) : null);
+  if (d.variante === "melee") {
+    const reponses = [reponse("garder", libelleCle(d.cle), "ok", null, "L'armure est gardée.")];
+    if (ligne) for (const autre of d.autres || []) reponses.push(reponse(`cle-${autre}`, libelleCle(autre), "crayon", (a) => versCle(autre)(a, []), `L'armure devient : ${libelleCle(autre).toLowerCase()}.`));
+    return {
+      ...base, manuel: true, titre: "Bémols ou dièses ?",
+      detail: `Je vois ${d.bemols} bémol${d.bemols > 1 ? "s" : ""} et ${d.dieses} dièse${d.dieses > 1 ? "s" : ""} au début de la ligne : une armure n'a que l'un ou l'autre. Je l'ai lue en ${nomCle(d.cle)}.`,
+      reponses,
+    };
+  }
+  if (d.variante === "premiere-note") {
+    const j = noteVisee(d, abc);
+    const signe = SIGNES[d.alteration] || "";
+    const surNote = (a, modifs) => {
+      const v = d.vise && apres(d.vise, modifs);
+      const jj = v && ed.lireJeton(a, v.debut);
+      return jj && jj.fin === v.fin ? ed.alterer(a, jj, d.alteration) : null;
+    };
+    const parNote = reponse("note", "Cette note seulement", "crayon", null, "L'altération ne vaut que pour cette note.");
+    const parLigne = reponse("ligne", `Toute la ligne : ${libelleCle(d.lue === "alteration" ? d.autreCle : d.cle).toLowerCase()}`, "crayon", null, "C'est l'armure de la ligne.");
+    if (d.lue === "alteration") parLigne.geste = j && ligne ? (a) => enchainer(a, [surNote, versCle(d.autreCle)]) : null;
+    else parNote.geste = j && ligne ? (a) => enchainer(a, [versCle(d.autreCle), surNote]) : null;
+    const reponses = (d.lue === "alteration" ? [parNote, parLigne] : [parLigne, parNote]).filter((r, i) => i === 0 || r.geste);
+    return {
+      ...base, manuel: true, titre: "Armure ou altération ?",
+      detail: d.lue === "alteration"
+        ? `Le ${signe} juste devant la première note : je l'ai lu pour cette note seulement. Si c'est l'armure, il vaut pour toute la ligne.`
+        : `Le ${signe} au début de la ligne, à la hauteur de la première note : je l'ai lu comme l'armure. Si c'est une altération, il ne vaut que pour cette note.`,
+      reponses,
+    };
+  }
+  const cle = d.cle || ((d.message || "").match(/\(([A-G][b#]?)\)/) || [])[1];
+  const reponses = [reponse("meme", "Oui, la même", "ok", null, "L'armure est gardée.")];
+  if (ligne && cle && cle !== "C") reponses.push(reponse("sans", "Non, sans armure", "crayon", (a) => versCle("C")(a, []), "La ligne n'a plus d'armure."));
+  return {
+    ...base,
+    titre: "Même armure qu'avant ?",
+    detail: `Il n'y a pas d'armure au début de cette ligne : je garde celle de la ligne d'avant${cle ? ` (${nomCle(cle)})` : ""}.`,
+    reponses,
+  };
 }
 
 /** « Ligne 2, main droite, 3ᵉ mesure » : où est le doute, dans les mots d'Adrien. */
@@ -243,16 +345,7 @@ export function poser(d, abc) {
     };
   }
 
-  if (type === "armure") {
-    const cle = d.cle || ((d.message || "").match(/\(([A-G][b#]?)\)/) || [])[1];
-    const nom = nomCle(cle);
-    return {
-      ...base,
-      titre: "Même armure qu'avant ?",
-      detail: `Il n'y a pas d'armure au début de cette ligne : je garde celle de la ligne d'avant${cle ? ` (${nom})` : ""}.`,
-      reponses: [reponse("meme", "Oui, la même", "ok", null, "L'armure est gardée.")],
-    };
-  }
+  if (type === "armure") return poserArmure(d, abc, base);
 
   if (type === "chiffrage") {
     return {

@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   lireJeton, deplacer, changerDuree, basculerPoint, alterer, basculerSilence, dupliquer, supprimer,
-  decrire, hauteursMidi, armureA, dureeABC,
+  decrire, hauteursMidi, armureA, dureeABC, changerArmure, cleA,
 } from "../app/edition.js";
 
 const abc = "X:1\nL:1/8\nK:C\nC2 D2 edc g2 GG G | [CEG]2 z2 ^F,3/2 _b/ c' |]";
@@ -74,4 +74,27 @@ test("hauteurs MIDI selon l'armure en vigueur", () => {
   assert.deepEqual(hauteursMidi(lireJeton(texte, 4), armureA(texte, 4)), [60]); // do4 = 60
   assert.deepEqual(armureA("K:Am\n", 5), {});
   assert.equal(dureeABC(0.75), "3/4");
+});
+
+test("changer l'armure d'une ligne : les autres lignes gardent la leur", () => {
+  const abc = "X:1\nT:x\nM:4/4\nL:1/8\nK:C\nC2 D2 E2 F2 |\nG2 A2 B2 c2 |\nc2 B2 A2 G2 |";
+  const ligne = (texte) => ({ debut: abc.indexOf(texte), fin: abc.indexOf("\n", abc.indexOf(texte)) === -1 ? abc.length : abc.indexOf("\n", abc.indexOf(texte)) });
+  // Au milieu : la ligne reçoit [K:D], la suivante retrouve [K:C].
+  const milieu = changerArmure(abc, ligne("G2 A2"), "D");
+  assert.equal(milieu.abc, "X:1\nT:x\nM:4/4\nL:1/8\nK:C\nC2 D2 E2 F2 |\n[K:D]G2 A2 B2 c2 |\n[K:C]c2 B2 A2 G2 |");
+  assert.equal(milieu.modif.length, 2);
+  // La première ligne change l'en-tête plutôt que d'écrire deux armures de suite.
+  assert.equal(changerArmure(abc, ligne("C2 D2"), "Eb").abc, "X:1\nT:x\nM:4/4\nL:1/8\nK:Eb\nC2 D2 E2 F2 |\n[K:C]G2 A2 B2 c2 |\nc2 B2 A2 G2 |");
+  // Revenir à l'armure de l'en-tête retire le [K:] devenu inutile.
+  assert.equal(changerArmure(milieu.abc, { debut: milieu.abc.indexOf("[K:D]"), fin: milieu.abc.indexOf("\n", milieu.abc.indexOf("[K:D]")) }, "C").abc.split("\n")[6], "G2 A2 B2 c2 |");
+  assert.equal(changerArmure(abc, ligne("G2 A2"), "Z#"), null);
+});
+
+test("au piano, l'armure change dans les deux voix du système, et chaque voix suit la sienne", () => {
+  const piano = "X:1\nT:x\nM:4/4\nL:1/8\nK:Eb\n%%score {1 2}\nV:1 clef=treble\nV:2 clef=bass\n[V:1] C2 D2 |\n[V:2] C,4 |\n[V:1] [K:C]E2 F2 |\n[V:2] [K:C]E,4 |\n[V:1] G2 A2 |\n[V:2] G,4 |";
+  const debut = piano.indexOf("[V:1] [K:C]"), fin = piano.indexOf("\n", piano.indexOf("[V:2] [K:C]"));
+  assert.equal(cleA(piano, piano.indexOf("E,4")), "C");
+  assert.equal(cleA(piano, piano.indexOf("C,4")), "Eb");
+  const r = changerArmure(piano, { debut, fin }, "Eb");
+  assert.deepEqual(r.abc.split("\n").slice(-4), ["[V:1] E2 F2 |", "[V:2] E,4 |", "[V:1] [K:C]G2 A2 |", "[V:2] [K:C]G,4 |"]);
 });

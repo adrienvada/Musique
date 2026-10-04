@@ -499,6 +499,7 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     return xs.length ? Math.min(...xs) - 0.3 * il : Infinity;
   });
 
+  const remplaces = [];
   for (const g of signes) {
     if (g.nature) continue;
     const p = porteeDe(portees, g.cy);
@@ -506,15 +507,30 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     if (g.partiel) { g.nature = "reste"; continue; }
     const forme = formeAlteration(g, il);
     if (g.x1 < debutMusique[p.index] && g.x0 > cal.x_debut) {
+      // Deux dièses d'armure qui se touchent ne font qu'un signe de huit
+      // traits, qui n'était ni un dièse ni rien : la ligne passait en do (L10).
+      const dieses = !forme ? separerDieses(g, il) : null;
+      if (dieses) {
+        g.nature = "separe";
+        for (const d of dieses) remplaces.push({ ...d, portee: p.index, nature: "diese-armure", pas: hauteurAlteration(d, "diese", p, il) });
+        continue;
+      }
       g.nature = forme === "bemol" ? "bemol-armure" : forme === "diese" ? "diese-armure" : "entete";
+      if (forme === "bemol" || forme === "diese") g.pas = hauteurAlteration(g, forme, p, il);
       continue;
     }
     const dansPortee = g.cy > p.haut - 0.6 * il && g.cy < p.bas + 0.6 * il;
-    const teteVoisine = tetes.find((t) => t.portee === p.index && g.x1 < t.x0 + 0.3 * il && t.x0 - g.x1 < 1.6 * il && Math.abs(t.cy - g.cy) < 1.3 * il);
-    if (teteVoisine && forme) {
-      g.nature = forme; g.tete = teteVoisine;
+    // L'altération va à la tête qui la suit, à sa hauteur : pour un bémol, celle de sa boucle.
+    const pasG = forme ? hauteurAlteration(g, forme, p, il) : null;
+    const voisines = forme ? tetes.filter((t) => t.portee === p.index && g.x1 < t.x0 + 0.3 * il && t.x0 - g.x1 < 1.6 * il && Math.abs(t.pas - pasG) <= 1.5) : [];
+    const teteVoisine = voisines.sort((a, b) => Math.abs(a.pas - pasG) - Math.abs(b.pas - pasG) || a.x0 - b.x0)[0];
+    if (teteVoisine) {
+      g.nature = forme; g.tete = teteVoisine; g.pas = pasG;
       continue;
     }
+    // Une altération sans note derrière elle : un signe à relire, jamais un
+    // silence (un bécarre devenait un soupir).
+    if (forme && dansPortee) { g.nature = "inconnu"; g.forme = forme; continue; }
     const pres = tetes.find((t) => Math.abs(t.cx - g.cx) < 1.3 * il && Math.abs(t.cy - g.cy) < 3.2 * il && Math.abs(t.cy - g.cy) > 0.7 * il);
     if (!dansPortee) {
       g.nature = pres && Math.max(g.l, g.h) < 1.4 * il ? "articulation" : g.l > 1.8 * il && g.h < 1.3 * il ? "liaison" : "hors-portee";
@@ -526,8 +542,92 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     if (pres && Math.max(g.l, g.h) < 1.4 * il && (g.cy < p.lignes[1] || g.cy > p.lignes[3])) { g.nature = "articulation"; continue; }
     g.nature = "inconnu";
   }
+  for (let i = signes.length - 1; i >= 0; i--) if (signes[i].nature === "separe") signes.splice(i, 1);
+  signes.push(...remplaces);
 
-  return { page: numeroPage, il, portees, traits, classe, tetes, hampes, barres, ligatures, signes, debutMusique };
+  // Armure, ou altération de la première note (L5) ? Un dièse juste devant la
+  // première note d'une ligne, à sa hauteur, passait pour l'armure : toute la
+  // ligne changeait de tonalité. C'est une altération quand il colle à la
+  // note (moins de 1,2 interligne ; tes armures du 30/09 en sont à 1,6), ou
+  // quand il n'est pas là où l'armure le mettrait (un fa♯ d'armure s'écrit
+  // sur la ligne du haut en clé de sol, pas dans le premier interligne). Le
+  // doute « armure » propose l'autre lecture.
+  const hesitations = [];
+  for (const p of portees) {
+    const armure = signes.filter((g) => g.portee === p.index && /-armure$/.test(g.nature)).sort((a, b) => a.x0 - b.x0);
+    if (!armure.length) continue;
+    const A = armure[armure.length - 1];
+    const apres = tetes.filter((t) => t.portee === p.index && t.x0 > A.x1 - 0.2 * il).sort((a, b) => a.x0 - b.x0);
+    if (!apres.length) continue;
+    const ecartX = apres[0].x0 - A.x1;
+    const tete = apres.filter((t) => t.x0 < apres[0].x0 + 0.8 * il).find((t) => Math.abs(t.pas - A.pas) <= 0.6);
+    if (!tete || ecartX > 1.6 * il) continue;
+    const type = A.nature === "bemol-armure" ? "bemol" : "diese";
+    const rang = armure.filter((g) => g !== A && g.nature === A.nature).length;
+    const attendu = positionArmure(type, rang, p);
+    const habituelle = attendu !== null && Math.abs(A.pas - attendu) <= 0.6;
+    const alteration = ecartX < 1.2 * il || !habituelle;
+    if (alteration) { A.nature = type; A.tete = tete; }
+    hesitations.push({ portee: p.index, signe: A, tete, lue: alteration ? "alteration" : "armure", alteration: type === "bemol" ? "_" : "^" });
+  }
+
+  return { page: numeroPage, il, portees, traits, classe, tetes, hampes, barres, ligatures, signes, debutMusique, hesitations };
+}
+
+// Place habituelle des altérations d'armure, en demi-interlignes au-dessus de
+// la ligne du bas, en clé de sol : si♭ mi♭ la♭ ré♭ sol♭ do♭ fa♭, et fa♯ do♯
+// sol♯ ré♯ la♯ mi♯ si♯. Les autres clés décalent tout d'autant que leur ligne du bas.
+const ARMURE_SOL = { bemol: [4, 7, 3, 6, 2, 5, 1], diese: [8, 5, 9, 6, 3, 7, 4] };
+const DECALAGE_ARMURE = { mi4: 0, sol2: -2, fa3: -1 };
+
+function positionArmure(type, rang, portee) {
+  const decalage = DECALAGE_ARMURE[portee.ligneDuBas];
+  if (decalage === undefined || rang > 6) return null;
+  return ARMURE_SOL[type][rang] + decalage;
+}
+
+/**
+ * La hauteur d'une altération, en demi-interlignes au-dessus de la ligne du
+ * bas : le centre d'un dièse ou d'un bécarre, la boucle d'un bémol (sa barre
+ * monte au-dessus de la note). Mesuré sur tes armures du 30/09 : la boucle
+ * tombe à 0,4 demi-interligne près de sa note.
+ */
+function hauteurAlteration(g, forme, portee, il) {
+  let y = g.cy;
+  if (forme === "bemol") {
+    const membres = g.membres || [g];
+    const boucle = membres.length === 2 ? membres.reduce((a, b) => (a.h < b.h ? a : b)) : null;
+    y = boucle ? boucle.cy : g.y1 - 0.42 * il;
+  }
+  return pasDe(portee, y, il);
+}
+
+/**
+ * Plusieurs dièses collés, un seul signe : on les sépare par leurs barres
+ * verticales, deux par dièse. Rend les dièses (chacun ses traits), ou null.
+ */
+function separerDieses(g, il) {
+  const membres = g.membres || [];
+  if (membres.length < 6 || membres.length > 20 || g.h > 4.5 * il) return null;
+  const verticales = membres.filter((m) => m.h > 0.9 * il && m.l < 0.6 * il).sort((a, b) => a.cx - b.cx);
+  if (verticales.length < 4 || verticales.length % 2) return null;
+  const paires = [];
+  for (let i = 0; i < verticales.length; i += 2) {
+    const [a, b] = [verticales[i], verticales[i + 1]];
+    if (b.cx - a.cx > 1.1 * il) return null;
+    paires.push([a, b]);
+  }
+  const reste = membres.filter((m) => !verticales.includes(m));
+  const dieses = paires.map((p) => ({ membres: [...p] }));
+  for (const m of reste) {
+    const k = paires.map((p) => Math.abs((p[0].cx + p[1].cx) / 2 - m.cx)).reduce((best, d, i, ds) => (d < ds[best] ? i : best), 0);
+    dieses[k].membres.push(m);
+  }
+  if (dieses.some((d) => d.membres.length < 3 || d.membres.length > 5)) return null;
+  return dieses.map((d) => {
+    const pts = d.membres.flatMap((m) => m.points);
+    return { traits: d.membres.flatMap((m) => m.traits), membres: d.membres, partiel: false, points: pts, ...boite(pts), longueur: d.membres.reduce((a, m) => a + m.longueur, 0) };
+  });
 }
 
 // ------------------------------------------------------------------------
@@ -596,6 +696,18 @@ function formeAlteration(g, il) {
     const aDroite = boucle.cx > barre.cx;
     if (enBas && aDroite) return "bemol";
     if (boucle.h > 0.9 * il) return "becarre";
+  }
+  // Bécarre en deux « L » : à gauche, la barre qui descend puis part à
+  // droite ; à droite, le trait qui part à droite puis descend, plus bas.
+  // Avant, aucun des deux n'était assez fin pour une barre, et le bécarre
+  // devenait un soupir (L10).
+  if (membres.length === 2 && g.l < 1.3 * il) {
+    const [a, b] = [...membres].sort((m, n) => m.y0 - n.y0);
+    const grands = membres.every((m) => m.h > 1.2 * il && m.l > 0.2 * il && m.l < 1.0 * il);
+    const decales = a.y0 < b.y0 - 0.3 * il && a.y1 < b.y1 - 0.3 * il && Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) > 0.5 * il;
+    const recouvre = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) > 0.4 * Math.min(a.l, b.l);
+    const sommet = a.points.reduce((p, q) => (q[1] < p[1] ? q : p)), pied = b.points.reduce((p, q) => (q[1] > p[1] ? q : p));
+    if (grands && decales && recouvre && sommet[0] < pied[0]) return "becarre";
   }
   if (membres.length === 1 && g.l < 1.2 * il) {
     // D'un seul trait : d'abord la barre, qui descend, puis la boucle, en bas
@@ -720,6 +832,18 @@ export function assembler(lue, cal) {
     const chiffres = gs.filter((g) => g.nature === "entete");
     return { bemols, dieses, chiffrage: chiffres.length > 0, chiffres };
   });
+
+  // Armure ou altération de la première note : la lecture choisie, et l'autre
+  // en réponse fermée. partition.js y ajoute les tonalités et la ligne visée.
+  for (const h of lue.hesitations || []) {
+    const ev = parPortee[h.portee].find((e) => e.type === "note" && e.tetes.includes(h.tete));
+    if (!ev) continue;
+    const b = { x0: Math.min(h.signe.x0, h.tete.x0), y0: Math.min(h.signe.y0, h.tete.y0), x1: Math.max(h.signe.x1, h.tete.x1), y1: Math.max(h.signe.y1, h.tete.y1) };
+    doutes.push(doute(lue, h.portee, b, h.lue === "alteration"
+      ? "Une altération juste devant la première note : lue comme une altération de cette note, pas comme l'armure."
+      : "Une altération à la hauteur de la première note : lue comme l'armure de la ligne.",
+    { type: "armure", variante: "premiere-note", lue: h.lue, alteration: h.alteration, _ev: ev, _hesitation: h }));
+  }
 
   // Signes inconnus dans les portées : doutes.
   for (const g of signes.filter((g) => g.nature === "inconnu")) {

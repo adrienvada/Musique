@@ -576,6 +576,30 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   montre un seul trait appuyé : elles se lisent maintenant « | ».
   `tests/lecteur.test.mjs` est mis à jour en ce sens. Une vraie double barre
   a ses deux traits nettement séparés (au moins un quart d'interligne).
+- **Armure ou altération de la première note (L5).** Un dièse collé à la
+  première note d'une ligne, à sa hauteur, devenait l'armure : toute la
+  ligne passait en sol majeur. C'est maintenant une altération quand il colle
+  à la note (moins de 1,2 interligne ; tes armures du 30/09 en sont à 1,6)
+  ou quand il n'est pas là où l'armure le mettrait (le fa♯ d'armure s'écrit
+  sur la ligne du haut en clé de sol). Dans les deux cas, un doute
+  « Armure ou altération ? » propose l'autre lecture, en un seul geste.
+  - La hauteur d'un bémol est celle de sa boucle, pas de sa boîte : mesuré
+    sur tes armures, elle tombe à 0,4 demi-interligne de sa note.
+- **Armure mêlée de bémols et de dièses (L3).** La ligne passait en do sans
+  rien dire. Elle garde les plus nombreux, et le doute « Bémols ou dièses ? »
+  propose les deux autres lectures (dont « Sans armure »).
+- **Un geste pour réécrire l'armure d'une ligne** (`changerArmure`,
+  `edition.js`). Il change les deux voix d'un système de piano, laisse les
+  lignes suivantes dans leur tonalité, et passe par l'en-tête pour la
+  première ligne. Il comble le « Non, sans armure » qui manquait au doute
+  d'armure reprise (refonte 10). `suivre` accepte désormais une liste de
+  modifications : une réponse qui touche l'armure et une note est un seul
+  pas d'« Annuler ».
+- **Bécarre et dièses collés (L10).** Un bécarre en deux « L » est reconnu
+  (il devenait un soupir) ; une altération sans note derrière elle n'est
+  jamais un silence, c'est un signe à relire. Deux dièses d'armure qui se
+  touchent sont séparés par leurs barres verticales : la ligne était lue en
+  do majeur au lieu de ré.
 
 ### Connecteur (S3 à S5, C1 à C6)
 

@@ -159,11 +159,28 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
     // Armure : celle écrite en tête de la première portée du système.
     const e0 = sys.entetes[0];
     let k = cle;
-    if (e0.bemols || e0.dieses) k = tonalite(e0.bemols, e0.dieses);
+    if (e0.bemols && e0.dieses) {
+      // Bémols et dièses mêlés : ce n'est pas une armure. On garde les plus
+      // nombreux, et on le demande (avant, la ligne passait en do sans rien dire).
+      const parBemols = tonalite(e0.bemols, 0), parDieses = tonalite(0, e0.dieses);
+      k = e0.bemols >= e0.dieses ? parBemols : parDieses;
+      doutes.push({
+        type: "armure", variante: "melee", cle: k, autres: [k === parBemols ? parDieses : parBemols, "C"], bemols: e0.bemols, dieses: e0.dieses,
+        page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), _sys: sys,
+        message: `Armure de ${e0.bemols} bémol${e0.bemols > 1 ? "s" : ""} et ${e0.dieses} dièse${e0.dieses > 1 ? "s" : ""} : lue en ${k}.`,
+      });
+    } else if (e0.bemols || e0.dieses) k = tonalite(e0.bemols, e0.dieses);
     else if (cle && cle !== "C") {
-      doutes.push({ type: "armure", cle, page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), message: `Pas d'armure en début de ligne : celle de la ligne précédente (${cle}) est reprise.` });
+      doutes.push({ type: "armure", cle, autres: ["C"], page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), _sys: sys, message: `Pas d'armure en début de ligne : celle de la ligne précédente (${cle}) est reprise.` });
     }
     if (!k) k = "C";
+    // Armure ou altération de la première note (lecteur.js) : les deux tonalités en jeu.
+    for (const d of doutes.filter((d) => d._hesitation && d.page === sys.page && sys.voix.some((v) => v.portee.index === d.portee))) {
+      const b = d.alteration === "_" ? 1 : 0, di = d.alteration === "^" ? 1 : 0;
+      d.cle = k;
+      d.autreCle = d.lue === "alteration" ? tonalite(e0.bemols + b, e0.dieses + di) : tonalite(Math.max(0, e0.bemols - b), Math.max(0, e0.dieses - di));
+      d._sys = sys;
+    }
 
     // Mesures de chaque voix et chiffrage.
     const voix = sys.voix.map((v) => ({ ...v, mesures: mesuresDe(v.evs) }));
@@ -235,9 +252,11 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
       for (let i = v.mesures.length; i < nbMesures; i++) corps.push(`x${dureeABC(m ? m.croches : 8)} |`);
       return prefixe + champs.join("") + debut + corps.join(" ");
     };
+    sys.premiereLigne = lignes.length;
     if (piano) {
       voix.forEach((v, i) => lignes.push(ecrireVoix(v, `[V:${i + 1}] `)));
     } else lignes.push(ecrireVoix(voix[0]));
+    sys.derniereLigne = lignes.length - 1;
     numeroMesure += nbMesures;
   });
 
@@ -264,8 +283,15 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
   for (const d of doutes) {
     const place = (d._ev || d._mes || {}).place;
     if (place) d.cible = { debut: debutsLignes[place.ligne] + place.debut, fin: debutsLignes[place.ligne] + place.fin };
+    // Les lignes d'un système (ses deux voix au piano) : ce que réécrit un changement d'armure.
+    if (d._sys && d._sys.premiereLigne !== undefined) {
+      const { premiereLigne: a, derniereLigne: b } = d._sys;
+      d.cibleLigne = { debut: debutsLignes[a], fin: debutsLignes[b] + lignes[b].length };
+    }
     delete d._ev;
     delete d._mes;
+    delete d._sys;
+    delete d._hesitation;
   }
 
   return { abc, doutes, lues, piano, nbSystemes: systemes.length };
