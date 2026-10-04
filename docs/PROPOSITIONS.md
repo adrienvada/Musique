@@ -754,6 +754,37 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   iOS 26.2 ; sur un iPhone plus ancien, plus aucun PDF ne se lirait. La
   lecture des pages d'essai n'a pas bougé (`npm test`), et l'import marche
   dans Chromium avec le nouveau worker.
+- **abcjs et les polices viennent du site (S2).** abcjs venait de cdnjs
+  sans empreinte, et les polices de Google Fonts : chaque visite donnait
+  l'adresse IP du visiteur à Google, une panne du CDN laissait la partition
+  vide, et la gravure hors ligne dépendait d'une première visite réussie.
+  L'assembleur les copie depuis `node_modules`, dans les deux assemblages
+  (site et claude.ai), aux versions de `package.json` (abcjs 6.7.1,
+  `@fontsource` 5.3.0).
+  - Les mêmes polices qu'avant : Young Serif, IBM Plex Sans (400, 500, 600,
+    400 italique), IBM Plex Mono (400, 500), en latin et latin étendu. Leur
+    licence (SIL OFL 1.1) voyage avec elles dans `polices/`, celle d'abcjs
+    (MIT) dans `vendor/abcjs/` : les deux le demandent.
+  - `app/styles/polices.css` dit quels fichiers prendre ; l'assembleur
+    copie exactement ceux-là et s'arrête si l'un manque, ou si la page
+    appelle encore une ressource d'un autre domaine.
+  - abcjs contient, comme pdf.js, des caractères de contrôle bruts que le
+    publieur de claude.ai refuse : il passe par la même réécriture.
+- **Le site a une politique de sécurité du contenu (CSP, S2).** Elle ne
+  laisse passer que les fichiers du site, et le connecteur
+  (`https://*.supabase.co`). Un texte entré dans la page sans être échappé
+  ne peut plus rien exécuter, même si `echapper` (S1) était oublié quelque
+  part : c'est la seconde porte.
+  - Chaque permission a sa raison, écrite dans `outils/assembler-appli.mjs`
+    (les styles en ligne de la grille et d'abcjs, le worker de pdf.js, le
+    mémo vocal…).
+  - Dans un `<meta>` au début de la page : GitHub Pages ne laisse pas
+    choisir ses en-têtes. La version claude.ai n'en porte pas, claude.ai
+    pose la sienne.
+  - Essayée dans Chromium sur tous les parcours, sans une violation :
+    import des pages d'essai (pdf.js et son worker), gravure, correction,
+    écoute, MIDI, idée au clavier, chant au faux micro, mémo vocal,
+    sauvegarde.
 
 ### Notation, harmonie et exports (N1 à N7)
 
@@ -1159,10 +1190,10 @@ ou supprimer la fonction dans Supabase.
 - **localStorage dans la page claude.ai** : il peut être refusé (cadre
   isolé). Les préférences de l'éditeur (affichage, tempo par défaut, clavier
   MIDI) passent par `lirePref` / `ecrirePref`, qui font sans.
-- **Essais Chromium derrière le proxy** : sans `ignoreHTTPSErrors`, abcjs
-  (cdnjs) ne se charge pas et la partition reste vide ; le proxy laisse
-  aussi parfois tomber les polices (`ERR_TOO_MANY_RETRIES`). Ce n'est pas
-  l'appli. Un faux micro : `--use-fake-device-for-media-stream
+- **Essais Chromium derrière le proxy** : depuis le 04/10, abcjs et les
+  polices viennent du site ; plus rien ne passe par le proxy, et un essai
+  peut couper tout le réseau extérieur sans rien perdre. Un faux micro :
+  `--use-fake-device-for-media-stream
   --use-file-for-fake-audio-capture=chant.wav` (un chanteur de synthèse).
 - **Micro et clavier MIDI** : ni l'un ni l'autre dans la page claude.ai
   (cadre sans ces permissions) ; Safari (iPhone, iPad) ne lit pas les
