@@ -662,6 +662,34 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - le zip (claude.ai) est daté du jour, plus du « 0 janvier 1980 » ;
   - l'en-tête de `midi.js` dit vrai : « Basse » n'existe que si tu as
     ajouté une piste de basse.
+- **N8 (nouveau) · Un fichier MIDI devient une idée : l'aller-retour avec
+  Live.** Venu de l'audit de l'interface : une phrase retravaillée dans
+  Ableton revenait dans Portée… par le clavier. Maintenant, un `.mid`
+  déposé sur l'accueil ou choisi par « Importer un PDF » (qui accepte aussi
+  les fichiers MIDI) devient une nouvelle idée, titrée par le nom du
+  fichier, et s'ouvre.
+  - Le lecteur est à nous (`lireFichierMidi`, `midi.js`), comme l'écrivain :
+    un fichier MIDI standard est simple à lire, et une bibliothèque aurait
+    été une dépendance de plus pour le site et pour claude.ai. Il lit les
+    formats 0 et 1, le « running status », le note-on de vélocité 0 qui vaut
+    note-off, les noms de pistes en UTF-8 ou en Latin-1, et saute le reste
+    (sysex, contrôleurs, blocs inconnus). Vérifié contre mido sur 49
+    fichiers (les nôtres, ceux d'abcjs, un fichier fabriqué à la main) :
+    mêmes notes, vélocités, canaux, tempo, mesure et armure.
+  - L'idée (`ideeDepuisMidi`) : une piste par piste du fichier qui joue, et
+    par canal quand une piste en mêle plusieurs (format 0) ; au plus quatre
+    pistes (une idée n'est pas un arrangement), sans la batterie (canal
+    10) : le message dit ce qui est laissé de côté. Les notes sont recalées
+    au pas de double croche par le même arrondi que le jeu en direct
+    (`quantifier`, avec ton jeu lié) : un fichier sorti de Live, déjà sur la
+    grille, ne bouge pas. Le tempo, la mesure et la tonalité sont ceux du
+    fichier (les premiers : une idée n'en a qu'un) ; sans eux, 120, 4/4 et
+    do, comme le veut la norme. « Melodie », que Portée écrit en ASCII,
+    redevient « Mélodie ».
+  - Hors de mes fichiers, deux retouches d'une ligne : l'`accept` du bouton
+    d'import (`index.html`) et le filtre du dépôt (`accueil.js`), qui ne
+    laissait passer que les PDF. Le libellé du bouton dit encore « Importer
+    un PDF » : à ajuster avec l'interface.
 - **B9 · L'arrondi traite la dernière note comme les autres.** Ta règle du
   jeu lié ne change pas (une note relâchée au plus un pas de grille avant la
   suivante tient jusqu'à elle). Mais la dernière note d'une prise n'a pas de

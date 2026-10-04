@@ -7,7 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import abcjs from "abcjs";
-import { fichierMidi, texteMidi, midiDeLaPage } from "../app/midi.js";
+import { fichierMidi, texteMidi, midiDeLaPage, lireFichierMidi, ideeDepuisMidi } from "../app/midi.js";
 
 /** Un petit lecteur de MIDI, juste ce qu'il faut pour vérifier (indépendant de celui de l'appli). */
 function lireMidi(octets) {
@@ -143,4 +143,90 @@ test("les textes en ASCII : accents, signes et guillemets", () => {
   assert.equal(texteMidi("Basse des accords"), "Basse des accords");
   assert.equal(texteMidi("« Idée » — fa♯, si♭ ’n’ Œuvre"), '"Idee" - fa#, sib \'n\' OEuvre');
   assert.equal(texteMidi("Ça déménage 🎵"), "Ca demenage");
+});
+
+// --- Importer un .mid (N8) ------------------------------------------------------------
+
+const notesDe = (piste) => piste.notes.map((n) => [n.d, n.l, n.h]);
+
+test("aller-retour : ce que Portée écrit, Portée le relit à l'identique", () => {
+  const voix = [
+    { nom: "Mélodie", notes: [{ d: 0, l: 6, h: 67, v: 100 }, { d: 6, l: 2, h: 69 }, { d: 8, l: 4, h: 71 }, { d: 12, l: 12, h: 72 }] },
+    { nom: "Basse", notes: [{ d: 0, l: 12, h: 36 }, { d: 12, l: 12, h: 43 }] },
+  ];
+  const { sequence: seq, ecartees } = ideeDepuisMidi(fichierMidi(voix, { tempo: 132, mesure: [6, 8], quintes: -3, mineur: true, titre: "Idée du matin" }));
+  assert.deepEqual([seq.tempo, seq.mesure, seq.tonalite], [132, [6, 8], "Cm"]);
+  assert.deepEqual(seq.pistes.map((p) => p.nom), ["Mélodie", "Basse"], "« Melodie » redevient « Mélodie »");
+  assert.deepEqual(notesDe(seq.pistes[0]), [[0, 6, 67], [6, 2, 69], [8, 4, 71], [12, 12, 72]]);
+  assert.deepEqual(notesDe(seq.pistes[1]), [[0, 12, 36], [12, 12, 43]]);
+  assert.equal(seq.pistes[0].notes[0].v, 100);
+  assert.equal(seq.pistes[1].cle, "fa", "une piste grave se lit en clé de fa");
+  assert.deepEqual(ecartees, { pistes: 0, batterie: false });
+  // Les identifiants suivent : on peut éditer l'idée tout de suite.
+  assert.equal(new Set(seq.pistes.flatMap((p) => p.notes.map((n) => n.id))).size, 6);
+  assert.ok(seq.suivant > 6);
+});
+
+/** Un fichier d'un autre logiciel, fabriqué octet par octet. */
+function fichierEtranger() {
+  const vlq = (n) => { const o = [n & 0x7f]; while ((n >>= 7)) o.unshift((n & 0x7f) | 0x80); return o; };
+  const u32 = (n) => [24, 16, 8, 0].map((s) => (n >>> s) & 0xff);
+  const nom = [..."Piano électrique"].map((c) => c.charCodeAt(0)); // en Latin-1, comme beaucoup de logiciels
+  const ev = [
+    0, 0xff, 0x03, nom.length, ...nom,
+    0, 0xff, 0x51, 3, 0x09, 0x27, 0xc0,         // 600 000 µs la noire : 100 à la minute
+    0, 0xff, 0x58, 4, 3, 2, 24, 8,              // 3/4
+    0, 0xff, 0x59, 2, 2, 0,                     // ré majeur
+    0, 0xf0, 5, 0x7e, 0x7f, 0x09, 0x01, 0xf7,   // un sysex (« GM on ») à sauter
+    0, 0xc0, 0,                                 // programme
+    0, 0xb0, 7, 100,                            // un contrôleur (volume)
+    0, 0x90, 62, 80,                            // ré4
+    ...vlq(48), 62, 0,                          // running status : note-on de vélocité 0 = note-off
+    0, 66, 80,                                  // running status : fa♯4
+    0, 0x99, 36, 100,                           // grosse caisse, canal 10
+    ...vlq(24), 0x89, 36, 0,
+    ...vlq(24), 0x90, 66, 0,
+    0, 69, 80,                                  // la4
+    ...vlq(96), 0x80, 69, 64,                   // un vrai note-off, avec sa vélocité de relâche
+    0, 0xff, 0x2f, 0,
+  ];
+  return new Uint8Array([
+    0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0, 96, // format 0, une piste, 96 tics la noire
+    0x58, 0x46, 0x49, 0x48, 0, 0, 0, 2, 1, 2,              // un bloc inconnu (« XFIH »), à sauter
+    0x4d, 0x54, 0x72, 0x6b, ...u32(ev.length), ...ev,
+  ]);
+}
+
+test("un fichier d'un autre logiciel : running status, note-on à vélocité 0, batterie à part", () => {
+  const lu = lireFichierMidi(fichierEtranger());
+  assert.equal(lu.format, 0);
+  assert.equal(lu.ppq, 96);
+  assert.equal(lu.pistes[0].nom, "Piano électrique");
+  // Ce que mido lit de ce même fichier (vérifié) : à temps égal, la plus grave d'abord.
+  assert.deepEqual(lu.pistes[0].notes.map((n) => [n.t, n.fin, n.h, n.canal]), [[0, 48, 62, 0], [48, 72, 36, 9], [48, 96, 66, 0], [96, 192, 69, 0]]);
+  const { sequence: seq, ecartees } = ideeDepuisMidi(fichierEtranger());
+  assert.deepEqual([seq.tempo, seq.mesure, seq.tonalite], [100, [3, 4], "D"]);
+  assert.equal(seq.pistes.length, 1);
+  assert.equal(seq.pistes[0].nom, "Piano électrique");
+  // 96 tics la noire : 24 par pas.
+  assert.deepEqual(notesDe(seq.pistes[0]), [[0, 2, 62], [2, 2, 66], [4, 4, 69]]);
+  assert.equal(ecartees.batterie, true);
+});
+
+test("importer : au plus quatre pistes, l'arrondi du jeu en direct, et des erreurs claires", () => {
+  // Six pistes : les quatre premières qui jouent sont gardées, les autres comptées.
+  const six = Array.from({ length: 6 }, (_, i) => ({ nom: `P${i}`, notes: [{ d: 0, l: 4, h: 60 + i }] }));
+  const { sequence: seq, ecartees } = ideeDepuisMidi(fichierMidi([{ nom: "Vide", notes: [] }, ...six]));
+  assert.deepEqual(seq.pistes.map((p) => p.nom), ["P0", "P1", "P2", "P3"]);
+  assert.equal(ecartees.pistes, 2);
+  // Un jeu humain (un peu à côté) se recale au pas, avec le jeu lié du direct.
+  const humain = fichierMidi([{ nom: "M", notes: [{ d: 0.3, l: 3.4, h: 60 }, { d: 4.2, l: 3.5, h: 62 }, { d: 7.9, l: 4, h: 64 }] }]);
+  assert.deepEqual(notesDe(ideeDepuisMidi(humain).sequence.pistes[0]), [[0, 4, 60], [4, 4, 62], [8, 4, 64]]);
+  // Sans tempo, mesure ni armure : 120, 4/4, do (les valeurs du MIDI).
+  const nu = new Uint8Array([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 1, 0xe0, 0x4d, 0x54, 0x72, 0x6b, 0, 0, 0, 12, 0, 0x90, 60, 90, 0x83, 0x60, 0x80, 60, 0, 0, 0xff, 0x2f, 0]);
+  const vide = ideeDepuisMidi(nu).sequence;
+  assert.deepEqual([vide.tempo, vide.mesure, vide.tonalite, vide.pistes[0].nom], [120, [4, 4], "C", "Mélodie"]);
+  assert.deepEqual(notesDe(vide.pistes[0]), [[0, 4, 60]]);
+  assert.throws(() => lireFichierMidi(new TextEncoder().encode("%PDF-1.7 pas un MIDI")), /pas un fichier MIDI/);
+  assert.throws(() => lireFichierMidi(new Uint8Array([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, 1, 0xe7, 0x28])), /SMPTE/);
 });

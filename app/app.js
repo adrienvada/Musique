@@ -19,12 +19,12 @@ import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE
 import { creerSynchro } from "./synchro.js";
 import { creerEditeurIdee, midiDeLIdee } from "./idee.js";
 import { Transport } from "./transport.js";
-import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
+import { sequenceDepuisAbc, pasParMesure, pasParTemps, ecrireAbc } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
 import { creerVueMorceau } from "./vue-morceau.js";
 import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
 import { ecrireMusicXml } from "./musicxml.js";
-import { midiDeLaPage } from "./midi.js";
+import { midiDeLaPage, ideeDepuisMidi } from "./midi.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerHistorique } from "./historique.js";
@@ -520,6 +520,7 @@ async function importer(fichiers) {
   for (const f of fichiers) {
     try {
       toast(`Lecture de « ${f.name} »…`, 60000);
+      if (/\.midi?$/i.test(f.name) || /midi/i.test(f.type)) { dernier = (await importerMidi(f)) || dernier; continue; }
       const pdfjs = await chargerPdfjs();
       const doc = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise;
       const lu = await lireDocument(pdfjs, doc);
@@ -537,6 +538,29 @@ async function importer(fichiers) {
     }
   }
   if (dernier && fichiers.length === 1) ouvrir(dernier, "atelier");
+}
+
+/**
+ * Un fichier MIDI devient une idée : l'aller-retour avec Ableton (une phrase
+ * retravaillée dans Live revient dans Portée). Les notes sont recalées au
+ * pas (midi.js, ideeDepuisMidi) ; l'idée s'enregistre comme une autre, et
+ * s'ouvre si c'est le seul fichier importé.
+ */
+async function importerMidi(f) {
+  const titre = f.name.replace(/\.midi?$/i, "").replace(/[_]+/g, " ").trim() || "Idée MIDI";
+  const { sequence, ecartees } = ideeDepuisMidi(new Uint8Array(await f.arrayBuffer()));
+  const nb = sequence.pistes.reduce((n, p) => n + p.notes.length, 0);
+  if (!nb) { toast(`« ${f.name} » ne contient aucune note à garder.`, 6000); return null; }
+  const id = nouvelId();
+  const maintenant = new Date().toISOString();
+  await etat.stockage.creer(id, {
+    type: "idee", titre, sequence, abc: ecrireAbc(sequence, { voix: voixCompletes(sequence), titre }).abc,
+    statut: "idee", nbPages: 0, modele: null, tempo: sequence.tempo, note: "", etiquettes: [], favori: false, memo: null,
+    creeLe: maintenant, modifieLe: maintenant,
+  }, []);
+  const laisse = [ecartees.pistes ? `${ecartees.pistes} piste${ecartees.pistes > 1 ? "s" : ""} de plus` : "", ecartees.batterie ? "la batterie" : ""].filter(Boolean).join(" et ");
+  toast(`« ${titre} » : ${nb} note${nb > 1 ? "s" : ""}, une idée de plus.${laisse ? ` Laissées de côté : ${laisse} (une idée garde quatre pistes, sans percussions).` : ""}`, laisse ? 8000 : 4000);
+  return id;
 }
 
 /**
