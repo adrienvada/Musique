@@ -639,6 +639,26 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     chevauchent sur la grille) ;
   - **un morceau garde le chiffrage et l'armure de chaque bloc**, au début
     du bloc (un refrain en 3/4 et en sol dans un morceau en 4/4 et en do) ;
+  - **les pages lues passent par le même écrivain**, plus par abcjs
+    (`getMidiFile`), qui écrivait des pistes sans nom, une piste vide de
+    plus pour une page de piano, et perdait les changements de la page
+    (Live restait en 4/4 et en do sur ta page de mélodie, qui passe en
+    12/8 et en mi♭). `lirePage` (`sequence.js`) fait jouer la page par
+    abcjs, au temps exact (un triolet reste un triolet : 160 tics la
+    croche) ; `midiDeLaPage` (`midi.js`) écrit « Main droite » et « Main
+    gauche » (ou « Melodie »), chaque changement de tonalité où il arrive,
+    chaque changement de mesure à la barre qui suit, précédé d'une mesure
+    de la longueur de la levée (1/8 sur ta page) : la grille de Live tombe
+    sur les barres de la page. Les notes y ont leur durée écrite (abcjs les
+    raccourcissait un peu pour le son). Pourquoi pas une idée au passage :
+    une idée vit au pas de double croche, le triolet y serait arrondi ;
+  - « Continuer en idée » profite de `lirePage` : une idée n'a qu'une
+    mesure et une tonalité, celles de la plus longue section de la page
+    (ta page de mélodie devient une idée en 12/8 et en mi♭, plus en 4/4 et
+    en do), et ses barres tombent sur celles de l'idée ; une levée en tête
+    de page tombe à la fin d'une mesure de silences, comme dans une idée.
+    Une tonalité que le menu n'a pas prend son nom enharmonique (sol♭ →
+    fa♯) au lieu de do ;
   - le zip (claude.ai) est daté du jour, plus du « 0 janvier 1980 » ;
   - l'en-tête de `midi.js` dit vrai : « Basse » n'existe que si tu as
     ajouté une piste de basse.

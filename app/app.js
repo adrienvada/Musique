@@ -24,6 +24,7 @@ import { voixCompletes } from "./harmonie.js";
 import { creerVueMorceau } from "./vue-morceau.js";
 import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
 import { ecrireMusicXml } from "./musicxml.js";
+import { midiDeLaPage } from "./midi.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerHistorique } from "./historique.js";
@@ -1473,19 +1474,20 @@ function graverLecteur() {
 
 const nomDeFichier = (p) => (p.titre || "").replace(/[\\/:*?"<>|]+/g, " ").trim() || "partition";
 
-/** Le MIDI d'une partition : une piste par voix (par main au piano), tempo et transposition compris. */
-function midiDe(abc, { tempo, transposition = 0 } = {}) {
-  const options = { midiOutputType: "binary", midiTranspose: transposition };
-  if (tempo) options.qpm = tempo; // sinon, le tempo écrit dans l'ABC (Q:)
-  const [binaire] = ABCJS().synth.getMidiFile(abc, options);
-  return binaire instanceof Uint8Array ? binaire : new Uint8Array(binaire);
+/**
+ * Le MIDI d'une page lue : une piste par main, tempo, transposition et
+ * changements de la page compris. Par le même écrivain que les idées
+ * (midi.js) : abcjs écrivait des pistes sans nom et perdait les changements.
+ */
+function midiDe(abc, { tempo, transposition = 0, titre = "" } = {}) {
+  return midiDeLaPage(abc, ABCJS(), { tempo, transposition, titre });
 }
 
 /** Le MIDI de n'importe quelle partition : une idée part de ses notes, une page lue, de son ABC. */
 function midiDePartition(p, reglages = {}) {
   if (p.type === "idee") return midiDeLIdee(p);
   if (p.type === "morceau") return midiDuMorceau(p, ideesParId());
-  return midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0 });
+  return midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0, titre: p.titre });
 }
 
 /** Télécharge le .mid (dans un .zip sur claude.ai, dont la liste des formats ignore .mid). */

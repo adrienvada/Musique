@@ -469,27 +469,156 @@ export function jetonA(jetons, pos) {
   return jetons.find((j) => pos >= j.avant && pos < j.fin) || null;
 }
 
+// ------------------------------------------------------------------------
+// Une page lue (ABC) en notes
+// ------------------------------------------------------------------------
+
+const MINEURS = /^(m|min|minor|aeo|aeolian)$/i;
+
+/** La tonalité d'une clé d'abcjs ({ root, acc, mode }) ou d'un champ K: : « Eb », « F#m ». */
+function tonaliteAbc(cle) {
+  if (!cle || !/^[A-G]$/.test(cle.root || "")) return "C";
+  return cle.root + (cle.acc === "sharp" || cle.acc === "#" ? "#" : cle.acc === "flat" || cle.acc === "b" ? "b" : "") + (MINEURS.test(cle.mode || "") ? "m" : "");
+}
+
+/** La mesure d'un chiffrage d'abcjs : [n, d] ; null si elle ne se lit pas. */
+function mesureAbc(m) {
+  if (!m) return null;
+  if (m.type === "common_time") return [4, 4];
+  if (m.type === "cut_time") return [2, 2];
+  const v = m.value && m.value[0];
+  const n = v && String(v.num).split("+").reduce((s, x) => s + Number(x), 0), d = v && Number(v.den);
+  return n > 0 && [1, 2, 4, 8, 16].includes(d) ? [n, d] : null;
+}
+
+/** La durée écrite d'un élément d'abcjs (en rondes), triolets compris. */
+const dureeEcrite = (e, triolet) => (e.el_type === "note" && e.duration ? e.duration * triolet : 0);
+
 /**
- * Une partition ABC (lue sur la tablette) devenue idée : abcjs (passé en
- * paramètre) la joue en notes, reprises dépliées. Le tempo vient de Q:.
+ * Une page lue (son ABC) jouée par abcjs (passé en paramètre) : ses voix en
+ * notes au temps exact, reprises dépliées, et ce qu'il faut pour l'écrire
+ * ailleurs (MIDI, idée, MusicXML). Les temps sont en pas, fractionnaires :
+ * un triolet de croches dure 4/3 de pas.
+ *
+ * Une levée en tête de page tombe à la fin d'une mesure de silences, comme
+ * dans une idée : tout est décalé pour que la première barre de la page
+ * tombe sur une barre.
+ *
+ * @returns { voix: [{ notes: [{ d, l, h, v }] }] (les voix qui jouent),
+ *   tempo, sections: [{ d, barre, mesure (null : mesure libre, « M:none »),
+ *   tonalite }] } : une section par changement de tonalité ou de mesure en
+ *   cours de page (« [K:Eb][M:12/8] »), qui commence en `d` et a sa première
+ *   barre en `barre` (sa levée est entre les deux).
  */
-export function sequenceDepuisAbc(abc, lib, { tempo = null } = {}) {
+export function lirePage(abc, lib) {
   const [tune] = lib.parseOnly(abc);
   const audio = tune.setUpAudio({ chordsOff: true });
-  let mesure = [4, 4];
-  try { const f = tune.getMeterFraction(); if (f && f.num && f.den) mesure = [f.num, f.den]; } catch { /* chiffrage libre */ }
-  if (![1, 2, 4, 8, 16].includes(mesure[1])) mesure = [4, 4];
-  const k = /^K:\s*([A-G][#b]?)\s*([A-Za-z]*)/m.exec(abc);
-  let tonalite = k ? k[1] + (/^(m|min|minor|aeo|aeolian)$/i.test(k[2]) ? "m" : "") : "C";
-  if (!TONALITES.includes(tonalite)) tonalite = "C";
   const q = /^Q:\s*(?:(\d+)\/(\d+)\s*=\s*)?(\d+)/m.exec(abc);
-  const tempoAbc = q ? Math.round(Number(q[3]) * (q[1] ? (4 * Number(q[1])) / Number(q[2]) : 1)) : 90;
-  const seq = nouvelleSequence({ tempo: tempo || tempoAbc, mesure, tonalite });
-  seq.pistes = audio.tracks.map((t, i) => ({
-    nom: i === 0 ? "Mélodie" : audio.tracks.length === 2 ? "Main gauche" : `Voix ${i + 1}`,
-    notes: t.filter((e) => e.cmd === "note" && e.pitch >= 0).map((e) => ({
-      id: seq.suivant++, d: Math.round(e.start * 16), l: Math.max(1, Math.round(e.duration * 16)), h: e.pitch,
-    })),
+  const tempo = q ? Math.round(Number(q[3]) * (q[1] ? (4 * Number(q[1])) / Number(q[2]) : 1)) : 90;
+  const k = /^K:\s*([A-G])([#b]?)\s*([A-Za-z]*)/m.exec(abc);
+  const enTete = {
+    tonalite: k ? tonaliteAbc({ root: k[1], acc: k[2], mode: k[3] }) : "C",
+    // abcjs prend « M:none » pour du 4/4 : la mesure libre se lit dans l'en-tête.
+    mesure: /^M:\s*none\b/im.test(abc) ? null : mesureAbc(tune.getMeter()) || [4, 4],
+  };
+  // Les éléments de la première voix de la première portée, dans l'ordre
+  // écrit, avec la clé et le chiffrage de chaque début de ligne.
+  const elements = [];
+  for (const l of tune.lines) {
+    if (!l.staff || !l.staff.length) continue;
+    const st = l.staff[0];
+    if (st.key) elements.push({ el_type: "key", ...st.key });
+    if (st.meter) elements.push({ el_type: "meter", ...st.meter });
+    elements.push(...((st.voices && st.voices[0]) || []));
+  }
+  // L'instant joué de chaque note écrite (sa première fois, si une reprise la répète).
+  const jouee = new Map();
+  for (const e of audio.tracks[0] || []) if (e.cmd === "note" && e.startChar !== undefined && !jouee.has(e.startChar)) jouee.set(e.startChar, e.start);
+  // Depuis l'élément i : la durée écrite jusqu'à la première note jouée (ses silences), et jusqu'à la première barre.
+  const avancer = (i) => {
+    let t = 0, triolet = 1, avantNote = null, avantBarre = null;
+    for (let j = i; j < elements.length && (avantNote === null || avantBarre === null); j++) {
+      const e = elements[j];
+      if (e.el_type === "bar" && avantBarre === null) avantBarre = t;
+      if (e.startTriplet) triolet = e.tripletMultiplier || 1;
+      if (avantNote === null && e.el_type === "note" && e.pitches && jouee.has(e.startChar)) avantNote = { t, debut: jouee.get(e.startChar) };
+      t += dureeEcrite(e, triolet);
+      if (e.endTriplet) triolet = 1;
+    }
+    return { avantNote, avantBarre };
+  };
+  const sections = [{ d: 0, barre: 0, ...enTete }];
+  let courante = { ...enTete };
+  for (let i = 0; i < elements.length; i++) {
+    const e = elements[i];
+    if (e.el_type !== "key" && e.el_type !== "meter") continue;
+    const nouvelle = { ...courante };
+    if (e.el_type === "key") nouvelle.tonalite = tonaliteAbc(e);
+    else nouvelle.mesure = mesureAbc(e) || courante.mesure;
+    if (nouvelle.tonalite === courante.tonalite && String(nouvelle.mesure) === String(courante.mesure)) continue;
+    // Un [K:] et un [M:] côte à côte font une seule section.
+    let j = i + 1;
+    while (j < elements.length && (elements[j].el_type === "key" || elements[j].el_type === "meter")) {
+      if (elements[j].el_type === "key") nouvelle.tonalite = tonaliteAbc(elements[j]);
+      else nouvelle.mesure = mesureAbc(elements[j]) || nouvelle.mesure;
+      j++;
+    }
+    // Juste après une barre (« C8|[M:3/4]D6| »), la section commence sur sa
+    // première barre ; sinon (« B2 c2 [M:12/8]G | ») sa levée va jusqu'à la suivante.
+    let p = i - 1;
+    while (p >= 0 && (elements[p].el_type === "key" || elements[p].el_type === "meter")) p--;
+    const surUneBarre = p < 0 || elements[p].el_type === "bar";
+    i = j - 1;
+    const { avantNote, avantBarre } = avancer(j);
+    if (!avantNote) break; // plus rien ne joue après le changement
+    const d = (avantNote.debut - avantNote.t) * 16;
+    courante = nouvelle;
+    if (d <= 0) { Object.assign(sections[0], nouvelle); continue; }
+    sections.push({ d, barre: surUneBarre ? d : d + (avantBarre ?? avantNote.t) * 16, ...nouvelle });
+  }
+  // La levée d'en-tête : ce qui précède la première barre, s'il manque de quoi faire une mesure.
+  let decalage = 0;
+  if (sections[0].mesure) {
+    const longueur = (sections[0].mesure[0] * 16) / sections[0].mesure[1];
+    const { avantBarre } = avancer(0);
+    const levee = avantBarre === null ? 0 : (avantBarre * 16) % longueur;
+    if (levee > 1e-9 && longueur - levee > 1e-9) decalage = longueur - levee;
+    sections[0].barre = avantBarre === null ? 0 : avantBarre * 16 + decalage;
+  }
+  for (const s of sections.slice(1)) { s.d += decalage; s.barre += decalage; }
+  const voix = audio.tracks
+    .map((t) => ({ notes: t.filter((e) => e.cmd === "note" && e.pitch >= 0).map((e) => ({ d: e.start * 16 + decalage, l: e.duration * 16, h: e.pitch, v: e.volume })) }))
+    .filter((v) => v.notes.length);
+  return { voix, tempo, sections };
+}
+
+// Les tonalités qu'une idée ne propose pas, et leur nom dans le menu (les notes ne changent pas).
+const ENHARMONIQUES = { Gb: "F#", "C#": "Db", Cb: "B", "G#": "Ab", "D#": "Eb", "A#": "Bb", Fb: "E", "E#": "F", "B#": "C", "D#m": "Ebm", "A#m": "Bbm", Dbm: "C#m", Gbm: "F#m", Abm: "G#m", "E#m": "Fm", "B#m": "Cm" };
+
+/**
+ * Une page lue devenue idée : abcjs (passé en paramètre) la joue en notes,
+ * reprises dépliées. Le tempo vient de Q:. Une idée n'a qu'une mesure et
+ * qu'une tonalité : celles de la plus longue section de la page (une page
+ * qui commence par une gamme en mesure libre puis passe en 12/8 et en mi♭
+ * devient une idée en 12/8 et en mi♭), et ses barres tombent sur celles de
+ * l'idée. Les notes sont recalées au pas (une double croche) : un triolet
+ * s'y arrondit, c'est la limite d'une idée.
+ */
+export function sequenceDepuisAbc(abc, lib, { tempo = null } = {}) {
+  const page = lirePage(abc, lib);
+  const fin = Math.max(0, ...page.voix.flatMap((v) => v.notes.map((n) => n.d + n.l)));
+  const duree = (s, i) => (i + 1 < page.sections.length ? page.sections[i + 1].d : fin) - s.d;
+  const avecMesure = page.sections.filter((s) => s.mesure);
+  const principale = (avecMesure.length ? avecMesure : page.sections)
+    .reduce((m, s) => (duree(s, page.sections.indexOf(s)) > duree(m, page.sections.indexOf(m)) ? s : m));
+  const mesure = principale.mesure || [4, 4];
+  const tonalite = TONALITES.includes(principale.tonalite) ? principale.tonalite : ENHARMONIQUES[principale.tonalite] || "C";
+  const longueur = (mesure[0] * 16) / mesure[1];
+  const decalage = principale.mesure ? (longueur - (Math.round(principale.barre) % longueur)) % longueur : 0;
+  const seq = nouvelleSequence({ tempo: tempo || page.tempo, mesure, tonalite });
+  seq.pistes = page.voix.map((v, i, toutes) => ({
+    nom: i === 0 ? "Mélodie" : toutes.length === 2 ? "Main gauche" : `Voix ${i + 1}`,
+    notes: v.notes.map((n) => ({ id: seq.suivant++, d: Math.round(n.d) + decalage, l: Math.max(1, Math.round(n.l)), h: n.h })),
   }));
   if (!seq.pistes.length) seq.pistes = [{ nom: "Mélodie", notes: [] }];
   seq.pistes.forEach(trier);

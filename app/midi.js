@@ -22,8 +22,11 @@
  *     première s'arrête où la suivante commence (sinon le deuxième note-on
  *     reste sans fin, ou coupe la mauvaise note, selon le logiciel).
  *
- * Sans dépendance (appli et tests).
+ * Sans dépendance (appli et tests) : abcjs, pour lire une page, est passé
+ * en paramètre.
  */
+import { lirePage, lireTonalite } from "./sequence.js";
+
 const PPQ = 480; // tics par noire ; un pas (double croche) = 120 tics
 const TICS_PAR_PAS = PPQ / 4;
 const tics = (pas) => Math.round(pas * TICS_PAR_PAS); // un triolet de croches : 4/3 de pas, 160 tics
@@ -141,4 +144,53 @@ export function fichierMidi(voix, { tempo = 90, mesure = [4, 4], quintes = 0, mi
   });
   const entete = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, pistes.length, (PPQ >> 8) & 0xff, PPQ & 0xff];
   return new Uint8Array([...entete, ...pistes.flat()]);
+}
+
+/** Une levée de `pas` pas en chiffrage MIDI (1/8 pour une croche), dans l'unité de la mesure qui suit si possible ; null sinon. */
+function chiffrageDeLevee(pas, mesure) {
+  for (const den of [mesure[1], 8, 16]) {
+    const num = (pas * den) / 16;
+    if (Math.abs(num - Math.round(num)) < 1e-9 && num >= 1) return [Math.round(num), den];
+  }
+  return null;
+}
+
+/**
+ * Le MIDI d'une page lue, par le même écrivain que les idées. Avant, abcjs
+ * l'écrivait (getMidiFile) : pistes sans nom, une piste vide de plus pour
+ * une page de piano, et les changements de la page (« [K:Eb][M:12/8] »)
+ * perdus, Live restait en 4/4 et en do. Maintenant :
+ *   - une piste par voix qui joue, « Main droite » et « Main gauche » pour
+ *     une page de piano, « Mélodie » pour une page de mélodie ;
+ *   - chaque changement de tonalité au moment où il arrive, chaque
+ *     changement de mesure à la barre qui suit, précédé d'une mesure de la
+ *     longueur de la levée s'il y en a une : la grille de Live tombe sur les
+ *     barres de la page ;
+ *   - les notes à leur durée écrite (abcjs les raccourcissait un peu pour le
+ *     son) et au temps exact : un triolet reste un triolet.
+ * @param lib abcjs
+ */
+export function midiDeLaPage(abc, lib, { tempo = null, transposition = 0, titre = "" } = {}) {
+  const page = lirePage(abc, lib);
+  const noms = page.voix.length === 1 ? ["Mélodie"] : page.voix.length === 2 ? ["Main droite", "Main gauche"] : page.voix.map((_, i) => `Voix ${i + 1}`);
+  const [debut, ...suite] = page.sections;
+  const k = lireTonalite(debut.tonalite);
+  const changements = [];
+  let avant = debut;
+  for (const s of suite) {
+    if (s.tonalite !== avant.tonalite) {
+      const ks = lireTonalite(s.tonalite);
+      changements.push({ d: s.d, quintes: ks.quintes, mineur: ks.mineur });
+    }
+    if (s.mesure && String(s.mesure) !== String(avant.mesure)) {
+      const levee = s.barre - s.d;
+      const chiffrage = levee > 1e-9 && chiffrageDeLevee(levee, s.mesure);
+      if (chiffrage) changements.push({ d: s.d, mesure: chiffrage });
+      changements.push({ d: chiffrage ? s.barre : s.d, mesure: s.mesure });
+    }
+    avant = s;
+  }
+  return fichierMidi(page.voix.map((v, i) => ({ nom: noms[i], notes: v.notes })), {
+    tempo: tempo || page.tempo, mesure: debut.mesure, quintes: k.quintes, mineur: k.mineur, titre, transposition, changements,
+  });
 }

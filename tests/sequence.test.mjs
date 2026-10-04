@@ -202,6 +202,33 @@ test("d'un ABC à une idée : notes, mesure, tonalité, tempo, reprises déplié
   assert.deepEqual(entendu(sq.ecrireAbc(seq).abc), attendu(seq));
 });
 
+test("une page lue : temps exacts, levée calée, changements de tonalité et de mesure", () => {
+  // Comme la page de mélodie du 30/09 : une gamme en mesure libre, puis [K:Eb][M:12/8] avec une levée.
+  const page = sq.lirePage("X:1\nM:none\nL:1/8\nQ:1/4=90\nK:C\nC2 D2 E2 F2 G2 A2 B2 c2\n[K:Eb][M:12/8]G |: c2 c2 edc g2 GG G :|\n", abcjs);
+  assert.equal(page.tempo, 90);
+  assert.deepEqual(page.sections.map((s) => [s.d, s.barre, s.mesure, s.tonalite]), [[0, 0, null, "C"], [32, 34, [12, 8], "Eb"]]);
+  // L'idée qui en sort : la plus longue section (12/8, mi♭), ses barres sur celles de l'idée.
+  const seq = sq.sequenceDepuisAbc("X:1\nM:none\nL:1/8\nQ:1/4=90\nK:C\nC2 D2 E2 F2 G2 A2 B2 c2\n[K:Eb][M:12/8]G |: c2 c2 edc g2 GG G :|\n", abcjs);
+  assert.deepEqual([seq.mesure, seq.tonalite], [[12, 8], "Eb"]);
+  const notes = seq.pistes[0].notes;
+  // La levée (sol, la 9ᵉ note), puis le premier temps du 12/8 sur une barre de l'idée.
+  assert.deepEqual([notes[8].h, notes[9].h, notes[9].d % 24], [67, 72, 0]);
+  assert.equal(notes[9].d - notes[8].d, 2);
+  // Un triolet garde ses temps exacts dans la page (4/3 de pas) ; l'idée les arrondit au pas.
+  const triolet = sq.lirePage("X:1\nM:2/4\nL:1/8\nQ:1/4=90\nK:C\n(3CDE G2|c4|]\n", abcjs);
+  assert.deepEqual(triolet.voix[0].notes.slice(0, 3).map((n) => [Math.round(n.d * 3), Math.round(n.l * 3)]), [[0, 4], [4, 4], [8, 4]]);
+  // Une levée en tête de page tombe à la fin d'une mesure de silences.
+  const levee = sq.sequenceDepuisAbc("X:1\nM:4/4\nL:1/8\nQ:1/4=90\nK:G\nD2 | G2 G2 B2 G2 | d8 |]\n", abcjs);
+  assert.deepEqual(levee.pistes[0].notes.slice(0, 2).map((n) => [n.d, n.h]), [[12, 62], [16, 67]]);
+  // Un changement juste après une barre commence sur elle ; un K: après une reprise aussi.
+  assert.deepEqual(sq.lirePage("X:1\nM:4/4\nL:1/8\nQ:1/4=90\nK:C\nC8|[M:3/4]D6|E6|]\n", abcjs).sections.map((s) => [s.d, s.barre, s.mesure]), [[0, 16, [4, 4]], [16, 16, [3, 4]]]);
+  assert.deepEqual(sq.lirePage("X:1\nM:2/4\nL:1/8\nQ:1/4=90\nK:C\n|:CD EF:|[K:F]B2 A2|]\n", abcjs).sections.slice(1).map((s) => [s.d, s.barre, s.tonalite]), [[16, 16, "F"]]);
+  // Deux mains : deux voix ; une tonalité que le menu n'a pas prend son nom enharmonique.
+  const mains = sq.lirePage("X:1\nM:3/4\nL:1/8\nQ:1/4=100\nK:G\n%%score {1 2}\nV:1 clef=treble\nV:2 clef=bass\n[V:1] B2 c2 d2|g6|\n[V:2] G,,6|D,6|\n", abcjs);
+  assert.equal(mains.voix.length, 2);
+  assert.equal(sq.sequenceDepuisAbc("X:1\nM:4/4\nL:1/8\nK:Gb\nG8|]\n", abcjs).tonalite, "F#");
+});
+
 test("écrire comme dans un texte : insérer, effacer, ⌫, changer la durée", () => {
   const seq = idee([[0, 2, 60], [2, 2, 62], [4, 4, 64]]);
   const [nouvelle] = sq.inserer(seq, 0, 2, [67], 2);

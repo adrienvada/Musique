@@ -6,7 +6,8 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fichierMidi, texteMidi } from "../app/midi.js";
+import abcjs from "abcjs";
+import { fichierMidi, texteMidi, midiDeLaPage } from "../app/midi.js";
 
 /** Un petit lecteur de MIDI, juste ce qu'il faut pour vérifier (indépendant de celui de l'appli). */
 function lireMidi(octets) {
@@ -115,6 +116,26 @@ test("les changements de mesure et d'armure en cours de route, et les temps hors
   assert.equal(voix.fin, 28 * 120);
   // Mesure libre (M:none) : pas de chiffrage au début.
   assert.deepEqual(lireMidi(fichierMidi([{ nom: "M", notes: [{ d: 0, l: 4, h: 60 }] }], { mesure: null })).pistes[0].mesures, []);
+});
+
+test("une page lue : pistes nommées par main, sans piste vide, ses changements gardés", () => {
+  // Deux mains : « Main droite », « Main gauche », et rien d'autre (abcjs ajoutait une piste vide, sans nom).
+  const piano = lireMidi(midiDeLaPage("X:1\nM:4/4\nL:1/8\nQ:1/4=90\nK:C\n%%score {1 2}\nV:1 clef=treble\nV:2 clef=bass\n[V:1] GABc dcAG |\n[V:2] C,2 z2 G,,2 z2 ||\n", abcjs, { titre: "Page de piano" }));
+  assert.deepEqual(piano.pistes.map((p) => p.nom), ["Page de piano", "Main droite", "Main gauche"]);
+  assert.deepEqual(piano.pistes.map((p) => p.notes.length), [0, 8, 2]);
+  // La page de mélodie : la gamme en mesure libre, puis mi♭ et 12/8 après une levée d'une croche.
+  const melodie = lireMidi(midiDeLaPage("X:1\nM:none\nL:1/8\nQ:1/4=90\nK:C\nC2 D2 E2 F2 G2 A2 B2 c2\n[K:Eb][M:12/8]G |: c2 c2 edc g2 GG G :|\n", abcjs));
+  const [conducteur, voix] = melodie.pistes;
+  assert.equal(voix.nom, "Melodie");
+  assert.deepEqual(conducteur.armures, [[0, 0, 0], [32 * 120, -3, 0]]);
+  assert.deepEqual(conducteur.mesures, [[32 * 120, 1, 8], [34 * 120, 12, 8]], "la levée, puis le 12/8 à la barre");
+  // Les notes à leur durée écrite, et la fin à la barre du 12/8.
+  assert.deepEqual(voix.notes.slice(0, 2).map((n) => n.slice(0, 3)), [[0, 480, 60], [480, 480, 62]]);
+  assert.equal((voix.fin - 34 * 120) % (24 * 120), 0);
+  // Un triolet reste un triolet (160 tics la croche), la transposition et le tempo suivent les réglages.
+  const triolet = lireMidi(midiDeLaPage("X:1\nM:2/4\nL:1/8\nQ:1/4=90\nK:C\n(3CDE G2|c4|]\n", abcjs, { tempo: 120, transposition: 2 }));
+  assert.deepEqual(triolet.pistes[1].notes.slice(0, 3).map((n) => n.slice(0, 3)), [[0, 160, 62], [160, 160, 64], [320, 160, 66]]);
+  assert.equal(triolet.pistes[0].meta.tempo, 120);
 });
 
 test("les textes en ASCII : accents, signes et guillemets", () => {
