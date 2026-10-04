@@ -26,6 +26,29 @@ import { preparerTraits } from "./traits.js";
 
 const NOMS = ["C", "D", "E", "F", "G", "A", "B"];
 const NOMS_FR = ["do", "ré", "mi", "fa", "sol", "la", "si"];
+
+/**
+ * Les marges des décisions limites (L2) : une lecture prise au ras d'un seuil
+ * est gardée, mais devient une question fermée qui propose l'autre lecture.
+ * Réglées le 04/10 sur tes deux pages et sur des milliers de pages perturbées
+ * (bruit, rotation, arrondi) : assez larges pour qu'une lecture qui bascule
+ * ne bascule jamais en silence, assez étroites pour ne pas te noyer de
+ * questions sur une page bien lue. Exportées pour ces essais ; le lecteur,
+ * lui, ne les modifie jamais.
+ */
+export const MARGES = {
+  // Hauteur : une tête à plus de 0,4 demi-interligne de sa place (le
+  // maximum est 0,5, où elle change de note) est « entre deux notes ».
+  hauteur: 0.4,
+  // Ligature : écart, en interlignes, entre son bout et une hampe ; la
+  // tolérance est de 0,55 (voir l'étape 5 de lirePage).
+  ligature: [0.3, 0.7],
+  // Tête pleine : longueur du trait sur (largeur + hauteur), au-delà de 2,3 ;
+  // en dessous de cette valeur, la tête l'est de justesse.
+  rapportTete: 2.4,
+  // Point de durée : distance à sa tête, en interlignes ; il compte jusqu'à 2,2.
+  point: [1.9, 2.6],
+};
 // Tonalités selon le nombre de bémols ou de dièses à l'armure.
 const TONALITES_BEMOLS = ["C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"];
 const TONALITES_DIESES = ["C", "G", "D", "A", "E", "B", "F#", "C#"];
@@ -125,8 +148,17 @@ function mesurer(points, id) {
   return { id, points, ...b, longueur: l, ferme: dist(points[0], points[points.length - 1]) };
 }
 
+/**
+ * Une tête pleine : un gribouillis compact, bien plus long que sa taille.
+ * La largeur minimale était de 0,35 interligne, et une de tes têtes de la
+ * mélodie en fait 0,353 : arrondie au demi-pixel avec une autre phase, elle
+ * disparaissait quatre fois sur dix (audit du 04/10). Elle descend à 0,25 ;
+ * pour qu'un point (de durée) ne devienne jamais une tête, la tête doit
+ * mesurer au moins 0,45 interligne dans un sens, la taille au-delà de
+ * laquelle un trait n'est plus un point (estPoint).
+ */
 function estTetePleine(t, il) {
-  const compacte = t.l > 0.35 * il && t.l < 1.5 * il && t.h > 0.3 * il && t.h < 1.4 * il;
+  const compacte = t.l > 0.25 * il && t.l < 1.5 * il && t.h > 0.3 * il && t.h < 1.4 * il && Math.max(t.l, t.h) >= 0.45 * il;
   return compacte && t.longueur > 2.3 * (t.l + t.h);
 }
 
@@ -157,9 +189,10 @@ function doublons(traits, formes, tol) {
     return a.points.length === 1 && dist(p, a.points[0]) < tol;
   });
   for (const b of traits) {
-    if (b.vide || formes[b.id]) continue;
+    if (b.vide) continue;
     for (const a of traits) {
-      if (a === b || a.vide || formes[a.id] || pris.has(a.id)) continue;
+      // Une tête repassée sur une tête, un trait sur un trait : jamais un trait sur une tête.
+      if (a === b || a.vide || !formes[a.id] !== !formes[b.id] || pris.has(a.id)) continue;
       if (b.x0 < a.x0 - tol || b.x1 > a.x1 + tol || b.y0 < a.y0 - tol || b.y1 > a.y1 + tol) continue;
       if (b.longueur > 1.1 * a.longueur + tol) continue;
       // Deux traits identiques : le premier reste, le second est le doublon.
@@ -202,9 +235,9 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
   //    l'identique (ou presque) sur un autre n'est pas un nouveau signe : une
   //    hampe repassée devenait une barre de mesure, un bémol d'armure repassé
   //    un dièse (trop de traits), un point repassé n'était plus un point. On
-  //    l'écarte avant tout le reste. Les têtes ne sont pas concernées : leurs
-  //    coups de stylo se réunissent déjà (fusionnerTetes), et en retirer un
-  //    déplacerait la boîte, donc peut-être la hauteur.
+  //    l'écarte avant tout le reste. Une tête repassée aussi : sa boîte
+  //    grandissait, et sa hauteur pouvait changer. Mais jamais un petit trait
+  //    contre une tête : le second coup de stylo d'une tête en fait partie.
   const formes = traits.map((t) => (t.vide ? null : estTetePleine(t, il) ? "pleine" : estTeteVide(t, il) ? "vide" : null));
   for (const [b, a] of doublons(traits, formes, 0.15 * il)) {
     classe[b.id] = "doublon";
@@ -220,7 +253,9 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
   const tetes = fusionnerTetes(candidates, il).map((t, i) => {
     const portee = porteeDe(portees, t.cy);
     const exact = pasDe(portee, t.cy, il);
-    return { ...t, id: i, portee: portee.index, pas: Math.round(exact), ecart: exact - Math.round(exact) };
+    // Le plus « gribouillé » de ses traits : près de 2,3, la tête l'est de justesse (L2).
+    const rapport = Math.max(...t.traits.map((id) => traits[id].longueur / Math.max(1e-6, traits[id].l + traits[id].h)));
+    return { ...t, id: i, portee: portee.index, pas: Math.round(exact), ecart: exact - Math.round(exact), rapport };
   });
   for (const t of tetes) for (const id of t.traits) classe[id] = "tete";
   // Un petit trait posé sur une tête (retouche, second passage) en fait partie.
@@ -338,9 +373,12 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     if (s.role || s.ang < 70) continue;
     const y0 = Math.min(s.a[1], s.b[1]), y1 = Math.max(s.a[1], s.b[1]);
     const x = (s.a[0] + s.b[0]) / 2;
+    // Une barre va d'une ligne extérieure à l'autre (à trois quarts
+    // d'interligne près ; la plus courte de tes pages s'arrête à 0,57) : une
+    // hampe sans tête, partie du milieu de la portée, n'en est pas une (L8).
     const couvertes = portees.filter((p) => {
       const recouvre = Math.min(y1, p.bas) - Math.max(y0, p.haut);
-      return recouvre >= 0.7 * (p.bas - p.haut) && x > cal.x_debut && x < cal.x_fin + il;
+      return recouvre >= 0.7 * (p.bas - p.haut) && y0 <= p.haut + 0.75 * il && y1 >= p.bas - 0.75 * il && x > cal.x_debut && x < cal.x_fin + il;
     });
     if (!couvertes.length) continue;
     s.role = "barre";
@@ -375,16 +413,19 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
   // 0,34 interligne sur les pages du 30/09), mais une ligature qui finit
   // 0,72 interligne avant la hampe du groupe suivant ne la prend pas
   // (mélodie du 30/09, 3ᵉ ligne) : on tolère 0,55 interligne.
-  const touche = (s, h, tolerance) => {
+  // `contact` : de combien la ligature s'arrête avant la hampe (dx, 0 si elle
+  // passe au-dessus) et à quelle distance elle passe de son bout (dv).
+  const contact = (s, h) => {
     const x = h.bout[0];
-    if (x < Math.min(s.a[0], s.b[0]) - 0.55 * il || x > Math.max(s.a[0], s.b[0]) + 0.55 * il) return false;
+    const [sx0, sx1] = [Math.min(s.a[0], s.b[0]), Math.max(s.a[0], s.b[0])];
+    const dx = x < sx0 ? sx0 - x : x > sx1 ? x - sx1 : 0;
     const yl = yA(s.a, s.b, x);
     const sens = Math.sign(h.pied[1] - h.bout[1]) || 1;
     const y0 = h.bout[1], y1 = h.bout[1] + sens * Math.min(1.8 * il, dist(h.bout, h.pied));
     const bas = Math.min(y0, y1), haut = Math.max(y0, y1);
-    const d = yl < bas ? bas - yl : yl > haut ? yl - haut : 0;
-    return d < tolerance;
+    return { dx, dv: yl < bas ? bas - yl : yl > haut ? yl - haut : 0 };
   };
+  const touche = (s, h, tolerance) => { const c = contact(s, h); return c.dx <= 0.55 * il && c.dv < tolerance; };
   const ligatures = [];
   const candidatsLig = segments.filter((s) => !s.role && s.ang <= 60 && s.lg >= 0.7 * il);
   for (const s of candidatsLig) {
@@ -405,16 +446,24 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     }
   }
   // Niveau de ligature de chaque hampe : 1 = croches, 2 = doubles croches.
-  // Deux ligatures qui croisent la hampe au même endroit sont un seul niveau.
   for (const h of hampes) {
-    const niveaux = [];
-    for (const l of ligatures.filter((l) => l.hampes.includes(h))) {
-      const y = yA(l.seg.a, l.seg.b, h.bout[0]);
-      const le = Math.abs(y - h.bout[1]);
-      if (!niveaux.some((n) => Math.abs(n - le) < 0.45 * il)) niveaux.push(le);
-    }
     h.ligatures = ligatures.filter((l) => l.hampes.includes(h));
-    h.niveaux = niveaux.length;
+    h.niveaux = niveauxDe(h, h.ligatures, il);
+  }
+  // Ligatures au ras d'une hampe (L2). Sur ta mélodie, deux ligatures
+  // s'arrêtent à 0,47 et 0,48 interligne d'une hampe, pour une tolérance de
+  // 0,55 : la note est lue liée (croche), mais l'image montre peut-être une
+  // noire. Entre 0,3 et 0,7 interligne, la lecture est gardée et devient une
+  // question (« Croche liée ou noire ? »), avec l'autre durée en réponse.
+  for (const h of hampes) {
+    for (const l of ligatures) {
+      const { dx, dv } = contact(l.seg, h);
+      if (l.hampes.includes(h)) {
+        if (dx >= MARGES.ligature[0] * il && (!h.limiteLigature || dx > h.limiteLigature.ecart)) h.limiteLigature = { ecart: dx, lue: "liee", ligature: l };
+      } else if (!h.ligatures.length && dx > 0.55 * il && dx <= MARGES.ligature[1] * il && dv < 0.8 * il) {
+        if (!h.limiteLigature || dx < h.limiteLigature.ecart) h.limiteLigature = { ecart: dx, lue: "seule", ligature: l };
+      }
+    }
   }
   // Groupe de ligature : les hampes reliées, de proche en proche.
   const groupe = new Map();
@@ -583,14 +632,18 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
   // Une tête sans hampe ni ligne supplémentaire, à plus d'un interligne de la portée : on la garde, mais on le demande.
   for (const t of seules) if (!texte.has(t) && horsBande(t) > 1.2) t.loin = true;
 
-  // Zone d'en-tête de chaque portée (armure, chiffrage) : avant la première note ou barre.
+  // Zone d'en-tête de chaque portée (armure, chiffrage) : avant la première
+  // note ou barre, et jamais plus de 9 interlignes après la clé imprimée
+  // (sept dièses et un chiffrage y tiennent). Sans cette borne, une ligne dont
+  // aucune tête n'était lue devenait tout entière un « en-tête », sans un doute.
+  const finEnTete = (cal.x_apres_cle ?? cal.x_debut + 3.2 * il) + 9 * il;
   const debutMusique = portees.map((p) => {
     const xs = [
       ...hampes.filter((h) => h.tetes[0].portee === p.index).map((h) => Math.min(h.x, ...h.tetes.map((t) => t.x0))),
       ...tetes.filter((t) => t.portee === p.index).map((t) => t.x0),
       ...barres.filter((b) => b.portee === p.index).map((b) => b.x),
     ];
-    return xs.length ? Math.min(...xs) - 0.3 * il : Infinity;
+    return Math.min(xs.length ? Math.min(...xs) - 0.3 * il : Infinity, finEnTete);
   });
 
   const remplaces = [];
@@ -600,7 +653,10 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     g.portee = p.index;
     if (g.partiel) { g.nature = "reste"; continue; }
     const forme = formeAlteration(g, il);
-    if (g.x1 < debutMusique[p.index] && g.x0 > cal.x_debut) {
+    // Une hampe sans tête n'est pas un signe d'en-tête : plus longue que les
+    // barres d'un dièse ou d'un bémol (2,7 interlignes au plus).
+    const longueHampe = hampeSeule(g, il) && g.h >= 2.8 * il;
+    if (g.x1 < debutMusique[p.index] && g.x0 > cal.x_debut && !longueHampe) {
       // Deux dièses d'armure qui se touchent ne font qu'un signe de huit
       // traits, qui n'était ni un dièse ni rien : la ligne passait en do (L10).
       const dieses = !forme ? separerDieses(g, il) : null;
@@ -731,6 +787,16 @@ function separerDieses(g, il) {
 // Formes des signes
 // ------------------------------------------------------------------------
 
+/** Combien de niveaux de ligature croisent une hampe : deux ligatures qui la croisent au même endroit sont un seul niveau. */
+function niveauxDe(h, ligatures, il) {
+  const niveaux = [];
+  for (const l of ligatures) {
+    const le = Math.abs(yA(l.seg.a, l.seg.b, h.bout[0]) - h.bout[1]);
+    if (!niveaux.some((n) => Math.abs(n - le) < 0.45 * il)) niveaux.push(le);
+  }
+  return niveaux.length;
+}
+
 /** Deux tracés se touchent-ils (à `tol` près) ? On compare des points pris le long de chacun. */
 function seTouchent(a, b, tol) {
   const echantillon = (pts) => (pts.length <= 60 ? pts : pts.filter((_, i) => i % Math.ceil(pts.length / 60) === 0));
@@ -832,7 +898,9 @@ function formeAlteration(g, il) {
  * allers-retours d'un dixième d'interligne pour les soupirs.
  */
 function typeSilence(g, il, tetesPortee) {
-  if (g.partiel || (g.membres && g.membres.length > 2)) return null;
+  // D'un seul trait, comme tous tes silences : deux traits qui se touchent (une
+  // hampe sans tête et un reste de tête) faisaient un demi-soupir en silence.
+  if (g.partiel || (g.membres && g.membres.length > 1)) return null;
   const loinDesTetes = !tetesPortee.some((t) => Math.abs(t.cx - g.cx) < 0.8 * il && Math.abs(t.cy - g.cy) < 2 * il);
   if (!loinDesTetes) return null;
   const droit = dist(g.points[0], g.points[g.points.length - 1]) / Math.max(g.longueur, 1);
@@ -911,7 +979,57 @@ export function assembler(lue, cal) {
     const barre = barres.find((b) => b.portee === p.index && Math.abs(b.x - g.cx) < 1.5 * il && g.cy > p.haut && g.cy < p.bas);
     if (barre) { pointsReprise.push({ barre, cote: g.cx < barre.x ? "gauche" : "droite" }); g.nature = "point-reprise"; continue; }
     const ev = parPortee[p.index].find((e) => e.type === "note" && e.tetes.some((t) => g.cx - t.cx > 0.4 * il && g.cx - t.cx < 2.2 * il && Math.abs(g.cy - t.cy) < 0.8 * il));
-    if (ev) { ev.points = 1; g.nature = "point-duree"; }
+    if (ev) {
+      ev.points = 1; g.nature = "point-duree";
+      // Loin de sa tête (au-delà de 1,9 interligne) : pointée de justesse (L2).
+      if (ev.tetes.every((t) => g.cx - t.cx > MARGES.point[0] * il)) ev.limitePoint = { lue: "pointee", signe: g };
+      continue;
+    }
+    // Un point un peu trop loin pour compter : la note n'est pas pointée, de justesse.
+    const loin = parPortee[p.index].find((e) => e.type === "note" && !e.points && e.tetes.some((t) => g.cx - t.cx >= 2.2 * il && g.cx - t.cx < MARGES.point[1] * il && Math.abs(g.cy - t.cy) < 0.8 * il));
+    if (loin) loin.limitePoint = { lue: "sans", signe: g };
+  }
+
+  // Décisions limites (L2) : la lecture est gardée, l'autre lecture devient
+  // une réponse fermée (`alternative`, écrite comme un geste d'edition.js :
+  // une durée en croches, un pas plus haut ou plus bas, une note à enlever).
+  // partition.js s'en sert aussi pour trancher par la mesure (L15).
+  const avecPoint = (e, d) => d * (e.points ? 1.5 : 1);
+  for (const e of parPortee.flat()) {
+    if (e.type !== "note") continue;
+    [...e.tetes].sort((a, b) => a.pas - b.pas).forEach((t, k) => {
+      if (Math.abs(t.ecart) < MARGES.hauteur) return;
+      const sens = t.ecart > 0 ? 1 : -1;
+      const nom = (pas) => { const n = nomDePas(portees[t.portee], pas); return NOMS_FR[NOMS.indexOf(n.lettre)]; };
+      doutes.push(doute(lue, t.portee, t, `Tête entre deux places : lue ${nom(t.pas)}, presque ${nom(t.pas + sens)}.`,
+        { type: "hauteur", _ev: e, alternative: { note: k, pas: sens }, ecart: Math.round(Math.abs(t.ecart) * 100) / 100 }));
+    });
+    const h = e.hampe;
+    if (h && h.limiteLigature) {
+      const lim = h.limiteLigature;
+      const niveaux = lim.lue === "liee" ? niveauxDe(h, h.ligatures.filter((l) => l !== lim.ligature), il) : h.niveaux + 1;
+      const drapeaux = Math.max(h.crochets, niveaux);
+      const alt = avecPoint(e, !e.tetes[0].pleine ? 4 : drapeaux >= 2 ? 0.5 : drapeaux === 1 ? 1 : 2);
+      if (Math.abs(alt - avecPoint(e, e.duree)) > 1e-6) {
+        const b = { x0: Math.min(h.x, lim.ligature.seg.a[0], lim.ligature.seg.b[0]) - 0.2 * il, x1: Math.max(h.x, lim.ligature.seg.a[0], lim.ligature.seg.b[0]) + 0.2 * il,
+          y0: Math.min(h.bout[1], lim.ligature.seg.a[1], lim.ligature.seg.b[1]) - 0.3 * il, y1: Math.max(h.bout[1], lim.ligature.seg.a[1], lim.ligature.seg.b[1]) + 0.3 * il };
+        doutes.push(doute(lue, e.tetes[0].portee, b, lim.lue === "liee"
+          ? "La ligature s'arrête juste avant la queue de cette note : lue liée."
+          : "La ligature s'arrête juste avant la queue de cette note : lue seule.",
+        { type: "ligature", lue: lim.lue, _ev: e, alternative: { croches: alt }, ecart: Math.round((lim.ecart / il) * 100) / 100 }));
+      }
+    }
+    const t0 = e.tetes[0];
+    if (e.tetes.length === 1 && t0.pleine && t0.rapport < MARGES.rapportTete) {
+      doutes.push(doute(lue, t0.portee, t0, "Une tête de justesse : ce gribouillis est peut-être un trait.", { type: "tete", _ev: e, alternative: { supprimer: true } }));
+    }
+    if (e.limitePoint) {
+      const g = e.limitePoint.signe;
+      const alt = e.points ? e.duree : e.duree * 1.5;
+      doutes.push(doute(lue, t0.portee, { x0: Math.min(t0.x0, g.x0), y0: Math.min(t0.y0, g.y0), x1: Math.max(t0.x1, g.x1), y1: Math.max(t0.y1, g.y1) },
+        e.points ? "Un point loin de sa note : lu comme pointée." : "Un point un peu loin de sa note : pas compté.",
+        { type: "point", lue: e.limitePoint.lue, _ev: e, alternative: { croches: alt } }));
+    }
   }
 
   // Altérations accidentelles.
@@ -1011,6 +1129,13 @@ export function assembler(lue, cal) {
     return { bemols, dieses, chiffrage: chiffres.length > 0, chiffres };
   });
 
+  // Plus de quatre signes inconnus en tête de ligne : ce n'est plus un
+  // chiffrage (« 12/8 » en fait trois). On les montre plutôt que de les taire.
+  for (const p of portees) {
+    const inconnus = signes.filter((g) => g.portee === p.index && g.nature === "entete");
+    if (inconnus.length > 4) for (const g of inconnus) doutes.push(doute(lue, p.index, g, "Signe au début de la ligne, ni armure ni chiffrage : ignoré.", { type: "signe" }));
+  }
+
   // Une hampe sans tête (L8) : la note manque peut-être. Le doute vise la
   // note d'avant sur la même portée (« Je corrige moi-même » la choisit).
   for (const g of signes.filter((g) => g.nature === "hampe-seule")) {
@@ -1041,7 +1166,8 @@ export function assembler(lue, cal) {
     if (vuesDouteuses.has(g.hampeDouteuse)) continue;
     vuesDouteuses.add(g.hampeDouteuse);
     const ev = parPortee.flat().find((e) => e.type === "note" && e.hampe === g.hampeDouteuse);
-    doutes.push(doute(lue, g.hampeDouteuse.tetes[0].portee, g, "Petit trait au bout de la hampe : lu comme une noire. Si c'est un crochet, la note est une croche.", { type: "crochet", _ev: ev }));
+    doutes.push(doute(lue, g.hampeDouteuse.tetes[0].portee, g, "Petit trait au bout de la hampe : lu comme une noire. Si c'est un crochet, la note est une croche.",
+      { type: "crochet", _ev: ev, ...(ev ? { alternative: { croches: avecPoint(ev, 1) } } : {}) }));
   }
 
   return { parPortee, entetes, doutes };

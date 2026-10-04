@@ -26,8 +26,11 @@ function repondre(abc, doutes, i, id) {
 
 test("la lecture dit où est chaque doute dans l'ABC, sans changer l'ABC", async () => {
   const r = await lireFichier(MELODIE);
-  assert.deepEqual(r.doutes.map((d) => d.type), ["crochet", "mesure"]);
-  const [crochet, mesure] = r.doutes;
+  // Dans l'ordre de la page. Depuis le 04/10 (L2), une ligature qui s'arrête au
+  // ras d'une hampe et une tête entre deux places sont aussi des questions.
+  assert.deepEqual(r.doutes.map((d) => d.type), ["crochet", "ligature", "mesure", "hauteur", "hauteur", "ligature"]);
+  assert.deepEqual(r.doutes.map((d) => d.id), ["d1", "d2", "d3", "d4", "d5", "d6"]);
+  const [crochet, , mesure] = r.doutes;
   assert.equal(r.abc.slice(crochet.cible.debut, crochet.cible.fin), "c2");
   assert.equal(r.abc.slice(mesure.cible.debut, mesure.cible.fin), "c2 c edc g2 z GG");
   // La levée (le sol seul, devant la reprise) n'est pas une mesure : la mesure
@@ -55,18 +58,18 @@ test("répondre « croche » puis « ajouter un silence » : la note change, la 
   assert.equal(abc.length, r.abc.length - 1);
   assert.equal(noteVisee(doutes[0], abc) && abc.slice(doutes[0].vise.debut, doutes[0].vise.fin), "c"); // la même note, devenue croche
   // Le doute de la mesure vise toujours sa mesure, décalée d'un caractère.
-  assert.equal(abc.slice(doutes[1].vise.debut, doutes[1].vise.fin), "c2 c edc g2 z GG");
+  assert.equal(abc.slice(doutes[2].vise.debut, doutes[2].vise.fin), "c2 c edc g2 z GG");
 
-  const q = poser(doutes[1], abc);
+  const q = poser(doutes[2], abc);
   assert.equal(q.titre, "Il manque une croche");
   assert.equal(q.detail, "Ligne 2, 2ᵉ mesure : j'en compte 11 au lieu de 12."); // la levée ne compte pas
   assert.deepEqual(q.reponses.map((x) => x.texte), ["Ajouter un silence", "Allonger la dernière note"]);
   assert.ok(q.voulu && q.manuel);
 
-  abc = repondre(abc, doutes, 1, "silence");
-  assert.equal(abc.slice(doutes[1].vise.debut, doutes[1].vise.fin), "c2 c edc g2 z GG z");
-  assert.equal(total(doutes[1], abc), 12);
-  assert.equal(poser(doutes[1], abc).titre, "La mesure est complète");
+  abc = repondre(abc, doutes, 2, "silence");
+  assert.equal(abc.slice(doutes[2].vise.debut, doutes[2].vise.fin), "c2 c edc g2 z GG z");
+  assert.equal(total(doutes[2], abc), 12);
+  assert.equal(poser(doutes[2], abc).titre, "La mesure est complète");
   const [tune] = abcjs.parseOnly(abc);
   assert.equal((tune.warnings || []).length, 0);
 });
@@ -74,11 +77,11 @@ test("répondre « croche » puis « ajouter un silence » : la note change, la 
 test("« allonger la dernière note » complète aussi la mesure, et « raccourcir » en retire une", async () => {
   const r = await lireFichier(MELODIE);
   const doutes = preparerDoutes(r.doutes);
-  const abc = repondre(r.abc, doutes, 1, "allonger");
-  assert.equal(abc.slice(doutes[1].vise.debut, doutes[1].vise.fin), "c2 c edc g2 z GG2"); // le dernier G, collé au premier, passe de 1 à 2
-  assert.equal(total(doutes[1], abc), 12);
+  const abc = repondre(r.abc, doutes, 2, "allonger");
+  assert.equal(abc.slice(doutes[2].vise.debut, doutes[2].vise.fin), "c2 c edc g2 z GG2"); // le dernier G, collé au premier, passe de 1 à 2
+  assert.equal(total(doutes[2], abc), 12);
   // Une mesure de trop : on raccourcit la dernière note.
-  const trop = preparerDoutes([{ ...r.doutes[1] }]);
+  const trop = preparerDoutes([{ ...r.doutes[2] }]);
   const abcTrop = r.abc.replace("z GG", "z GG3"); // 13 croches
   suivre(trop, { de: trop[0].vise.fin, a: trop[0].vise.fin, longueur: 1 }); // le « 3 » écrit à la fin de la mesure
   const q = poser(trop[0], abcTrop);
@@ -100,7 +103,7 @@ test("répondre « noire » ne change pas l'ABC ; défaire une note ôte les ré
   assert.deepEqual([q.reponses.length, q.manuel], [0, true]);
   assert.equal(q.titre, "Croche ou noire ?");
   // L'autre doute a suivi.
-  assert.equal(res.abc.slice(sans[1].vise.debut, sans[1].vise.fin), "c2 c edc g2 z GG");
+  assert.equal(res.abc.slice(sans[2].vise.debut, sans[2].vise.fin), "c2 c edc g2 z GG");
 });
 
 test("suivre les corrections : une note ne s'étend pas à ses voisines, une mesure grandit à ses bords", () => {
@@ -121,7 +124,8 @@ test("suivre les corrections : une note ne s'étend pas à ses voisines, une mes
 
 test("les anciens doutes, sans type ni cible : la question se pose, mais sans réponse fermée", async () => {
   const r = await lireFichier(MELODIE);
-  const anciens = r.doutes.map(({ message, page, portee, boite }) => ({ message, page, portee, boite, leve: false }));
+  // Une partition lue avant le 02/10 : ses seuls doutes étaient le crochet et la mesure, sans type ni cible.
+  const anciens = r.doutes.filter((d) => ["crochet", "mesure"].includes(d.type)).map(({ message, page, portee, boite }) => ({ message, page, portee, boite, leve: false }));
   assert.deepEqual(anciens.map(typeDe), ["crochet", "mesure"]);
   const q = poser(anciens[1], r.abc);
   assert.equal(q.titre, "Il manque une croche");

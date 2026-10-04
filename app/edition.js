@@ -120,6 +120,21 @@ export function deplacer(abc, j, pas) {
   return remplacer(abc, j, { ...j, notes });
 }
 
+/**
+ * Une seule note d'un accord (la `k`-ième, de la plus grave à la plus aiguë,
+ * comme l'ABC les écrit) monte ou descend : la réponse à « la ou sol ? » sur
+ * une tête d'accord. Pour une note seule, c'est `deplacer`.
+ */
+export function deplacerNote(abc, j, k, pas) {
+  if (j.type === "silence" || !pas || !j.notes[k]) return null;
+  const notes = j.notes.map((n, i) => {
+    if (i !== k) return n;
+    const rang = n.octave * 7 + LETTRES.indexOf(n.lettre) + pas;
+    return { alteration: "", lettre: LETTRES[((rang % 7) + 7) % 7], octave: Math.floor(rang / 7) };
+  });
+  return remplacer(abc, j, { ...j, notes });
+}
+
 /** Nouvelle durée, en croches ; garde le point si la note en avait un. */
 export function changerDuree(abc, j, croches) {
   const pointee = estPointee(j.croches);

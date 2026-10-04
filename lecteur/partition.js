@@ -326,6 +326,7 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
         if (ecart) {
           const rang = i + 1 - decalage;
           const lieu = rang > 0 ? `${rang}ᵉ mesure` : "levée";
+          const propositions = trancher(mes, m, doutes);
           doutes.push({
             type: "mesure", page: sys.page, portee: v.portee.index, mesure: numeroMesure + i - decalage,
             // Pour poser la question : où (ligne, main, rang dans la ligne) et combien de croches.
@@ -333,6 +334,7 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
             boite: boiteMesure(mes, v.portee, cal),
             message: `Ligne ${n + 1}${piano ? (iv ? ", main gauche" : ", main droite") : ""}, ${lieu} : ${temps(mes.duree)} au lieu de ${temps(m.croches)}.`,
             _mes: mes,
+            ...(propositions.length ? { propositions } : {}),
           });
         }
       });
@@ -382,6 +384,13 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
   ];
   const abc = [...entete, ...lignes].join("\n");
 
+  // Les doutes dans l'ordre de la page (page, ligne, de gauche à droite),
+  // chacun avec son numéro : c'est l'ordre où l'atelier les pose, et les
+  // propositions d'une mesure nomment les doutes qu'elles règlent.
+  const systemeDePortee = new Map(lues.flatMap((l) => l.portees.map((p) => [p.index, p.systeme])));
+  doutes.sort((a, b) => (a.page - b.page) || (systemeDePortee.get(a.portee) - systemeDePortee.get(b.portee)) || ((a.boite ? a.boite.x0 : 0) - (b.boite ? b.boite.x0 : 0)) || (a.portee - b.portee));
+  doutes.forEach((d, i) => { d.id = `d${i + 1}`; });
+
   // Où tombe chaque doute dans l'ABC (début et fin du jeton ou de la mesure).
   // C'est ce qui permet à l'atelier de poser une question fermée et d'appliquer
   // la réponse sur la bonne note ; l'ABC, lui, n'en dépend pas.
@@ -403,10 +412,66 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
       const s = d._section.systemes;
       d.cibleLigne = lignesDe(s[0].premiereLigne, s[s.length - 1].derniereLigne);
     }
+    // Les propositions d'une mesure : la place de chaque note à changer, et les doutes qu'elles règlent.
+    for (const p of d.propositions || []) {
+      for (const c of p.changements) {
+        c.cible = absolu(c._ev.place);
+        if (c._evFin) c.cible = { debut: c.cible.debut, fin: absolu(c._evFin.place).fin };
+        if (c._doute) c.doute = c._doute.id;
+        delete c._ev; delete c._evFin; delete c._doute;
+      }
+      p.regle = p.changements.map((c) => c.doute).filter(Boolean);
+    }
     for (const k of ["_ev", "_evFin", "_mes", "_sys", "_section", "_hesitation", "_accord"]) delete d[k];
   }
 
   return { abc, doutes, lues, piano, nbSystemes: systemes.length };
+}
+
+const NOMS_DUREES = { 0.5: "double croche", 0.75: "double croche pointée", 1: "croche", 1.5: "croche pointée", 2: "noire", 3: "noire pointée", 4: "blanche", 6: "blanche pointée", 8: "ronde", 12: "ronde pointée" };
+const ordinal = (k) => (k === 1 ? "1ʳᵉ" : `${k}ᵉ`);
+
+/**
+ * Trancher par la mesure (L15). Les décisions limites (ligature ou crochet,
+ * point ou pas, tête ou trait) sont justement celles qu'une mesure fausse
+ * désigne : on essaie leurs autres lectures, seules ou deux à deux, et on
+ * garde celles qui complètent la mesure. En mesure simple, trois croches
+ * liées peuvent aussi être un triolet. Chaque proposition dit quelles notes
+ * changer (leur place deviendra leur `cible`) et quels doutes elle règle.
+ */
+function trancher(mes, m, doutes) {
+  const manque = m.croches - mes.duree;
+  const notes = mes.evs.filter((e) => e.type === "note");
+  const rang = (e) => ordinal(notes.indexOf(e) + 1);
+  const candidats = [];
+  for (const d of doutes) {
+    if (!d._ev || !d.alternative || !mes.evs.includes(d._ev)) continue;
+    const e = d._ev, avant = dureeEv(e), alt = d.alternative;
+    if (alt.croches !== undefined) candidats.push({ delta: alt.croches - avant, e, changement: { _ev: e, croches: alt.croches, _doute: d }, texte: `${rang(e)} note en ${NOMS_DUREES[alt.croches] || temps(alt.croches)}` });
+    else if (alt.supprimer) candidats.push({ delta: -avant, e, changement: { _ev: e, supprimer: true, _doute: d }, texte: `sans la ${rang(e)} note` });
+  }
+  if (!/\/8$/.test(m.m)) {
+    const groupes = new Map();
+    for (const e of notes) if (e.ligature !== null) (groupes.get(e.ligature) || groupes.set(e.ligature, []).get(e.ligature)).push(e);
+    for (const g of groupes.values()) {
+      if (g.length !== 3 || g.some((e) => Math.abs(dureeEv(e) - 1) > 1e-6)) continue;
+      const d = doutes.find((x) => x.type === "triolet" && x._ev === g[0]);
+      candidats.push({ delta: -1, e: g[0], changement: { _ev: g[0], _evFin: g[2], triolet: true, ...(d ? { _doute: d } : {}) }, texte: `triolet sur les ${rang(g[0])} à ${rang(g[2])} notes` });
+    }
+  }
+  const propositions = [];
+  const ajouter = (choix) => {
+    const texte = choix.map((c) => c.texte).join(", ");
+    propositions.push({ texte: texte.charAt(0).toUpperCase() + texte.slice(1), changements: choix.map((c) => ({ ...c.changement })) });
+  };
+  for (const a of candidats) if (Math.abs(a.delta - manque) < 1e-6) ajouter([a]);
+  for (let i = 0; i < candidats.length; i++) {
+    for (let j = i + 1; j < candidats.length; j++) {
+      const [a, b] = [candidats[i], candidats[j]];
+      if (a.e !== b.e && Math.abs(a.delta + b.delta - manque) < 1e-6) ajouter([a, b]);
+    }
+  }
+  return propositions.slice(0, 3);
 }
 
 function groupesLigatures(evs) {

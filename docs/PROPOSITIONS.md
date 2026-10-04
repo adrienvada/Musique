@@ -668,6 +668,54 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   double (le lecteur et `edition.js` n'importent rien l'un de l'autre :
   chacun doit tourner seul dans `dist/`) ; un test vérifie qu'ils écrivent
   la même chose.
+- **Une décision au ras d'un seuil devient une question (L2).** Le lecteur
+  garde sa lecture, mais la demande, avec l'autre lecture en réponse fermée
+  (`alternative`, écrite comme un geste d'`edition.js`) :
+  - « Croche liée ou noire ? » : une ligature qui s'arrête entre 0,3 et
+    0,7 interligne d'une hampe (la tolérance est 0,55). Ta mélodie en a
+    deux, à 0,47 : le 2ᵉ sol de « GG » et le do de « dedc », que l'audit
+    lisait comme des noires. La réponse coupe aussi la ligature dans l'ABC
+    (« G G2 », « ded c2 ») ;
+  - « La ou sol ? » : une tête à plus de 0,4 demi-interligne de sa place (0,5
+    la fait changer de note). Deux sur ta mélodie (la5 et sol5 de la
+    3ᵉ ligne, à 0,43), aucune sur le piano ;
+  - « Une note ou un trait ? » (un gribouillis tout juste assez long pour une
+    tête) et « Pointée ou pas ? » (un point à la limite de sa distance).
+  - Pourquoi ces bornes : réglées sur tes deux pages et sur 100 pages
+    perturbées par niveau (bruit, rotation, pente, espacement). À 0,35, ta
+    mélodie avait 9 doutes et le piano 1 ; à 0,46, des notes du piano
+    basculaient de nouveau en silence. À 0,4, plus aucune lecture ne change
+    en silence au niveau 1 (avant : 9 % sur la mélodie, 7 % sur le piano),
+    1 % au niveau 2 (6 % et 13 %). Elles sont rangées dans `MARGES`
+    (`lecteur.js`), avec ces raisons.
+  - La largeur minimale d'une tête passe de 0,35 à 0,25 interligne (une de
+    tes têtes en fait 0,353, et c'est elle qui faisait changer 42 relectures
+    sur 100) ; pour qu'un point ne devienne jamais une tête, une tête mesure
+    au moins 0,45 interligne dans un sens. Une barre de mesure doit aller
+    près des deux lignes extérieures, et un silence est d'un seul trait : une
+    hampe sans tête devenait une barre ou un demi-soupir.
+  - Tes deux pages se lisent comme avant ; la mélodie a maintenant 6 doutes
+    (2 avant), dans l'ordre de la page, chacun avec un numéro (`id`).
+- **Trancher par la mesure (L15).** Quand une mesure ne tombe pas juste, le
+  lecteur essaie les autres lectures de ses décisions limites, seules ou
+  deux à deux (et, en mesure simple, un triolet sur trois croches liées), et
+  propose en réponses fermées celles qui la complètent (« 4ᵉ note en
+  croche »). Chaque proposition dit quelles notes changer (leur `cible`) et
+  quels doutes elle règle (`regle`).
+- **Les doutes de mesure se recalculent après chaque geste (L13).**
+  `recalculerDoutes(doutes, abc)` (`doutes.js`, pure) relit les mesures de
+  l'ABC d'aujourd'hui avec les règles du lecteur et ajoute un doute à chaque
+  mesure fausse qu'aucun doute ne vise encore, avec ses propositions. Sur ta
+  mélodie : répondre « Croche » au doute du crochet fait tomber la mesure à
+  11 croches ; le nouveau doute le dit, et propose « 8ᵉ note en noire » (le
+  2ᵉ sol de « GG ») ; les deux réponses donnent la lecture de l'audit
+  (« c2 c edc g2 G G2 G »). L'atelier doit l'appeler après chaque geste
+  (lot atelier).
+- **Lecture reproductible (L14, L18).** Sur tes deux pages, la lecture ne
+  change plus quelle que soit la phase de l'arrondi au demi-pixel, ni en
+  déplaçant toute la page de ±0,1 px (des tests le vérifient). Les doutes de
+  marge, eux, peuvent apparaître ou disparaître au ras de leur propre seuil :
+  c'est leur nature.
 
 ### Connecteur (S3 à S5, C1 à C6)
 
@@ -1017,8 +1065,12 @@ ou supprimer la fonction dans Supabase.
   `tests/lecteur.test.mjs` dans le même commit.
 - **Traits arrondis au demi-pixel par le connecteur.** Des seuils trop justes
   font basculer une lecture (une ligature à 0,80 interligne, deux bémols
-  fusionnés). Le test « arrondir les traits » garde la lecture identique pour
-  des pas de 0 à 1 px.
+  fusionnés). L'ancien test « arrondir les traits » ne le vérifiait que pour
+  un arrondi sans décalage : avec une autre phase, la mélodie se relisait
+  autrement 42 fois sur 100 (audit du 04/10). Le lecteur arrondit maintenant
+  lui-même (`lecteur/traits.js`), et un test vérifie la lecture pour 36
+  phases sur tes deux pages. Un réglage qui rapproche une décision d'un seuil
+  le fera échouer : c'est voulu.
 - **Le projet Supabase gratuit s'endort** après une semaine sans requête. Le
   connecteur répond alors « ne répond pas » : relancer le projet depuis le
   tableau de bord.

@@ -110,13 +110,15 @@ test("un triolet ne donne plus 9/8 : il est demandé, et la réponse complète l
   pg.bas(470, 5); pg.hampe(pg.teteVide(600, 5), "bas"); pg.barre(740);
   const r = lirePages(f, pg);
   assert.equal(r.abc, "M:4/4 K:C | GAB c2 c4 |");
-  assert.deepEqual(r.doutes.map((d) => d.type), ["triolet", "mesure"]);
+  assert.deepEqual(r.doutes.map((d) => d.type), ["mesure", "triolet"]);
+  // La mesure de 9 croches propose elle aussi le triolet (L15), et dit qu'il règle le doute du « 3 ».
+  assert.deepEqual(r.doutes[0].propositions.map((p) => [p.texte, p.regle]), [["Triolet sur les 1ʳᵉ à 3ᵉ notes", ["d2"]]]);
   const doutes = preparerDoutes(r.r.doutes);
-  const q = poser(doutes[0], r.r.abc);
+  const q = poser(doutes[1], r.r.abc);
   assert.equal(q.titre, "Un triolet ?");
   const res = q.reponses.find((x) => x.id === "triolet").geste(r.r.abc);
   suivre(doutes, res.modif);
   assert.equal(corps(res.abc), "(3GAB c2 c4 |");
-  assert.equal(jetonsDeLaMesure(doutes[1], res.abc).reduce((t, j) => t + j.duree, 0), 8);
-  assert.equal(poser(doutes[1], res.abc).titre, "La mesure est complète");
+  assert.equal(jetonsDeLaMesure(doutes[0], res.abc).reduce((t, j) => t + j.duree, 0), 8);
+  assert.equal(poser(doutes[0], res.abc).titre, "La mesure est complète");
 });

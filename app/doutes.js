@@ -206,8 +206,164 @@ const somme = (jetons) => jetons.reduce((t, j) => t + (j.duree ?? j.croches), 0)
 export function cibleVisible(d, abc) {
   const t = typeDe(d);
   if (t === "mesure" || t === "triolet") return jetonsDeLaMesure(d, abc) ? { ...d.vise, genre: "mesure" } : null;
-  if (["crochet", "sans-hampe", "tete-manquante"].includes(t) || (t === "armure" && d.variante === "premiere-note")) return noteVisee(d, abc) ? { ...d.vise, genre: "note" } : null;
+  if (["crochet", "sans-hampe", "tete-manquante", "ligature", "hauteur", "tete", "point"].includes(t) || (t === "armure" && d.variante === "premiere-note")) return noteVisee(d, abc) ? { ...d.vise, genre: "note" } : null;
   return null;
+}
+
+// ------------------------------------------------------------------------
+// Recalculer les doutes de mesure sur l'ABC d'aujourd'hui (L13)
+// ------------------------------------------------------------------------
+
+/** La durée d'une mesure (en croches, L:1/8) d'après un chiffrage écrit, ou null. */
+function crochesDe(m) {
+  if (m === "C" || m === "C|") return 8;
+  const x = /^(\d+)\/(\d+)$/.exec(m || "");
+  return x ? (Number(x[1]) * 8) / Number(x[2]) : null;
+}
+
+/**
+ * Les mesures de l'ABC d'aujourd'hui, voix par voix : où elles sont, ce
+ * qu'elles durent (triolets compris), si une barre les ferme, et ce qu'elles
+ * devraient durer d'après le chiffrage en vigueur. Une mesure qui contient
+ * autre chose que des notes, des silences, des liaisons et des triolets est
+ * « illisible » : on n'en dit rien (le mode avancé permet tout).
+ */
+export function mesuresDeLAbc(abc) {
+  const sortie = [];
+  let p = 0, systeme = 0, voixAvant = null, metreEnTete = "none";
+  const metres = new Map(); // voix → chiffrage en vigueur
+  const BARRE = /^(:*\|+\]?:*|::|:+)/;
+  for (const texte of abc.split("\n")) {
+    const debutLigne = p;
+    p += texte.length + 1;
+    const h = /^M:\s*(\S+)/.exec(texte);
+    if (h) { metreEnTete = h[1]; continue; }
+    if (/^[A-Za-z]:|^%/.test(texte) || !texte.trim()) continue;
+    const v = /^\[V:\s*([^\]\s]+)\]\s*/.exec(texte);
+    const voix = v ? v[1] : "1";
+    // Un nouveau système commence à chaque ligne de la première voix.
+    if (!v || voixAvant === null || voix <= voixAvant) systeme++;
+    voixAvant = voix;
+    let pos = v ? v[0].length : 0, rang = 0, triolet = 0, section = false;
+    let courante = null;
+    const fermer = (fermee, reprise) => {
+      if (courante && courante.jetons) sortie.push({ ...courante, fermee, reprise });
+      courante = null;
+    };
+    while (pos < texte.length) {
+      const c = texte[pos];
+      if (c === " " || c === "-") { pos++; continue; }
+      const champ = /^\[([A-Za-z]):([^\]]*)\]/.exec(texte.slice(pos));
+      if (champ) {
+        if (champ[1] === "M") { metres.set(voix, champ[2].trim()); if (!courante) section = true; }
+        pos += champ[0].length;
+        continue;
+      }
+      const barre = BARRE.exec(texte.slice(pos));
+      if (barre) { fermer(true, /^:/.test(barre[0])); pos += barre[0].length; continue; }
+      if (texte.startsWith("(3", pos)) { triolet = 3; pos += 2; continue; }
+      if (!courante) {
+        rang++;
+        const m = metres.get(voix) || metreEnTete;
+        courante = { voix, systeme, rang, debut: debutLigne + pos, fin: debutLigne + pos, croches: 0, jetons: 0, lisible: true, metre: m, attendu: crochesDe(m), invisible: true, section };
+        section = false;
+      }
+      const j = ed.lireJeton(abc, debutLigne + pos);
+      if (!j || j.fin <= debutLigne + pos) { courante.lisible = false; pos++; continue; }
+      courante.croches += triolet ? (j.croches * 2) / 3 : j.croches;
+      if (triolet) triolet--;
+      courante.jetons++;
+      if (!j.invisible) courante.invisible = false;
+      courante.fin = j.fin;
+      pos = j.fin - debutLigne;
+    }
+    fermer(false, false);
+  }
+  return sortie;
+}
+
+/**
+ * Les doutes de mesure, recalculés après un geste (L13). Après la bonne
+ * réponse à un doute, une mesure pouvait tomber à 11 croches sans que rien ne
+ * le dise : la lecture ne pose ses doutes qu'une fois. Cette fonction relit les
+ * mesures de l'ABC d'aujourd'hui avec les règles du lecteur (levée en tête de
+ * pièce ou de section, dernière mesure qui complète la levée ou reste
+ * inachevée) et ajoute un doute pour chaque mesure fausse qu'aucun doute de
+ * mesure ne vise encore. Il propose les autres lectures des doutes de marge
+ * encore ouverts dans la mesure (L15). Pure : les doutes reçus ne changent
+ * pas ; la liste rendue les reprend, suivis des nouveaux.
+ */
+export function recalculerDoutes(doutes, abc) {
+  const mesures = mesuresDeLAbc(abc).filter((m) => !m.invisible);
+  const nouveaux = [];
+  const voix = [...new Set(mesures.map((m) => m.voix))];
+  const piano = voix.length > 1;
+  const numero = doutes.reduce((n, d) => Math.max(n, Number((/^r(\d+)$/.exec(d.id || "") || [])[1] || 0)), 0);
+  for (const v of voix) {
+    const ms = mesures.filter((m) => m.voix === v);
+    let levee = 0;
+    ms.forEach((m, k) => {
+      if (!m.lisible || !m.attendu) return;
+      // Une mesure courte en tête de pièce ou de section est la levée. Le lecteur
+      // demandait aussi qu'une mesure complète la suive ; ici, c'est souvent
+      // cette mesure-là que le geste vient de changer : c'est elle qui a le doute.
+      const enTete = k === 0 || m.section;
+      if (enTete) {
+        if (m.croches < m.attendu - 1e-6 && ms.length > 1) { levee = m.croches; m.levee = true; return; }
+        levee = 0;
+      }
+      const derniere = k === ms.length - 1;
+      if ((m.reprise || derniere) && levee && Math.abs(m.croches + levee - m.attendu) < 1e-6) return;
+      if (derniere && !m.fermee && m.croches < m.attendu) return;
+      if (Math.abs(m.croches - m.attendu) < 1e-6) return;
+      if (doutes.some((d) => typeDe(d) === "mesure" && d.vise && d.vise.debut < m.fin && d.vise.fin > m.debut)) return;
+      // La place sur la page : celle d'un doute dont la note est dans cette mesure (souvent celui qu'on vient de régler).
+      const voisin = doutes.find((d) => d.vise && d.boite && d.vise.debut >= m.debut && d.vise.fin <= m.fin);
+      const ligne = mesures.filter((x) => x.systeme === m.systeme && x.voix === v);
+      const rang = ligne.filter((x) => !x.levee).indexOf(m) + 1;
+      const main = piano ? (v === voix[0] ? "droite" : "gauche") : null;
+      const d = {
+        id: `r${numero + nouveaux.length + 1}`, type: "mesure", origine: "recalcul",
+        page: voisin ? voisin.page : 1, portee: voisin ? voisin.portee : 0, boite: voisin ? voisin.boite : null,
+        ligne: m.systeme, ...(main ? { main } : {}), rang, trouve: m.croches, attendu: m.attendu,
+        message: `Ligne ${m.systeme}${main ? `, main ${main}` : ""}, ${rang}ᵉ mesure : ${nb(m.croches)} croche${m.croches > 1 ? "s" : ""} au lieu de ${nb(m.attendu)} croche${m.attendu > 1 ? "s" : ""}.`,
+        cible: null, vise: { debut: m.debut, fin: m.fin }, leve: false,
+      };
+      const propositions = proposerPourMesure(doutes, abc, m);
+      if (propositions.length) d.propositions = propositions;
+      nouveaux.push(d);
+    });
+  }
+  return [...doutes, ...nouveaux];
+}
+
+/** Trancher par la mesure (L15), sur l'ABC d'aujourd'hui : les doutes de marge ouverts dans la mesure `m`. */
+function proposerPourMesure(doutes, abc, m) {
+  const manque = m.attendu - m.croches;
+  const jetons = jetonsEntre(abc, m.debut, m.fin) || [];
+  const notes = jetons.filter((j) => j.type !== "silence");
+  const rang = (vise) => { const k = notes.findIndex((j) => j.debut === vise.debut) + 1; return k === 1 ? "1ʳᵉ" : `${k}ᵉ`; };
+  const candidats = [];
+  for (const d of doutes) {
+    if (d.leve || !d.alternative || !d.vise || d.vise.debut < m.debut || d.vise.fin > m.fin) continue;
+    const j = jetonVise(d.vise, abc);
+    if (!j) continue;
+    const a = d.alternative;
+    if (a.croches !== undefined) candidats.push({ d, delta: a.croches - j.croches, changement: { vise: { ...d.vise }, croches: a.croches, doute: d.id }, texte: `${rang(d.vise)} note en ${nomDuree(a.croches)}` });
+    else if (a.supprimer) candidats.push({ d, delta: -j.croches, changement: { vise: { ...d.vise }, supprimer: true, doute: d.id }, texte: `sans la ${rang(d.vise)} note` });
+  }
+  const propositions = [];
+  const ajouter = (choix) => {
+    const texte = choix.map((c) => c.texte).join(", ");
+    propositions.push({ texte: majuscule(texte), changements: choix.map((c) => c.changement), regle: choix.map((c) => c.d.id).filter(Boolean) });
+  };
+  for (const a of candidats) if (Math.abs(a.delta - manque) < 1e-6) ajouter([a]);
+  for (let i = 0; i < candidats.length; i++) {
+    for (let k = i + 1; k < candidats.length; k++) {
+      if (candidats[i].d.vise.debut !== candidats[k].d.vise.debut && Math.abs(candidats[i].delta + candidats[k].delta - manque) < 1e-6) ajouter([candidats[i], candidats[k]]);
+    }
+  }
+  return propositions.slice(0, 3);
 }
 
 // ------------------------------------------------------------------------
@@ -228,6 +384,126 @@ export function enCroches(n) {
   if (Math.abs(n - 1) < 1e-9) return "une croche";
   if (Math.abs(n - 0.5) < 1e-9) return "une double croche";
   return `${nb(n)} croche${n > 1 ? "s" : ""}`;
+}
+
+const NOMS_DUREES = { 0.5: "double croche", 0.75: "double croche pointée", 1: "croche", 1.5: "croche pointée", 2: "noire", 3: "noire pointée", 4: "blanche", 6: "blanche pointée", 8: "ronde", 12: "ronde pointée" };
+/** « noire », « croche pointée » : le nom d'une durée en croches. */
+export const nomDuree = (c) => NOMS_DUREES[c] || `${nb(c)} croches`;
+const majuscule = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+// Ce qui peut précéder une note dans un groupe lié : la fin d'une autre note.
+const finDeNote = /[A-Ga-g,'\d/\]]/;
+
+/** Sépare une note de la précédente quand elles étaient collées (liées) : une espace devant. */
+function delier(abc, vise) {
+  if (!vise || vise.debut === 0 || !finDeNote.test(abc[vise.debut - 1])) return { abc, debut: vise.debut, fin: vise.fin, modif: [] };
+  return { abc: abc.slice(0, vise.debut) + " " + abc.slice(vise.debut), debut: vise.debut + 1, fin: vise.fin + 1, modif: { de: vise.debut, a: vise.debut, longueur: 1 } };
+}
+
+/** Colle une note à la précédente (les relie d'une ligature) en retirant l'espace entre elles. */
+function lier(abc, vise) {
+  if (!vise || vise.debut < 2 || abc[vise.debut - 1] !== " " || !finDeNote.test(abc[vise.debut - 2])) return { abc, debut: vise.debut, fin: vise.fin, modif: [] };
+  return { abc: abc.slice(0, vise.debut - 1) + abc.slice(vise.debut), debut: vise.debut - 1, fin: vise.fin - 1, modif: { de: vise.debut - 1, a: vise.debut, longueur: 0 } };
+}
+
+/**
+ * « Croche liée ou noire ? » (L2) : une ligature qui s'arrête au ras de la
+ * hampe. La réponse change la durée et coupe (ou fait) la ligature dans l'ABC.
+ */
+function poserLigature(d, abc, base) {
+  const j = noteVisee(d, abc);
+  const alt = d.alternative && d.alternative.croches;
+  const cur = j ? j.croches : null;
+  const liee = d.lue === "liee";
+  const titre = cur && alt ? (liee ? `${majuscule(nomDuree(cur))} liée ou ${nomDuree(alt)} ?` : `${majuscule(nomDuree(cur))} ou ${nomDuree(alt)} liée ?`) : "Ligature ou pas ?";
+  const changer = (a) => {
+    const jj = noteVisee(d, a);
+    if (!jj) return null;
+    return enchainer(a, [(t) => ed.fixerDuree(t, jj, alt), (t, modifs) => (liee ? delier : lier)(t, apres(d.vise, modifs))]);
+  };
+  return {
+    ...base, manuel: true, titre,
+    detail: liee
+      ? "La ligature s'arrête juste avant la queue de cette note : je l'ai liée aux autres. Si elle ne l'atteint pas, la note est seule."
+      : "La ligature s'arrête juste avant la queue de cette note : je l'ai laissée seule. Si elle l'atteint, la note est liée aux autres.",
+    reponses: !j || !alt ? [] : [
+      reponse("garder", majuscule(nomDuree(cur)) + (liee ? " liée" : ""), "ok", null, "La note est gardée telle quelle."),
+      reponse("autre", majuscule(nomDuree(alt)) + (liee ? "" : " liée"), "crayon", changer, `La note devient une ${nomDuree(alt)}.`),
+    ],
+  };
+}
+
+/** « La ou sol ? » (L2) : une tête entre deux places. */
+function poserHauteur(d, abc, base) {
+  const j = noteVisee(d, abc);
+  const { note: k = 0, pas = 0 } = d.alternative || {};
+  const n = j && j.notes[k];
+  const nom = (x) => (x ? NOMS_CLES[x.lettre] : "");
+  const autre = n && ed.deplacerNote(abc, j, k, pas);
+  const nAutre = autre && ed.lireJeton(autre.abc, j.debut).notes[k];
+  return {
+    ...base, manuel: true,
+    titre: n && nAutre ? `${majuscule(nom(n))} ou ${nom(nAutre)} ?` : "Quelle note ?",
+    detail: n ? `Cette tête est entre deux places : je l'ai lue ${nom(n)}${j.notes.length > 1 ? " (dans l'accord)" : ""}.` : (d.message || ""),
+    reponses: !n || !nAutre ? [] : [
+      reponse("garder", majuscule(nom(n)), "ok", null, `La note reste un ${nom(n)}.`),
+      reponse("autre", majuscule(nom(nAutre)), pas > 0 ? "haut" : "bas", (a) => { const jj = noteVisee(d, a); return jj && ed.deplacerNote(a, jj, k, pas); }, `La note devient un ${nom(nAutre)}.`),
+    ],
+  };
+}
+
+/** « Pointée ou pas ? » (L2) : un point à la limite de la distance où il compte. */
+function poserPoint(d, abc, base) {
+  const j = noteVisee(d, abc);
+  const alt = d.alternative && d.alternative.croches;
+  return {
+    ...base, manuel: true, titre: "Pointée ou pas ?",
+    detail: d.lue === "pointee" ? "Le point est loin de la note : je l'ai compté. C'est peut-être un point de reprise, ou une trace." : "Un point un peu loin de la note : je ne l'ai pas compté.",
+    reponses: !j || !alt ? [] : [
+      reponse("garder", majuscule(nomDuree(j.croches)), "ok", null, "La note est gardée telle quelle."),
+      reponse("autre", majuscule(nomDuree(alt)), "point", (a) => { const jj = noteVisee(d, a); return jj && ed.fixerDuree(a, jj, alt); }, `La note devient une ${nomDuree(alt)}.`),
+    ],
+  };
+}
+
+/**
+ * Les propositions d'une mesure qui ne tombe pas juste (L15) : chacune change
+ * une ou deux notes (une autre lecture d'une décision limite) pour la
+ * compléter. Elles ne sont proposées que si elles complètent encore la mesure
+ * dans l'ABC d'aujourd'hui. Chaque réponse dit les doutes qu'elle règle (`regle`).
+ */
+function reponsesPropositions(d, abc, jetons, attendu) {
+  if (!jetons || attendu === undefined) return [];
+  const actuel = somme(jetons);
+  const sortie = [];
+  (d.propositions || []).forEach((p, k) => {
+    const changements = p.changements || [];
+    let delta = 0;
+    for (const c of changements) {
+      if (c.triolet) {
+        const g = c.vise && jetonsEntre(abc, c.vise.debut, c.vise.fin);
+        if (!g || g.length !== 3 || abc.slice(Math.max(0, c.vise.debut - 2), c.vise.debut) === "(3") return;
+        delta -= somme(g) / 3;
+      } else {
+        const j = jetonVise(c.vise, abc);
+        if (!j) return;
+        delta += c.supprimer ? -j.croches : c.croches - j.croches;
+      }
+    }
+    if (Math.abs(actuel + delta - attendu) > 1e-6) return;
+    const geste = (a) => {
+      // De la droite vers la gauche : chaque changement garde la place des précédents.
+      const ordre = [...changements].sort((x, y) => y.vise.debut - x.vise.debut);
+      return enchainer(a, ordre.map((c) => (t) => {
+        if (c.triolet) return ed.faireTriolet(t, c.vise);
+        const j = jetonVise(c.vise, t);
+        return j && (c.supprimer ? ed.supprimer(t, j) : ed.fixerDuree(t, j, c.croches));
+      }));
+    };
+    const r = reponse(`proposition-${k + 1}`, p.texte, "crayon", geste, "La mesure est complète.");
+    r.regle = p.regle || [];
+    sortie.push(r);
+  });
+  return sortie;
 }
 
 /** « Mi♭ majeur », ou « Sans armure » pour do majeur : le texte d'un bouton. */
@@ -339,17 +615,21 @@ export function poser(d, abc) {
     if (!jetons) return { ...sortie, titre: manque > 0 ? `Il manque ${enCroches(manque)}` : `Il y a ${enCroches(-manque)} de trop` };
     const derniere = (a) => { const l = jetonsDeLaMesure(d, a); return l && l[l.length - 1]; };
     const fin = jetons[jetons.length - 1];
+    // D'abord les autres lectures des décisions limites de la mesure (L15), puis les gestes de toujours.
+    const proposees = reponsesPropositions(d, abc, jetons, attendu);
+    if (proposees.length) sortie.detail += ` ${proposees.length > 1 ? "Ces lectures la complètent" : "Cette lecture la complète"} :`;
     if (manque > 0) {
       return {
         ...sortie, titre: `Il manque ${enCroches(manque)}`,
         reponses: [
+          ...proposees,
           reponse("silence", "Ajouter un silence", "silence", (a) => ed.ajouterSilence(a, derniere(a), manque), `Un silence de ${enCroches(manque)} complète la mesure.`),
           reponse("allonger", "Allonger la dernière note", "allonger", (a) => ed.fixerDuree(a, derniere(a), derniere(a).croches + manque), "La dernière note est allongée."),
         ],
       };
     }
     const trop = -manque;
-    const reponses = [];
+    const reponses = [...proposees];
     if (fin.croches > trop + 1e-6) reponses.push(reponse("raccourcir", "Raccourcir la dernière note", "raccourcir", (a) => ed.fixerDuree(a, derniere(a), derniere(a).croches - trop), "La dernière note est raccourcie."));
     if (Math.abs(fin.croches - trop) < 1e-6) reponses.push(reponse("enlever", "Enlever la dernière note", "corbeille", (a) => ed.supprimer(a, derniere(a)), "La dernière note est enlevée."));
     return { ...sortie, titre: `Il y a ${enCroches(trop)} de trop`, reponses };
@@ -381,6 +661,21 @@ export function poser(d, abc) {
       reponses: [
         ...(jetons && jetons.length === 3 && !deja ? [reponse("triolet", "Oui, un triolet", "d2", (a) => ed.faireTriolet(a, d.vise), "Les trois notes forment un triolet.")] : []),
         reponse("non", "Non, trois notes", "ok", null, "Les trois notes restent telles quelles."),
+      ],
+    };
+  }
+
+  if (type === "ligature") return poserLigature(d, abc, base);
+  if (type === "hauteur") return poserHauteur(d, abc, base);
+  if (type === "point") return poserPoint(d, abc, base);
+  if (type === "tete") {
+    const j = noteVisee(d, abc);
+    return {
+      ...base, manuel: true, titre: "Une note ou un trait ?",
+      detail: "Ce gribouillis ressemble à une tête de note, mais de justesse : c'est peut-être un trait.",
+      reponses: !j ? [] : [
+        reponse("note", "Une note", "d4", null, "La note est gardée."),
+        reponse("enlever", "Un trait : l'enlever", "corbeille", (a) => ed.supprimer(a, noteVisee(d, a)), "La note est enlevée."),
       ],
     };
   }
