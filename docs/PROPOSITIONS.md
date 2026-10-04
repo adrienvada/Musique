@@ -480,6 +480,75 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
     nom d'une carte ne s'édite qu'une fois la carte choisie (le premier
     toucher choisit, il ne fait pas surgir le clavier). Modifier le morceau
     pendant l'écoute l'arrête.
+- **04/10 · Audit complet, puis toutes ses recommandations.** Demandé par
+  Adrien : « Lance un audit complet de l'outil et propose-moi toutes les
+  implémentations dernier cri permettant de faire passer l'application au
+  niveau suivant », puis « Implémente ensuite toutes tes recommandations
+  avant de me proposer une PR complète ». Le rapport, les recommandations
+  (repères S1, D4, L1…) et l'état de chacune sont dans
+  [AUDIT-2026-10.md](AUDIT-2026-10.md) ; ce qui a été décidé en chemin, et
+  pourquoi, est rangé lot par lot juste en dessous.
+  - Huit audits en parallèle (lecteur, sécurité et données, interface,
+    moteur musical, code, et trois veilles), chacun avec ses mesures. Les
+    constats graves ont été rejoués avant d'être retenus.
+  - **Deux exceptions à « tout implémenter »**, gardées pour Adrien : ce qui
+    reviendrait sur une de ses décisions (la phrase chantée entière, une
+    seule bibliothèque pour le site et claude.ai…), et ce qui demande une
+    action de sa part (un réglage de GitHub, son iPhone, son DNS). Les deux
+    listes sont dans le rapport.
+  - Pourquoi des lots plutôt qu'un seul chantier : le lecteur, le
+    connecteur, les données, le son et l'outillage ne partagent presque
+    aucun fichier ; ils avancent en parallèle, puis `app.js` est découpé
+    avant que les écrans changent, pour que les lots suivants ne se
+    marchent pas dessus.
+
+## Évolutions du 04/10, lot par lot
+
+Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
+
+### Sécurité de base (S1)
+
+<!-- lot base -->
+
+### Lecteur (L1 à L19, C7)
+
+<!-- lot lecteur -->
+
+### Connecteur (S3 à S5, C1 à C6)
+
+<!-- lot connecteur -->
+
+### Données et synchronisation (S6, D1 à D10)
+
+<!-- lot données -->
+
+### Son, temps, notation et exports (M1 à M12, N1 à N7)
+
+<!-- lot musique -->
+
+### Outillage, hors ligne et dépendances (S2, I5, T1, T2, T6)
+
+<!-- lot outillage -->
+
+### Architecture (T3 à T5)
+
+<!-- lot architecture -->
+
+### Atelier et pages manuscrites (intégration des L, H1)
+
+<!-- lot atelier -->
+
+### Écrans des données (D6, D7, D9, H3)
+
+<!-- lot écrans des données -->
+
+### Interface (I1 à I4)
+
+<!-- lot interface -->
+
+### Claude dans l'éditeur d'idée (H2)
+
+<!-- lot claude -->
 
 ## La refonte visuelle : le plan (02/10)
 
