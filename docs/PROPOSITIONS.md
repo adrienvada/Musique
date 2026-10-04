@@ -785,6 +785,41 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     import des pages d'essai (pdf.js et son worker), gravure, correction,
     écoute, MIDI, idée au clavier, chant au faux micro, mémo vocal,
     sauvegarde.
+- **Hors ligne dès la première visite (I5).** Le service worker ne gardait
+  que ce qu'on avait déjà ouvert, et chaque mise en ligne vidait tout : le
+  nouveau effaçait l'ancien cache dès son arrivée, avant d'avoir rien
+  copié. Rejoué dans Chromium (serveur qui cache comme Pages) : après une
+  mise en ligne, l'appli ne s'ouvrait plus hors ligne (`net::ERR_FAILED`).
+  - À l'installation, il copie toute la coquille (86 fichiers : la page, les
+    modules et feuilles de style de la version, abcjs, pdf.js, les polices,
+    les modèles, les pages d'essai, les icônes), puis le piano.
+    L'assembleur lui écrit la liste exacte.
+  - L'ancien cache ne part qu'une fois le nouveau complet : une copie ratée
+    laisse l'ancienne version entière, qui retente à la visite suivante.
+    Seules les réponses `ok` sont gardées : une erreur de cdnjs restait
+    servie toute une version (abcjs absent).
+  - Le piano a son propre cache, nommé d'après l'empreinte de ses
+    fichiers : il ne se retélécharge que s'il change, et s'il change,
+    l'ancien part (`portee-piano-1` n'était jamais remplacé).
+  - La navigation garde la règle du 02/10 : la page est redemandée au
+    serveur, la copie ne sert que sans réseau (ou si le serveur est en
+    panne). La copie de la page n'est jamais remplacée en route : une page
+    plus récente, venue du réseau, n'irait pas avec les modules copiés ;
+    elle entre dans la copie avec sa version.
+  - Quand une nouvelle version prend la main, une page ouverte d'une autre
+    version dit « Une nouvelle version de Portée est prête » et propose
+    « Recharger » : rien ne se recharge tout seul, tu peux être au milieu
+    d'une prise. En revenant sur l'appli (au plus toutes les dix minutes),
+    Portée demande s'il y a du neuf : une appli installée reste ouverte des
+    jours.
+  - Il ne touche plus qu'aux caches de Portée : il effaçait tous ceux du
+    domaine, qui sert aussi tes autres sites.
+  - Prouvé avec les deux essais de l'audit, adaptés : hors ligne après une
+    première visite ; après une mise en ligne ratée (la v1 reste entière) ;
+    après une mise en ligne réussie (le message, « Recharger », puis la v2
+    hors ligne : pages d'essai lues, gravées, jouées) ; un 503 sur abcjs
+    n'est plus gardé. Le service worker s'inscrit aussi sur l'ordinateur
+    lui-même (`isSecureContext` plutôt que `https:`), pour ces essais.
 
 ### Notation, harmonie et exports (N1 à N7)
 
@@ -1119,6 +1154,11 @@ ou supprimer la fonction dans Supabase.
   version dans les adresses, une page neuve tournait avec des modules
   anciens. `assembler-appli.mjs` versionne les imports `"./x.js"` du site :
   écrire les imports sous cette forme littérale (il refuse les autres).
+  Le service worker copie à l'installation tout ce que l'assembleur met
+  dans `dist/` (sauf le piano, à part, et les licences) : un fichier que
+  l'appli demande doit donc sortir de l'assembleur, sinon il manque hors
+  ligne. Les fichiers tiers (pdf.js, abcjs, polices) gardent une adresse
+  fixe : figés par `package.json`, ils sont revalidés, pas versionnés.
 
 - **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, disponible
   partout seulement depuis le 14/02/2026 (Chrome 145, Firefox 144,

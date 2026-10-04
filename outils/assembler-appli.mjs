@@ -137,12 +137,29 @@ if (externe) throw new Error(`index.html : une ressource vient encore d'ailleurs
 if (autonome) {
   fichiers.push(copier("app/manifest.webmanifest", "manifest.webmanifest"));
   for (const f of fs.readdirSync(path.join(racine, "app/icones"))) fichiers.push(copier(`app/icones/${f}`, `icones/${f}`));
-  // Le cache hors ligne porte l'empreinte du contenu : chaque version l'invalide.
+  // Le cache hors ligne porte l'empreinte du contenu, service worker
+  // compris : chaque version l'invalide.
+  const source = fs.readFileSync(path.join(racine, "app/sw.js"), "utf8");
   const empreinte = crypto.createHash("sha256");
-  for (const f of [...fichiers].sort()) empreinte.update(fs.readFileSync(path.join(dist, f)));
-  empreinte.update(page);
+  for (const f of [...fichiers].sort()) empreinte.update(f).update(fs.readFileSync(path.join(dist, f)));
+  empreinte.update(page).update(source);
   const version = empreinte.digest("hex").slice(0, 12);
-  const sw = fs.readFileSync(path.join(racine, "app/sw.js"), "utf8").replace("__VERSION__", version);
+  // Le piano a la sienne : lourd, il ne se retélécharge que s'il change.
+  const piano = fichiers.filter((f) => f.startsWith("piano/")).sort();
+  const empreintePiano = crypto.createHash("sha256");
+  for (const f of piano) empreintePiano.update(f).update(fs.readFileSync(path.join(dist, f)));
+  // Ce que le service worker copie à l'installation, sous l'adresse exacte
+  // que la page demandera : la page elle-même (./), les modules et les
+  // feuilles de style avec leur version, le reste tel quel. Le piano à part,
+  // et les licences, que l'appli ne demande jamais.
+  const versionne = (f) => (f.endsWith(".js") && !f.startsWith("vendor/")) || (f.startsWith("styles/") && f.endsWith(".css"));
+  const coquille = ["./", ...fichiers.filter((f) => !f.startsWith("piano/") && !/\/LICENCE[^/]*\.txt$/.test(f)).map((f) => (versionne(f) ? `${f}?v=${version}` : f))];
+  const sw = source
+    .replace('"__VERSION__"', JSON.stringify(version))
+    .replace('["__COQUILLE__"]', JSON.stringify(coquille))
+    .replace('"__PIANO__"', JSON.stringify(empreintePiano.digest("hex").slice(0, 12)))
+    .replace('["__PIANO_FICHIERS__"]', JSON.stringify(piano));
+  if (/__[A-Z_]+__/.test(sw)) throw new Error("sw.js : une valeur n'a pas été remplie");
   fs.writeFileSync(path.join(dist, "sw.js"), sw);
   fichiers.push("sw.js");
   // La version dans l'adresse des modules : tous les imports relatifs, sans

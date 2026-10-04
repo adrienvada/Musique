@@ -1942,6 +1942,55 @@ function creerEditeur() {
   });
 }
 
+/**
+ * Le service worker (sw.js) garde l'appli pour le hors-ligne. Une version
+ * mise en ligne s'installe en arrière-plan, puis prend la main ; si la page
+ * ouverte n'est pas de cette version, un message passager propose de
+ * recharger. Rien ne se recharge tout seul : on peut être au milieu d'une
+ * prise ou d'une correction.
+ *
+ * Une appli installée reste ouverte des jours : en y revenant (au plus une
+ * fois toutes les dix minutes), on demande s'il y a une nouvelle version,
+ * sans attendre que le navigateur y pense.
+ */
+function brancherServiceWorker() {
+  // La version de la page : celle de l'adresse de ce module (app.js?v=…).
+  const maVersion = new URL(import.meta.url).searchParams.get("v");
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    const m = e.data;
+    if (m && m.type === "portee-version" && maVersion && m.version !== maVersion) proposerRechargement();
+  });
+  let verifiee = Date.now();
+  navigator.serviceWorker.register("sw.js").then((inscription) => {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || Date.now() - verifiee < 10 * 60 * 1000) return;
+      verifiee = Date.now();
+      inscription.update().catch(() => {}); // hors ligne : la prochaine fois
+    });
+  }).catch(() => {});
+}
+
+/** « Une nouvelle version est prête » : un message passager, avec de quoi recharger. */
+function proposerRechargement() {
+  if ($("toast-version")) return;
+  const m = document.createElement("div");
+  m.className = "toast toast-action";
+  m.id = "toast-version";
+  m.setAttribute("role", "status");
+  m.setAttribute("popover", "manual");
+  const texte = document.createElement("span");
+  texte.textContent = "Une nouvelle version de Portée est prête.";
+  const recharger = document.createElement("button");
+  recharger.className = "btn btn-petit";
+  recharger.textContent = "Recharger";
+  recharger.addEventListener("click", () => location.reload());
+  m.append(texte, recharger);
+  document.body.appendChild(m);
+  // En « popover », comme les autres messages : au-dessus d'une feuille ouverte.
+  if (m.showPopover) { try { m.showPopover(); } catch { /* sans popover : il s'affiche quand même */ } }
+  setTimeout(() => m.remove(), 20000);
+}
+
 async function demarrer() {
   injecterIcones();
   // Un appui long sur une icône dit ce qu'elle fait.
@@ -1965,9 +2014,8 @@ async function demarrer() {
   demarrerSynchro();
   $("changer-adresse").hidden = dansClaude() || !adresseEnregistree();
   // Hors ligne et installable, hors de claude.ai (sw.js n'existe que sur le site).
-  if (!dansClaude() && "serviceWorker" in navigator && location.protocol === "https:") {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  }
+  // Un contexte sûr : https, ou l'ordinateur lui-même (les essais de bout en bout).
+  if (!dansClaude() && "serviceWorker" in navigator && window.isSecureContext) brancherServiceWorker();
   etat.stockage.ecouter(
     (liste) => {
       etat.partitions = liste;
