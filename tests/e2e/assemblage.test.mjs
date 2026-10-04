@@ -63,8 +63,10 @@ test("le site : le service worker garde exactement ce que la page demandera", ()
   assert.deepEqual(PIANO_FICHIERS, fs.readdirSync(path.join(DIST, "piano")).map((f) => `piano/${f}`).sort());
 });
 
-test("la version claude.ai : publiable telle quelle", () => {
-  const sortie = path.join(dossierTemporaire("claude"), "claude");
+test("la version claude.ai : publiable telle quelle", (t) => {
+  const dossier = dossierTemporaire("claude");
+  t.after(() => fs.rmSync(dossier, { recursive: true, force: true }));
+  const sortie = path.join(dossier, "claude");
   execFileSync(process.execPath, [path.join(RACINE, "outils/assembler-appli.mjs"), "--sortie", sortie], { stdio: "pipe" });
   const carte = JSON.parse(fs.readFileSync(`${sortie}.fichiers.json`, "utf8"));
   const fichiers = fs.readdirSync(sortie, { recursive: true }).filter((f) => fs.statSync(path.join(sortie, f)).isFile() && f !== "index.html");
