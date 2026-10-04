@@ -173,6 +173,8 @@ dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: 1.35rem; }
    clavier et la liste, là où va le pouce. Ils laissent passer les doigts :
    un message posé sur un bouton ne doit pas l'avaler. */
 .toast { pointer-events: none; inset: auto; margin: 0; border: 0; overflow: visible; position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + var(--barre) + 10px); background: var(--encre); color: var(--papier); padding: 10px 16px; border-radius: 12px; font-size: 0.92rem; font-weight: 500; max-width: min(92vw, 560px); z-index: 40; box-shadow: var(--ombre); }
+/* Un message passager qui propose un geste (« Recharger », app.js) : lui seul prend le toucher. */
+.toast.toast-action { pointer-events: auto; display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 16px; width: max-content; }
 
 /* La bulle d'un appui long (infobulles.js) : ce que fait une icône, au-dessus du
    doigt, avec une pointe vers elle. En « popover », elle passe au-dessus des

@@ -1,7 +1,6 @@
 <title>Portée</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<!-- Les polices viennent du site, plus de Google Fonts (styles/polices.css). -->
+<link rel="stylesheet" href="styles/polices.css">
 <link rel="stylesheet" href="styles/systeme.css">
 <link rel="stylesheet" href="styles/bibliotheque.css">
 <link rel="stylesheet" href="styles/atelier.css">
@@ -96,7 +95,7 @@
           <button class="btn" id="ouvrir-modeles"><svg class="ico s" aria-hidden="true"><use href="#i-partition"></use></svg>Modèles pour la tablette</button>
         </div>
         <p class="remarque">Une page écrite sur un modèle Portée s'exporte de la tablette en PDF (<em>Partager → PDF</em>) : importe-le, ou glisse-le sur cet onglet.</p>
-        <input id="fichier" type="file" accept="application/pdf,.pdf" multiple hidden>
+        <input id="fichier" type="file" accept="application/pdf,.pdf,audio/midi,audio/x-midi,.mid,.midi" multiple hidden>
       </div>
       <div class="panneau" id="panneau-modeles" hidden>
         <div class="panneau-tete">
@@ -440,6 +439,7 @@
       </div>
       <div class="menu-actions">
         <button class="btn btn-plein" id="morceau-midi"><svg class="ico" aria-hidden="true"><use href="#i-partager"></use></svg>Envoyer le MIDI</button>
+        <button class="btn" id="morceau-musicxml"><svg class="ico" aria-hidden="true"><use href="#i-partition"></use></svg>MusicXML (MuseScore)</button>
         <button class="btn btn-danger" id="morceau-supprimer"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg>Supprimer le morceau</button>
       </div>
     </dialog>
@@ -859,5 +859,7 @@
 <div class="toast" id="toast" role="status" popover="manual" hidden></div>
 <dialog class="dialogue" id="dialogue"><form method="dialog" class="dialogue-dedans" id="dialogue-dedans"></form></dialog>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.7.1/abcjs-basic-min.js"></script>
+<!-- abcjs vient du site (copié de node_modules par l'assembleur, version figée par package.json) : plus de CDN.
+     « defer » : il ne retient plus le premier affichage, et passe toujours avant app.js (même ordre). -->
+<script defer src="vendor/abcjs/abcjs-basic-min.js"></script>
 <script type="module" src="app.js"></script>

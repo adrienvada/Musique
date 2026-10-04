@@ -35,12 +35,77 @@ test("les accords de la tonalité, et ceux qui vont avec la mélodie", () => {
   assert.deepEqual(h.harmoniser(seq).map((a) => [a.d, a.nom]), [[0, "C"], [16, "F"], [32, "G"], [48, "C"]]);
 });
 
+// Une mélodie en notation compacte : « F#4:4 G4:8 | … » (note, octave, durée en pas).
+function chanson(texte, options = {}) {
+  const PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const notes = [];
+  let d = options.depuis || 0;
+  for (const tok of texte.trim().split(/\s+/)) {
+    if (tok === "|") continue;
+    const [n, l] = tok.split(":");
+    const m = /^([A-G])([#b]?)(\d)$/.exec(n);
+    notes.push([d, Number(l), 12 * (Number(m[3]) + 1) + PC[m[1]] + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0)]);
+    d += Number(l);
+  }
+  return idee(notes, options);
+}
+// Les accords d'harmoniser, mesure par mesure : « D » ou « D A » (deux accords dans la mesure).
+function parMesure(seq) {
+  const m = seq.mesure[0] * 16 / seq.mesure[1];
+  const accords = h.harmoniser(seq);
+  const nb = Math.ceil(Math.max(...seq.pistes[0].notes.map((n) => n.d + n.l)) / m);
+  return Array.from({ length: nb }, (_, i) => {
+    const tete = [...accords].reverse().find((a) => a.d <= i * m);
+    return [tete && tete.nom, ...accords.filter((a) => a.d > i * m && a.d < (i + 1) * m).map((a) => a.nom)].join(" ");
+  });
+}
+
+test("harmoniser : cadences gardées, deux accords quand une moitié de mesure le demande", () => {
+  // L'Hymne à la joie : la demi-cadence de la 4ᵉ mesure (sur la), la cadence parfaite à la fin (la puis ré).
+  const hymne = chanson("F#4:4 F#4:4 G4:4 A4:4 | A4:4 G4:4 F#4:4 E4:4 | D4:4 D4:4 E4:4 F#4:4 | F#4:6 E4:2 E4:8 | F#4:4 F#4:4 G4:4 A4:4 | A4:4 G4:4 F#4:4 E4:4 | D4:4 D4:4 E4:4 F#4:4 | E4:6 D4:2 D4:8", { tonalite: "D" });
+  const accords = parMesure(hymne);
+  assert.equal(accords[3].split(" ").at(-1), "A", `demi-cadence : ${accords[3]}`);
+  assert.equal(accords[7], "A D", "cadence parfaite");
+  assert.equal(accords[0], "D");
+  // Au clair de la lune : « do mi ré ré » se partage (do, puis sol), la phrase finit sur do, la suivante sur sol.
+  const lune = chanson("C4:4 C4:4 C4:4 D4:4 | E4:8 D4:8 | C4:4 E4:4 D4:4 D4:4 | C4:16 | D4:4 D4:4 D4:4 D4:4 | A3:8 A3:8 | D4:4 C4:4 B3:4 A3:4 | G3:16 | C4:4 C4:4 C4:4 D4:4 | E4:8 D4:8 | C4:4 E4:4 D4:4 D4:4 | C4:16");
+  const l = parMesure(lune);
+  assert.equal(l[2], "C G");
+  assert.equal(l[3], "C");
+  assert.equal(l[7], "G", "demi-cadence");
+  assert.equal(l[10], "C G");
+  assert.equal(l[11], "C", "la fin sur la tonique");
+  // Une note de passage ne suffit pas à couper la mesure : Frère Jacques reste en do.
+  const jacques = chanson("C4:4 D4:4 E4:4 C4:4 | C4:4 D4:4 E4:4 C4:4 | E4:4 F4:4 G4:8 | E4:4 F4:4 G4:8 | G4:2 A4:2 G4:2 F4:2 E4:4 C4:4 | G4:2 A4:2 G4:2 F4:2 E4:4 C4:4 | C4:4 G3:4 C4:8 | C4:4 G3:4 C4:8");
+  assert.deepEqual(h.harmoniser(jacques).map((a) => a.nom), ["C"]);
+  // En 3/4, une mesure ne se partage pas ; une levée ne compte pas dans la phrase.
+  const valse = chanson("A4:4 | C5:8 D5:4 | E5:6 F5:2 E5:4 | D5:8 B4:4 | G4:6 A4:2 B4:4 | C5:8 A4:4", { tonalite: "Am", mesure: [3, 4], depuis: 8 });
+  assert.ok(h.harmoniser(valse).every((a) => a.d % 12 === 0));
+});
+
+test("les dominantes secondaires : proposées quand la mélodie les appelle, et elles mènent à leur accord", () => {
+  // Fa♯ en do appelle D7 (qui mène à sol), sol♯ appelle E7 (vers la mineur), si♭ appelle C7 (vers fa).
+  assert.equal(h.suggerer(idee([[0, 4, 66], [4, 4, 69], [8, 4, 72], [12, 4, 74]]), 0, 16)[0], "D7");
+  assert.equal(h.suggerer(idee([[0, 4, 68], [4, 4, 71], [8, 4, 74], [12, 4, 76]]), 0, 16)[0], "E7");
+  assert.ok(h.suggerer(idee([[0, 4, 70], [4, 4, 67], [8, 4, 64], [12, 4, 60]]), 0, 16, 3).includes("C7"));
+  // Sans note étrangère, aucune : la suggestion d'une mélodie diatonique ne change pas.
+  assert.ok(!h.suggerer(idee([[0, 4, 60], [4, 4, 64], [8, 8, 67]]), 0, 16, 8).some((n) => /^(D7|E7|A7|B7|C7)$/.test(n)));
+  // Ni sur la roue (elle ne montre que ses sept accords).
+  assert.ok(h.accordsDeLaMelodie(idee([[0, 4, 66], [4, 4, 69], [8, 4, 72], [12, 4, 74]]), 0, 16).every((n) => h.roueDeLaTonalite("C").some((r) => r.nom === n)));
+  // Harmoniser les pose, et chacune se résout sur son accord.
+  const ligne = chanson("C4:4 E4:4 G4:8 | F#4:4 A4:4 C5:4 D5:4 | G4:16 | G#4:4 B4:4 D5:4 E5:4 | A4:16 | F4:4 D4:4 B3:4 G3:4 | C4:16");
+  assert.deepEqual(parMesure(ligne), ["C", "D7", "G", "E7", "Am", "G7", "C"]);
+  // En mineur aussi : do♯ appelle A7 (vers ré mineur).
+  assert.equal(h.suggerer(idee([[0, 4, 73], [4, 4, 76], [8, 4, 79], [12, 4, 69]], { tonalite: "Am" }), 0, 16)[0], "A7");
+});
+
 test("l'accompagnement : une voix de plus, dans la mesure, gravée en clé de fa", () => {
   const seq = idee([[0, 16, 72], [16, 16, 71]]);
   seq.accords = [{ d: 0, nom: "C" }, { d: 16, nom: "G/B" }];
   seq.accompagnement = "plaque";
-  // Sol avec si à la basse : le si en dessous, l'accord au-dessus.
-  assert.deepEqual(h.accompagnement(seq).map((n) => [n.d, n.l, n.h]), [[0, 16, 36], [0, 16, 48], [0, 16, 52], [0, 16, 55], [16, 16, 47], [16, 16, 55], [16, 16, 59], [16, 16, 62]]);
+  // Do (mi sol do, sous la mélodie), puis sol avec si à la basse : le si en dessous, et l'accord
+  // pris dans le renversement le plus proche (ré sol si : 3 demi-tons de mouvement en tout).
+  assert.deepEqual(h.accompagnement(seq).map((n) => [n.d, n.l, n.h]), [[0, 16, 36], [0, 16, 52], [0, 16, 55], [0, 16, 60], [16, 16, 47], [16, 16, 50], [16, 16, 55], [16, 16, 59]]);
   seq.accompagnement = "basse";
   const basse = h.accompagnement(seq);
   assert.deepEqual(basse.filter((n) => n.d % 16 === 0).map((n) => n.h), [36, 47]);
@@ -49,11 +114,72 @@ test("l'accompagnement : une voix de plus, dans la mesure, gravée en clé de fa
   const arpege = h.accompagnement(seq);
   assert.equal(arpege.length, 16);
   assert.ok(arpege.every((n) => n.l === 2));
+  // Deux voix d'accompagnement (pour le MIDI : les accords, et la basse sur sa propre piste),
+  // gravées ensemble sur une seule portée en clé de fa.
   const voix = h.voixCompletes(seq);
-  assert.equal(voix.length, 2);
-  assert.match(ecrireAbc(seq, { voix }).abc, /V:2 clef=bass/);
+  assert.deepEqual(voix.map((v) => v.nom), ["Mélodie", "Accords", "Basse des accords"]);
+  assert.deepEqual(voix[2].notes.map((n) => n.h), [36, 47]);
+  assert.ok(voix[1].notes.every((n) => n.h > 47));
+  const { abc } = ecrireAbc(seq, { voix });
+  assert.match(abc, /V:2 clef=bass/);
+  assert.doesNotMatch(abc, /V:3/);
   seq.accompagnement = "aucun";
   assert.equal(h.voixCompletes(seq).length, 1);
+});
+
+test("la conduite des voix : renversements proches, sous la mélodie, la septième et la neuvième dans l'arpège", () => {
+  // Les mesures de l'audit : une suite d'accords d'une mesure chacun sous une mélodie tenue.
+  const conduite = (noms, melodie) => {
+    const seq = idee(noms.map((_, i) => [i * 16, 16, melodie]));
+    seq.accords = noms.map((nom, i) => ({ d: i * 16, nom }));
+    seq.accompagnement = "plaque";
+    const notes = h.accompagnement(seq);
+    const parAccord = noms.map((_, i) => notes.filter((n) => n.d === i * 16).map((n) => n.h).sort((a, b) => a - b));
+    let mouvement = 0, paralleles = 0;
+    for (let i = 1; i < parAccord.length; i++) {
+      const a = parAccord[i - 1].slice(1), b = parAccord[i].slice(1); // sans la basse
+      mouvement += a.reduce((s, x, j) => s + Math.abs((b[j] ?? x) - x), 0);
+      if (a.every((x, j) => b[j] - x === b[0] - a[0]) && b[0] !== a[0]) paralleles++;
+    }
+    return { mouvement, paralleles, dessus: notes.filter((n) => n.h >= melodie).length, parAccord };
+  };
+  // Avant : 64 demi-tons, deux enchaînements sur quatre tout en parallèle, une note sur la mélodie.
+  const simple = conduite(["C", "Am", "F", "G", "C"], 64);
+  assert.ok(simple.mouvement < 20, `${simple.mouvement} demi-tons`);
+  assert.equal(simple.paralleles, 0);
+  assert.equal(simple.dessus, 0);
+  // Avant : 81 demi-tons, cinq sur sept en parallèle. Trois voix serrées ne peuvent pas faire
+  // beaucoup moins ici (fa → sol, sans note commune, en coûte déjà 6).
+  const longue = conduite(["C", "G7", "Am", "Em", "F", "C", "F", "G"], 64);
+  assert.ok(longue.mouvement <= 25, `${longue.mouvement} demi-tons`);
+  assert.ok(longue.paralleles <= 1);
+  assert.equal(longue.dessus, 0);
+  // Avant : cinq notes au-dessus d'une mélodie en ré4.
+  const sauts = conduite(["G", "Bb", "Eb", "B"], 62);
+  assert.equal(sauts.dessus, 0);
+  assert.ok(sauts.mouvement < 20);
+  // Une mélodie grave : l'accord descend sous elle, la basse reste en dessous de l'accord.
+  const grave = conduite(["C", "F"], 55);
+  assert.equal(grave.dessus, 0);
+  for (const a of grave.parAccord) assert.ok(a[0] < a[1], "la basse sous l'accord");
+  // L'arpège joue toutes les notes de l'accord : le ré de E7, le fa de G7, la neuvième de Cadd9.
+  const arpege = (nom) => {
+    const seq = idee([[0, 16, 76]]);
+    seq.accords = [{ d: 0, nom }];
+    seq.accompagnement = "arpege";
+    return new Set(h.accompagnement(seq).map((n) => n.h % 12));
+  };
+  assert.ok(arpege("E7").has(2), "E7 : le ré");
+  assert.ok(arpege("G7").has(5), "G7 : le fa");
+  assert.ok(arpege("Cadd9").has(2), "Cadd9 : le ré");
+  assert.ok(arpege("Cmaj7").has(11), "Cmaj7 : le si");
+  // Une neuvième sur sa racine : les voix du dessus en tierces (fa la do mi), la racine à la basse.
+  const neuvieme = idee([[0, 16, 74]]);
+  neuvieme.accords = [{ d: 0, nom: "Dm9" }];
+  neuvieme.accompagnement = "plaque";
+  const dm9 = h.accompagnement(neuvieme).map((n) => n.h).sort((a, b) => a - b);
+  assert.equal(dm9[0] % 12, 2, "ré à la basse");
+  assert.deepEqual(new Set(dm9.slice(1).map((x) => x % 12)), new Set([5, 9, 0, 4]));
 });
 
 test("transposer toute l'idée : notes, accords et tonalité suivent", () => {

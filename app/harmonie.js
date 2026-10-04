@@ -12,32 +12,13 @@
  * Sans dépendance (appli et tests).
  */
 import { lireTonalite, pasParMesure, pasParTemps, nbMesures } from "./sequence.js";
+import { RACINES, FORME, lireAccord, epellationsDeLAccord } from "./accords.js";
 
-const RACINES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+// La lecture des noms d'accords vit dans accords.js (la partition s'en sert
+// aussi) ; on la redonne ici, où l'appli l'a toujours cherchée.
+export { lireAccord, QUALITES } from "./accords.js";
+
 const mod12 = (x) => ((x % 12) + 12) % 12;
-
-/** Les sortes d'accords qu'on sait lire et jouer : suffixe → intervalles (demi-tons). */
-export const QUALITES = {
-  "": [0, 4, 7], m: [0, 3, 7], 7: [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10],
-  dim: [0, 3, 6], dim7: [0, 3, 6, 9], m7b5: [0, 3, 6, 10], aug: [0, 4, 8],
-  sus2: [0, 2, 7], sus4: [0, 5, 7], "7sus4": [0, 5, 7, 10], 6: [0, 4, 7, 9], m6: [0, 3, 7, 9],
-  9: [0, 4, 7, 10, 14], add9: [0, 4, 7, 14], madd9: [0, 3, 7, 14], m9: [0, 3, 7, 10, 14],
-};
-const FORME = /^([A-G])([#b]?)(maj7|m7b5|dim7|7sus4|madd9|add9|sus2|sus4|dim|aug|maj|m9|m7|m6|m|7|6|9)?(?:\/([A-G])([#b]?))?$/;
-
-/** « F#m7/E » → { racine: 6, qualite: "m7", intervalles, basse: 4 } ; null si illisible. */
-export function lireAccord(nom) {
-  const m = FORME.exec((nom || "").trim());
-  if (!m) return null;
-  const alt = (a) => (a === "#" ? 1 : a === "b" ? -1 : 0);
-  const qualite = m[3] === "maj" ? "" : m[3] || "";
-  return {
-    racine: mod12(RACINES[m[1]] + alt(m[2])),
-    qualite,
-    intervalles: QUALITES[qualite],
-    basse: m[4] ? mod12(RACINES[m[4]] + alt(m[5])) : null,
-  };
-}
 
 /** « F#m7b5 » → « F♯m7b5 », « Bb » → « B♭ » : pour l'affichage. */
 export const joliAccord = (nom) => nom.replace(/#/g, "♯").replace(/([A-G])b/g, "$1♭");
@@ -76,23 +57,48 @@ export function accordsDeLaTonalite(tonalite) {
 }
 
 const PREFERENCES = { I: 0.3, i: 0.3, V: 0.25, IV: 0.25, iv: 0.25, vi: 0.15, VI: 0.15, V7: 0.15, ii: 0.1, III: 0.1, VII: 0.1, iii: 0.05, v: 0.05, "vii°": -0.1, "ii°": -0.1 };
+// Une dominante secondaire n'est proposée que si la mélodie l'appelle : elle
+// part avec le même petit avantage qu'un accord peu courant de la tonalité.
+const PREFERENCE_SECONDAIRE = 0.1;
 
 /**
- * Les accords qui vont avec les notes entre `debut` et `fin` (pas) de la
- * première piste : une note de l'accord compte pour, une note à un
- * demi-ton d'une note de l'accord compte contre ; le premier temps pèse
- * plus. Rend les noms, du meilleur au moins bon.
+ * Les dominantes secondaires de la tonalité : le 7 qui mène à chaque accord
+ * de la roue (sauf la tonique, qui a déjà la sienne, et l'accord diminué).
+ * Chacune porte ses notes étrangères à la gamme (`appel`) : fa♯ pour D7 en
+ * do, qui mène à sol ; sol♯ pour E7, qui mène à la mineur ; si♭ pour C7, qui
+ * mène à fa. Sans note étrangère (G7 vers do en la mineur), rien ne la
+ * distingue d'un accord de la tonalité : elle n'est pas proposée.
  */
-export function suggerer(seq, debut, fin, combien = 6) {
+function dominantesSecondaires(tonalite) {
+  const k = lireTonalite(tonalite);
+  const gamme = (k.mineur ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11]).map((x) => mod12(k.pc + x));
+  return roueDeLaTonalite(tonalite).filter((r) => r.indice > 0 && r.qualite !== "dim").map((r) => {
+    const racine = mod12(r.racine + 7);
+    const appel = [0, 4, 7, 10].map((x) => mod12(racine + x)).filter((pc) => !gamme.includes(pc));
+    return { nom: nomRacine(racine, tonalite) + "7", degre: `V/${r.degre}`, appel, cible: r.nom };
+  }).filter((c) => c.appel.length);
+}
+
+/**
+ * Chaque accord candidat, noté d'après les notes entre `debut` et `fin`
+ * (pas) de la première piste : une note de l'accord compte pour, une note à
+ * un demi-ton d'une note de l'accord compte contre ; le premier temps pèse
+ * plus. Les candidats : les accords de la tonalité, et les dominantes
+ * secondaires dont la mélodie joue une note étrangère. Du meilleur au moins
+ * bon : [{ nom, degre, score }].
+ */
+function noter(seq, debut, fin) {
   const notes = seq.pistes[0].notes.filter((n) => n.d < fin && n.d + n.l > debut);
   const candidats = accordsDeLaTonalite(seq.tonalite);
-  if (!notes.length) return candidats.slice(0, combien).map((c) => c.nom);
+  if (!notes.length) return candidats.map((c) => ({ ...c, score: 0 }));
+  const jouees = new Set(notes.map((n) => mod12(n.h)));
+  for (const s of dominantesSecondaires(seq.tonalite)) if (s.appel.some((pc) => jouees.has(pc))) candidats.push(s);
   const poids = notes.map((n) => {
     const recouvre = Math.min(fin, n.d + n.l) - Math.max(debut, n.d);
     return { pc: mod12(n.h), w: recouvre * (n.d === debut ? 1.5 : 1) };
   });
   const total = poids.reduce((s, p) => s + p.w, 0) || 1;
-  const notes1 = candidats.map((c) => {
+  return candidats.map((c) => {
     const a = lireAccord(c.nom);
     const tons = new Set(a.intervalles.map((i) => mod12(a.racine + i)));
     let score = 0;
@@ -101,25 +107,111 @@ export function suggerer(seq, debut, fin, combien = 6) {
       else if (tons.has(mod12(pc + 1)) || tons.has(mod12(pc - 1))) score -= 0.5 * w;
       else score -= 0.1 * w;
     }
-    return { nom: c.nom, score: score / total + (PREFERENCES[c.degre] || 0) };
-  });
-  return notes1.sort((a, b) => b.score - a.score).slice(0, combien).map((c) => c.nom);
+    const prefere = c.degre.startsWith("V/") ? PREFERENCE_SECONDAIRE : PREFERENCES[c.degre] || 0;
+    return { nom: c.nom, degre: c.degre, cible: c.cible || null, score: score / total + prefere };
+  }).sort((a, b) => b.score - a.score);
 }
 
-/** Un accord par mesure, d'après la mélodie : le premier et le dernier tirent vers la tonique. */
-export function harmoniser(seq) {
-  const mesure = pasParMesure(seq);
-  const tonique = accordsDeLaTonalite(seq.tonalite)[0].nom;
-  const nb = nbMesures(seq);
-  const accords = [];
-  for (let m = 0; m < nb; m++) {
-    const propositions = suggerer(seq, m * mesure, (m + 1) * mesure, 3);
-    let choix = propositions[0];
-    if ((m === 0 || m === nb - 1) && propositions.includes(tonique)) choix = tonique;
-    else if (accords.length && propositions.slice(0, 2).includes(accords.at(-1).nom)) choix = accords.at(-1).nom;
-    accords.push({ d: m * mesure, nom: choix });
+/**
+ * Les accords qui vont avec les notes entre `debut` et `fin` (pas) de la
+ * première piste, du meilleur au moins bon (leurs noms). Sans note, ceux de
+ * la tonalité, du plus courant au plus rare.
+ */
+export function suggerer(seq, debut, fin, combien = 6) {
+  return noter(seq, debut, fin).slice(0, combien).map((c) => c.nom);
+}
+
+/**
+ * La part d'une moitié de mesure que la mélodie passe hors de l'accord
+ * `nom` : 1 si toutes ses notes y sont étrangères, 0 si toutes en sont.
+ */
+function horsDeLAccord(seq, debut, fin, nom) {
+  const a = lireAccord(nom);
+  const tons = new Set(a.intervalles.map((i) => mod12(a.racine + i)));
+  let dehors = 0, sonne = 0;
+  for (const n of seq.pistes[0].notes) {
+    const l = Math.min(fin, n.d + n.l) - Math.max(debut, n.d);
+    if (l <= 0) continue;
+    sonne += l;
+    if (!tons.has(mod12(n.h))) dehors += l;
   }
-  // Deux mesures de suite sur le même accord : un seul symbole.
+  return sonne ? dehors / sonne : 0;
+}
+
+// Une moitié de mesure qui passe les trois quarts de son temps hors de
+// l'accord de la mesure le demande clairement : une note de passage (une
+// croche, ou une noire sur deux) n'y suffit pas, une note tenue oui.
+const PARTAGE = 0.75;
+const PHRASE = 4; // les phrases vont par quatre mesures, comme dans presque toutes les chansons
+// Une règle (cadence, tonique, résolution) ne choisit qu'un accord presque
+// aussi bon que le meilleur : elle tranche entre deux accords qui vont tous
+// deux avec la mélodie, elle n'en impose pas un qui jure.
+const MARGE = 0.3;
+
+/**
+ * Les accords d'une idée, d'après sa mélodie, comme un harmoniste pressé :
+ *   - un accord par mesure, deux quand une moitié de mesure le demande
+ *     clairement (4/4, 2/4, 2/2, 6/8, 12/8 : des mesures qui se coupent en
+ *     deux temps égaux) ;
+ *   - la première mesure sur la tonique, si la mélodie le permet ;
+ *   - la fin de chaque phrase de quatre mesures sur une cadence : la
+ *     dernière mesure sur la tonique (la dominante d'abord, si la mesure se
+ *     partage : cadence parfaite), les autres sur la dominante quand la
+ *     mélodie s'y prête (demi-cadence). Une levée ne compte pas dans la
+ *     phrase ;
+ *   - une dominante secondaire (D7 en do, appelé par un fa♯) mène à son
+ *     accord (sol) quand la mélodie le permet ;
+ *   - ailleurs, le meilleur accord, mais on garde celui d'avant s'il est
+ *     parmi les deux meilleurs : une harmonie qui change à chaque mesure
+ *     fatigue. Cette règle ne joue plus aux fins de phrase : elle y effaçait
+ *     la demi-cadence (l'Hymne à la joie restait en ré à la 4ᵉ mesure).
+ */
+export function harmoniser(seq) {
+  const mesure = pasParMesure(seq), temps = pasParTemps(seq);
+  const nb = nbMesures(seq);
+  const tonalite = accordsDeLaTonalite(seq.tonalite);
+  const tonique = new Set([tonalite[0].nom]);
+  const dominantes = new Set(tonalite.filter((c) => c.degre === "V" || c.degre === "V7").map((c) => c.nom));
+  const melodie = seq.pistes[0].notes;
+  if (!melodie.length) return [];
+  const moitie = (mesure / temps) % 2 === 0 ? mesure / 2 : null;
+  // Une levée : la mélodie n'entre qu'à partir de la moitié de la première mesure.
+  const premiere = Math.min(...melodie.map((n) => n.d));
+  const levee = nb > 1 && premiere >= mesure / 2 && premiere < mesure;
+  // Parmi les trois meilleurs, et presque aussi bon que le premier, celui qu'on veut ; sinon le meilleur.
+  const preferer = (notes, voulus) => (voulus && notes.slice(0, 3).find((c) => voulus.has(c.nom) && c.score >= notes[0].score - MARGE)) || notes[0];
+  const accords = [];
+  let precedent = null; // le dernier accord posé (avec sa cible, si c'est une dominante secondaire)
+  for (let m = 0; m < nb; m++) {
+    const debut = m * mesure, fin = debut + mesure;
+    if (!melodie.some((n) => n.d < fin && n.d + n.l > debut)) continue; // l'accord d'avant continue
+    const rang = levee ? m : m + 1;
+    const cadence = m === nb - 1 ? "parfaite" : rang % PHRASE === 0 ? "demi" : null;
+    const resolution = precedent && precedent.cible ? new Set([precedent.cible]) : null;
+    const entiere = noter(seq, debut, fin);
+    // Deux accords dans la mesure ? Seulement si une moitié se passe clairement de l'accord de la mesure.
+    if (moitie && !(m === 0 && levee)) {
+      const moities = [[debut, debut + moitie], [debut + moitie, fin]];
+      if (moities.some(([a, b]) => horsDeLAccord(seq, a, b, entiere[0].nom) >= PARTAGE)) {
+        const [n1, n2] = moities.map(([a, b]) => noter(seq, a, b));
+        const c1 = preferer(n1, cadence === "parfaite" ? dominantes : m === 0 ? tonique : resolution);
+        const c2 = preferer(n2, cadence === "parfaite" ? tonique : cadence === "demi" ? dominantes : c1.cible ? new Set([c1.cible]) : null);
+        if (c1.nom !== c2.nom) {
+          accords.push({ d: debut, nom: c1.nom }, { d: debut + moitie, nom: c2.nom });
+          precedent = c2;
+          continue;
+        }
+      }
+    }
+    let choix = preferer(entiere, m === 0 || cadence === "parfaite" ? tonique : cadence === "demi" ? dominantes : resolution);
+    if (choix === entiere[0] && !cadence && m > 0 && !resolution) {
+      const garde = entiere.slice(0, 2).find((c) => precedent && c.nom === precedent.nom);
+      if (garde) choix = garde;
+    }
+    accords.push({ d: debut, nom: choix.nom });
+    precedent = choix;
+  }
+  // Deux fois de suite le même accord : un seul symbole.
   return accords.filter((a, i) => i === 0 || a.nom !== accords[i - 1].nom);
 }
 
@@ -244,27 +336,13 @@ export function accordsDeLaMelodie(seq, debut, fin, combien = 3) {
 
 const SIGNES = { "-2": "𝄫", "-1": "♭", 0: "", 1: "♯", 2: "𝄪" };
 const NOTES_FR = { C: "do", D: "ré", E: "mi", F: "fa", G: "sol", A: "la", B: "si" };
-// Combien de lettres au-dessus de la racine chaque intervalle s'écrit (tierce
-// = deux lettres plus haut, quinte = quatre…) : c'est ce qui donne mi♭ et non ré♯.
-const LETTRES_DE = { 0: 0, 2: 1, 3: 2, 4: 2, 5: 3, 6: 4, 7: 4, 8: 4, 9: 5, 10: 6, 11: 6, 14: 1 };
 
 /**
  * Les notes d'un accord, en clair, du grave à l'aigu : « C » → ["do", "mi",
  * "sol"], « F#m7/E » → ["mi", "fa♯", "la", "do♯"] (la basse d'abord).
  */
 export function notesDeLAccord(nom) {
-  const m = FORME.exec((nom || "").trim());
-  const a = lireAccord(nom);
-  if (!m || !a) return [];
-  const iRacine = LETTRES.indexOf(m[1]);
-  const ecrire = (lettre, pc) => NOTES_FR[lettre] + (SIGNES[((mod12(pc - RACINES[lettre]) + 6) % 12) - 6] ?? "");
-  const notes = a.intervalles.map((i) => {
-    // Dans l'accord diminué de septième, le 9 est une septième diminuée, pas une sixte.
-    const pas = a.qualite === "dim7" && i === 9 ? 6 : LETTRES_DE[i];
-    return { pc: mod12(a.racine + i), nom: ecrire(LETTRES[(iRacine + pas) % 7], a.racine + i) };
-  });
-  if (a.basse === null) return notes.map((n) => n.nom);
-  return [ecrire(m[4], a.basse), ...notes.filter((n) => n.pc !== a.basse).map((n) => n.nom)];
+  return epellationsDeLAccord(nom).map((n) => NOTES_FR[n.lettre] + (SIGNES[n.alt] ?? ""));
 }
 
 /**
@@ -339,12 +417,81 @@ export const STYLES = [
   { id: "arpege", nom: "Arpège" },
 ];
 
+// ---------------------------------------------------------------------------
+// La conduite des voix : où se placent les notes de chaque accord
+// ---------------------------------------------------------------------------
+//
+// Avant, chaque accord était plaqué en position fondamentale à partir du
+// do3 : tout bougeait en parallèle (C Am F G C : 64 demi-tons parcourus par
+// les voix du dessus), et l'accompagnement passait au-dessus d'une mélodie
+// grave. Maintenant, comme un pianiste : chaque accord prend le renversement
+// le plus proche du précédent, sous la mélodie de sa mesure, et la basse
+// reste en dessous.
+
+const PLAFOND = 72;                 // do5 : l'accompagnement ne monte jamais plus haut
+const CENTRE = 57;                  // la3 : là où il sonne clair sans gêner la mélodie
+const PLANCHERS = [48, 45, 43, 40]; // do3 ; plus bas seulement si la mélodie descend
+const REGISTRE = 0.2;               // le poids du registre face au mouvement des voix
+
 /**
- * Les notes d'un accord : l'accord à partir de l'octave du do3, la basse
- * dans l'octave du dessous (la note après « / », sinon la racine).
+ * Les notes de l'accord au-dessus de la basse (0-11). Avec une neuvième, la
+ * basse dit déjà la racine : les voix du dessus la laissent et sonnent en
+ * tierces (fa la do mi pour ré m9), pas en grappe (mi fa do ré). Si la basse
+ * est une autre note (C9/E), la racine reste et c'est la quinte, la plus
+ * dispensable, qui part : quatre voix au plus sous la mélodie.
  */
-function disposition(a) {
-  return { tons: a.intervalles.map((i) => 48 + a.racine + i), basse: 36 + (a.basse ?? a.racine) };
+function tonsDe(a) {
+  let iv = a.intervalles;
+  if (iv.includes(14) && (a.basse === null || a.basse === a.racine)) iv = iv.filter((i) => i !== 0);
+  else if (iv.length > 4) iv = iv.filter((i) => i !== 7);
+  return [...new Set(iv.map((i) => mod12(a.racine + i)))];
+}
+
+/** Les accords serrés (chaque renversement, à chaque octave) dont toutes les notes tiennent entre `plancher` et `plafond`. */
+function dispositions(tons, plancher, plafond) {
+  const tries = [...tons].sort((x, y) => x - y);
+  const sortie = [];
+  tries.forEach((_, r) => {
+    const ordre = [...tries.slice(r), ...tries.slice(0, r)];
+    for (let bas = plancher; bas <= plafond; bas++) {
+      if (mod12(bas) !== ordre[0]) continue;
+      const v = [bas];
+      for (const pc of ordre.slice(1)) { let x = v.at(-1) + 1; while (mod12(x) !== pc) x++; v.push(x); }
+      if (v.at(-1) <= plafond) sortie.push(v);
+    }
+  });
+  return sortie;
+}
+
+/** Le mouvement des voix d'un accord à l'autre (demi-tons), voix par voix du grave à l'aigu. */
+function mouvement(u, v) {
+  let s = 0;
+  for (let i = 0; i < Math.max(u.length, v.length); i++) s += Math.abs(u[Math.min(i, u.length - 1)] - v[Math.min(i, v.length - 1)]);
+  return s;
+}
+const ecartAuCentre = (v) => Math.abs(v.reduce((s, x) => s + x, 0) / v.length - CENTRE);
+
+/**
+ * La disposition de chaque accord. On choisit l'enchaînement entier (le
+ * moins de mouvement possible, sans quitter le registre), pas accord par
+ * accord : un premier choix pris au hasard pourrait coincer la suite.
+ * `possibles[i]` : les dispositions permises du i-ème accord.
+ */
+function conduire(possibles) {
+  const couts = possibles.map((liste) => liste.map(() => Infinity));
+  const venant = possibles.map((liste) => liste.map(() => -1));
+  possibles.forEach((liste, i) => liste.forEach((v, j) => {
+    const propre = REGISTRE * ecartAuCentre(v);
+    if (i === 0) { couts[0][j] = propre; return; }
+    possibles[i - 1].forEach((u, k) => {
+      const c = couts[i - 1][k] + mouvement(u, v) + propre;
+      if (c < couts[i][j]) { couts[i][j] = c; venant[i][j] = k; }
+    });
+  }));
+  const choix = [];
+  let j = couts.at(-1).indexOf(Math.min(...couts.at(-1)));
+  for (let i = possibles.length - 1; i >= 0; i--) { choix[i] = possibles[i][j]; j = venant[i][j]; }
+  return choix;
 }
 
 /** L'accompagnement d'une idée, d'après ses accords et le style choisi. */
@@ -352,34 +499,64 @@ export function accompagnement(seq, style = seq.accompagnement) {
   if (!style || style === "aucun" || !seq.accords || !seq.accords.length) return [];
   const mesure = pasParMesure(seq), temps = pasParTemps(seq);
   const total = nbMesures(seq) * mesure;
-  const accords = [...seq.accords].sort((a, b) => a.d - b.d);
+  const melodie = (seq.pistes[0] && seq.pistes[0].notes) || [];
+  const accords = [...seq.accords].sort((a, b) => a.d - b.d)
+    .map((ac, i, tous) => ({ ...ac, a: lireAccord(ac.nom), fin: i + 1 < tous.length ? tous[i + 1].d : total }))
+    .filter((ac) => ac.a && ac.d < total);
+  if (!accords.length) return [];
+  // Chaque accord sous la note la plus grave que la mélodie joue pendant qu'il sonne.
+  const plafonds = accords.map((ac) => {
+    const dessus = melodie.filter((n) => n.d < ac.fin && n.d + n.l > ac.d).map((n) => n.h);
+    return Math.min(PLAFOND, dessus.length ? Math.min(...dessus) - 1 : PLAFOND);
+  });
+  const possibles = accords.map((ac, i) => {
+    for (const plancher of PLANCHERS) {
+      const liste = dispositions(tonsDe(ac.a), plancher, plafonds[i]);
+      if (liste.length) return liste;
+    }
+    // Une mélodie plus grave que tout accord : l'accord reste à sa place, sous le do5.
+    plafonds[i] = PLAFOND;
+    return dispositions(tonsDe(ac.a), PLANCHERS[0], PLAFOND);
+  });
+  const choix = conduire(possibles);
   const notes = [];
-  const ajouter = (d, l, h, v = 70) => { if (l > 0 && d < total) notes.push({ id: -(notes.length + 1), d, l: Math.min(l, total - d), h, v }); };
+  // Chaque note dit si elle est la basse ou l'accord : le MIDI les met sur deux pistes (voixCompletes).
+  const ajouter = (d, l, h, v, role) => { if (l > 0 && d < total) notes.push({ id: -(notes.length + 1), d, l: Math.min(l, total - d), h, v, role }); };
   accords.forEach((ac, i) => {
-    const a = lireAccord(ac.nom);
-    if (!a) return;
-    const fin = i + 1 < accords.length ? accords[i + 1].d : total;
-    const { tons, basse } = disposition(a);
+    const { a, fin } = ac;
+    const voix = choix[i];
+    // La basse (la note après « / », sinon la racine) dans l'octave du do2, sous l'accord.
+    let basse = 36 + (a.basse ?? a.racine);
+    while (basse >= voix[0]) basse -= 12;
     if (style === "plaque") {
       // Un accord par mesure (rejoué à chaque barre, pour qu'on l'entende).
       for (let d = ac.d; d < fin; d = Math.min(fin, (Math.floor(d / mesure) + 1) * mesure)) {
         const l = Math.min(fin, (Math.floor(d / mesure) + 1) * mesure) - d;
-        for (const h of new Set([basse, ...tons])) ajouter(d, l, h);
+        ajouter(d, l, basse, 70, "basse");
+        for (const h of voix) ajouter(d, l, h, 70, "accord");
       }
     } else if (style === "basse") {
-      // La basse sur le premier temps, l'accord (sans la racine) sur les autres.
+      // La basse sur le premier temps, l'accord (sans sa racine, que la basse vient de dire) sur les autres.
+      const sansRacine = voix.filter((h) => mod12(h) !== a.racine);
+      const dessus = sansRacine.length >= 2 ? sansRacine : voix;
       for (let d = ac.d; d < fin; d += temps) {
         const l = Math.min(temps, fin - d);
-        if ((d % mesure) === 0 || d === ac.d) ajouter(d, l, basse, 80);
-        else for (const h of tons.slice(1)) ajouter(d, l, h, 60);
+        if ((d % mesure) === 0 || d === ac.d) ajouter(d, l, basse, 80, "basse");
+        else for (const h of dessus) ajouter(d, l, h, 60, "accord");
       }
     } else if (style === "arpege") {
-      // Des croches qui montent et redescendent : racine, quinte, octave, tierce…
-      const motif = [basse, tons[0], tons[2] ?? tons[1], tons[0] + 12, tons[1] + 12, tons[0] + 12, tons[2] ?? tons[1], tons[0]];
+      // Des croches : la basse, puis l'accord qui monte et redescend, toutes
+      // ses notes comprises (la septième, la neuvième). Un accord de trois
+      // notes prend l'octave de la plus grave, s'il reste de la place sous
+      // la mélodie, pour que le motif d'une mesure de 4/4 ne bégaie pas.
+      const haut = [...voix];
+      if (haut.length === 3 && haut[0] + 12 > haut[2] && haut[0] + 12 <= plafonds[i]) haut.push(haut[0] + 12);
+      const vague = [...haut, ...haut.slice(1, -1).reverse()];
       let k = 0;
       for (let d = ac.d; d < fin; d += 2, k++) {
         if (d % mesure === 0) k = 0;
-        ajouter(d, Math.min(2, fin - d), motif[k % motif.length], k === 0 ? 75 : 62);
+        if (k === 0) ajouter(d, Math.min(2, fin - d), basse, 75, "basse");
+        else ajouter(d, Math.min(2, fin - d), vague[(k - 1) % vague.length], 62, "accord");
       }
     }
   });
@@ -399,16 +576,35 @@ export function motifAccompagnement(style, mesure = [4, 4]) {
   return { pas, notes: accompagnement(seq, style).map(({ d, l, h }) => ({ d, l, h })) };
 }
 
-/** Les voix à graver, jouer et exporter : les pistes, plus l'accompagnement s'il y en a un. */
+/**
+ * Les voix à graver, jouer et exporter : les pistes, plus l'accompagnement
+ * s'il y en a un, en deux voix, « Accords » et « Basse des accords ». Le MIDI
+ * les sépare (dans Live, la basse va sur sa propre piste, vers une basse) ;
+ * la partition et le MusicXML les gardent sur une seule portée en clé de fa
+ * (`portee`), comme la main gauche d'un pianiste. « Basse des accords » et
+ * pas « Basse » : une piste de basse jouée par toi ne s'y mélange pas.
+ */
 export function voixCompletes(seq) {
   const voix = seq.pistes.map((p) => ({ ...p }));
   const acc = accompagnement(seq);
-  if (acc.length) voix.push({ nom: "Accords", cle: "fa", notes: acc });
+  const accords = acc.filter((n) => n.role !== "basse"), basses = acc.filter((n) => n.role === "basse");
+  if (accords.length) voix.push({ nom: "Accords", cle: "fa", portee: "accompagnement", notes: accords });
+  if (basses.length) voix.push({ nom: "Basse des accords", cle: "fa", portee: "accompagnement", notes: basses });
   return voix;
 }
 
 const TONIQUES_MAJ = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const TONIQUES_MIN = ["Cm", "C#m", "Dm", "Ebm", "Em", "Fm", "F#m", "Gm", "G#m", "Am", "Bbm", "Bm"];
+
+/**
+ * Une tonalité montée ou descendue de `demiTons`, nommée comme dans le menu
+ * des tonalités (« C » + 3 → « Eb ») ; sans transposition, elle ne change pas.
+ */
+export function tonaliteTransposee(tonalite, demiTons) {
+  if (!demiTons) return tonalite;
+  const k = lireTonalite(tonalite);
+  return (k.mineur ? TONIQUES_MIN : TONIQUES_MAJ)[mod12(k.pc + demiTons)];
+}
 
 /** Toute l'idée transposée : notes, accords et tonalité. */
 export function transposerIdee(seq, demiTons) {

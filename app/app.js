@@ -19,11 +19,12 @@ import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE
 import { creerSynchro } from "./synchro.js";
 import { creerEditeurIdee, midiDeLIdee } from "./idee.js";
 import { Transport } from "./transport.js";
-import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
-import { voixCompletes } from "./harmonie.js";
+import { sequenceDepuisAbc, pasParMesure, pasParTemps, ecrireAbc } from "./sequence.js";
+import { voixCompletes, transposerIdee } from "./harmonie.js";
 import { creerVueMorceau } from "./vue-morceau.js";
-import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
-import { ecrireMusicXml } from "./musicxml.js";
+import { midiDuMorceau, musicXmlDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
+import { ecrireMusicXml, musicXmlDeLaPage } from "./musicxml.js";
+import { midiDeLaPage, ideeDepuisMidi } from "./midi.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerHistorique } from "./historique.js";
@@ -271,7 +272,11 @@ function ouvrirIdee(p = null, options = {}) {
 /** Toutes les étiquettes de la bibliothèque, les plus employées d'abord. */
 function toutesEtiquettes() {
   const compte = new Map();
-  for (const p of etat.partitions) for (const t of p.etiquettes || []) compte.set(t, (compte.get(t) || 0) + 1);
+  // Une fiche abîmée (des étiquettes qui ne sont pas une liste) vidait tout le
+  // carnet (audit, S6) : le stockage les remet en forme, et ceci ne casse plus.
+  for (const p of etat.partitions) {
+    for (const t of Array.isArray(p.etiquettes) ? p.etiquettes : []) if (typeof t === "string" && t) compte.set(t, (compte.get(t) || 0) + 1);
+  }
   return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
 }
 
@@ -486,12 +491,32 @@ async function sauvegarderBibliotheque() {
 async function restaurerBibliotheque(fichier) {
   try {
     const contenu = JSON.parse(await fichier.text());
-    const { ajoutees, ignorees } = await restaurer(etat.stockage, contenu, new Set(etat.partitions.map((p) => p.id)));
-    const deja = ignorees ? ` (${ignorees} déjà dans ta bibliothèque)` : "";
-    toast(ajoutees ? `${ajoutees} partition${ajoutees > 1 ? "s" : ""} restaurée${ajoutees > 1 ? "s" : ""}${deja}.` : `Rien à restaurer : tout est déjà dans ta bibliothèque.`);
+    const bilan = await restaurer(etat.stockage, contenu, new Set(etat.partitions.map((p) => p.id)));
+    toast(bilanRestauration(bilan), bilan.echecs.length ? 10000 : 5000);
   } catch (e) {
     toast(e instanceof SyntaxError ? "Ce fichier n'est pas une sauvegarde de Portée." : (e.message || "La restauration n'a pas abouti."), 7000);
   }
+}
+
+/**
+ * Ce que la restauration a fait, en une phrase : combien sont revenues
+ * (même supprimées ailleurs depuis), combien étaient déjà là (gardées telles
+ * quelles), et lesquelles n'ont pas pu revenir, avec la raison.
+ */
+function bilanRestauration({ revenues = 0, ignorees = 0, differentes = 0, echecs = [] }) {
+  const pluriel = (n, un, plusieurs) => (n > 1 ? plusieurs : un);
+  if (!revenues && !echecs.length) return ignorees ? "Rien à restaurer : tout est déjà dans ta bibliothèque." : "Cette sauvegarde est vide.";
+  const morceaux = [];
+  if (revenues) morceaux.push(`${revenues} ${pluriel(revenues, "partition revenue", "partitions revenues")}`);
+  if (ignorees) {
+    const changees = differentes ? ` (dont ${differentes} ${pluriel(differentes, "modifiée depuis, gardée telle quelle", "modifiées depuis, gardées telles quelles")})` : "";
+    morceaux.push(`${ignorees} déjà là${changees}`);
+  }
+  if (echecs.length) {
+    const lesquelles = echecs.slice(0, 3).map((x) => `« ${x.titre} » (${x.raison})`).join(", ") + (echecs.length > 3 ? "…" : "");
+    morceaux.push(`${echecs.length} ${pluriel(echecs.length, "n'a pas pu revenir", "n'ont pas pu revenir")} : ${lesquelles}`);
+  }
+  return morceaux.join(" · ") + ".";
 }
 
 function nomModele(m) {
@@ -519,6 +544,7 @@ async function importer(fichiers) {
   for (const f of fichiers) {
     try {
       toast(`Lecture de « ${f.name} »…`, 60000);
+      if (/\.midi?$/i.test(f.name) || /midi/i.test(f.type)) { dernier = (await importerMidi(f)) || dernier; continue; }
       const pdfjs = await chargerPdfjs();
       const doc = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise;
       const lu = await lireDocument(pdfjs, doc);
@@ -536,6 +562,29 @@ async function importer(fichiers) {
     }
   }
   if (dernier && fichiers.length === 1) ouvrir(dernier, "atelier");
+}
+
+/**
+ * Un fichier MIDI devient une idée : l'aller-retour avec Ableton (une phrase
+ * retravaillée dans Live revient dans Portée). Les notes sont recalées au
+ * pas (midi.js, ideeDepuisMidi) ; l'idée s'enregistre comme une autre, et
+ * s'ouvre si c'est le seul fichier importé.
+ */
+async function importerMidi(f) {
+  const titre = f.name.replace(/\.midi?$/i, "").replace(/[_]+/g, " ").trim() || "Idée MIDI";
+  const { sequence, ecartees } = ideeDepuisMidi(new Uint8Array(await f.arrayBuffer()));
+  const nb = sequence.pistes.reduce((n, p) => n + p.notes.length, 0);
+  if (!nb) { toast(`« ${f.name} » ne contient aucune note à garder.`, 6000); return null; }
+  const id = nouvelId();
+  const maintenant = new Date().toISOString();
+  await etat.stockage.creer(id, {
+    type: "idee", titre, sequence, abc: ecrireAbc(sequence, { voix: voixCompletes(sequence), titre }).abc,
+    statut: "idee", nbPages: 0, modele: null, tempo: sequence.tempo, note: "", etiquettes: [], favori: false, memo: null,
+    creeLe: maintenant, modifieLe: maintenant,
+  }, []);
+  const laisse = [ecartees.pistes ? `${ecartees.pistes} piste${ecartees.pistes > 1 ? "s" : ""} de plus` : "", ecartees.batterie ? "la batterie" : ""].filter(Boolean).join(" et ");
+  toast(`« ${titre} » : ${nb} note${nb > 1 ? "s" : ""}, une idée de plus.${laisse ? ` Laissées de côté : ${laisse} (une idée garde quatre pistes, sans percussions).` : ""}`, laisse ? 8000 : 4000);
+  return id;
 }
 
 /**
@@ -1473,19 +1522,20 @@ function graverLecteur() {
 
 const nomDeFichier = (p) => (p.titre || "").replace(/[\\/:*?"<>|]+/g, " ").trim() || "partition";
 
-/** Le MIDI d'une partition : une piste par voix (par main au piano), tempo et transposition compris. */
-function midiDe(abc, { tempo, transposition = 0 } = {}) {
-  const options = { midiOutputType: "binary", midiTranspose: transposition };
-  if (tempo) options.qpm = tempo; // sinon, le tempo écrit dans l'ABC (Q:)
-  const [binaire] = ABCJS().synth.getMidiFile(abc, options);
-  return binaire instanceof Uint8Array ? binaire : new Uint8Array(binaire);
+/**
+ * Le MIDI d'une page lue : une piste par main, tempo, transposition et
+ * changements de la page compris. Par le même écrivain que les idées
+ * (midi.js) : abcjs écrivait des pistes sans nom et perdait les changements.
+ */
+function midiDe(abc, { tempo, transposition = 0, titre = "" } = {}) {
+  return midiDeLaPage(abc, ABCJS(), { tempo, transposition, titre });
 }
 
 /** Le MIDI de n'importe quelle partition : une idée part de ses notes, une page lue, de son ABC. */
 function midiDePartition(p, reglages = {}) {
   if (p.type === "idee") return midiDeLIdee(p);
   if (p.type === "morceau") return midiDuMorceau(p, ideesParId());
-  return midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0 });
+  return midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0, titre: p.titre });
 }
 
 /** Télécharge le .mid (dans un .zip sur claude.ai, dont la liste des formats ignore .mid). */
@@ -1573,20 +1623,22 @@ function resumeIdee(seq) {
 }
 
 /**
- * Le MusicXML (MuseScore) : une idée part de ses notes, une page lue de son
- * ABC joué en notes. Sur claude.ai, dans un .zip (liste fermée des formats).
+ * Le MusicXML (MuseScore) : une idée part de ses notes, un morceau de ses
+ * blocs assemblés (comme pour le MIDI), une page lue de son ABC joué en
+ * notes, avec la transposition choisie à l'écoute (le MIDI la prenait, le
+ * MusicXML l'oubliait). Sur claude.ai, dans un .zip (liste fermée des formats).
  */
 async function exporterMusicXml(p) {
   try {
-    let seq, voix;
-    if (p.type === "idee") { seq = p.sequence; voix = voixCompletes(seq); }
+    let texte;
+    if (p.type === "idee") texte = ecrireMusicXml(p.sequence, { voix: voixCompletes(p.sequence), titre: p.titre });
+    else if (p.type === "morceau") texte = musicXmlDuMorceau(p, ideesParId());
     else {
       if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
-      seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
-      voix = seq.pistes;
+      texte = musicXmlDeLaPage(p.abc, ABCJS(), { tempo: p.tempo, transposition: p.transposition || 0, titre: p.titre });
     }
     const nom = `${nomDeFichier(p)}.musicxml`;
-    const octets = new TextEncoder().encode(ecrireMusicXml(seq, { voix, titre: p.titre }));
+    const octets = new TextEncoder().encode(texte);
     if (etat.stockage.midiDirect) await etat.stockage.enregistrerFichier(nom, new Blob([octets], { type: "application/vnd.recordare.musicxml+xml" }));
     else await etat.stockage.enregistrerFichier(`${nomDeFichier(p)} (MusicXML).zip`, zipper([{ nom, donnees: octets }]));
   } catch (e) {
@@ -1752,6 +1804,8 @@ function brancher() {
     if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
     try {
       const seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
+      // Ce qu'on entend (et ce que le MIDI exporte) : la page transposée.
+      transposerIdee(seq, p.transposition || 0);
       ouvrirIdee(null, { seq, titre: `${p.titre} (idée)` });
       toast("Une copie en idée : la page d'origine ne change pas.");
     } catch (e) {
@@ -1909,6 +1963,7 @@ function creerVueDuMorceau() {
     stockage: () => etat.stockage,
     partitions: () => etat.partitions,
     partager: partagerMidi,
+    exporterMusicXml,
     ouvrirIdee: (id) => ouvrir(id),
     quitter: () => montrer("biblio"),
     veutSupprimer,
@@ -1942,6 +1997,65 @@ function creerEditeur() {
   });
 }
 
+/**
+ * Le service worker (sw.js) garde l'appli pour le hors-ligne. Une version
+ * mise en ligne s'installe en arrière-plan, puis prend la main ; si la page
+ * ouverte n'est pas de cette version, un message passager propose de
+ * recharger. Rien ne se recharge tout seul : on peut être au milieu d'une
+ * prise ou d'une correction.
+ *
+ * Une appli installée reste ouverte des jours : en y revenant (au plus une
+ * fois toutes les dix minutes), on demande s'il y a une nouvelle version,
+ * sans attendre que le navigateur y pense.
+ *
+ * L'inscription attend que la page soit chargée : la copie de l'appli ne
+ * lui dispute pas le réseau. Ce qui est lourd et ne sert pas au démarrage
+ * (pdf.js, le piano) se copie ensuite, en tâche de fond.
+ */
+function brancherServiceWorker() {
+  // La version de la page : celle de l'adresse de ce module (app.js?v=…).
+  const maVersion = new URL(import.meta.url).searchParams.get("v");
+  const copierEnFond = (sw) => sw && sw.postMessage({ type: "portee-precharger" });
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    const m = e.data;
+    if (!m || m.type !== "portee-version") return;
+    copierEnFond(e.source); // une version qui vient de prendre la main
+    if (maVersion && m.version !== maVersion) proposerRechargement();
+  });
+  let verifiee = Date.now();
+  const inscrire = () => navigator.serviceWorker.register("sw.js").then((inscription) => {
+    navigator.serviceWorker.ready.then((r) => copierEnFond(r.active));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || Date.now() - verifiee < 10 * 60 * 1000) return;
+      verifiee = Date.now();
+      inscription.update().catch(() => {}); // hors ligne : la prochaine fois
+    });
+  }).catch(() => {});
+  if (document.readyState === "complete") inscrire();
+  else addEventListener("load", inscrire, { once: true });
+}
+
+/** « Une nouvelle version est prête » : un message passager, avec de quoi recharger. */
+function proposerRechargement() {
+  if ($("toast-version")) return;
+  const m = document.createElement("div");
+  m.className = "toast toast-action";
+  m.id = "toast-version";
+  m.setAttribute("role", "status");
+  m.setAttribute("popover", "manual");
+  const texte = document.createElement("span");
+  texte.textContent = "Une nouvelle version de Portée est prête.";
+  const recharger = document.createElement("button");
+  recharger.className = "btn btn-petit";
+  recharger.textContent = "Recharger";
+  recharger.addEventListener("click", () => location.reload());
+  m.append(texte, recharger);
+  document.body.appendChild(m);
+  // En « popover », comme les autres messages : au-dessus d'une feuille ouverte.
+  if (m.showPopover) { try { m.showPopover(); } catch { /* sans popover : il s'affiche quand même */ } }
+  setTimeout(() => m.remove(), 20000);
+}
+
 async function demarrer() {
   injecterIcones();
   // Un appui long sur une icône dit ce qu'elle fait.
@@ -1951,7 +2065,23 @@ async function demarrer() {
   creerEditeur();
   creerVueDuMorceau();
   afficherBibliotheque();
-  etat.stockage = await ouvrirStockage();
+  let bloquee = false;
+  try {
+    etat.stockage = await ouvrirStockage({
+      // Un autre onglet garde la base ouverte sur une version précédente : on
+      // le dit, et la bibliothèque s'ouvre dès qu'il la lâche (audit, S13).
+      surBloque: (message) => { bloquee = true; $("mode").textContent = message; toast(message, 120000); },
+    });
+  } catch (e) {
+    // Base déjà passée à une version plus récente : pas de bibliothèque vide en douce.
+    const message = (e && e.message) || "La bibliothèque ne s'ouvre pas : recharge la page.";
+    $("mode").textContent = message;
+    toast(message, 120000);
+    return;
+  }
+  if (bloquee) toast("Ta bibliothèque est ouverte.");
+  // Une version plus récente de Portée, ouverte dans un autre onglet, a besoin de la base : celle-ci la lâche.
+  if (etat.stockage.surFermeture) etat.stockage.surFermeture(() => toast("Portée a été mise à jour dans un autre onglet : recharge cette page pour continuer.", 120000));
   // Le bouton « précédent » du téléphone recule dans l'appli au lieu de la quitter.
   creerHistorique({ racine: aLaRacine, reculer }).synchroniser();
   // Raccourci de l'appli installée (« Nouvelle idée ») : on y va tout droit.
@@ -1965,9 +2095,8 @@ async function demarrer() {
   demarrerSynchro();
   $("changer-adresse").hidden = dansClaude() || !adresseEnregistree();
   // Hors ligne et installable, hors de claude.ai (sw.js n'existe que sur le site).
-  if (!dansClaude() && "serviceWorker" in navigator && location.protocol === "https:") {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  }
+  // Un contexte sûr : https, ou l'ordinateur lui-même (les essais de bout en bout).
+  if (!dansClaude() && "serviceWorker" in navigator && window.isSecureContext) brancherServiceWorker();
   etat.stockage.ecouter(
     (liste) => {
       etat.partitions = liste;

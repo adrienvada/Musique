@@ -1,0 +1,31 @@
+# Les dépendances et les actions, tenues à jour une fois par semaine (le
+# lundi matin), chacune en une seule PR qui les regroupe : les vérifications
+# du site (tests, lint, types, essais de bout en bout) disent si une
+# nouvelle version change quelque chose, avant que rien ne parte en ligne.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    groups:
+      dependances:
+        patterns: ["*"]
+    ignore:
+      # Playwright va avec les navigateurs installés dans l'environnement où
+      # travaille Claude (Chromium 1194, Playwright 1.56.1) : il se monte à
+      # la main, avec eux.
+      - dependency-name: playwright
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    groups:
+      actions:
+        patterns: ["*"]

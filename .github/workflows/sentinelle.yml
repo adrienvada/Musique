@@ -1,0 +1,70 @@
+# La sentinelle du connecteur « Portée reMarkable ».
+#
+# Une fois par semaine, un appel muet au connecteur (l'outil
+# « arborescence », comme le bouton reMarkable de l'appli) : il fait
+# travailler le projet Supabase gratuit, qui s'endort après une semaine sans
+# activité, et il échoue si le connecteur ne répond plus. Quand une tâche
+# planifiée échoue, GitHub l'écrit par courriel à Adrien : il l'apprend
+# avant l'import suivant, au lieu de le découvrir devant sa tablette.
+#
+# Rien ne s'affiche : ni l'adresse (elle porte la clé), ni la réponse (les
+# noms de ses documents). Les journaux d'Actions d'un dépôt public sont
+# publics.
+#
+# LA RÈGLE DES 60 JOURS. Dans un dépôt public, GitHub désactive une tâche
+# planifiée après 60 jours sans activité du dépôt (aucun commit). Il
+# prévient par courriel avant ; un commit, ou « Enable workflow » dans
+# l'onglet Actions, la relance. La sentinelle ne compte pas comme activité.
+name: Sentinelle du connecteur
+
+on:
+  schedule:
+    # Le lundi à 6 h 47 UTC : à une heure ronde, la tâche attendrait derrière
+    # toutes celles de GitHub (et serait parfois sautée).
+    - cron: "47 6 * * 1"
+  workflow_dispatch:
+
+# Le jeton GitHub du job ne peut rien faire : la sentinelle n'en a pas besoin.
+permissions: {}
+
+concurrency: sentinelle
+
+jobs:
+  veiller:
+    runs-on: ubuntu-latest
+    # Le même environnement que le déploiement : quand les secrets y seront
+    # déplacés, la sentinelle les lira encore. (Pas de relecteur obligatoire
+    # sur cet environnement : la tâche du lundi attendrait une approbation.)
+    environment: supabase
+    timeout-minutes: 5
+    steps:
+      - name: Appeler l'arborescence, sans rien afficher
+        env:
+          PORTEE_CLE: ${{ secrets.PORTEE_CLE }}
+          SUPABASE_PROJET: ${{ vars.SUPABASE_PROJET || 'omekkqjinvppadsoinvj' }}
+        run: |
+          set -eu
+          if [ -z "${PORTEE_CLE:-}" ]; then
+            echo "::error::Pas de secret PORTEE_CLE : la sentinelle ne sait pas joindre le connecteur."
+            exit 1
+          fi
+          corps="$(mktemp)"
+          # -s sans -S : aucun message de curl, qui pourrait citer l'adresse.
+          statut="$(curl -s -o "$corps" -w '%{http_code}' --max-time 120 -X POST \
+            -H 'content-type: application/json' \
+            -H 'accept: application/json, text/event-stream' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"arborescence","arguments":{}}}' \
+            "https://${SUPABASE_PROJET}.supabase.co/functions/v1/portee-remarkable/${PORTEE_CLE}")" || statut="000"
+          if [ "$statut" != "200" ]; then
+            echo "::error::Le connecteur répond HTTP ${statut} (000 : aucune réponse). Le projet Supabase s'est peut-être endormi : tableau de bord Supabase, relancer le projet."
+            exit 1
+          fi
+          if ! jq -e '(.error == null) and (.result.isError != true)' "$corps" > /dev/null 2>&1; then
+            echo "::error::Le connecteur répond, mais par une erreur (outil arborescence)."
+            exit 1
+          fi
+          if [ "$(jq -r '.result.structuredContent.connectee' "$corps")" = "false" ]; then
+            echo "::warning::Le connecteur répond, mais la tablette n'est plus reliée : relie-la depuis Portée (Réglages, ma reMarkable)."
+            exit 0
+          fi
+          echo "Le connecteur répond, et la tablette aussi."
