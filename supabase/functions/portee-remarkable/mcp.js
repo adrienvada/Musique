@@ -21,6 +21,7 @@
  */
 import { NonReliee } from "./remarkable.js";
 import { appelerConversation, INVITES, NOMS_CONVERSATION, OUTILS_CONVERSATION, texteConversation, texteInvite } from "./conversation.js";
+import { HTML_VUE, META_VUE, RESSOURCE_VUE, TYPE_VUE, URI_VUE } from "./vue-partition.js";
 
 const OUTILS = [
   {
@@ -293,10 +294,14 @@ function lireEpoque(msg, entetes) {
   return { moderne: false };
 }
 
-/** Ce que sait faire le serveur. `extensions` n'existe qu'à partir de 2026-07-28. */
+/**
+ * Ce que sait faire le serveur. `extensions` n'existe qu'à partir de
+ * 2026-07-28 : on y dit l'interface (MCP Apps). Avant, l'hôte la découvre
+ * par `_meta.ui` sur l'outil partition_montrer.
+ */
 function capacites(moderne) {
-  const c = { tools: { listChanged: false }, prompts: { listChanged: false } };
-  return moderne ? { ...c, extensions: {} } : c;
+  const c = { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false } };
+  return moderne ? { ...c, extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [TYPE_VUE] } } } : c;
 }
 
 // La tablette et la synchro d'abord, puis ce qui sert dans une conversation.
@@ -350,6 +355,14 @@ async function executer(msg, epoque, ctx) {
       return { tools: outils() };
     case "tools/call":
       return appelOutil(p, ctx);
+    case "resources/list":
+      return { resources: [RESSOURCE_VUE] };
+    case "resources/templates/list":
+      return { resourceTemplates: [] };
+    case "resources/read":
+      // Introuvable : -32002 jusqu'en 2025-11-25, -32602 ensuite.
+      if (p.uri !== URI_VUE) throw new ErreurMcp(epoque.moderne ? -32602 : -32002, `Ressource introuvable : ${p.uri}`);
+      return { contents: [{ uri: URI_VUE, mimeType: TYPE_VUE, text: HTML_VUE, _meta: META_VUE }] };
     case "prompts/list":
       return { prompts: INVITES };
     case "prompts/get":

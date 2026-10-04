@@ -12,13 +12,17 @@
  *   - suggestion_ecrire, suggestions_lister, suggestion_retirer : ranger une
  *     proposition à côté d'une partition, qu'Adrien applique d'un geste dans
  *     Portée (suggestions.js) ;
+ *   - partition_montrer : la partition gravée et jouable dans la
+ *     conversation (vue-partition.js, extension MCP Apps) ;
  *   - le prompt relire_page, qui guide Claude sur une page lue.
  *
  * Tout passe par l'API publique de la bibliothèque (changements, ecrire) :
  * aucune règle de la synchro n'est contournée. Les entrées sont vérifiées
  * strictement : une erreur dit à Claude quoi corriger.
  */
+import { abcDeSecours } from "./abc.js";
 import { hasard, verifierIdentifiant } from "./suggestions.js";
+import { URI_VUE } from "./vue-partition.js";
 
 // Ce que l'appli sait faire. Les mêmes listes qu'app/sequence.js, app/idee.js
 // et app/harmonie.js (le connecteur est déployé seul, il ne peut pas les
@@ -157,6 +161,16 @@ export const OUTILS_CONVERSATION = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: "partition_montrer",
+    title: "Montrer une partition",
+    description: "Montre une partition de la bibliothèque dans la conversation, gravée et jouable au piano, quand l'application sait afficher une interface ; sinon rend son ABC. Pour une idée tout juste notée par idee_ecrire, une partition simple est écrite d'après ses notes. Un morceau ne se montre pas : montre ses idées une à une.",
+    inputSchema: { type: "object", properties: { id: SCHEMA_ID }, required: ["id"], additionalProperties: false },
+    annotations: LECTURE,
+    // L'interface qui affiche le résultat (MCP Apps) ; la clé à plat est
+    // l'ancienne forme, que des hôtes lisent encore.
+    _meta: { ui: { resourceUri: URI_VUE }, "ui/resourceUri": URI_VUE },
   },
 ];
 
@@ -328,6 +342,23 @@ async function lire(bibliotheque, args) {
   return vue(await lireFiche(bibliotheque, args.id, toutes), toutes);
 }
 
+/** De quoi graver et jouer une partition dans la conversation. */
+async function montrer(bibliotheque, args) {
+  champs(args, ["id"], "partition_montrer");
+  const toutes = await fiches(bibliotheque);
+  const f = await lireFiche(bibliotheque, args.id, toutes);
+  const v = vue(f, toutes);
+  if (v.type === "morceau") throw new Error("Un morceau ne se montre pas encore ici : montre ses idées une à une (partition_lire donne ses blocs).");
+  let abc = v.abc, source = "partition";
+  if (!abc && v.type === "idee") {
+    // Une idée de Claude, pas encore passée par l'appli : une partition simple, d'après ses notes.
+    abc = abcDeSecours(f.donnees.sequence, v.titre);
+    source = "notes";
+  }
+  if (!abc) throw new Error("Cette partition n'a pas encore d'ABC à graver.");
+  return { id: v.id, titre: v.titre, type: v.type, tempo: v.tempo, mesure: v.mesure, tonalite: v.tonalite, abc, source };
+}
+
 // ------------------------------------------------------------------------
 // Écrire : une idée neuve, ou une suggestion à côté
 // ------------------------------------------------------------------------
@@ -435,6 +466,7 @@ export async function appelerConversation(nom, args, { bibliotheque = null, sugg
       champs(args, ["cible", "sid"], "suggestion_retirer");
       return sug().retirer(args.cible, args.sid);
     }
+    case "partition_montrer": return montrer(bib(), args);
     default: throw new Error(`Outil inconnu : ${nom}`);
   }
 }
@@ -448,6 +480,12 @@ export function texteConversation(nom, r) {
   if (nom === "idee_ecrire") return `L'idée « ${r.titre} » est créée (id ${r.id}) : ${r.notes} note${r.notes > 1 ? "s" : ""}, ${r.accords} accord${r.accords > 1 ? "s" : ""}, ${r.mesures} mesure${r.mesures > 1 ? "s" : ""}. Elle apparaîtra dans Portée à la prochaine synchronisation.`;
   if (nom === "suggestion_ecrire") return `Suggestion rangée (sid ${r.sid}) pour la partition ${r.cible} : Adrien la verra dans Portée et choisira de l'appliquer ou non.`;
   if (nom === "suggestion_retirer") return r.retiree ? "Suggestion retirée." : "Cette suggestion n'existait déjà plus.";
+  if (nom === "partition_montrer") {
+    // Pour un hôte sans interface, l'ABC lui-même : Claude sait le lire.
+    const origine = r.source === "notes" ? " (écrite d'après ses notes, en attendant que Portée l'écrive)" : "";
+    const abc = r.abc.length <= 20000 ? `\n\n${r.abc}` : "";
+    return `« ${r.titre} » : la partition${origine} s'affiche, avec un bouton pour l'écouter.${abc}`;
+  }
   const json = JSON.stringify(r);
   return json.length <= 60000 ? json : `Résultat structuré de ${Math.round(json.length / 1024)} Ko (voir structuredContent).`;
 }

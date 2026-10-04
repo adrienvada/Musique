@@ -704,6 +704,39 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     `changements(null)` (toute la bibliothèque) : c'est l'API publique de
     la bibliothèque, et quelques centaines de fiches se lisent en une ou
     deux secondes.
+- **Une partition jouable dans la conversation (C6).** claude.ai affiche
+  maintenant une petite page fournie par un connecteur (extension MCP Apps,
+  `io.modelcontextprotocol/ui`). L'outil `partition_montrer({ id })` porte
+  `_meta.ui.resourceUri` ; la ressource `ui://portee/partition`
+  (`text/html;profile=mcp-app`, `vue-partition.js`) grave l'ABC avec
+  abcjs 6.7.1 et le joue au piano, les notes jouées allumées.
+  - **Sans dépendance** : le protocole (JSON-RPC par postMessage :
+    `ui/initialize`, les arguments puis le résultat de l'outil, la hauteur
+    annoncée, `ping`, le démontage) est écrit à la main, d'après la
+    spécification du 2026-01-26 et l'exemple officiel `sheet-music-server`.
+    Si l'hôte garde le résultat structuré pour lui, la page le redemande à
+    l'outil, par l'hôte.
+  - **Ce qu'elle charge est déclaré** (`_meta.ui.csp`), sinon l'hôte le
+    bloque : abcjs sur cdnjs, vérifié par son empreinte (SRI : un CDN
+    détourné ne pourrait rien glisser ; un test vérifie qu'elle est celle
+    de `node_modules`), et les sons du synthé d'abcjs (paulrosen.github.io).
+  - Elle suit le clair ou sombre et les jetons de claude.ai, garde les
+    icônes de l'appli, et son bouton fait 44 px.
+  - **Une idée notée par Claude n'a pas encore d'ABC** (l'appli l'écrit à la
+    réception) : `abc.js` en écrit une partition simple d'après ses notes
+    (la mélodie, ses accords, silences et liaisons), pour la montrer tout
+    de suite. Pourquoi pas le code de l'appli : le connecteur est déployé
+    seul, et une copie de `sequence.js` divergerait. abcjs y relit les
+    mêmes notes sur deux cents idées au hasard (et quinze mille à l'essai).
+    Piège trouvé en chemin : abcjs ne compte pas l'altération écrite sur la
+    suite d'une liaison ; la même note, après, redit donc la sienne, comme
+    dans l'appli.
+  - **Essayée dans Chromium** avec un faux hôte qui joue le protocole et
+    applique la CSP que la spécification lui fait construire : gravure,
+    thème, hauteur, écoute (les sons viennent du domaine déclaré), `ping`,
+    démontage, redemande à l'outil, erreur dite en clair, aucune requête
+    ailleurs, aucune erreur de console. Sans Playwright (en CI), l'essai se
+    saute.
 
 ### Données et synchronisation (S6, D1 à D10)
 
