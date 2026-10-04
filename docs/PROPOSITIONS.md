@@ -541,8 +541,8 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 - **La porte du connecteur (S4, côté HTTP).** Trois gardes avant le
   protocole (`http.js`) :
   - **la clé se compare à temps constant** : `!==` s'arrête au premier
-    caractère faux, et le temps de réponse disait combien étaient justes.
-    On compare les empreintes SHA-256 jusqu'au bout ;
+    caractère faux, et le temps de réponse pouvait dire combien étaient
+    justes. On compare les empreintes SHA-256 jusqu'au bout ;
   - **l'en-tête `Origin` est vérifié**, comme la spécification MCP l'exige :
     une page d'ailleurs reçoit 403, même avec la bonne clé (avant, elle
     faisait agir le connecteur, le navigateur lui cachait seulement la
@@ -586,8 +586,8 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     environ (la moitié tirée au hasard, pour ne pas revenir tous ensemble),
     jamais plus de 30 s (claude.ai coupe un appel à 240 s). Pas pour
     `relier` : le code ne sert qu'une fois.
-  - **Six requêtes à la fois** au lieu de douze, qui se faisaient refuser
-    par paquets.
+  - **Six requêtes à la fois** au lieu de douze : une rafale de douze est
+    la première à se faire refuser (429).
   - **Un document illisible** ne fait plus tomber l'arborescence : il est
     dans `illisibles` ({ id, raison }), les autres s'affichent. **Une page
     illisible** est dans `pagesIllisibles`, les autres pages arrivent.
