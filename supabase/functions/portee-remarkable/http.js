@@ -13,7 +13,7 @@
  * En JavaScript standard (Request, Response, WebCrypto) : Deno sur
  * Supabase, Node dans les tests.
  */
-import { traiter } from "./mcp.js";
+import { repondreMcp } from "./mcp.js";
 
 // Le site est publié par GitHub Pages sous le domaine d'Adrien : adrienvada.github.io
 // redirige vers adrienvada.fr, et c'est cette origine-là que le navigateur envoie.
@@ -41,7 +41,8 @@ function entetesCors(req, origines) {
   return {
     "access-control-allow-origin": origine,
     "access-control-allow-methods": "POST, OPTIONS",
-    "access-control-allow-headers": "content-type, accept, mcp-protocol-version, mcp-session-id",
+    // Mcp-Method et Mcp-Name : les en-têtes de la version 2026-07-28.
+    "access-control-allow-headers": "content-type, accept, mcp-protocol-version, mcp-session-id, mcp-method, mcp-name",
     "access-control-max-age": "86400",
     vary: "origin",
   };
@@ -136,7 +137,7 @@ export async function repondreHttp(req, { cle, cloud, bibliotheque = () => null,
   } catch {
     return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON illisible" } }, { status: 400, headers: cors });
   }
-  const reponse = await traiter(message, cloud(), bibliotheque());
-  if (reponse === null) return new Response(null, { status: 202, headers: cors });
-  return Response.json(reponse, { headers: cors });
+  const { statut, corps } = await repondreMcp(message, { entetes: req.headers, cloud, bibliotheque });
+  if (corps === null) return new Response(null, { status: statut, headers: cors });
+  return Response.json(corps, { status: statut, headers: cors });
 }

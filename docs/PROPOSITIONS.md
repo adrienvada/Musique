@@ -552,6 +552,33 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     sous-domaines) au cas où ses serveurs en mettraient une ;
   - **le corps est borné à 6 Mo** (413 au-delà), compté en lisant : la
     longueur annoncée peut manquer ou mentir. Une page dense pèse 60 Ko.
+- **MCP 2026-07-28 et les versions d'avant, sur la même adresse (C2).** La
+  version du 28 juillet 2026 n'a plus d'`initialize` : chaque requête porte
+  sa version dans `params._meta`, redite par l'en-tête
+  `MCP-Protocol-Version`, avec `Mcp-Method` et `Mcp-Name`. claude.ai la
+  déploie ; on sert les deux époques requête par requête (`mcp.js`), sans
+  rien changer à ce qui marche.
+  - Pourquoi les deux plutôt que la nouvelle seule : ton site appelle
+    `tools/call` directement, sans `initialize` ni en-tête, et claude.ai
+    passera d'une version à l'autre quand il voudra. Une requête sans
+    version dans `_meta` est servie comme avant.
+  - Nouveau : `server/discover` (versions, capacités, identité du
+    serveur) ; en 2026-07-28, chaque résultat dit `resultType` et l'identité
+    du serveur, et les listes disent combien de temps les garder (cinq
+    minutes, `private` : l'adresse porte une clé).
+  - Corrigé (écarts relevés par l'audit) : une version inconnue n'est plus
+    renvoyée telle quelle (`initialize` répond 2025-11-25 ; en 2026-07-28,
+    400 et l'erreur -32022 avec la liste) ; un outil inconnu est une erreur
+    de protocole (-32602) ; une notification `tools/call` n'écrit plus rien
+    (202) ; une réponse JSON-RPC du client reçoit 202 ; un en-tête absent
+    ou contraire au corps, 400 (-32020) ; `ping` et une méthode inconnue,
+    404 en 2026-07-28 ; GET et DELETE, 405.
+  - On ne réclame pas `clientCapabilities`, que la spécification veut à
+    chaque requête : le serveur ne dépend d'aucune capacité du client, et un
+    client un peu en retard sur ce point ne doit pas perdre la tablette.
+  - Les échanges de la synchro et les traits d'un document ne sont plus
+    redits en texte : ils voyageaient deux fois (JSON dans le JSON). Un mot
+    les résume ; l'appli lit le résultat structuré, comme avant.
 
 ### Données et synchronisation (S6, D1 à D10)
 
