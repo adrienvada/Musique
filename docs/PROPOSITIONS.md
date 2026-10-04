@@ -555,6 +555,18 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 - **B8 · En 3/8, les trois croches de la mesure se lient**, comme on les
   écrit à la main. Le temps reste la croche pour le métronome et le
   découpage : seule la ligature change (`groupeDeLigature`).
+  - Un accord aux durées différentes (do noire, mi blanche, sol blanche
+    pointée, partant ensemble) : abcjs le dessine en couches qui partagent
+    une hampe ; on lit les têtes (pleine, vides, le point), pas trois voix
+    bien séparées. abcjs ne sait pas mieux : une liaison par note dans un
+    accord y suit le rang de la note, pas sa hauteur (le piège déjà noté).
+    Le MIDI et le MusicXML, eux, sont justes : music21 relit trois voix
+    (sol blanche pointée, mi blanche, do noire), mido les trois durées.
+  - Pas demandé, pas fait : une levée en tête d'idée reste une mesure de
+    silences (une idée commence sur une barre). Une page lue, elle, cale
+    sa levée en fin de mesure de silences pour l'idée et le MIDI, et en fait
+    une vraie mesure incomplète dans le MusicXML quand elle arrive en cours
+    de page.
 - **N2 · Les notes s'épellent d'après l'accord, puis d'après la ligne.**
   Une note hors de la tonalité s'écrivait d'après l'armure seule : ré 7 en
   fa donnait sol♭ au lieu de fa♯, mi 7 en do un la♭, si♭ en sol un la♯. Dans
@@ -693,7 +705,10 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 - **N7 · La transposition d'une page la suit partout.** Le MIDI la prenait,
   le MusicXML et « Continuer en idée » l'oubliaient. Les deux la prennent
   maintenant (`transposerIdee` après `sequenceDepuisAbc`, et la
-  transposition passée à `musicXmlDeLaPage`, armures comprises).
+  transposition passée à `musicXmlDeLaPage`, armures comprises). Le MIDI
+  de la page transposée change aussi d'armure : abcjs, avant, montait les
+  notes et laissait l'armure (une page en do jouée en ré arrivait en do
+  dans Live).
 - **N8 (nouveau) · Un fichier MIDI devient une idée : l'aller-retour avec
   Live.** Venu de l'audit de l'interface : une phrase retravaillée dans
   Ableton revenait dans Portée… par le clavier. Maintenant, un `.mid`

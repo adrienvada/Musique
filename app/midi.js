@@ -26,6 +26,7 @@
  * en paramètre.
  */
 import { lirePage, lireTonalite, nouvelleSequence, pasParTemps, quantifier } from "./sequence.js";
+import { tonaliteTransposee } from "./harmonie.js";
 
 const PPQ = 480; // tics par noire ; un pas (double croche) = 120 tics
 const TICS_PAR_PAS = PPQ / 4;
@@ -174,12 +175,13 @@ export function midiDeLaPage(abc, lib, { tempo = null, transposition = 0, titre 
   const page = lirePage(abc, lib);
   const noms = page.voix.length === 1 ? ["Mélodie"] : page.voix.length === 2 ? ["Main droite", "Main gauche"] : page.voix.map((_, i) => `Voix ${i + 1}`);
   const [debut, ...suite] = page.sections;
-  const k = lireTonalite(debut.tonalite);
+  // Transposée à l'écoute, la page change aussi d'armure (do + 2 : ré).
+  const k = lireTonalite(tonaliteTransposee(debut.tonalite, transposition));
   const changements = [];
   let avant = debut;
   for (const s of suite) {
     if (s.tonalite !== avant.tonalite) {
-      const ks = lireTonalite(s.tonalite);
+      const ks = lireTonalite(tonaliteTransposee(s.tonalite, transposition));
       changements.push({ d: s.d, quintes: ks.quintes, mineur: ks.mineur });
     }
     if (s.mesure && String(s.mesure) !== String(avant.mesure)) {

@@ -136,6 +136,10 @@ test("une page lue : pistes nommées par main, sans piste vide, ses changements 
   const triolet = lireMidi(midiDeLaPage("X:1\nM:2/4\nL:1/8\nQ:1/4=90\nK:C\n(3CDE G2|c4|]\n", abcjs, { tempo: 120, transposition: 2 }));
   assert.deepEqual(triolet.pistes[1].notes.slice(0, 3).map((n) => n.slice(0, 3)), [[0, 160, 62], [160, 160, 64], [320, 160, 66]]);
   assert.equal(triolet.pistes[0].meta.tempo, 120);
+  // Transposée, la page change aussi d'armure : do + 2 → ré, mi♭ + 2 → fa.
+  const haut = lireMidi(midiDeLaPage("X:1\nM:none\nL:1/8\nQ:1/4=90\nK:C\nC2 D2 E2 F2 G2 A2 B2 c2\n[K:Eb][M:12/8]G |: c2 c2 edc g2 GG G :|\n", abcjs, { transposition: 2 }));
+  assert.deepEqual(haut.pistes[0].armures.map((a) => a.slice(1)), [[2, 0], [-1, 0]]);
+  assert.equal(haut.pistes[1].notes[0][2], 62);
 });
 
 test("les textes en ASCII : accents, signes et guillemets", () => {
