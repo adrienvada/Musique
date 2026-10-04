@@ -892,6 +892,50 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     pour aucun bogue trouvé : pas maintenant. Le mode strict n'en vaut pas
     la peine.
   - TypeScript 7, la version native : moins d'une seconde pour tout.
+- **Des essais de bout en bout dans Chromium (T1).** `npm run e2e` assemble
+  le site, le sert comme GitHub Pages (`max-age=600`, empreintes, sous
+  `/Musique/`) et y joue vingt parcours dans Chromium, réseau extérieur
+  coupé, en une vingtaine de secondes. Aucun écran n'était testé, et trois
+  des quatre bogues de l'audit avaient été trouvés par de courts essais au
+  navigateur.
+  - Les parcours de CLAUDE.md d'abord : la page s'ouvre sans erreur (ses
+    polices et abcjs viennent du site), import des pages d'essai, un doute
+    réglé et une note corrigée puis annulés, écoute puis arrêt, le MIDI
+    (`MThd`), sauvegarde puis restauration dans un navigateur vierge,
+    traits compris.
+  - L'éditeur d'idée : A S D F au clavier, la grille puis la partition,
+    l'idée retrouvée après rechargement ; une note chantée au faux micro
+    (un chanteur de synthèse, la4 puis do5) ; « précédent » ferme la
+    feuille du bas, puis revient au carnet sans quitter Portée.
+  - La sécurité : une sauvegarde piégée (du HTML dans le titre, les
+    étiquettes, le nom de piste, la durée du mémo, un accord, un
+    identifiant de note) ne fait rien exécuter et n'atteint même pas la
+    CSP ; sur la version d'avant S1, l'essai échoue (quatorze violations).
+    Et le connecteur appelé par le site, sous sa CSP : le vrai
+    `repondreHttp`, sur le faux cloud et le faux stockage (relier,
+    importer, synchroniser).
+  - Hors ligne : après une première visite (import, gravure, piano) ;
+    une mise en ligne ratée, puis réussie (le message, « Recharger ») ;
+    une erreur jamais gardée ; un réseau qui traîne (la copie à 2,5 s).
+  - La version claude.ai simulée : le vrai assemblage (`npm run appli`) et
+    un faux `window.claude` (la base, les téléchargements, et `use("mcp")`
+    qui appelle `traiter()` du connecteur sur le faux cloud) : relier la
+    tablette, importer, le MIDI zippé, la base retrouvée après
+    rechargement, la sauvegarde piégée sans CSP.
+  - L'interface : chaque bouton à icône a un nom, sur chaque écran et
+    chaque feuille. Les 44 px au doigt (à 390 et 320 px) sont mesurés mais
+    notés « à faire » : l'essai liste les cibles trop petites sans arrêter
+    la suite, en attendant le lot de l'interface (I1).
+  - Les deux assemblages vérifiés sans navigateur : la page ne demande
+    rien d'ailleurs, le service worker garde tout ce qu'elle demande sous
+    la même adresse, la version claude.ai n'a ni caractère de contrôle ni
+    fichier d'un type inconnu.
+  - Pourquoi `node:test` plutôt que le lanceur de Playwright : comme les
+    autres tests ; seule la bibliothèque est ajoutée, en 1.56.1, la version
+    des navigateurs installés ici (en CI, `npx playwright install`).
+  - Trouvé en route, pas corrigé ici : une idée rechargée moins de 0,7 s
+    après sa dernière note est perdue (son premier enregistrement attend
+    encore ; rien ne l'écrit quand la page se ferme).
 
 ### Notation, harmonie et exports (N1 à N7)
 
@@ -1306,10 +1350,16 @@ ou supprimer la fonction dans Supabase.
   isolé). Les préférences de l'éditeur (affichage, tempo par défaut, clavier
   MIDI) passent par `lirePref` / `ecrirePref`, qui font sans.
 - **Essais Chromium derrière le proxy** : depuis le 04/10, abcjs et les
-  polices viennent du site ; plus rien ne passe par le proxy, et un essai
-  peut couper tout le réseau extérieur sans rien perdre. Un faux micro :
-  `--use-fake-device-for-media-stream
-  --use-file-for-fake-audio-capture=chant.wav` (un chanteur de synthèse).
+  polices viennent du site ; plus rien ne passe par le proxy, et les
+  essais de bout en bout (`tests/e2e/`) coupent tout le réseau extérieur.
+  Pour couper ou ralentir le réseau, c'est le serveur d'essai qu'on coupe
+  (`serveur.reseau(false)`, `serveur.ralentir(ms)`) : ni
+  `context.setOffline` ni le bridage de Chromium ne touchent les requêtes
+  du service worker. `page.waitForFunction` n'attend pas une promesse :
+  pour une condition asynchrone (les caches), `attendreQue`. Un faux
+  micro : `--use-fake-device-for-media-stream
+  --use-file-for-fake-audio-capture=chant.wav` (un chanteur de synthèse,
+  `ecrireChant`).
 - **Micro et clavier MIDI** : ni l'un ni l'autre dans la page claude.ai
   (cadre sans ces permissions) ; Safari (iPhone, iPad) ne lit pas les
   claviers MIDI. Le micro et le son ne marchent pas en même temps : on coupe
