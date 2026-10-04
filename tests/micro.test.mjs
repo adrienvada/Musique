@@ -7,8 +7,9 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detecterHauteur, midiDe, Micro } from "../app/micro.js";
+import { detecterHauteur, midiDe, Micro, tailleFenetre } from "../app/micro.js";
 import { positionAiguille, creerFiltreSauts } from "../app/idee-chant.js";
+import { raisonsEveil } from "../app/eveil.js";
 
 const SR = 48000;
 function son(f, { duree = 2048, harmoniques = [1], vibrato = 0, bruit = 0, graine = 1 } = {}) {
@@ -114,8 +115,119 @@ test("une autre note s'écrit tout de suite, sans respirer (legato)", () => {
   chante(voix(392), 6);
   chante(voix(440), 6);
   assert.deepEqual(notes, [67, 69]);
-  // La tenue repart de zéro à la nouvelle note.
-  assert.equal(Math.round(mesures[6].tenue * 6), 1);
+  // La première mesure du la pourrait être la crête d'un vibrato : l'écran garde le sol le temps
+  // d'une mesure (40 ms). À la deuxième, la tenue du la repart de zéro, et ces deux mesures comptent :
+  // la note s'écrit toujours au bout de six.
+  assert.equal(mesures[6].h, 67);
+  assert.equal(mesures[7].h, 69);
+  assert.equal(Math.round(mesures[7].tenue * 6), 2);
+});
+
+// --- Le vibrato, les sifflements, les cartes son rapides (audit du 04/10, M7) ------
+
+/** Un son tenu, continu : une voix (trois harmoniques) qui vibre de ±`cents` à `vitesse` Hz, ou glisse de f à `vers` entre t1 et t2. */
+function sonTenu(f, { sr = SR, duree = 1.5, cents = 0, vitesse = 5.5, vers = null, t1 = 0.6, t2 = 0.75 } = {}) {
+  const x = new Float32Array(Math.round(sr * duree));
+  let phase = 0;
+  for (let i = 0; i < x.length; i++) {
+    const t = i / sr;
+    let fi = f * 2 ** ((cents * Math.sin(2 * Math.PI * vitesse * t)) / 1200);
+    if (vers) fi = t < t1 ? f : t > t2 ? vers : f * (vers / f) ** ((t - t1) / (t2 - t1));
+    phase += (2 * Math.PI * fi) / sr;
+    x[i] = 0.2 * (Math.sin(phase) + 0.5 * Math.sin(2 * phase) + 0.3 * Math.sin(3 * phase)) * Math.min(1, t / 0.03);
+  }
+  return x;
+}
+
+/** Ce que le micro écrit de ce son : une mesure toutes les 40 ms, sur la fenêtre la plus récente, comme dans l'appli. */
+function notesEcrites(x, sr = SR) {
+  const notes = [];
+  const m = new Micro({ surNote: (h) => notes.push(h) });
+  const n = tailleFenetre(sr);
+  let fin = 0;
+  m.analyse = { getFloatTimeDomainData: (t) => { t.fill(0); const d = Math.max(0, fin - n); t.set(x.subarray(d, fin), n - (fin - d)); } };
+  m.tampon = new Float32Array(n);
+  m.ctx = { sampleRate: sr };
+  m.derniere = null; m.silences = 99;
+  const pas = Math.round(0.04 * sr);
+  for (fin = pas; fin <= x.length; fin += pas) m.mesurer();
+  return notes;
+}
+
+test("un grand vibrato : la note s'écrit quand même, une seule fois", () => {
+  // Avant, une seule mesure à plus de 0,6 demi-ton de la moyenne remettait la tenue à zéro : dès
+  // ±45 centièmes à 5 Hz, la note ne s'écrivait jamais. Une mesure isolée hors de la note est
+  // maintenant la crête d'un vibrato ; il en faut deux de suite pour faire une autre note.
+  for (const [cents, vitesse] of [[30, 5], [45, 5], [60, 5], [60, 6.5], [80, 5], [100, 5.5]]) {
+    assert.deepEqual(notesEcrites(sonTenu(220, { cents, vitesse })), [57], `±${cents} c à ${vitesse} Hz`);
+  }
+});
+
+test("le legato glissé reste deux notes, la justesse approximative une seule", () => {
+  // Du la au do en 150 ms, du la au mi en 300 ms : la deuxième note s'écrit, après le glissé.
+  assert.deepEqual(notesEcrites(sonTenu(220, { vers: 261.63 })), [57, 60]);
+  assert.deepEqual(notesEcrites(sonTenu(220, { vers: 329.63, t2: 0.9 })), [57, 64]);
+  // Un demi-ton, sans glisser : c'est une autre note (le seuil de la crête est à 0,8 demi-ton).
+  assert.deepEqual(notesEcrites(sonTenu(220, { vers: 233.08, t2: 0.601 })), [57, 58]);
+  // Une voix entre deux notes (le la chanté 45 centièmes trop haut) ne fait pas osciller la note.
+  assert.deepEqual(notesEcrites(sonTenu(220 * 2 ** (45 / 1200))), [57]);
+});
+
+test("un sifflement aigu : la bonne octave jusqu'au do6", () => {
+  // Avant, la recherche s'arrêtait à 1 200 Hz : un mi5, un la5 sifflés s'écrivaient une octave trop bas.
+  for (const [f, h] of [[880, 81], [1318.5, 88], [1760, 93], [2093, 96]]) {
+    const x = new Float32Array(2048);
+    for (let i = 0; i < x.length; i++) x[i] = 0.3 * Math.sin((2 * Math.PI * f * i) / SR);
+    const r = detecterHauteur(x, SR);
+    assert.ok(r && Math.abs(midiDe(r.hz) - h) < 0.1, `${f} Hz → ${r && r.hz}`);
+  }
+});
+
+test("une carte son à 88,2 ou 96 kHz : la fenêtre s'allonge, le grave d'une basse se reconnaît", () => {
+  assert.equal(tailleFenetre(44100), 2048);
+  assert.equal(tailleFenetre(48000), 2048);
+  assert.equal(tailleFenetre(88200), 4096);
+  assert.equal(tailleFenetre(96000), 4096);
+  // Avant, à 96 kHz, rien sous 94 Hz : le mi1 (82 Hz) d'une basse n'était pas entendu.
+  for (const sr of [88200, 96000]) {
+    assert.deepEqual(notesEcrites(sonTenu(82.41, { sr, duree: 0.6 }), sr), [40], `${sr} Hz`);
+    assert.deepEqual(notesEcrites(sonTenu(1760, { sr, duree: 0.6 }), sr), [93], `${sr} Hz, sifflé`);
+  }
+});
+
+test("le micro s'ouvre sans traitement de la voix ; l'iPhone enregistre le temps de l'écoute, l'écran reste allumé", async () => {
+  const contraintes = [], session = { type: "auto" };
+  const avant = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { audioSession: session, mediaDevices: { getUserMedia: async (c) => { contraintes.push(c); return { getTracks: () => [{ stop() {} }] }; } } },
+  });
+  class FauxContexte {
+    constructor() { this.state = "running"; this.sampleRate = 96000; }
+    createAnalyser() { return { fftSize: 2048, getFloatTimeDomainData: (t) => t.fill(0) }; }
+    createMediaStreamSource() { return { connect() {} }; }
+    close() { return Promise.resolve(); }
+  }
+  globalThis.window = { AudioContext: FauxContexte };
+  try {
+    const m = new Micro({ surNote() {} });
+    await m.demarrer();
+    // Le gain automatique faisait varier le niveau d'une mesure à l'autre : coupé, comme l'écho et le bruit.
+    assert.deepEqual(contraintes, [{ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }]);
+    assert.equal(session.type, "play-and-record");
+    assert.equal(m.analyse.fftSize, 4096);
+    assert.ok(raisonsEveil().has("chant"));
+    m.arreter();
+    assert.equal(session.type, "playback");
+    assert.ok(!raisonsEveil().has("chant"));
+    // Un micro refusé : la session revient à « playback » (le piano doit encore sonner en silencieux).
+    navigator.mediaDevices.getUserMedia = async () => { throw new Error("refusé"); };
+    await assert.rejects(new Micro({ surNote() {} }).demarrer(), /refusé/);
+    assert.equal(session.type, "playback");
+  } finally {
+    delete globalThis.window;
+    if (avant) Object.defineProperty(globalThis, "navigator", avant);
+  }
 });
 
 // --- Ce que fait l'écran de ces mesures --------------------------------------------

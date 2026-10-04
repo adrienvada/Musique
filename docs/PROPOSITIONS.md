@@ -860,6 +860,35 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     de chaque note jouée en direct. Pourquoi la médiane : une tape oubliée
     ou doublée ne déplace pas le réglage. Essayé avec des tapes horodatées
     40 ms après chaque clic : « Réglée : 40 ms ».
+- **Le micro entend le vibrato, le sifflement et les cartes son rapides
+  (M7).** Mesuré sur les 29 sons de synthèse de l'audit (voix d'homme, de
+  femme, de soprano, sifflements, vibratos, bruit de fond, fondamentale
+  absente…) et sur des vibratos de ±30 à ±100 centièmes, à 5 et 6,5 Hz.
+  - Le vibrato : une mesure (toutes les 40 ms) compte pour la note tenue
+    tant qu'elle en reste à 0,8 demi-ton, la note suit la médiane des six
+    dernières mesures, et il faut deux mesures de suite au-delà pour faire
+    une autre note : une seule, c'est la crête d'un vibrato. Avant, une
+    seule mesure à plus de 0,6 demi-ton de la moyenne remettait la tenue à
+    zéro : dès ±45 centièmes à 5 Hz, un vibrato ordinaire, la note ne
+    s'écrivait jamais. Maintenant, jusqu'à ±60 centièmes, elle s'écrit en
+    240 ms comme une note droite ; à ±80 et ±100, en 400 à 640 ms. Le
+    legato glissé (la → do en 150 ms, la → mi en 300 ms) s'écrit au même
+    moment qu'avant.
+  - Ce que ça coûte : une autre note, attaquée sans glisser, s'affiche une
+    mesure plus tard (40 ms), et s'écrit toujours au bout de six ; une
+    attaque glissée de −150 centièmes s'écrit en 360 ms au lieu de 320.
+  - Le sifflement : on cherche jusqu'à 2 500 Hz au lieu de 1 200 ; un mi5
+    ou un la5 sifflés s'écrivaient une octave trop bas (76 et 81 au lieu de
+    88 et 93). Aucune nouvelle erreur d'octave sur les sons d'essai, pour le
+    même calcul (0,3 ms par mesure).
+  - Les cartes son à 88,2 et 96 kHz : le son est ramené vers 24 kHz (un
+    échantillon sur quatre, moyenné) et la fenêtre double ; avant, rien
+    sous 94 Hz, le mi1 d'une basse n'était pas entendu.
+  - Le micro s'ouvre sans gain automatique (il l'était déjà sans
+    annulation d'écho ni réduction de bruit) : le gain remontait le bruit de
+    fond entre deux notes. Sur l'iPhone, la session audio passe en
+    « play-and-record » le temps que le micro écoute, et l'écran reste
+    allumé (M8).
 - **La pédale de maintien du clavier MIDI (M9).** Elle était ignorée.
   Enfoncée (CC64, à partir de 64), le piano tient les touches relâchées
   jusqu'à ce qu'elle se relève ; la même note rejouée efface vite la
