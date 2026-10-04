@@ -8,7 +8,7 @@
  * Les durées sont comptées en croches : c'est l'unité de l'ABC produit
  * (L:1/8). Une noire vaut 2, une blanche 4, une croche pointée 1,5.
  */
-import { assembler, alterationsArmure, lirePage, nomDePas, tonalite } from "./lecteur.js";
+import { assembler, alterationsArmure, lirePage, nomDePas, tonalite, verifierCalibration } from "./lecteur.js";
 
 // ------------------------------------------------------------------------
 // Durées et hauteurs en ABC
@@ -125,6 +125,8 @@ function mesureABC(m, portee) {
 // ------------------------------------------------------------------------
 
 export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
+  verifierCalibration(cal);
+  if (!Array.isArray(pages)) throw new Error("Pas de page à lire.");
   const lues = [];
   const doutes = [];
   const systemes = []; // { page, index, voix: [{portee, evs}], entetes }
@@ -240,14 +242,17 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
   });
 
   const composees = enTete.M && /^(6|9|12)\/8$/.test(enTete.M);
+  // La clé de chaque voix vient de la calibration : en clé de sol, abcjs n'a
+  // rien à savoir ; une autre clé doit être dite, sinon la gravure place mal les notes.
+  const cles = cal.systemes[0].portees.map((p) => CLES_ABC[p.cle] || "treble");
   const entete = [
     "X:1",
     `T:${titre}`,
     `M:${enTete.M || "none"}`,
     "L:1/8",
     composees ? "Q:3/8=60" : "Q:1/4=90",
-    `K:${enTete.K || "C"}`,
-    ...(piano ? ["%%score {1 2}", "V:1 clef=treble", "V:2 clef=bass"] : []),
+    `K:${enTete.K || "C"}${!piano && cles[0] !== "treble" ? ` clef=${cles[0]}` : ""}`,
+    ...(piano ? ["%%score {1 2}", ...cles.map((c, i) => `V:${i + 1} clef=${c}`)] : []),
   ];
   const abc = [...entete, ...lignes].join("\n");
 
@@ -279,8 +284,12 @@ function temps(croches) {
 
 function bandeau(sys, cal) {
   const p0 = sys.voix[0].portee, p1 = sys.voix[sys.voix.length - 1].portee;
-  return { x0: cal.x_debut, y0: p0.haut - 10, x1: cal.x_debut + 6 * cal.interligne, y1: p1.bas + 10 };
+  const marge = 0.3 * cal.interligne; // en interlignes, comme tous les seuils (c'était 10 px)
+  return { x0: cal.x_debut, y0: p0.haut - marge, x1: cal.x_debut + 6 * cal.interligne, y1: p1.bas + marge };
 }
+
+// Le nom abcjs de chaque clé des calibrations.
+const CLES_ABC = { sol: "treble", fa: "bass", ut3: "alto", ut4: "tenor" };
 
 function boiteMesure(mes, portee, cal) {
   const xs = mes.evs.map((e) => e.x);

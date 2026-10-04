@@ -22,10 +22,10 @@
  * 30/09 (tests/pages/) ; une valeur changée doit garder ces tests au vert.
  */
 import { angle, boite, dist, distSegment, longueur, retournements, simplifier, xA } from "./geometrie.js";
+import { preparerTraits } from "./traits.js";
 
 const NOMS = ["C", "D", "E", "F", "G", "A", "B"];
-// Degré (0 = do) et octave (4 = octave du do central) de la ligne du bas.
-const LIGNE_DU_BAS = { mi4: [2, 4], sol2: [4, 2] };
+const NOMS_FR = ["do", "ré", "mi", "fa", "sol", "la", "si"];
 // Ordre des bémols et des dièses à l'armure.
 const ORDRE_BEMOLS = ["B", "E", "A", "D", "G", "C", "F"];
 const ORDRE_DIESES = ["F", "C", "G", "D", "A", "E", "B"];
@@ -36,7 +36,46 @@ const TONALITES_DIESES = ["C", "G", "D", "A", "E", "B", "F#", "C#"];
 // Portées
 // ------------------------------------------------------------------------
 
+/**
+ * Degré (0 = do) et octave (4 = octave du do central) d'un nom de note
+ * (« mi4 », « sol2 », « fa3 »). La ligne du bas de chaque portée est écrite
+ * ainsi dans la calibration : lire le nom plutôt qu'une table des clés connues
+ * laisse un futur modèle en clé d'ut se lire sans toucher au lecteur (avant,
+ * une clé autre que sol ou fa faisait planter la lecture).
+ */
+export function degreOctave(nom) {
+  const m = /^(do|ré|re|mi|fa|sol|la|si)(-?\d)$/.exec(String(nom || ""));
+  if (!m) throw new Error(`Calibration illisible : « ${nom} » n'est pas un nom de note (mi4, sol2…).`);
+  return [NOMS_FR.indexOf(m[1] === "re" ? "ré" : m[1]), Number(m[2])];
+}
+
+/**
+ * Une calibration se lit-elle comme une partition ? Elle doit avoir un
+ * interligne et au moins une portée de cinq lignes. Une page d'étalonnage
+ * (L16) n'a que des cases : elle se lit avec lireEtalonnage (gabarits.js).
+ * Sans cette vérification, une calibration incomplète donnait une lecture
+ * vide sans rien dire, ou un plantage incompréhensible.
+ */
+export function verifierCalibration(cal) {
+  if (!cal || typeof cal !== "object") throw new Error("Pas de calibration : impossible de savoir où sont les lignes.");
+  if (cal.genre === "etalonnage") throw new Error("C'est une page d'étalonnage : elle sert à apprendre ton écriture, pas à lire une partition.");
+  if (!(cal.interligne > 0)) throw new Error(`Calibration incomplète (${cal.modele || "modèle inconnu"}) : l'interligne manque.`);
+  const systemes = Array.isArray(cal.systemes) ? cal.systemes : [];
+  if (!systemes.length || systemes.some((s) => !Array.isArray(s.portees) || !s.portees.length)) {
+    throw new Error(`Calibration incomplète (${cal.modele || "modèle inconnu"}) : aucune portée.`);
+  }
+  for (const s of systemes) {
+    for (const p of s.portees) {
+      if (!Array.isArray(p.lignes) || p.lignes.length !== 5 || p.lignes.some((y) => !Number.isFinite(y))) {
+        throw new Error(`Calibration incomplète (${cal.modele || "modèle inconnu"}) : une portée n'a pas ses cinq lignes.`);
+      }
+      degreOctave(p.ligne_du_bas);
+    }
+  }
+}
+
 function listerPortees(cal) {
+  verifierCalibration(cal);
   const portees = [];
   cal.systemes.forEach((s, is) => {
     s.portees.forEach((p, ip) => {
@@ -46,6 +85,7 @@ function listerPortees(cal) {
         voix: ip,
         cle: p.cle,
         ligneDuBas: p.ligne_du_bas,
+        bas0: degreOctave(p.ligne_du_bas),
         lignes: p.lignes,
         haut: p.lignes[0],
         bas: p.lignes[4],
@@ -71,7 +111,7 @@ function pasDe(portee, y, il) {
 }
 
 function nomDePas(portee, pas) {
-  const [degre0, octave0] = LIGNE_DU_BAS[portee.ligneDuBas];
+  const [degre0, octave0] = portee.bas0 || degreOctave(portee.ligneDuBas);
   const rang = degre0 + pas;
   return { lettre: NOMS[((rang % 7) + 7) % 7], octave: octave0 + Math.floor(rang / 7) };
 }
@@ -81,6 +121,7 @@ function nomDePas(portee, pas) {
 // ------------------------------------------------------------------------
 
 function mesurer(points, id) {
+  if (!points.length) return { id, points, x0: 0, y0: 0, x1: 0, y1: 0, l: 0, h: 0, cx: 0, cy: 0, longueur: 0, ferme: 0, vide: true };
   const b = boite(points);
   const l = longueur(points);
   return { id, points, ...b, longueur: l, ferme: dist(points[0], points[points.length - 1]) };
@@ -120,10 +161,12 @@ function fusionnerTetes(tetes, il) {
 // ------------------------------------------------------------------------
 
 export function lirePage(traitsBruts, cal, numeroPage = 1) {
-  const il = cal.interligne;
   const portees = listerPortees(cal);
-  const traits = traitsBruts.map((pts, i) => mesurer(pts, i));
-  const classe = new Array(traits.length).fill(null); // ce qu'est devenu chaque trait
+  const il = cal.interligne;
+  // Au demi-pixel, sans point invalide (traits.js) : la même page se lit
+  // toujours de la même façon, qu'elle vienne du PDF, du connecteur ou de la bibliothèque.
+  const traits = preparerTraits(traitsBruts, cal.page).map((pts, i) => mesurer(pts, i));
+  const classe = traits.map((t) => (t.vide ? "vide" : null)); // ce qu'est devenu chaque trait
 
   // 1. Têtes
   const candidates = [];

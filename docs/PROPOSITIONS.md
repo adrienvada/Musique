@@ -523,7 +523,26 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Lecteur (L1 à L19, C7)
 
-<!-- lot lecteur -->
+- **Une même page donne toujours la même lecture (L14).** Le lecteur
+  ramène tous les traits au demi-pixel avant de lire (`lecteur/traits.js`),
+  avec l'arrondi du stockage. Avant, une page importée en PDF était lue sur
+  ses décimaux, puis relue sur ses traits rangés, arrondis : l'audit a trouvé
+  42 relectures différentes sur 100. Il écarte aussi les points non finis ou
+  très loin de la page, et garde un trait vide à sa place, vide : les numéros
+  des traits suivent ceux de l'entrée.
+- **Le PDF dit son modèle, sa version et ses lignes grises.** `lireDocument`
+  rend la version du sujet (`portee:<modèle>:v<N>`), qu'il jetait (M1), et
+  les lignes grises imprimées du modèle, exactes à la calibration à 0,001 px
+  près sur tes deux pages : elles serviront à reconnaître le modèle (L9).
+  L'origine de la page est son coin haut gauche tel que le PDF le décrit :
+  une page dont la boîte ne part pas de (0, 0) était lue décalée, toutes ses
+  notes fausses (M9).
+- **Plus de plantage sur une entrée inattendue (L19).** Une calibration sans
+  interligne ou sans portée, une page d'étalonnage passée au lecteur, une
+  clé autre que sol ou fa, un modèle inconnu dans `npm run lire` : un
+  message clair à la place d'une erreur JavaScript. La ligne du bas de
+  chaque portée se lit d'après son nom (« fa3 ») plutôt que dans une table
+  de deux clés : un modèle en clé d'ut se lirait sans toucher au lecteur.
 
 ### Connecteur (S3 à S5, C1 à C6)
 

@@ -21,9 +21,12 @@ export async function lireFichier(chemin) {
   const doc = await pdfjs.getDocument({ data, isEvalSupported: false, verbosity: 0 }).promise;
   const lu = await lireDocument(pdfjs, doc);
   if (!lu.modele) throw new Error(`${chemin} n'a pas été écrit sur un modèle Portée`);
-  const cal = JSON.parse(fs.readFileSync(path.join(racine, "modeles", `${lu.modele}.json`), "utf8"));
+  const fichier = path.join(racine, "modeles", `${lu.modele}.json`);
+  // Un nom de modèle que ce dépôt ne connaît pas : un message clair plutôt qu'un ENOENT.
+  if (!fs.existsSync(fichier)) throw new Error(`${chemin} a été écrit sur le modèle « ${lu.modele} », que cette version de Portée ne connaît pas.`);
+  const cal = JSON.parse(fs.readFileSync(fichier, "utf8"));
   const titre = path.basename(chemin, ".pdf");
-  return { ...lirePartition(lu.pages.map((p) => p.traits), cal, { titre }), cal, pages: lu.pages };
+  return { ...lirePartition(lu.pages.map((p) => p.traits), cal, { titre }), cal, pages: lu.pages, modele: lu.modele, version: lu.version };
 }
 
 const COULEURS = {
