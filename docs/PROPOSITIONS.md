@@ -628,6 +628,24 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - Pourquoi pas la clé de service comme clé de chiffrement : quelqu'un qui
     lit le stockage a justement cette clé. `PORTEE_COFFRE` vit ailleurs (les
     secrets de la fonction), et ne sert qu'à ça.
+- **Le déploiement du connecteur, durci (S3).** Le jeton Supabase
+  (`SUPABASE_ACCESS_TOKEN`) ouvre tous tes projets ; il était dans
+  l'environnement de tout le job, donc lisible par `npm ci` et les tests
+  (une dépendance piégée l'aurait lu). Dans `connecteur.yml` :
+  - les deux secrets ne sont donnés qu'à l'étape « Déployer » ;
+  - `permissions: contents: read` : le jeton GitHub du job ne peut rien
+    écrire ; `checkout` ne le garde pas dans `.git/config`
+    (`persist-credentials: false`) ;
+  - `npm ci --ignore-scripts` : aucun script d'installation ne s'exécute ;
+  - `deno check` avant de déployer (CLAUDE.md le demandait, rien ne le
+    vérifiait) ;
+  - les actions sont épinglées par empreinte, la version en commentaire :
+    une étiquette (`@v4`) peut être déplacée vers un autre code ;
+  - le job tourne dans l'environnement `supabase`, que GitHub crée tout
+    seul. **À faire de ton côté** : y déplacer les deux secrets et n'y
+    autoriser que `main` (Settings → Environments → supabase). Tant qu'ils
+    restent des secrets du dépôt, tout marche comme avant, mais un workflow
+    poussé sur une autre branche peut encore les lire.
 
 ### Données et synchronisation (S6, D1 à D10)
 
