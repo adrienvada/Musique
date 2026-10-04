@@ -306,12 +306,81 @@ export const STYLES = [
   { id: "arpege", nom: "Arpège" },
 ];
 
+// ---------------------------------------------------------------------------
+// La conduite des voix : où se placent les notes de chaque accord
+// ---------------------------------------------------------------------------
+//
+// Avant, chaque accord était plaqué en position fondamentale à partir du
+// do3 : tout bougeait en parallèle (C Am F G C : 64 demi-tons parcourus par
+// les voix du dessus), et l'accompagnement passait au-dessus d'une mélodie
+// grave. Maintenant, comme un pianiste : chaque accord prend le renversement
+// le plus proche du précédent, sous la mélodie de sa mesure, et la basse
+// reste en dessous.
+
+const PLAFOND = 72;                 // do5 : l'accompagnement ne monte jamais plus haut
+const CENTRE = 57;                  // la3 : là où il sonne clair sans gêner la mélodie
+const PLANCHERS = [48, 45, 43, 40]; // do3 ; plus bas seulement si la mélodie descend
+const REGISTRE = 0.2;               // le poids du registre face au mouvement des voix
+
 /**
- * Les notes d'un accord : l'accord à partir de l'octave du do3, la basse
- * dans l'octave du dessous (la note après « / », sinon la racine).
+ * Les notes de l'accord au-dessus de la basse (0-11). Avec une neuvième, la
+ * basse dit déjà la racine : les voix du dessus la laissent et sonnent en
+ * tierces (fa la do mi pour ré m9), pas en grappe (mi fa do ré). Si la basse
+ * est une autre note (C9/E), la racine reste et c'est la quinte, la plus
+ * dispensable, qui part : quatre voix au plus sous la mélodie.
  */
-function disposition(a) {
-  return { tons: a.intervalles.map((i) => 48 + a.racine + i), basse: 36 + (a.basse ?? a.racine) };
+function tonsDe(a) {
+  let iv = a.intervalles;
+  if (iv.includes(14) && (a.basse === null || a.basse === a.racine)) iv = iv.filter((i) => i !== 0);
+  else if (iv.length > 4) iv = iv.filter((i) => i !== 7);
+  return [...new Set(iv.map((i) => mod12(a.racine + i)))];
+}
+
+/** Les accords serrés (chaque renversement, à chaque octave) dont toutes les notes tiennent entre `plancher` et `plafond`. */
+function dispositions(tons, plancher, plafond) {
+  const tries = [...tons].sort((x, y) => x - y);
+  const sortie = [];
+  tries.forEach((_, r) => {
+    const ordre = [...tries.slice(r), ...tries.slice(0, r)];
+    for (let bas = plancher; bas <= plafond; bas++) {
+      if (mod12(bas) !== ordre[0]) continue;
+      const v = [bas];
+      for (const pc of ordre.slice(1)) { let x = v.at(-1) + 1; while (mod12(x) !== pc) x++; v.push(x); }
+      if (v.at(-1) <= plafond) sortie.push(v);
+    }
+  });
+  return sortie;
+}
+
+/** Le mouvement des voix d'un accord à l'autre (demi-tons), voix par voix du grave à l'aigu. */
+function mouvement(u, v) {
+  let s = 0;
+  for (let i = 0; i < Math.max(u.length, v.length); i++) s += Math.abs(u[Math.min(i, u.length - 1)] - v[Math.min(i, v.length - 1)]);
+  return s;
+}
+const ecartAuCentre = (v) => Math.abs(v.reduce((s, x) => s + x, 0) / v.length - CENTRE);
+
+/**
+ * La disposition de chaque accord. On choisit l'enchaînement entier (le
+ * moins de mouvement possible, sans quitter le registre), pas accord par
+ * accord : un premier choix pris au hasard pourrait coincer la suite.
+ * `possibles[i]` : les dispositions permises du i-ème accord.
+ */
+function conduire(possibles) {
+  const couts = possibles.map((liste) => liste.map(() => Infinity));
+  const venant = possibles.map((liste) => liste.map(() => -1));
+  possibles.forEach((liste, i) => liste.forEach((v, j) => {
+    const propre = REGISTRE * ecartAuCentre(v);
+    if (i === 0) { couts[0][j] = propre; return; }
+    possibles[i - 1].forEach((u, k) => {
+      const c = couts[i - 1][k] + mouvement(u, v) + propre;
+      if (c < couts[i][j]) { couts[i][j] = c; venant[i][j] = k; }
+    });
+  }));
+  const choix = [];
+  let j = couts.at(-1).indexOf(Math.min(...couts.at(-1)));
+  for (let i = possibles.length - 1; i >= 0; i--) { choix[i] = possibles[i][j]; j = venant[i][j]; }
+  return choix;
 }
 
 /** L'accompagnement d'une idée, d'après ses accords et le style choisi. */
@@ -319,34 +388,61 @@ export function accompagnement(seq, style = seq.accompagnement) {
   if (!style || style === "aucun" || !seq.accords || !seq.accords.length) return [];
   const mesure = pasParMesure(seq), temps = pasParTemps(seq);
   const total = nbMesures(seq) * mesure;
-  const accords = [...seq.accords].sort((a, b) => a.d - b.d);
+  const melodie = (seq.pistes[0] && seq.pistes[0].notes) || [];
+  const accords = [...seq.accords].sort((a, b) => a.d - b.d)
+    .map((ac, i, tous) => ({ ...ac, a: lireAccord(ac.nom), fin: i + 1 < tous.length ? tous[i + 1].d : total }))
+    .filter((ac) => ac.a && ac.d < total);
+  if (!accords.length) return [];
+  // Chaque accord sous la note la plus grave que la mélodie joue pendant qu'il sonne.
+  const plafonds = accords.map((ac) => {
+    const dessus = melodie.filter((n) => n.d < ac.fin && n.d + n.l > ac.d).map((n) => n.h);
+    return Math.min(PLAFOND, dessus.length ? Math.min(...dessus) - 1 : PLAFOND);
+  });
+  const possibles = accords.map((ac, i) => {
+    for (const plancher of PLANCHERS) {
+      const liste = dispositions(tonsDe(ac.a), plancher, plafonds[i]);
+      if (liste.length) return liste;
+    }
+    // Une mélodie plus grave que tout accord : l'accord reste à sa place, sous le do5.
+    plafonds[i] = PLAFOND;
+    return dispositions(tonsDe(ac.a), PLANCHERS[0], PLAFOND);
+  });
+  const choix = conduire(possibles);
   const notes = [];
   const ajouter = (d, l, h, v = 70) => { if (l > 0 && d < total) notes.push({ id: -(notes.length + 1), d, l: Math.min(l, total - d), h, v }); };
   accords.forEach((ac, i) => {
-    const a = lireAccord(ac.nom);
-    if (!a) return;
-    const fin = i + 1 < accords.length ? accords[i + 1].d : total;
-    const { tons, basse } = disposition(a);
+    const { a, fin } = ac;
+    const voix = choix[i];
+    // La basse (la note après « / », sinon la racine) dans l'octave du do2, sous l'accord.
+    let basse = 36 + (a.basse ?? a.racine);
+    while (basse >= voix[0]) basse -= 12;
     if (style === "plaque") {
       // Un accord par mesure (rejoué à chaque barre, pour qu'on l'entende).
       for (let d = ac.d; d < fin; d = Math.min(fin, (Math.floor(d / mesure) + 1) * mesure)) {
         const l = Math.min(fin, (Math.floor(d / mesure) + 1) * mesure) - d;
-        for (const h of new Set([basse, ...tons])) ajouter(d, l, h);
+        for (const h of [basse, ...voix]) ajouter(d, l, h);
       }
     } else if (style === "basse") {
-      // La basse sur le premier temps, l'accord (sans la racine) sur les autres.
+      // La basse sur le premier temps, l'accord (sans sa racine, que la basse vient de dire) sur les autres.
+      const sansRacine = voix.filter((h) => mod12(h) !== a.racine);
+      const dessus = sansRacine.length >= 2 ? sansRacine : voix;
       for (let d = ac.d; d < fin; d += temps) {
         const l = Math.min(temps, fin - d);
         if ((d % mesure) === 0 || d === ac.d) ajouter(d, l, basse, 80);
-        else for (const h of tons.slice(1)) ajouter(d, l, h, 60);
+        else for (const h of dessus) ajouter(d, l, h, 60);
       }
     } else if (style === "arpege") {
-      // Des croches qui montent et redescendent : racine, quinte, octave, tierce…
-      const motif = [basse, tons[0], tons[2] ?? tons[1], tons[0] + 12, tons[1] + 12, tons[0] + 12, tons[2] ?? tons[1], tons[0]];
+      // Des croches : la basse, puis l'accord qui monte et redescend, toutes
+      // ses notes comprises (la septième, la neuvième). Un accord de trois
+      // notes prend l'octave de la plus grave, s'il reste de la place sous
+      // la mélodie, pour que le motif d'une mesure de 4/4 ne bégaie pas.
+      const haut = [...voix];
+      if (haut.length === 3 && haut[0] + 12 > haut[2] && haut[0] + 12 <= plafonds[i]) haut.push(haut[0] + 12);
+      const vague = [...haut, ...haut.slice(1, -1).reverse()];
       let k = 0;
       for (let d = ac.d; d < fin; d += 2, k++) {
         if (d % mesure === 0) k = 0;
-        ajouter(d, Math.min(2, fin - d), motif[k % motif.length], k === 0 ? 75 : 62);
+        ajouter(d, Math.min(2, fin - d), k === 0 ? basse : vague[(k - 1) % vague.length], k === 0 ? 75 : 62);
       }
     }
   });

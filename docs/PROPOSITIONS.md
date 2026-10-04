@@ -571,6 +571,29 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     `lireAccord` et `QUALITES` : rien ne change pour les écrans.
   - Hors partition (le nom d'une note sur la grille, `nomNote`), rien ne
     change : sans accord ni ligne, c'est l'armure qui décide.
+- **N3 · L'accompagnement se joue comme un pianiste.** **Tes idées avec
+  des accords sonneront autrement** (mieux, on l'espère) : comme il est
+  calculé à chaque écoute, rien n'est à refaire, mais rien n'est comme
+  avant. Chaque accord était plaqué en position fondamentale à partir du
+  do3 ; tout bougeait en parallèle et passait parfois au-dessus de la
+  mélodie. Maintenant :
+  - chaque accord prend le renversement le plus proche du précédent, sous
+    la note la plus grave que la mélodie joue pendant qu'il sonne (jamais
+    plus haut que do5), et la basse reste dessous, dans l'octave du do2.
+    L'enchaînement se choisit en entier (`conduire`), pas accord par accord ;
+  - mesuré avec le script de l'audit : C Am F G C passe de 64 à 12
+    demi-tons parcourus par les voix du dessus, sans enchaînement parallèle
+    ni note au-dessus de la mélodie ; C G7 Am Em F C F G de 81 à 25 (trois
+    voix serrées ne peuvent guère faire moins : fa → sol en coûte déjà 6) ;
+    G B♭ E♭ B sous un ré4, de 5 notes au-dessus de la mélodie à aucune ;
+  - l'arpège joue toutes les notes de l'accord, la septième et la neuvième
+    comprises (E7 a son ré, « Septième » s'entend enfin), en montant puis
+    en redescendant ;
+  - avec une neuvième, les voix du dessus laissent la racine à la basse et
+    sonnent en tierces (fa la do mi pour Dm9) au lieu d'une grappe ;
+  - le style « Basse et accords » joue l'accord sans sa racine après la
+    basse, comme avant ; les cartes des styles dessinent le nouveau motif
+    (elles le calculent avec le même code).
 - **B9 · L'arrondi traite la dernière note comme les autres.** Ta règle du
   jeu lié ne change pas (une note relâchée au plus un pas de grille avant la
   suivante tient jusqu'à elle). Mais la dernière note d'une prise n'a pas de

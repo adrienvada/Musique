@@ -39,8 +39,9 @@ test("l'accompagnement : une voix de plus, dans la mesure, gravée en clé de fa
   const seq = idee([[0, 16, 72], [16, 16, 71]]);
   seq.accords = [{ d: 0, nom: "C" }, { d: 16, nom: "G/B" }];
   seq.accompagnement = "plaque";
-  // Sol avec si à la basse : le si en dessous, l'accord au-dessus.
-  assert.deepEqual(h.accompagnement(seq).map((n) => [n.d, n.l, n.h]), [[0, 16, 36], [0, 16, 48], [0, 16, 52], [0, 16, 55], [16, 16, 47], [16, 16, 55], [16, 16, 59], [16, 16, 62]]);
+  // Do (mi sol do, sous la mélodie), puis sol avec si à la basse : le si en dessous, et l'accord
+  // pris dans le renversement le plus proche (ré sol si : 3 demi-tons de mouvement en tout).
+  assert.deepEqual(h.accompagnement(seq).map((n) => [n.d, n.l, n.h]), [[0, 16, 36], [0, 16, 52], [0, 16, 55], [0, 16, 60], [16, 16, 47], [16, 16, 50], [16, 16, 55], [16, 16, 59]]);
   seq.accompagnement = "basse";
   const basse = h.accompagnement(seq);
   assert.deepEqual(basse.filter((n) => n.d % 16 === 0).map((n) => n.h), [36, 47]);
@@ -54,6 +55,61 @@ test("l'accompagnement : une voix de plus, dans la mesure, gravée en clé de fa
   assert.match(ecrireAbc(seq, { voix }).abc, /V:2 clef=bass/);
   seq.accompagnement = "aucun";
   assert.equal(h.voixCompletes(seq).length, 1);
+});
+
+test("la conduite des voix : renversements proches, sous la mélodie, la septième et la neuvième dans l'arpège", () => {
+  // Les mesures de l'audit : une suite d'accords d'une mesure chacun sous une mélodie tenue.
+  const conduite = (noms, melodie) => {
+    const seq = idee(noms.map((_, i) => [i * 16, 16, melodie]));
+    seq.accords = noms.map((nom, i) => ({ d: i * 16, nom }));
+    seq.accompagnement = "plaque";
+    const notes = h.accompagnement(seq);
+    const parAccord = noms.map((_, i) => notes.filter((n) => n.d === i * 16).map((n) => n.h).sort((a, b) => a - b));
+    let mouvement = 0, paralleles = 0;
+    for (let i = 1; i < parAccord.length; i++) {
+      const a = parAccord[i - 1].slice(1), b = parAccord[i].slice(1); // sans la basse
+      mouvement += a.reduce((s, x, j) => s + Math.abs((b[j] ?? x) - x), 0);
+      if (a.every((x, j) => b[j] - x === b[0] - a[0]) && b[0] !== a[0]) paralleles++;
+    }
+    return { mouvement, paralleles, dessus: notes.filter((n) => n.h >= melodie).length, parAccord };
+  };
+  // Avant : 64 demi-tons, deux enchaînements sur quatre tout en parallèle, une note sur la mélodie.
+  const simple = conduite(["C", "Am", "F", "G", "C"], 64);
+  assert.ok(simple.mouvement < 20, `${simple.mouvement} demi-tons`);
+  assert.equal(simple.paralleles, 0);
+  assert.equal(simple.dessus, 0);
+  // Avant : 81 demi-tons, cinq sur sept en parallèle. Trois voix serrées ne peuvent pas faire
+  // beaucoup moins ici (fa → sol, sans note commune, en coûte déjà 6).
+  const longue = conduite(["C", "G7", "Am", "Em", "F", "C", "F", "G"], 64);
+  assert.ok(longue.mouvement <= 25, `${longue.mouvement} demi-tons`);
+  assert.ok(longue.paralleles <= 1);
+  assert.equal(longue.dessus, 0);
+  // Avant : cinq notes au-dessus d'une mélodie en ré4.
+  const sauts = conduite(["G", "Bb", "Eb", "B"], 62);
+  assert.equal(sauts.dessus, 0);
+  assert.ok(sauts.mouvement < 20);
+  // Une mélodie grave : l'accord descend sous elle, la basse reste en dessous de l'accord.
+  const grave = conduite(["C", "F"], 55);
+  assert.equal(grave.dessus, 0);
+  for (const a of grave.parAccord) assert.ok(a[0] < a[1], "la basse sous l'accord");
+  // L'arpège joue toutes les notes de l'accord : le ré de E7, le fa de G7, la neuvième de Cadd9.
+  const arpege = (nom) => {
+    const seq = idee([[0, 16, 76]]);
+    seq.accords = [{ d: 0, nom }];
+    seq.accompagnement = "arpege";
+    return new Set(h.accompagnement(seq).map((n) => n.h % 12));
+  };
+  assert.ok(arpege("E7").has(2), "E7 : le ré");
+  assert.ok(arpege("G7").has(5), "G7 : le fa");
+  assert.ok(arpege("Cadd9").has(2), "Cadd9 : le ré");
+  assert.ok(arpege("Cmaj7").has(11), "Cmaj7 : le si");
+  // Une neuvième sur sa racine : les voix du dessus en tierces (fa la do mi), la racine à la basse.
+  const neuvieme = idee([[0, 16, 74]]);
+  neuvieme.accords = [{ d: 0, nom: "Dm9" }];
+  neuvieme.accompagnement = "plaque";
+  const dm9 = h.accompagnement(neuvieme).map((n) => n.h).sort((a, b) => a - b);
+  assert.equal(dm9[0] % 12, 2, "ré à la basse");
+  assert.deepEqual(new Set(dm9.slice(1).map((x) => x % 12)), new Set([5, 9, 0, 4]));
 });
 
 test("transposer toute l'idée : notes, accords et tonalité suivent", () => {
