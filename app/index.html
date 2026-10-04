@@ -1,7 +1,6 @@
 <title>Portée</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<!-- Les polices viennent du site, plus de Google Fonts (styles/polices.css). -->
+<link rel="stylesheet" href="styles/polices.css">
 <link rel="stylesheet" href="styles/systeme.css">
 <link rel="stylesheet" href="styles/bibliotheque.css">
 <link rel="stylesheet" href="styles/atelier.css">
@@ -860,5 +859,7 @@
 <div class="toast" id="toast" role="status" popover="manual" hidden></div>
 <dialog class="dialogue" id="dialogue"><form method="dialog" class="dialogue-dedans" id="dialogue-dedans"></form></dialog>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.7.1/abcjs-basic-min.js"></script>
+<!-- abcjs vient du site (copié de node_modules par l'assembleur, version figée par package.json) : plus de CDN.
+     « defer » : il ne retient plus le premier affichage, et passe toujours avant app.js (même ordre). -->
+<script defer src="vendor/abcjs/abcjs-basic-min.js"></script>
 <script type="module" src="app.js"></script>
