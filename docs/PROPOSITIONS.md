@@ -555,6 +555,24 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 - **B8 · En 3/8, les trois croches de la mesure se lient**, comme on les
   écrit à la main. Le temps reste la croche pour le métronome et le
   découpage : seule la ligature change (`groupeDeLigature`).
+- **B9 · L'arrondi traite la dernière note comme les autres.** Ta règle du
+  jeu lié ne change pas (une note relâchée au plus un pas de grille avant la
+  suivante tient jusqu'à elle). Mais la dernière note d'une prise n'a pas de
+  suivante : des noires un peu détachées restaient des noires, sauf la
+  dernière, qui devenait une croche. Elle tient maintenant jusqu'à la fin du
+  temps où elle commence, avec la même tolérance ; une syncope finale (qui
+  dépasse déjà son temps) ne bouge pas, et au-delà d'un pas de grille c'est
+  toujours un silence.
+  - Deux attaques de la même note dans le même pas de grille n'en font plus
+    qu'une, la plus longue, dès l'arrondi. Avant, `poser` en effaçait une
+    ensuite, mais le message disait « 3 notes gardées » pour deux écrites.
+  - À intégrer (lot son) : `arrondir` (`idee-direct.js`) peut passer
+    `temps: sq.pasParTemps(e.seq)` à `quantifier`. Sans, le temps vaut la
+    noire : juste en 2/4, 3/4 et 4/4 ; en 6/8, la dernière note se règle
+    sur la noire au lieu de la noire pointée.
+  - Pas touché, comme tu l'as décidé : à la grille noire, des croches swing
+    ou un triolet se fondent encore en accords. C'est le prix d'une grille
+    grossière ; la croche ou la double croche les gardent.
 
 ### Architecture (T3 à T5)
 

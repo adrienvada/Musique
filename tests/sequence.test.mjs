@@ -221,7 +221,8 @@ test("jouer en direct : les notes se recalent sur la grille", () => {
     { h: 67, debut: 9.9, fin: 12.6 },   // jeu lié : déborde sur la suivante
     { h: 69, debut: 12.1, fin: 13.9 },
   ], { grille: 2, origine: 16 });
-  assert.deepEqual(notes.map((n) => [n.d, n.l, n.h]), [[16, 2, 60], [18, 2, 62], [20, 4, 64], [24, 2, 64], [26, 2, 67], [28, 2, 69]]);
+  // La dernière, relâchée une croche avant la fin de son temps, tient jusqu'à elle (jeu lié).
+  assert.deepEqual(notes.map((n) => [n.d, n.l, n.h]), [[16, 2, 60], [18, 2, 62], [20, 4, 64], [24, 2, 64], [26, 2, 67], [28, 4, 69]]);
   // Des noires jouées un peu détachées (relâchées une croche trop tôt) restent des noires ;
   // un vrai silence (plus d'une croche) reste un silence.
   const detachees = sq.quantifier([
@@ -231,4 +232,27 @@ test("jouer en direct : les notes se recalent sur la grille", () => {
   // Un accord tenu sous la mélodie, lui, reste tenu.
   const tenu = sq.quantifier([{ h: 48, debut: 0, fin: 8 }, { h: 72, debut: 2, fin: 4 }], { grille: 2 });
   assert.deepEqual(tenu.map((n) => [n.d, n.l, n.h]), [[0, 8, 48], [2, 2, 72]]);
+});
+
+test("l'arrondi : la dernière note se prolonge comme les autres, une double attaque ne compte qu'une fois", () => {
+  const brut = (n) => [n.d, n.l, n.h];
+  // Des noires tenues à 60 % : toutes restent des noires, la dernière aussi (avant : une croche).
+  const noires = [0, 4, 8, 12].map((d, i) => ({ h: 60 + i, debut: d + 0.1, fin: d + 0.1 + 2.4 }));
+  assert.deepEqual(sq.quantifier(noires, { grille: 2 }).map(brut), [[0, 4, 60], [4, 4, 61], [8, 4, 62], [12, 4, 63]]);
+  assert.deepEqual(sq.quantifier(noires.map((n) => ({ ...n, fin: n.debut + 3 })), { grille: 1 }).map(brut), [[0, 4, 60], [4, 4, 61], [8, 4, 62], [12, 4, 63]]);
+  // Le dernier accord relâché en désordre : toutes ses notes tiennent jusqu'au temps.
+  const accord = [{ h: 60, debut: 0, fin: 3.4 }, { h: 64, debut: 0, fin: 3.6 }, { h: 67, debut: 0, fin: 4.4 }];
+  assert.deepEqual(sq.quantifier(accord, { grille: 1 }).map(brut), [[0, 4, 60], [0, 4, 64], [0, 4, 67]]);
+  // Au-delà d'un pas de grille, c'est un silence, pour la dernière comme pour les autres ;
+  // une note qui dépasse déjà son temps (syncope) ne bouge pas ; en 6/8, le temps est la noire pointée.
+  assert.deepEqual(sq.quantifier([{ h: 60, debut: 0, fin: 1.6 }], { grille: 1 }).map(brut), [[0, 2, 60]]);
+  assert.deepEqual(sq.quantifier([{ h: 60, debut: 2, fin: 5.8 }], { grille: 2 }).map(brut), [[2, 4, 60]]);
+  assert.deepEqual(sq.quantifier([{ h: 60, debut: 0, fin: 4.2 }], { grille: 2, temps: 6 }).map(brut), [[0, 6, 60]]);
+  // La même note attaquée deux fois dans le même pas de grille : une seule note, la plus longue.
+  const repetee = sq.quantifier([{ h: 60, debut: 0, fin: 0.6 }, { h: 60, debut: 0.8, fin: 1.6 }, { h: 60, debut: 2, fin: 3 }], { grille: 2 });
+  assert.deepEqual(repetee.map(brut), [[0, 2, 60], [2, 2, 60]]);
+  // Le compte des notes gardées est donc celui des notes écrites.
+  const seq = sq.nouvelleSequence();
+  for (const n of repetee) sq.poser(seq, 0, n);
+  assert.equal(seq.pistes[0].notes.length, repetee.length);
 });

@@ -594,14 +594,26 @@ export function recaler(seq, p, ids, grille) {
  * de grille au plus avant la suivante tient jusqu'à elle, une note qui
  * déborde à peine sur la suivante s'arrête où l'autre commence. Deux fois
  * la même hauteur ne se chevauchent jamais.
+ *
+ * La dernière note (ou le dernier accord) n'a pas de suivante : c'est la
+ * fin du temps où elle commence qui en tient lieu (`temps`, en pas : la
+ * noire par défaut), avec la même tolérance. Sans quoi des noires jouées un
+ * peu détachées restaient des noires, sauf la dernière, qui devenait une
+ * croche. Une note qui dépasse déjà son temps (une syncope) ne bouge pas.
+ *
+ * Deux attaques de la même note qui tombent sur le même pas n'en font
+ * qu'une (la plus longue), comme `poser` l'aurait fait : le compte des notes
+ * gardées est celui des notes écrites.
  */
-export function quantifier(evenements, { grille = 2, origine = 0 } = {}) {
+export function quantifier(evenements, { grille = 2, origine = 0, temps = 4 } = {}) {
   const notes = [];
   for (const e of [...evenements].sort((x, y) => x.debut - y.debut)) {
     let d = Math.round(e.debut / grille) * grille;
     let f = Math.round(e.fin / grille) * grille;
     if (d < 0) { if (f <= 0) continue; d = 0; }
     if (f <= d) f = d + grille;
+    const double = notes.find((n) => n.d === d + origine && n.h === e.h);
+    if (double) { double.l = Math.max(double.l, f - d); continue; }
     notes.push({ d: d + origine, l: f - d, h: e.h, v: e.v });
   }
   for (const n of notes) {
@@ -611,8 +623,8 @@ export function quantifier(evenements, { grille = 2, origine = 0 } = {}) {
   for (const n of notes) {
     // La note qui suit de plus près (celles qui commencent ensemble forment un accord).
     const apres = notes.filter((m) => m.d > n.d);
-    if (!apres.length) continue;
-    const prochaine = Math.min(...apres.map((m) => m.d));
+    // Après la dernière attaque, c'est la fin de son temps qui joue ce rôle.
+    const prochaine = apres.length ? Math.min(...apres.map((m) => m.d)) : origine + (Math.floor((n.d - origine) / temps) + 1) * temps;
     const ecart = prochaine - (n.d + n.l);
     if (ecart > 0 && ecart <= grille) n.l += ecart;
   }
