@@ -740,7 +740,40 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Données et synchronisation (S6, D1 à D10)
 
-<!-- lot données -->
+- **Chaque fiche est vérifiée et remise en forme (S6, `app/fiche.js`).**
+  Une sauvegarde abîmée, ou une fiche venue d'un autre appareil, dont les
+  étiquettes n'étaient pas une liste, vidait le carnet partout.
+  `normaliserFiche` redonne à chaque champ son type et ses bornes : titre,
+  étiquettes, favori, note, mémo, notes et accords d'une idée, mesure,
+  tonalité, tempo, transposition, doutes, blocs d'un morceau, dates. Une
+  idée écrite sans ABC (par Claude, avec `idee_ecrire`) le retrouve d'après
+  ses notes, comme dans l'éditeur.
+  - Un champ inconnu reste, s'il est du JSON raisonnable : une version plus
+    récente de l'appli a pu l'ajouter, et l'effacer ici l'effacerait partout.
+  - Les dates sortent toujours sur 24 caractères : l'appli les trie comme
+    des textes, et « +275760-… » passait avant « 1970-… ».
+  - Le coût : 26 ms pour 300 fiches lourdes, dix fois moins que leur
+    lecture dans IndexedDB. Pas besoin de cache.
+- **Fusionner deux versions au lieu d'écraser la plus ancienne (D4,
+  `fusionnerFiches`).** Une étoile posée sur le téléphone effaçait les
+  notes ajoutées sur l'ordinateur : la fiche entière la plus récente
+  gagnait (« le plus récent gagne », décision du 30/09). Maintenant, à
+  partir de la dernière version que les deux connaissaient (la « base »),
+  chaque champ garde le côté qui l'a changé. Changé des deux côtés : les
+  étiquettes se réunissent (ajouts et retraits des deux côtés), les notes se
+  fusionnent une par une (un retrait d'un côté s'applique si l'autre n'a pas
+  touché la note ; changée des deux côtés, la plus récente), les accords
+  position par position, le reste au plus récent. Le texte d'une page lue
+  (son ABC et ses doutes) ne se mélange pas : la fiche garde celui d'ici,
+  et l'autre devient une copie « titre (version de l'autre appareil) ».
+  - Pourquoi une base plutôt qu'une horloge par champ (HLC) : l'éditeur
+    d'idée, le morceau et l'accueil enregistrent la fiche entière. Dater
+    chaque champ et chaque note aurait demandé de toucher tous les écrans ;
+    la base marche avec ce qui s'écrit déjà. Une fiche sans base (d'avant)
+    fusionne comme avant : la plus récente, entière.
+  - Deux appareils ont pu donner le même numéro à deux notes différentes :
+    les deux restent, l'une renumérotée. La même note posée des deux côtés
+    n'en fait qu'une, la plus longue, comme quand on la pose deux fois.
 
 ### Son, temps, notation et exports (M1 à M12, N1 à N7)
 
