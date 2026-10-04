@@ -596,6 +596,16 @@ export function voixCompletes(seq) {
 const TONIQUES_MAJ = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const TONIQUES_MIN = ["Cm", "C#m", "Dm", "Ebm", "Em", "Fm", "F#m", "Gm", "G#m", "Am", "Bbm", "Bm"];
 
+/**
+ * Une tonalité montée ou descendue de `demiTons`, nommée comme dans le menu
+ * des tonalités (« C » + 3 → « Eb ») ; sans transposition, elle ne change pas.
+ */
+export function tonaliteTransposee(tonalite, demiTons) {
+  if (!demiTons) return tonalite;
+  const k = lireTonalite(tonalite);
+  return (k.mineur ? TONIQUES_MIN : TONIQUES_MAJ)[mod12(k.pc + demiTons)];
+}
+
 /** Toute l'idée transposée : notes, accords et tonalité. */
 export function transposerIdee(seq, demiTons) {
   const k = lireTonalite(seq.tonalite);

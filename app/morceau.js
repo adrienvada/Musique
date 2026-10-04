@@ -15,6 +15,7 @@
 import { nbMesures, pasParMesure, pasParTemps, lireTonalite } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
 import { fichierMidi } from "./midi.js";
+import { ecrireMusicXml } from "./musicxml.js";
 
 export const SECTIONS = ["Intro", "Couplet", "Pré-refrain", "Refrain", "Pont", "Solo", "Outro"];
 
@@ -75,6 +76,18 @@ export function midiDuMorceau(morceau, idees) {
     return { d: s.d, mesure: s.mesure, quintes: ks.quintes, mineur: ks.mineur };
   });
   return fichierMidi(a.voix, { tempo: a.tempo, mesure: a.mesure, quintes: k.quintes, mineur: k.mineur, titre: morceau.titre, changements, fin: a.fin });
+}
+
+/**
+ * Le MusicXML de l'enchaînement, assemblé comme le MIDI : la mélodie de
+ * tous les blocs sur une portée, les accords en symboles, l'accompagnement
+ * sur la sienne, et le chiffrage et l'armure de chaque bloc à sa première
+ * mesure. Avant, un morceau ne s'exportait pas en MusicXML.
+ */
+export function musicXmlDuMorceau(morceau, idees) {
+  const a = assembler(morceau, idees);
+  const seq = { tempo: a.tempo, mesure: a.mesure, tonalite: a.tonalite, pistes: a.voix, accords: a.accords };
+  return ecrireMusicXml(seq, { voix: a.voix, titre: morceau.titre || "Morceau", sections: a.sections });
 }
 
 /** Ce que le transport joue (transport.js). */

@@ -20,10 +20,10 @@ import { creerSynchro } from "./synchro.js";
 import { creerEditeurIdee, midiDeLIdee } from "./idee.js";
 import { Transport } from "./transport.js";
 import { sequenceDepuisAbc, pasParMesure, pasParTemps, ecrireAbc } from "./sequence.js";
-import { voixCompletes } from "./harmonie.js";
+import { voixCompletes, transposerIdee } from "./harmonie.js";
 import { creerVueMorceau } from "./vue-morceau.js";
-import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
-import { ecrireMusicXml } from "./musicxml.js";
+import { midiDuMorceau, musicXmlDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
+import { ecrireMusicXml, musicXmlDeLaPage } from "./musicxml.js";
 import { midiDeLaPage, ideeDepuisMidi } from "./midi.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
@@ -1599,20 +1599,22 @@ function resumeIdee(seq) {
 }
 
 /**
- * Le MusicXML (MuseScore) : une idée part de ses notes, une page lue de son
- * ABC joué en notes. Sur claude.ai, dans un .zip (liste fermée des formats).
+ * Le MusicXML (MuseScore) : une idée part de ses notes, un morceau de ses
+ * blocs assemblés (comme pour le MIDI), une page lue de son ABC joué en
+ * notes, avec la transposition choisie à l'écoute (le MIDI la prenait, le
+ * MusicXML l'oubliait). Sur claude.ai, dans un .zip (liste fermée des formats).
  */
 async function exporterMusicXml(p) {
   try {
-    let seq, voix;
-    if (p.type === "idee") { seq = p.sequence; voix = voixCompletes(seq); }
+    let texte;
+    if (p.type === "idee") texte = ecrireMusicXml(p.sequence, { voix: voixCompletes(p.sequence), titre: p.titre });
+    else if (p.type === "morceau") texte = musicXmlDuMorceau(p, ideesParId());
     else {
       if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
-      seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
-      voix = seq.pistes;
+      texte = musicXmlDeLaPage(p.abc, ABCJS(), { tempo: p.tempo, transposition: p.transposition || 0, titre: p.titre });
     }
     const nom = `${nomDeFichier(p)}.musicxml`;
-    const octets = new TextEncoder().encode(ecrireMusicXml(seq, { voix, titre: p.titre }));
+    const octets = new TextEncoder().encode(texte);
     if (etat.stockage.midiDirect) await etat.stockage.enregistrerFichier(nom, new Blob([octets], { type: "application/vnd.recordare.musicxml+xml" }));
     else await etat.stockage.enregistrerFichier(`${nomDeFichier(p)} (MusicXML).zip`, zipper([{ nom, donnees: octets }]));
   } catch (e) {
@@ -1778,6 +1780,8 @@ function brancher() {
     if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
     try {
       const seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
+      // Ce qu'on entend (et ce que le MIDI exporte) : la page transposée.
+      transposerIdee(seq, p.transposition || 0);
       ouvrirIdee(null, { seq, titre: `${p.titre} (idée)` });
       toast("Une copie en idée : la page d'origine ne change pas.");
     } catch (e) {
@@ -1935,6 +1939,7 @@ function creerVueDuMorceau() {
     stockage: () => etat.stockage,
     partitions: () => etat.partitions,
     partager: partagerMidi,
+    exporterMusicXml,
     ouvrirIdee: (id) => ouvrir(id),
     quitter: () => montrer("biblio"),
     veutSupprimer,

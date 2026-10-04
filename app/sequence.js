@@ -246,7 +246,7 @@ function decouperCouche(evenements, { mesures, total, coupures, epellation }) {
     const a = liste[i], b = liste[i + 1];
     while (im + 1 < mesures.length && mesures[im + 1].debut <= a) im++;
     const e = evenements.find((x) => x.d <= a && x.d + x.l > a);
-    for (const [x, y] of fragmenter(a, b, mesures[im].debut, mesures[im].temps)) {
+    for (const [x, y] of fragmenter(a, b, mesures[im].origine, mesures[im].temps)) {
       parMesure[im].push({
         a: x, l: y - x, silence: !e, lie: !!e && e.d + e.l > y,
         // L'épellation est celle de la note entière : un morceau lié garde la même.
@@ -259,11 +259,14 @@ function decouperCouche(evenements, { mesures, total, coupures, epellation }) {
 
 /**
  * Les mesures de la partition, de 0 à `total` : [{ debut, longueur, mesure,
- * temps, ligature, tonalite, k, change: { mesure, tonalite } }]. `sections` :
- * [{ d, mesure, tonalite }], triées, la première en 0 ; une idée n'en a
- * qu'une, un morceau une par bloc qui change de mesure ou de tonalité.
- * `change` dit ce qu'une mesure change par rapport à la précédente (pour le
- * MusicXML) ; la toute première change tout.
+ * temps, ligature, tonalite, k, levee, change: { mesure, tonalite } }].
+ * `sections` : [{ d, mesure, tonalite, barre? }], triées, la première en 0 ;
+ * une idée n'en a qu'une, un morceau une par bloc qui change de mesure ou de
+ * tonalité. Une section dont la première barre (`barre`) vient après son
+ * début commence par une levée : une mesure incomplète (`levee`), de son
+ * début à cette barre (une page lue qui passe en 12/8 sur une croche de
+ * levée). `change` dit ce qu'une mesure change par rapport à la précédente
+ * (pour le MusicXML) ; la toute première change tout.
  */
 function lesMesures(sections, total) {
   const mesures = [];
@@ -271,25 +274,35 @@ function lesMesures(sections, total) {
     const jusque = i + 1 < sections.length ? Math.min(total, sections[i + 1].d) : total;
     const longueur = (s.mesure[0] * 16) / s.mesure[1];
     const info = { mesure: s.mesure, temps: pasParTemps(s), ligature: groupeDeLigature(s), tonalite: s.tonalite, k: lireTonalite(s.tonalite) };
-    for (let x = s.d; x < jusque; x += longueur) {
+    // `origine` : d'où se comptent les temps. Une levée est la fin d'une
+    // mesure : ses temps se comptent depuis une mesure avant la barre qui suit.
+    const ajouter = (debut, l, levee, origine) => {
       const avant = mesures.at(-1);
       mesures.push({
-        debut: x, longueur: Math.min(longueur, jusque - x), ...info,
+        debut, longueur: l, origine, ...info, levee,
         change: {
           mesure: !avant || avant.mesure.join("/") !== s.mesure.join("/"),
           tonalite: !avant || avant.tonalite !== s.tonalite,
         },
       });
-    }
+    };
+    let x = s.d;
+    if (s.barre > s.d && s.barre - s.d < longueur && s.barre < jusque) { ajouter(s.d, s.barre - s.d, true, s.barre - longueur); x = s.barre; }
+    for (; x < jusque; x += longueur) ajouter(x, Math.min(longueur, jusque - x), false, x);
   });
   return mesures;
 }
 
-/** Où finissent les mesures qui contiennent `derniere` (pas), d'après les sections. */
+/**
+ * Où finissent les mesures qui contiennent `derniere` (pas), d'après les
+ * sections. Après une levée, les mesures se comptent depuis la première barre.
+ */
 function finDesMesures(sections, derniere) {
   const s = [...sections].reverse().find((x) => x.d <= Math.max(0, derniere - 1)) || sections[0];
   const longueur = (s.mesure[0] * 16) / s.mesure[1];
-  return s.d + Math.max(1, Math.ceil((derniere - s.d) / longueur)) * longueur;
+  const ancre = s.barre > s.d && s.barre - s.d < longueur ? s.barre : s.d;
+  if (derniere <= ancre) return ancre;
+  return ancre + Math.max(1, Math.ceil((derniere - ancre) / longueur)) * longueur;
 }
 
 /**
@@ -431,7 +444,7 @@ export function ecrireAbc(seq, { voix = seq.pistes, titre = "", mesuresParLigne 
           // abcjs y invente un silence qui ne renvoie à rien.
           if (ic > 0) abc += " &";
           let precedent = null;
-          const { debut: debutMesure, ligature: groupe } = mesures[m];
+          const { origine: debutMesure, ligature: groupe } = mesures[m];
           for (const t of couche[m]) {
             const dedans = t.a - debutMesure;
             const ligature = precedent && !t.silence && !precedent.silence && t.l < 4 && precedent.l < 4
@@ -592,6 +605,17 @@ export function lirePage(abc, lib) {
   return { voix, tempo, sections };
 }
 
+/**
+ * Une note d'une page (temps exacts) posée au pas : son début et sa fin
+ * s'arrondissent chacun, pour que des notes qui se suivent se touchent
+ * encore. Arrondies une à une, les trois notes d'un triolet de croches
+ * laissaient un trou (do, ré, silence, mi) ; ainsi, double, croche, double.
+ */
+export function auPas(n, decalage = 0) {
+  const d = Math.round(n.d);
+  return { d: d + decalage, l: Math.max(1, Math.round(n.d + n.l) - d) };
+}
+
 // Les tonalités qu'une idée ne propose pas, et leur nom dans le menu (les notes ne changent pas).
 const ENHARMONIQUES = { Gb: "F#", "C#": "Db", Cb: "B", "G#": "Ab", "D#": "Eb", "A#": "Bb", Fb: "E", "E#": "F", "B#": "C", "D#m": "Ebm", "A#m": "Bbm", Dbm: "C#m", Gbm: "F#m", Abm: "G#m", "E#m": "Fm", "B#m": "Cm" };
 
@@ -618,7 +642,7 @@ export function sequenceDepuisAbc(abc, lib, { tempo = null } = {}) {
   const seq = nouvelleSequence({ tempo: tempo || page.tempo, mesure, tonalite });
   seq.pistes = page.voix.map((v, i, toutes) => ({
     nom: i === 0 ? "Mélodie" : toutes.length === 2 ? "Main gauche" : `Voix ${i + 1}`,
-    notes: v.notes.map((n) => ({ id: seq.suivant++, d: Math.round(n.d) + decalage, l: Math.max(1, Math.round(n.l)), h: n.h })),
+    notes: v.notes.map((n) => ({ id: seq.suivant++, ...auPas(n, decalage), h: n.h })),
   }));
   if (!seq.pistes.length) seq.pistes = [{ nom: "Mélodie", notes: [] }];
   seq.pistes.forEach(trier);

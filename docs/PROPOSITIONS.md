@@ -662,6 +662,38 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - le zip (claude.ai) est daté du jour, plus du « 0 janvier 1980 » ;
   - l'en-tête de `midi.js` dit vrai : « Basse » n'existe que si tu as
     ajouté une piste de basse.
+- **N6 · Le MusicXML dit tout ce que la partition dit.** Validé contre le
+  schéma officiel 4.0 (xmllint) et relu par music21 :
+  - **les accords que MusicXML n'a pas** s'écrivent avec leurs degrés :
+    G7sus4 en « suspended-fourth » plus une septième mineure, Cadd9 et
+    Dmadd9 en majeur et mineur plus une neuvième. music21 lisait « Gsus »
+    et un do majeur ; il lit « Gsus add b7 » (sol do ré fa), « C add 9 » ;
+  - **le tempo dans l'unité du temps** : en 6/8, 9/8 et 12/8, la noire
+    pointée (90 à la noire devient 60 à la noire pointée), arrondie à
+    l'unité pour l'affichage ; `<sound>` garde le tempo exact, à la noire,
+    comme le veut MusicXML ;
+  - **un morceau s'exporte** (« ••• » du morceau, « MusicXML ») : ses blocs
+    bout à bout, comme pour le MIDI, chacun avec sa mesure, sa tonalité et
+    ses accords à sa première mesure (`musicXmlDuMorceau`). La mise en
+    mesures sait maintenant qu'une partition a des sections ;
+  - **une page lue** (`musicXmlDeLaPage`) garde ses changements de
+    tonalité et de mesure, et sa levée devient une mesure incomplète
+    (« implicit ») sous le nouveau chiffrage, comme on l'écrit à la main :
+    ta page de mélodie fait deux mesures de 4/4 (la gamme, en mesure
+    libre), une croche de levée, puis huit mesures de 12/8 en mi♭. Un
+    changement de tonalité seul prend effet à la barre qui suit ;
+  - **pas fait : le triolet d'une page.** La mise en mesures est celle des
+    idées, qui vivent au pas de double croche : un triolet s'y arrondit.
+    Le garder demanderait des n-olets dans cette mise en mesures commune
+    (des durées en tiers de pas, `<time-modification>`), pour des pages que
+    le lecteur ne sait pas encore lire (L12). En attendant, l'arrondi se
+    fait aux bornes des notes, pour qu'elles se touchent : double, croche,
+    double, au lieu de do, ré, silence, mi. Le MIDI de la page, lui, garde
+    le triolet exact.
+- **N7 · La transposition d'une page la suit partout.** Le MIDI la prenait,
+  le MusicXML et « Continuer en idée » l'oubliaient. Les deux la prennent
+  maintenant (`transposerIdee` après `sequenceDepuisAbc`, et la
+  transposition passée à `musicXmlDeLaPage`, armures comprises).
 - **N8 (nouveau) · Un fichier MIDI devient une idée : l'aller-retour avec
   Live.** Venu de l'audit de l'interface : une phrase retravaillée dans
   Ableton revenait dans Portée… par le clavier. Maintenant, un `.mid`
