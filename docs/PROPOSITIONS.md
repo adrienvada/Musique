@@ -632,6 +632,66 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   petit module, `eveil.js`, tient la session audio de l'iPhone, le verrou de
   l'écran et les commandes de l'écran verrouillé ; le transport l'appelle
   pour toute écoute (détails plus bas, avec M8).
+- **Jeu en direct : chaque note à l'instant de son geste (M6).** L'instant
+  était pris quand le code s'exécutait ; au téléphone, le fil principal
+  occupé le retardait, et des doubles croches tombaient un cran trop tard.
+  Chaque touche apporte maintenant l'instant de son geste
+  (`event.timeStamp`, l'horodatage du message MIDI, ramené à maintenant
+  s'il vient d'une autre horloge), que le transport rapporte à ce qu'on
+  entendait (`getOutputTimestamp`, avec repli sur l'horloge du contexte
+  moins ses latences). Mesuré dans l'appli : des doubles croches à 120
+  horodatées juste, traitées jusqu'à 58 ms en retard (le fil principal
+  occupé 60 ms toutes les 100 ms) : 24 sur 24 au bon pas, contre 6 sur 24
+  avant.
+  - **La latence de l'appareil se règle d'un geste** (« Régler en tapant
+    avec le clic », feuille Tempo) : douze clics à 100, on tape huit fois
+    avec eux (sur un grand pavé, ou au clavier MIDI : c'est ce dont on joue
+    qui compte), et la médiane de l'écart au clic devient la latence de
+    l'appareil (`portee:latence-jeu`, bornée de −150 à 400 ms), retranchée
+    de chaque note jouée en direct. Pourquoi la médiane : une tape oubliée
+    ou doublée ne déplace pas le réglage. Essayé avec des tapes horodatées
+    40 ms après chaque clic : « Réglée : 40 ms ».
+- **La pédale de maintien du clavier MIDI (M9).** Elle était ignorée.
+  Enfoncée (CC64, à partir de 64), le piano tient les touches relâchées
+  jusqu'à ce qu'elle se relève ; la même note rejouée efface vite la
+  précédente au lieu de s'y ajouter. En direct, une note tenue par la
+  pédale dure jusqu'à son lever, ou jusqu'à la même note rejouée. Essayé
+  avec un faux clavier MIDI dans la page : une note relâchée sous la
+  pédale ne s'arrête qu'au lever ; enregistrée, elle dure une mesure au lieu
+  de la croche jouée. Ce que le transport programme ne dépend pas de la
+  pédale : la durée des notes est déjà écrite.
+- **La levée jouée pendant le décompte se dit (M11).** Elle disparaissait
+  sans un mot. Le comportement ne change pas : la prise commence au premier
+  temps (garder la levée, ou non, reste à décider par Adrien) ; la feuille
+  de l'arrondi le dit (« 2 notes jouées pendant le décompte : pas gardées,
+  la prise commence au premier temps »), et si tout a été joué pendant le
+  décompte, le message le dit au lieu de « rien n'a été joué ».
+- **Le tempo tapé compte les temps de la mesure (M12).** On tape ce que
+  bat le métronome : la noire pointée en 6/8, 9/8 et 12/8, la blanche en
+  2/2, la croche en 3/8 ; l'idée garde ses noires par minute. Avant, taper
+  la noire pointée d'un 12/8 réglait le métronome aux deux tiers.
+- **Proposé, à valider par Adrien : la capture après coup (M13).** Comme
+  « Capture MIDI » dans Live et dans Ableton Note : sans avoir touché le
+  bouton rouge, ce qu'on joue au clavier (à l'écran, de l'ordinateur ou
+  MIDI) s'écrit note à note, de la durée choisie, comme avant ; Portée garde
+  aussi en mémoire la dernière phrase jouée, avec son rythme (seize mesures
+  au plus ; quatre secondes de silence, ou deux mesures, en commencent une
+  autre ; oubliée après une minute sans jouer). Une pastille « Capturer »
+  apparaît sur la grille dès deux notes (ou C au clavier) et ouvre la
+  feuille de l'arrondi, « Tel que joué | Arrondi » : « Garder » remplace les
+  notes écrites pendant qu'on jouait par celles-ci, avec leur rythme ;
+  « Jeter » laisse l'idée comme elle est. La phrase se cale sur la musique
+  si l'idée tournait (dans la boucle, si elle bouclait), sinon sur le tempo
+  de l'idée, à partir de la première note. Essayé dans l'appli : croche,
+  croche, noire, croche, croche jouées à 120 sans le bouton rouge s'écrivent
+  en cinq noires, puis « Capturer », « Garder » : 2, 2, 4, 2, 2 pas.
+  - Pourquoi une pastille sur la grille plutôt qu'un bouton du transport :
+    la rangée du transport est pleine au téléphone (320 px sur 366), et la
+    pastille ne se montre que quand il y a quelque chose à capturer.
+  - Pourquoi remplacer plutôt qu'ajouter : la même phrase, écrite deux fois,
+    se chevaucherait. Seules les notes que la capture a vues s'écrire (et
+    qui sont encore là) partent ; une note choisie qui change de hauteur au
+    clavier n'est pas une phrase jouée, et n'y entre pas.
 
 <!-- lot musique -->
 

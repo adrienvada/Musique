@@ -62,6 +62,7 @@ export class Transport {
     this.attente = null; // l'écoute demandée qui attend le piano
     this.reperes = [];
     this.clics = []; // les clics programmés : { o, g, t, decompte }
+    this.instantsClics = [];
     /** La sortie MIDI vers un autre logiciel (sortie-midi.js), quand l'appli en a branché une. */
     this.sortieMidi = null;
     // Un contexte audio neuf (retour d'arrière-plan) : ce qui était programmé n'existe plus.
@@ -102,6 +103,7 @@ export class Transport {
     this.actif = true;
     this.fini = false;
     this.reperes = [];
+    this.instantsClics = [];
     this.prochain = depuis - decompte * s.mesure;
     this.debutMusique = depuis;
     this.instant = ctx.currentTime + 0.08;
@@ -234,6 +236,9 @@ export class Transport {
     o.start(t);
     o.stop(t + 0.08);
     this.clics.push({ o, g, t, decompte });
+    // Les instants des clics, pour le réglage de la latence (« tape avec le clic », idee-direct.js).
+    this.instantsClics.push(t);
+    if (this.instantsClics.length > 64) this.instantsClics.shift();
     return { o, g, t };
   }
 

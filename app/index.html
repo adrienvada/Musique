@@ -507,6 +507,8 @@
         </div>
         <button class="btn dir-arreter" id="idee-arreter" title="Annuler (R)"></button>
       </div>
+      <!-- Capture après coup · la dernière phrase jouée au clavier, reprise avec son rythme (idee-direct.js, M13) -->
+      <button class="btn dir-capturer" id="idee-capturer" aria-label="Capturer les dernières notes jouées, avec leur rythme (C)" title="Capturer ce que tu viens de jouer, avec son rythme (C)" hidden><svg class="ico s" aria-hidden="true"><use href="#i-onde"></use></svg><span>Capturer</span></button>
       <span class="idee-mode" id="idee-mode" role="status"></span>
     </div>
 
@@ -619,7 +621,9 @@
       <div class="feuille-tete">
         <h2 id="idee-arrondi-titre">Notes jouées</h2>
       </div>
-      <p class="remarque">Choisis comment arrondir le rythme. Fermer la feuille garde ce que tu vois.</p>
+      <p class="remarque" id="idee-arrondi-aide">Choisis comment arrondir le rythme. Fermer la feuille garde ce que tu vois.</p>
+      <!-- M11 : combien de notes jouées pendant le décompte ne sont pas gardées -->
+      <p class="remarque dir-perdues" id="idee-arrondi-decompte" role="status" hidden></p>
       <div class="dir-defil">
         <div class="dir-plan" id="idee-plan-arrondi">
           <span class="surtitre dir-etiquette">Tel que joué</span>
@@ -738,6 +742,16 @@
           <button data-grille="2" aria-pressed="true">Croche</button>
           <button data-grille="1" aria-pressed="false">Double croche</button>
         </div>
+      </div>
+      <!-- Jeu en direct · la latence de l'appareil, réglée en tapant avec le clic (idee-direct.js, M6) -->
+      <div class="reglage-bloc" id="idee-latence-bloc">
+        <span class="surtitre">Jeu en direct : latence</span>
+        <div class="rangee">
+          <button class="btn" id="idee-latence" aria-pressed="false"><svg class="ico s" aria-hidden="true"><use href="#i-taper"></use></svg><span id="idee-latence-texte">Régler en tapant avec le clic</span></button>
+          <span class="remarque" id="idee-latence-etat" role="status"></span>
+        </div>
+        <button class="btn btn-plein latence-pad" id="idee-latence-pad" hidden>Écoute le clic, puis tape ici avec lui</button>
+        <span class="remarque">Si tes notes jouées en direct tombent toujours un peu tard, ou un peu tôt : huit tapes en même temps que le clic, avec ce dont tu joues (l'écran, ou ton clavier MIDI).</span>
       </div>
       <div class="reglage-bloc">
         <span class="surtitre">Pistes</span>

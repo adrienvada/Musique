@@ -1,5 +1,5 @@
 /**
- * L'ÉDITEUR D'IDÉE : LE JEU EN DIRECT
+ * L'ÉDITEUR D'IDÉE : LE JEU EN DIRECT, ET LA CAPTURE APRÈS COUP
  *
  * Le bouton rouge du transport (#idee-enregistrer, ou R au clavier) lance
  * une scène lisible à bout de bras, à la place de la grille ; le pupitre
@@ -12,8 +12,20 @@
  *     qui montre les notes jouées au fil de l'eau, avec la tête de lecture ;
  *   - « Arrêter » (#idee-arreter), un gros bouton ; le bouton rouge du
  *     transport devient un carré stop.
- * Chaque touche enfoncée (clavier à l'écran, de l'ordinateur ou MIDI) est
- * notée à l'instant près, en pas, sur l'horloge exacte du transport.
+ *
+ * L'INSTANT D'UNE TOUCHE (audit du 04/10, M6). Chaque touche (clavier à
+ * l'écran, de l'ordinateur ou MIDI) arrive avec l'instant de son geste
+ * (event.timeStamp, l'horodatage du message MIDI) ; le transport le rapporte
+ * à ce qu'on entendait à ce moment-là, et la latence de l'appareil s'en
+ * retranche. Avant, l'instant était pris quand le code s'exécutait : des
+ * doubles croches jouées au doigt tombaient une fois sur quatre un cran trop
+ * tard. La latence se règle d'un geste (« tape avec le clic », dans la
+ * feuille Tempo) : huit tapes, la médiane de leur écart au clic, retenue sur
+ * l'appareil (`portee:latence-jeu`, en millisecondes).
+ *
+ * LA PÉDALE DE MAINTIEN (M9). Une note relâchée pendant que la pédale du
+ * clavier MIDI est enfoncée dure jusqu'à ce que la pédale se relève, ou
+ * jusqu'à ce que la même note soit rejouée.
  *
  * ARRONDIR APRÈS COUP. À l'arrêt, on garde les instants bruts et on ouvre
  * une feuille du bas (#idee-arrondi) : « Tel que joué » et « Arrondi » se
@@ -21,15 +33,26 @@
  * se change en voyant ce que ça change. « Garder » écrit les notes arrondies
  * dans l'idée, en un seul pas d'« Annuler » ; fermer la feuille sans choisir
  * garde aussi, avec la grille affichée : ce qu'on a joué ne se perd jamais.
- * « Recommencer » jette la prise et relance le décompte. Avant, le recalage
- * se faisait d'office, sur une grille réglée ailleurs (feuille Tempo), sans
- * rien montrer de ce qu'il changeait.
+ * « Recommencer » jette la prise et relance le décompte. Les notes jouées
+ * pendant le décompte ne sont pas gardées (la prise commence au premier
+ * temps) : la feuille le dit, et combien (M11).
  *
- * Deux préférences de l'appareil : `portee:decompte` (0, 1 ou 2 mesures ;
- * 1 par défaut), réglée dans la feuille Tempo ou, d'un appui long, depuis
- * le bouton rouge ; `portee:arrondi` (la dernière grille choisie : 4, 2 ou
- * 1 pas ; croche par défaut). La même grille sert à « Recaler » du menu en
- * cercle : elle vit donc aussi dans e.recalage.
+ * LA CAPTURE APRÈS COUP (M13, comme « Capture MIDI » dans Live). Sans avoir
+ * touché le bouton rouge, ce qu'on joue au clavier s'écrit note à note, de
+ * la durée choisie ; Portée garde aussi en mémoire la dernière phrase jouée,
+ * avec son rythme (seize mesures au plus ; un silence de quatre secondes,
+ * ou de deux mesures, en commence une autre). « Capturer » (la pastille
+ * #idee-capturer, ou C au clavier) la reprend dans la même feuille de
+ * l'arrondi : « Garder » remplace les notes écrites pendant qu'on jouait
+ * par celles-ci, avec leur rythme ; « Jeter » laisse l'idée comme elle est.
+ * Elle se cale sur la musique si l'idée tournait, sinon sur le tempo de
+ * l'idée, à partir de la première note (là où elle s'est écrite).
+ *
+ * Préférences de l'appareil : `portee:decompte` (0, 1 ou 2 mesures ; 1 par
+ * défaut), réglée dans la feuille Tempo ou, d'un appui long, depuis le bouton
+ * rouge ; `portee:arrondi` (la dernière grille choisie : 4, 2 ou 1 pas ;
+ * croche par défaut), qui sert aussi à « Recaler » du menu en cercle (elle
+ * vit donc aussi dans e.recalage) ; `portee:latence-jeu`.
  *
  * Reçoit du cœur (ctx) : e (l'état : seq, piste, curseur, selection,
  *   recalage, mode, ouverte, et e.enregistrement, que ce module seul
@@ -38,25 +61,36 @@
  *   joue le transport), suivreLecture(pas), avantSon(), apresSon() (le micro
  *   se tait puis reprend), choisirMode(mode), grille (pour montrer les notes
  *   gardées).
- * Rend : { basculer(), arreter(), enfoncer(h, v) → true si la note est
- *   prise, relever(h), suivre(pas), maj(), enCours }.
+ * Rend : { basculer(), arreter(), capturer(), ouvrir(), enfoncer(h, v,
+ *   quand, { muet }) → true si la note est prise, relever(h, quand),
+ *   pedale(bas, quand), suivre(pas), maj(), enCours }.
  *
- * Les calculs (où en est la mesure, les barres d'un ruban, l'arrondi) sont
- * exportés et ne touchent pas à la page : tests/direct.test.mjs les essaie.
+ * Les calculs (où en est la mesure, les barres d'un ruban, l'arrondi, la
+ * latence, la prise et la capture) sont exportés et ne touchent pas à la
+ * page : tests/direct.test.mjs les essaie.
  */
 import * as sq from "./sequence.js";
 import { lirePref, ecrirePref } from "./preferences.js";
 import { ico } from "./icones.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
+import { garderEveille, laisserDormir } from "./eveil.js";
 
 const CLE_DECOMPTE = "portee:decompte";
 const CLE_ARRONDI = "portee:arrondi";
+const CLE_LATENCE = "portee:latence-jeu";
 /** Les grilles de l'arrondi, en pas (1 pas = une double croche). */
 export const GRILLES = [{ pas: 4, nom: "Noire" }, { pas: 2, nom: "Croche" }, { pas: 1, nom: "Double croche" }];
 /** Les mesures de décompte. */
 export const DECOMPTES = [{ n: 0, nom: "Aucun" }, { n: 1, nom: "1 mesure" }, { n: 2, nom: "2 mesures" }];
 /** L'appui long qui ouvre le réglage du décompte, en millisecondes. */
 const APPUI_LONG = 550;
+/** Le réglage de la latence : au tempo 100, deux mesures de clics, et l'on tape huit fois. */
+export const REGLAGE = { tempo: 100, clics: 12, tapes: 8 };
+/** Une nouvelle phrase pour la capture après ce silence (ou deux mesures, si c'est plus long). */
+export const SILENCE_PHRASE = 4000;
+/** La capture garde au plus ces dernières mesures, et s'oublie après une minute sans jouer. */
+export const MESURES_CAPTURE = 16;
+const OUBLI_CAPTURE = 60000;
 
 // --- Les calculs (sans page) ---------------------------------------------------
 
@@ -70,6 +104,42 @@ export function decompteRetenu(valeur) {
 export function grilleRetenue(valeur) {
   const n = Number(valeur);
   return GRILLES.some((g) => g.pas === n) ? n : 2;
+}
+
+/**
+ * La latence retenue, en millisecondes : 0 tant qu'on ne l'a pas réglée, et
+ * bornée (−150 à 400 ms) : un réglage raté ne doit pas déplacer tout le jeu.
+ */
+export function latenceRetenue(valeur) {
+  const n = Number(valeur);
+  if (valeur === null || valeur === undefined || valeur === "" || !Number.isFinite(n)) return 0;
+  return Math.max(-150, Math.min(400, Math.round(n)));
+}
+
+/**
+ * La latence d'après des tapes faites avec le clic. Pour chaque tape (l'instant
+ * entendu, en secondes, sur l'horloge du son), l'écart au clic le plus
+ * proche ; une tape à plus d'un tiers d'intervalle de tout clic est écartée
+ * (un oubli, un doublé) ; la médiane de ce qui reste, s'il reste au moins
+ * `minimum` tapes. Positive : la tape arrive après le clic (le toucher, le
+ * son en Bluetooth, la main qui suit le clic plutôt que de l'anticiper).
+ * @returns { latence (ms), gardees } ou null (pas assez de tapes)
+ */
+export function latenceDesTapes(tapes, clics, { minimum = 5 } = {}) {
+  if (clics.length < 2) return null;
+  const tries = [...clics].sort((a, b) => a - b);
+  const intervalle = (tries[tries.length - 1] - tries[0]) / (tries.length - 1);
+  const ecarts = [];
+  for (const t of tapes) {
+    let proche = tries[0];
+    for (const c of tries) if (Math.abs(c - t) < Math.abs(proche - t)) proche = c;
+    if (Math.abs(t - proche) <= intervalle / 3) ecarts.push(t - proche);
+  }
+  if (ecarts.length < minimum) return null;
+  ecarts.sort((a, b) => a - b);
+  const m = ecarts.length >> 1;
+  const mediane = ecarts.length % 2 ? ecarts[m] : (ecarts[m - 1] + ecarts[m]) / 2;
+  return { latence: Math.round(mediane * 1000), gardees: ecarts.length };
 }
 
 /**
@@ -182,6 +252,81 @@ export function arrondir(brutes, grille, depuis) {
   return sq.quantifier(brutes.map((n) => ({ ...n, debut: n.debut - depuis, fin: n.fin - depuis })), { grille, origine: depuis });
 }
 
+/**
+ * Combien de notes jouées pendant le décompte l'arrondi ne garde pas (M11) :
+ * la prise commence au premier temps, et une levée jouée avant lui disparaît.
+ * Le comportement ne change pas (garder la levée, ou non, reste à décider) :
+ * on le dit, au lieu de la faire disparaître sans un mot.
+ */
+export function nonGardees(brutes, grille, depuis) {
+  const avant = brutes.filter((n) => n.debut < depuis);
+  return avant.length - arrondir(avant, grille, depuis).length;
+}
+
+// --- La prise : ce qu'on joue, touche par touche (sans page) -----------------------
+
+/**
+ * Ce qu'on joue pendant une prise ou une capture : les touches enfoncées,
+ * celles que la pédale tient, les notes finies. Les instants sont des
+ * positions (en pas pour une prise, en millisecondes pour une capture).
+ */
+export const nouvellePrise = () => ({ notes: [], ouvertes: new Map(), tenues: new Map(), pedale: false });
+
+const finir = (p, h, o, t) => p.notes.push({ h, debut: o.debut, fin: Math.max(t, o.debut), v: o.v });
+
+/** Une touche s'enfonce à `t`. La même note que tenait la pédale s'arrête là (on la rejoue). */
+export function noterDebut(p, h, v, t) {
+  if (p.tenues.has(h)) { finir(p, h, p.tenues.get(h), t); p.tenues.delete(h); }
+  if (p.ouvertes.has(h)) finir(p, h, p.ouvertes.get(h), t);
+  p.ouvertes.set(h, { debut: t, v });
+}
+
+/** Une touche se relève à `t` : la note finit là, ou la pédale la tient. */
+export function noterFin(p, h, t) {
+  const o = p.ouvertes.get(h);
+  if (!o) return;
+  p.ouvertes.delete(h);
+  if (p.pedale) p.tenues.set(h, o);
+  else finir(p, h, o, t);
+}
+
+/** La pédale de maintien s'enfonce ou se relève à `t` ; relevée, ce qu'elle tenait finit là. */
+export function noterPedale(p, bas, t) {
+  p.pedale = !!bas;
+  if (bas) return;
+  for (const [h, o] of p.tenues) finir(p, h, o, t);
+  p.tenues.clear();
+}
+
+/** La prise s'arrête à `t` : ce qui sonnait encore (touches, pédale) finit là. */
+export function fermerPrise(p, t) {
+  for (const [h, o] of [...p.ouvertes, ...p.tenues]) finir(p, h, o, t);
+  p.ouvertes.clear();
+  p.tenues.clear();
+}
+
+/** Ce qui sonne encore dans une prise, pour le ruban : [{ h, debut }]. */
+export const enCoursDe = (p) => [...p.ouvertes, ...p.tenues].map(([h, o]) => ({ h, debut: o.debut }));
+
+/**
+ * Les notes d'une capture (instants en millisecondes) → des notes « telles
+ * que jouées », en pas, prêtes pour l'arrondi : la première tombe sur
+ * `depart` (là où elle s'est écrite, ou là où en était la musique qui
+ * tournait), les autres suivent au tempo de l'idée. Jouée par-dessus une
+ * boucle (`boucle` : [de, a[), chaque note retombe dans la boucle, là où
+ * elle a été jouée.
+ */
+export function brutesDeCapture(notes, { depart, tempo, boucle = null }) {
+  if (!notes.length) return [];
+  const t0 = Math.min(...notes.map((n) => n.debut));
+  const msParPas = 60000 / (tempo * 4);
+  return notes.map((n) => {
+    let debut = depart + (n.debut - t0) / msParPas;
+    if (boucle) { const l = boucle[1] - boucle[0]; debut = boucle[0] + ((((debut - boucle[0]) % l) + l) % l); }
+    return { h: n.h, v: n.v, debut, fin: debut + (n.fin - n.debut) / msParPas };
+  });
+}
+
 const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 
 // --- Le module -------------------------------------------------------------------
@@ -194,6 +339,9 @@ export function creerDirect(ctx) {
   // La grille retenue sert aussi à « Recaler » (menu en cercle) : le cœur la lit dans e.recalage.
   e.recalage = grilleRetenue(lirePref(CLE_ARRONDI));
   const decompteRetenu_ = () => decompteRetenu(lirePref(CLE_DECOMPTE));
+  const latence = () => latenceRetenue(lirePref(CLE_LATENCE));
+  /** La position (en pas) d'un geste : à son instant, rapporté à ce qu'on entendait, moins la latence de l'appareil. */
+  const positionDuGeste = (quand) => transport.position(quand ?? null, { latence: latence() / 1000 });
 
   // Le ruban en direct : les traits dessous, les notes, la tête de lecture dessus.
   const ruban = {
@@ -225,6 +373,8 @@ export function creerDirect(ctx) {
     const phase = r && r.phase !== "arrondi" ? r.phase : null;
     scene.hidden = !phase;
     $("idee-cadre").hidden = phase !== "jeu";
+    // L'écran reste allumé pendant le décompte et le jeu (eveil.js, M8).
+    if (phase) garderEveille("direct"); else laisserDormir("direct");
     if (!phase) return;
     scene.dataset.phase = phase;
     const jeu = phase === "jeu";
@@ -275,8 +425,8 @@ export function creerDirect(ctx) {
 
   function majRuban(pas, r, mesure, temps) {
     const page = pageRuban(pas, r.depuis, mesure);
-    const enCours = [...r.ouvertes].map(([h, o]) => ({ d: o.debut, f: Math.max(pas, o.debut), h }));
-    const jouees = r.notes.map((n) => ({ d: n.debut, f: n.fin, h: n.h })).concat(enCours);
+    const enCours = enCoursDe(r.prise).map((o) => ({ d: o.debut, f: Math.max(pas, o.debut), h: o.h }));
+    const jouees = r.prise.notes.map((n) => ({ d: n.debut, f: n.fin, h: n.h })).concat(enCours);
     // La fenêtre des hauteurs ne fait que s'agrandir : les notes déjà tracées ne sautent pas.
     const fen = fenetreHauteurs(jouees.map((n) => n.h), { rangsMin: 20, base: ruban.fenetre ? { bas: ruban.fenetre.bas, haut: ruban.fenetre.haut } : { bas: 55, haut: 77 } });
     const cle = `${page.de}|${mesure}|${temps}|${fen.bas}|${fen.haut}`;
@@ -287,7 +437,7 @@ export function creerDirect(ctx) {
       ruban.signature = "";
     }
     // Les notes ne se redessinent que quand elles changent (une note tenue grandit à chaque image).
-    const signature = `${r.notes.length}|${enCours.length ? Math.round(pas * 8) : "-"}`;
+    const signature = `${r.prise.notes.length}|${enCours.length ? Math.round(pas * 8) : "-"}`;
     if (signature !== ruban.signature) {
       ruban.signature = signature;
       ruban.notes.innerHTML = htmlBarres(barresRuban(jouees, ruban.fenetre));
@@ -301,7 +451,9 @@ export function creerDirect(ctx) {
 
   async function demarrer() {
     if (e.enregistrement) return;
+    if (reglage) finirReglage(false);
     transport.arreter();
+    oublierCapture(); // la prise prend le relais de la capture
     // On joue au clavier : celui de l'écran doit être là (Chanter et Accords n'ont pas de touches à jouer).
     if (e.mode === "chanter" || e.mode === "accords") ctx.choisirMode("clavier");
     ctx.avantSon();
@@ -309,7 +461,7 @@ export function creerDirect(ctx) {
     const depuis = Math.floor(Math.min(e.curseur, sq.finSequence(e.seq)) / mesure) * mesure;
     const decompte = decompteRetenu_();
     e.selection.clear();
-    const prise = { phase: decompte ? "decompte" : "jeu", depuis, decompte, notes: [], ouvertes: new Map(), grille: e.recalage, total: 0 };
+    const prise = { phase: decompte ? "decompte" : "jeu", depuis, decompte, prise: nouvellePrise(), grille: e.recalage, total: 0, perdues: 0 };
     e.enregistrement = prise;
     derniere = { temps: -1, mesure: -1, chiffre: -1, chrono: "", nTemps: 0 };
     ruban.fenetre = null;
@@ -353,13 +505,14 @@ export function creerDirect(ctx) {
     if (!r) return;
     if (r.phase === "arrondi") { garder(); return; }
     if (r.phase === "decompte") { finir(); return; }
-    const fin = transport.position();
-    for (const [h, o] of r.ouvertes) r.notes.push({ h, debut: o.debut, fin: Math.max(fin, o.debut), v: o.v });
-    r.ouvertes.clear();
+    fermerPrise(r.prise, transport.position());
+    r.notes = r.prise.notes;
+    r.perdues = nonGardees(r.notes, r.grille, r.depuis);
     const jouees = arrondir(r.notes, r.grille, r.depuis);
     if (!jouees.length) {
       finir();
-      if (e.ouverte) toast("Rien n'a été joué : l'idée n'a pas changé.");
+      // M11 : tout a été joué pendant le décompte ; on le dit, plutôt que « rien n'a été joué ».
+      if (e.ouverte) toast(r.perdues ? `${pluriel(r.perdues, "note")} jouée${r.perdues > 1 ? "s" : ""} pendant le décompte : la prise commence au premier temps, l'idée n'a pas changé.` : "Rien n'a été joué : l'idée n'a pas changé.", 6000);
       return;
     }
     r.total = jouees.length;
@@ -377,7 +530,11 @@ export function creerDirect(ctx) {
     ouvrirFeuille(feuille);
   }
 
-  /** Écrit les notes arrondies dans l'idée, un seul pas d'« Annuler ». */
+  /**
+   * Écrit les notes arrondies dans l'idée, un seul pas d'« Annuler ». Une
+   * capture remplace les notes écrites pendant qu'on jouait (celles qu'elle a
+   * vues s'écrire, et qui sont encore là).
+   */
   function garder() {
     const r = e.enregistrement;
     if (!r || r.phase !== "arrondi") return;
@@ -387,6 +544,12 @@ export function creerDirect(ctx) {
     const notes = arrondir(r.notes, r.grille, r.depuis);
     if (!notes.length) { ctx.rafraichir(); return; }
     ctx.modifier(() => {
+      if (r.ecrites && r.ecrites.length) {
+        const piste = e.seq.pistes[e.piste];
+        const parti = piste ? piste.notes.filter((n) => r.ecrites.some((x) => x.id === n.id && x.h === n.h)).map((n) => n.id) : [];
+        // Ce qui suivait se rapproche, comme avant leur écriture ; la capture se pose ensuite, telle que jouée.
+        if (parti.length) sq.effacer(e.seq, e.piste, parti);
+      }
       const ids = notes.map((n) => sq.poser(e.seq, e.piste, n));
       e.selection = new Set(ids);
       e.curseur = Math.max(...notes.map((n) => n.d + n.l));
@@ -395,15 +558,16 @@ export function creerDirect(ctx) {
     const premiere = notes[0];
     requestAnimationFrame(() => { if (e.ouverte) ctx.grille.montrer(premiere); });
     // Court : le message passager est étroit, et « Annuler » est juste en dessous, dans le pupitre.
-    if (e.ouverte) toast(`${pluriel(notes.length, "note")} gardée${notes.length > 1 ? "s" : ""}.`);
+    if (e.ouverte) toast(`${pluriel(notes.length, "note")} ${r.capture ? "capturée" : "gardée"}${notes.length > 1 ? "s" : ""}.`);
   }
 
-  /** Jette la prise et relance le décompte. */
+  /** Jette la prise et relance le décompte ; une capture est seulement jetée (l'idée garde ce qui s'est écrit). */
   function recommencer() {
     const r = e.enregistrement;
     if (!r || r.phase !== "arrondi") return;
     e.enregistrement = null;
     fermerFeuille(feuille);
+    if (r.capture) { majBouton(); ctx.rafraichir(); return; }
     demarrer();
   }
 
@@ -416,7 +580,16 @@ export function creerDirect(ctx) {
     const mesure = sq.pasParMesure(e.seq), temps = sq.pasParTemps(e.seq);
     const brutes = r.notes.map((n) => ({ d: n.debut, f: n.fin, h: n.h }));
     const arrondies = arrondir(r.notes, r.grille, r.depuis).map((n) => ({ d: n.d, f: n.d + n.l, h: n.h }));
-    $("idee-arrondi-titre").textContent = `${pluriel(r.total, "note")} jouée${r.total > 1 ? "s" : ""}`;
+    $("idee-arrondi-titre").textContent = `${pluriel(r.total, "note")} ${r.capture ? "capturée" : "jouée"}${r.total > 1 ? "s" : ""}`;
+    $("idee-arrondi-aide").textContent = r.capture
+      ? (r.ecrites && r.ecrites.length ? "Garder remplace les notes écrites pendant que tu jouais par celles-ci, avec leur rythme." : "Garder les écrit dans l'idée, avec leur rythme.") + " Choisis comment l'arrondir."
+      : "Choisis comment arrondir le rythme. Fermer la feuille garde ce que tu vois.";
+    // M11 : une levée jouée pendant le décompte n'est pas gardée ; on le dit.
+    const perdues = $("idee-arrondi-decompte");
+    perdues.hidden = !r.perdues;
+    perdues.textContent = r.perdues ? `${pluriel(r.perdues, "note")} jouée${r.perdues > 1 ? "s" : ""} pendant le décompte : pas gardée${r.perdues > 1 ? "s" : ""}, la prise commence au premier temps.` : "";
+    $("idee-recommencer").innerHTML = r.capture ? `${ico("fermer", "s")}Jeter` : `${ico("annuler", "s")}Recommencer`;
+    $("idee-recommencer").title = r.capture ? "Ne pas capturer : l'idée reste comme elle est" : "Jeter la prise et rejouer, avec le décompte";
     const fin = Math.max(...brutes.map((n) => n.f), ...arrondies.map((n) => n.f));
     const mesures = Math.max(1, Math.ceil((fin - r.depuis) / mesure - 1e-9));
     const de = r.depuis, a = r.depuis + mesures * mesure;
@@ -438,7 +611,8 @@ export function creerDirect(ctx) {
     pas = grilleRetenue(pas);
     e.recalage = pas;
     ecrirePref(CLE_ARRONDI, String(pas));
-    if (e.enregistrement && e.enregistrement.phase === "arrondi") { e.enregistrement.grille = pas; majArrondi(); }
+    const r = e.enregistrement;
+    if (r && r.phase === "arrondi") { r.grille = pas; if (!r.capture) r.perdues = nonGardees(r.notes, pas, r.depuis); majArrondi(); }
     majReglages();
   }
 
@@ -448,11 +622,155 @@ export function creerDirect(ctx) {
     majBouton();
   }
 
-  /** La feuille Tempo : le décompte et la grille retenus. */
+  /** La feuille Tempo : le décompte, la grille et la latence retenus. */
   function majReglages() {
     const n = decompteRetenu_();
     $("idee-decompte-mesures").querySelectorAll("[data-decompte]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.decompte) === n)));
     $("idee-recalage-reglage").querySelectorAll("[data-grille]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.grille) === e.recalage)));
+    majLatence();
+  }
+
+  // --- La latence : « tape avec le clic » (M6) ------------------------------------------
+
+  let reglage = null; // { tapes: [instants entendus, s], clics: [instants des clics], minuterie }
+  let dernierMot = "";
+
+  function majLatence() {
+    const pad = $("idee-latence-pad");
+    pad.hidden = !reglage;
+    $("idee-latence").setAttribute("aria-pressed", String(!!reglage));
+    $("idee-latence-texte").textContent = reglage ? "Arrêter le réglage" : lirePref(CLE_LATENCE) !== null ? "Régler à nouveau" : "Régler en tapant avec le clic";
+    if (reglage) {
+      pad.textContent = reglage.tapes.length ? `Tape avec le clic · ${reglage.tapes.length} sur ${REGLAGE.tapes}` : "Écoute le clic, puis tape ici avec lui";
+      return;
+    }
+    const ms = latence();
+    $("idee-latence-etat").textContent = dernierMot || (lirePref(CLE_LATENCE) === null ? "Pas réglée : les notes se placent comme on les entend." : `Réglée : ${ms} ms.`);
+  }
+
+  /** Huit tapes avec le clic du métronome ; la médiane de leur écart au clic devient la latence de l'appareil. */
+  async function reglerLatence() {
+    if (reglage) { finirReglage(false); return; }
+    if (e.enregistrement) return;
+    transport.arreter();
+    ctx.avantSon();
+    dernierMot = "";
+    const moi = { tapes: [], clics: [] };
+    reglage = moi;
+    majLatence();
+    // Rien que le métronome : une source sans note, au tempo du réglage.
+    const source = () => ({ tempo: REGLAGE.tempo, mesure: 16, temps: 4, fin: 0, notesA: () => [] });
+    try {
+      await transport.jouer(source, { metronome: true, sansFin: true, surFin: () => { if (reglage === moi) finirReglage(true); } });
+    } catch (err) {
+      if (reglage === moi) { reglage = null; majLatence(); ctx.apresSon(); }
+      toast(err.message || "Le piano n'a pas pu se charger.");
+      return;
+    }
+    if (reglage !== moi) return;
+    moi.minuterie = setTimeout(() => { if (reglage === moi) finirReglage(true); }, (REGLAGE.clics * 60000) / REGLAGE.tempo + 600);
+  }
+
+  /** Une tape (pad, clavier MIDI) pendant le réglage : l'instant qu'on entendait alors. */
+  function taper(quand) {
+    if (!reglage) return false;
+    reglage.tapes.push(transport.instantEntendu(quand ?? null));
+    if (reglage.tapes.length >= REGLAGE.tapes) finirReglage(true);
+    else majLatence();
+    return true;
+  }
+
+  function finirReglage(conclure) {
+    const r = reglage;
+    if (!r) return;
+    reglage = null;
+    clearTimeout(r.minuterie);
+    // Les instants des clics, avant que l'arrêt les oublie.
+    const clics = transport.instantsClics ? [...transport.instantsClics] : [];
+    transport.arreter();
+    ctx.apresSon();
+    if (conclure) {
+      const res = latenceDesTapes(r.tapes, clics);
+      if (res) {
+        ecrirePref(CLE_LATENCE, String(latenceRetenue(res.latence)));
+        dernierMot = `Réglée : ${latence()} ms, d'après ${res.gardees} tapes.`;
+      } else dernierMot = "Pas assez de tapes avec le clic : recommence, en tapant en même temps que lui.";
+    }
+    majLatence();
+  }
+
+  // --- La capture après coup (M13) -------------------------------------------------------
+
+  let capture = null; // { prise (instants en ms), ecrites: [{ id, h }], depart (pas) ou pos0 (position de la musique), dernier, oubli }
+
+  function oublierCapture() {
+    if (capture) clearTimeout(capture.oubli);
+    capture = null;
+    majCapture();
+  }
+
+  /** La pastille « Capturer » : dès deux notes jouées, tant qu'aucune prise ne tourne. */
+  function majCapture() {
+    const b = $("idee-capturer");
+    const n = capture ? capture.prise.notes.length + capture.prise.ouvertes.size + capture.prise.tenues.size : 0;
+    const voir = n >= 2 && !e.enregistrement && e.ouverte;
+    b.hidden = !voir;
+    if (voir) b.setAttribute("aria-label", `Capturer les ${n} dernières notes jouées, avec leur rythme (C)`);
+  }
+
+  /** Une touche jouée hors d'une prise : la capture la garde, avec son instant. */
+  function capterDebut(h, v, quand) {
+    const t = quand ?? performance.now();
+    const mesureMs = (sq.pasParMesure(e.seq) * 60000) / (e.seq.tempo * 4);
+    const enCours = capture && (capture.prise.ouvertes.size || capture.prise.tenues.size);
+    // Après un silence, une nouvelle phrase commence.
+    if (capture && !enCours && t - capture.dernier > Math.max(SILENCE_PHRASE, 2 * mesureMs)) oublierCapture();
+    if (!capture) {
+      // Elle se cale sur la musique si l'idée tourne ; sinon, la première note tombe là où elle s'écrit (le curseur).
+      const boucle = transport.actif && transport.options && transport.options.boucle;
+      capture = { prise: nouvellePrise(), ecrites: [], depart: e.curseur, pos0: transport.actif ? positionDuGeste(t) : null, boucle: boucle ? [...boucle] : null, dernier: t, oubli: null };
+    }
+    const p = capture.prise;
+    // Pas plus de seize mesures : le début s'oublie.
+    const limite = t - MESURES_CAPTURE * mesureMs;
+    if (p.notes.length && p.notes[0].debut < limite) {
+      p.notes = p.notes.filter((n) => n.debut >= limite);
+      if (capture.pos0 !== null) capture.pos0 = null; // la musique d'il y a seize mesures n'est plus dans les repères du transport
+      if (p.notes.length) capture.depart = e.curseur;
+    }
+    noterDebut(p, h, v, t);
+    // La note qu'écrit ce toucher (l'écriture note à note), pour la remplacer si l'on garde la capture.
+    capture.ecrites.push({ id: e.seq.suivant, h });
+    capture.dernier = t;
+    clearTimeout(capture.oubli);
+    capture.oubli = setTimeout(oublierCapture, OUBLI_CAPTURE);
+    majCapture();
+  }
+
+  /** Reprend la dernière phrase jouée dans la feuille de l'arrondi. */
+  function capturer() {
+    if (!capture || e.enregistrement || !e.ouverte) return;
+    const p = capture.prise;
+    fermerPrise(p, performance.now());
+    if (p.notes.length < 1) { oublierCapture(); return; }
+    const tempo = e.seq.tempo, mesure = sq.pasParMesure(e.seq);
+    const enMusique = capture.pos0 !== null;
+    const depart = enMusique ? capture.pos0 : capture.depart;
+    const boucle = enMusique ? capture.boucle : null;
+    const notes = brutesDeCapture(p.notes, { depart, tempo, boucle });
+    // Calée sur la musique : l'arrondi part de la mesure (le début de la boucle) ; sinon, de la première note.
+    const depuis = boucle ? boucle[0] : enMusique ? Math.max(0, Math.floor(depart / mesure) * mesure) : depart;
+    const ecrites = capture.ecrites;
+    oublierCapture();
+    transport.arreter();
+    const r = { phase: "arrondi", capture: true, depuis, decompte: 0, prise: nouvellePrise(), notes, grille: e.recalage, total: 0, perdues: 0, ecrites };
+    r.total = arrondir(notes, r.grille, depuis).length;
+    if (!r.total) return;
+    e.enregistrement = r;
+    majBouton();
+    majArrondi();
+    feuille.returnValue = "";
+    ouvrirFeuille(feuille);
   }
 
   // --- Les gestes ---------------------------------------------------------------------
@@ -477,6 +795,7 @@ export function creerDirect(ctx) {
     if (e.enregistrement) arreter(); else demarrer();
   });
   $("idee-arreter").addEventListener("click", arreter);
+  $("idee-capturer").addEventListener("click", capturer);
 
   $("idee-decompte-mesures").addEventListener("click", (ev) => { const b = ev.target.closest("[data-decompte]"); if (b) choisirDecompte(b.dataset.decompte); });
   $("idee-recalage-reglage").addEventListener("click", (ev) => { const b = ev.target.closest("[data-grille]"); if (b) choisirGrille(b.dataset.grille); });
@@ -485,6 +804,14 @@ export function creerDirect(ctx) {
   $("idee-garder").addEventListener("click", garder);
   // Fermer la feuille (le voile, Échap) sans choisir : on garde, avec la grille affichée.
   brancherFeuille(feuille, { surFermer: () => garder() });
+  // Le réglage de la latence : le bouton, et le pavé où l'on tape (au doigt, ou Espace / Entrée).
+  $("idee-latence").addEventListener("click", reglerLatence);
+  const pad = $("idee-latence-pad");
+  pad.addEventListener("pointerdown", (ev) => { ev.preventDefault(); taper(ev.timeStamp); });
+  pad.addEventListener("keydown", (ev) => { if ((ev.key === " " || ev.key === "Enter") && !ev.repeat) { ev.preventDefault(); taper(ev.timeStamp); } });
+  pad.addEventListener("click", (ev) => ev.preventDefault());
+  // Fermer la feuille Tempo arrête le réglage en cours.
+  $("idee-reglages").addEventListener("close", () => { if (reglage) finirReglage(false); });
 
   majBouton();
   majReglages();
@@ -492,22 +819,38 @@ export function creerDirect(ctx) {
   return {
     basculer: () => (e.enregistrement ? arreter() : demarrer()),
     arreter,
-    /** Une touche s'enfonce : pendant la prise, on note l'instant (la feuille ouverte avale la note). */
-    enfoncer(h, v) {
+    capturer,
+    /** Une idée s'ouvre : la capture d'avant ne la concerne pas. */
+    ouvrir() { oublierCapture(); if (reglage) finirReglage(false); },
+    /**
+     * Une touche s'enfonce, à l'instant `quand` (horloge de la page). Pendant
+     * une prise, on note sa position (la feuille ouverte avale la note) ;
+     * pendant le réglage de la latence, c'est une tape. Sinon, la capture la
+     * garde (sauf une note chantée, ou une note choisie qui change de hauteur).
+     */
+    enfoncer(h, v, quand = null, { muet = false } = {}) {
+      if (reglage && !muet) return taper(quand);
       const r = e.enregistrement;
-      if (!r) return false;
-      if (r.phase !== "arrondi") r.ouvertes.set(h, { debut: transport.position(), v });
+      if (!r) {
+        if (!muet && !e.selection.size) capterDebut(h, v, quand);
+        return false;
+      }
+      if (r.phase !== "arrondi") noterDebut(r.prise, h, v, positionDuGeste(quand));
       return true;
     },
-    relever(h) {
+    relever(h, quand = null) {
       const r = e.enregistrement;
-      const o = r && r.phase !== "arrondi" && r.ouvertes.get(h);
-      if (!o) return;
-      r.notes.push({ h, debut: o.debut, fin: transport.position(), v: o.v });
-      r.ouvertes.delete(h);
+      if (r && r.phase !== "arrondi") { noterFin(r.prise, h, positionDuGeste(quand)); return; }
+      if (!r && capture) { noterFin(capture.prise, h, quand ?? performance.now()); capture.dernier = quand ?? performance.now(); }
+    },
+    /** La pédale de maintien (M9) : les notes relâchées pendant qu'elle est enfoncée durent jusqu'à ce qu'elle se relève. */
+    pedale(bas, quand = null) {
+      const r = e.enregistrement;
+      if (r && r.phase !== "arrondi") { noterPedale(r.prise, bas, positionDuGeste(quand)); return; }
+      if (!r && capture) noterPedale(capture.prise, bas, quand ?? performance.now());
     },
     suivre,
-    maj() { majReglages(); majBouton(); },
+    maj() { majReglages(); majBouton(); majCapture(); },
     get enCours() { return !!e.enregistrement; },
   };
 }

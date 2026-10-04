@@ -11,7 +11,11 @@
  *     A S D F… pour les touches blanches, W E T Y U pour les noires, Z X
  *     pour l'octave), qui joue dans tous les modes ;
  *   - un clavier MIDI (Chrome et Edge ; bouton #idee-midi dans la feuille
- *     Tempo), rebranché tout seul à l'ouverture s'il l'a déjà été.
+ *     Tempo), rebranché tout seul à l'ouverture s'il l'a déjà été, et sa
+ *     pédale de maintien (CC64) : le piano tient les notes, le jeu en direct
+ *     les enregistre tenues (audit du 04/10, M9).
+ * Chaque touche donne l'instant de son geste (event.timeStamp, ou celui du
+ * message MIDI) : le jeu en direct la place à cet instant-là (M6).
  * Sans note choisie, une touche écrit à la suite, de la durée choisie ;
  * avec une note choisie, elle lui donne sa hauteur (c'est le cœur qui en
  * décide, dans enfoncer).
@@ -21,8 +25,9 @@
  * « portee:clavier-facon » (Piano ou Gamme, retenu d'une fois sur l'autre).
  *
  * Reçoit du cœur (ctx) : e (l'état : duree, pointee, seq, ouverte), $,
- *   toast, enfoncer(h, v), relever(h), choisirDuree(pas), basculerPointee(),
- *   silence(), effacer(), choisies().
+ *   toast, piano, enfoncer(h, v, { quand }), relever(h, quand),
+ *   pedale(bas, quand), choisirDuree(pas), basculerPointee(), silence(),
+ *   effacer(), choisies().
  * Rend : { entrer(), sortir(), maj(), ouvrir(notes), toucheBas(ev),
  *   toucheHaut(ev), montrer(h, enfoncee), marquer(hauteurs), amener(h) }.
  */
@@ -38,6 +43,30 @@ export const TOUCHES_ORDI = {
   KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13, KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17,
 };
 
+/**
+ * Ce que dit un message MIDI : { type: "debut", note, force }, { type: "fin",
+ * note }, { type: "pedale", bas } (la pédale de maintien, CC64 : enfoncée à
+ * partir de 64), ou null (le reste ne nous concerne pas). Tous canaux.
+ */
+export function lireMessageMidi(data) {
+  const [statut, a, b] = data || [];
+  const type = statut & 0xf0;
+  if (type === 0x90 && b > 0) return { type: "debut", note: a, force: b };
+  if (type === 0x80 || (type === 0x90 && b === 0)) return { type: "fin", note: a };
+  if (type === 0xb0 && a === 64) return { type: "pedale", bas: b >= 64 };
+  return null;
+}
+
+/**
+ * L'instant d'un message MIDI, sur l'horloge de la page : son horodatage s'il
+ * est plausible (à moins de cinq secondes de maintenant), sinon maintenant.
+ * Un message traité en retard (le fil principal occupé) garde ainsi l'instant
+ * où la touche a été jouée.
+ */
+export function instantMidi(timeStamp, maintenant = performance.now()) {
+  return timeStamp > 0 && Math.abs(maintenant - timeStamp) < 5000 ? timeStamp : maintenant;
+}
+
 const CLE_GAMME = "portee:clavier-gamme";
 const CLE_FACON = "portee:clavier-facon";
 
@@ -47,7 +76,7 @@ export function creerModeClavier(ctx) {
   // Les touches de gamme écrivent par le même chemin que celles du piano
   // (enfoncer, relever) : le jeu en direct, la note choisie qui prend la hauteur… marchent pareil.
   const clavier = creerClavier($("idee-clavier"), {
-    surNote: (h, bas, v) => (bas ? ctx.enfoncer(h, v) : ctx.relever(h)),
+    surNote: (h, bas, v, quand) => (bas ? ctx.enfoncer(h, v, { quand }) : ctx.relever(h, quand)),
     // Un geste sur les chevrons ou la carte : les touches de l'ordinateur suivent l'octave montrée.
     surOctave: (bas) => { octaveOrdi = bas; preferer(); },
     surFacon: (f) => ecrirePref(CLE_FACON, f),
@@ -109,7 +138,7 @@ export function creerModeClavier(ctx) {
   /** Les touches qui jouent, et Z X pour l'octave. Rend true si la touche a servi. */
   function toucheBas(ev) {
     if (TOUCHES_ORDI[ev.code] !== undefined) {
-      if (!ev.repeat) ctx.enfoncer(octaveOrdi + TOUCHES_ORDI[ev.code]); // touche tenue : rien de plus
+      if (!ev.repeat) ctx.enfoncer(octaveOrdi + TOUCHES_ORDI[ev.code], undefined, { quand: ev.timeStamp }); // touche tenue : rien de plus
       return true;
     }
     if (ev.code === "KeyZ" || ev.code === "KeyX") {
@@ -124,7 +153,7 @@ export function creerModeClavier(ctx) {
 
   function toucheHaut(ev) {
     if (TOUCHES_ORDI[ev.code] === undefined) return false;
-    ctx.relever(octaveOrdi + TOUCHES_ORDI[ev.code]);
+    ctx.relever(octaveOrdi + TOUCHES_ORDI[ev.code], ev.timeStamp);
     return true;
   }
 
@@ -152,10 +181,12 @@ export function creerModeClavier(ctx) {
   }
 
   function surMessageMidi(m) {
-    const [statut, note, force] = m.data;
-    const type = statut & 0xf0;
-    if (type === 0x90 && force > 0) ctx.enfoncer(note, force);
-    else if (type === 0x80 || (type === 0x90 && force === 0)) ctx.relever(note);
+    const x = lireMessageMidi(m.data);
+    if (!x) return;
+    const quand = instantMidi(m.timeStamp);
+    if (x.type === "debut") ctx.enfoncer(x.note, x.force, { quand });
+    else if (x.type === "fin") ctx.relever(x.note, quand);
+    else ctx.pedale(x.bas, quand);
   }
   $("idee-midi").addEventListener("click", () => brancherMidi(true));
 

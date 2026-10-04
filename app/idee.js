@@ -45,6 +45,7 @@ import { creerChant, messageMicro } from "./idee-chant.js";
 import { creerAccords } from "./idee-accords.js";
 import { creerSelection } from "./idee-selection.js";
 import { creerDirect } from "./idee-direct.js";
+import { tempoDesTapes } from "./transport.js";
 
 const $ = (id) => document.getElementById(id);
 const MESURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8", "2/2"];
@@ -136,7 +137,7 @@ export function creerEditeurIdee(deps) {
 
   const ctx = {
     e, $, sq, deps, piano, transport, toast,
-    modifier, rafraichir, entendre, enfoncer, relever,
+    modifier, rafraichir, entendre, enfoncer, relever, pedale,
     dureeCourante: () => dureeCourante(), choisirDuree, basculerPointee, silence, effacer,
     choisir, notesPiste: () => notesPiste(), choisies: () => choisies(),
     source, suivreLecture, avantSon, apresSon, choisirMode,
@@ -190,6 +191,7 @@ export function creerEditeurIdee(deps) {
     $("idee-etat").textContent = "";
     for (const f of feuilles) fermerFeuille(f);
     accords.fermer();
+    direct.ouvrir();
     afficherAffichage();
     // Un mémo vocal prend le micro : on l'ouvre au clavier, pas au chant.
     choisirMode(MODES.includes(mode) ? mode : memo ? "clavier" : lirePref(CLE_MODE));
@@ -214,6 +216,8 @@ export function creerEditeurIdee(deps) {
     if (enregistreur) enregistreur.stop();
     if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; }
     for (const h of [...tenues.keys()]) relever(h);
+    // Une pédale restée enfoncée ne doit pas tenir les notes des autres écrans.
+    piano.pedale(false);
     if (e.minuterie) { clearTimeout(e.minuterie); e.minuterie = null; sauver(); }
     await e.sauvegarde;
   }
@@ -336,8 +340,12 @@ export function creerEditeurIdee(deps) {
     piano.pret().then(() => hauteurs.forEach((h) => piano.note(h, duree, 85))).catch(() => {});
   }
 
-  /** Une touche s'enfonce (clavier à l'écran, de l'ordinateur, MIDI, ou note chantée). */
-  function enfoncer(h, v = 90, { muet = false } = {}) {
+  /**
+   * Une touche s'enfonce (clavier à l'écran, de l'ordinateur, MIDI, ou note
+   * chantée) ; `quand` : l'instant du geste (horloge de la page), que le jeu
+   * en direct garde (M6).
+   */
+  function enfoncer(h, v = 90, { muet = false, quand = null } = {}) {
     if (!e.ouverte) return;
     if (tenues.has(h)) relever(h);
     const autres = tenues.size > 0;
@@ -347,7 +355,7 @@ export function creerEditeurIdee(deps) {
     // (piano.js), au lieu d'être perdue comme le premier toucher l'était.
     if (!muet) tenues.set(h, piano.debut(h, v));
     // En direct, la touche est notée à l'instant ; elle ne s'écrit qu'à la fin.
-    if (direct.enfoncer(h, v)) return;
+    if (direct.enfoncer(h, v, quand, { muet })) return;
     const sel = [...e.selection];
     if (autres && e.accordEnCours !== null) {
       // Un doigt de plus pendant que les autres tiennent : un accord.
@@ -373,13 +381,19 @@ export function creerEditeurIdee(deps) {
     }
   }
 
-  function relever(h) {
+  function relever(h, quand = null) {
     if (!tenues.has(h)) return;
     piano.fin(tenues.get(h));
     tenues.delete(h);
     clavierMode.montrer(h, false);
-    direct.relever(h);
+    direct.relever(h, quand);
     if (!tenues.size) e.accordEnCours = null;
+  }
+
+  /** La pédale de maintien du clavier MIDI (M9) : le piano tient les notes, le jeu en direct aussi. */
+  function pedale(bas, quand = null) {
+    piano.pedale(bas);
+    direct.pedale(bas, quand);
   }
 
   function silence() {
@@ -949,7 +963,10 @@ export function creerEditeurIdee(deps) {
     if (tapes.length < 3) { $("idee-taper-texte").textContent = "Encore…"; return; }
     $("idee-taper-texte").textContent = "Taper le tempo";
     const ecarts = tapes.slice(1).map((x, i) => x - tapes[i]);
-    changerTempo(60000 / (ecarts.reduce((a, b) => a + b, 0) / ecarts.length));
+    // On tape les temps de la mesure, ceux que bat le métronome (la noire pointée en 6/8, la blanche
+    // en 2/2) ; l'idée garde des noires par minute (M12). Avant, en 12/8, le métronome battait aux
+    // deux tiers de ce qu'on avait tapé.
+    changerTempo(tempoDesTapes(ecarts, sq.pasParTemps(e.seq)));
   });
   const changerMesure = (m) => reglage(() => { e.seq.mesure = m.split("/").map(Number); });
   $("idee-mesure").addEventListener("change", () => changerMesure($("idee-mesure").value));
@@ -1030,6 +1047,8 @@ export function creerEditeurIdee(deps) {
     const actions = {
       Space: jouer,
       KeyR: direct.basculer,
+      // Capturer la dernière phrase jouée, avec son rythme (M13, comme dans Live).
+      KeyC: direct.capturer,
       Digit1: () => choisirDuree(1), Digit2: () => choisirDuree(2), Digit3: () => choisirDuree(4), Digit4: () => choisirDuree(8), Digit5: () => choisirDuree(16),
       Period: basculerPointee, NumpadDecimal: basculerPointee,
       Digit0: silence, Numpad0: silence,
