@@ -67,12 +67,14 @@ self.addEventListener("install", (e) => {
     try {
       const cache = await caches.open(CACHE);
       // Ce qui porte sa version et que la version d'avant gardait déjà
-      // passe d'un cache à l'autre sans le réseau ; le reste se télécharge.
+      // passe d'un cache à l'autre sans le réseau ; le reste de la coquille
+      // se télécharge (ce qui est en tâche de fond attendra la page).
+      const enFond = new Set(EN_FOND.map(adresse));
       const aTelecharger = [];
-      for (const url of [...COQUILLE, ...EN_FOND].map(adresse)) {
+      for (const url of [...COQUILLE.map(adresse), ...enFond]) {
         const deja = versionnee(url) ? await caches.match(url) : null;
         if (deja) await cache.put(url, deja);
-        else if (!EN_FOND.map(adresse).includes(url)) aTelecharger.push(url);
+        else if (!enFond.has(url)) aTelecharger.push(url);
       }
       await cache.addAll(aTelecharger.map((u) => new Request(u, { cache: "no-cache" })));
       // Si le site a été remis en ligne pendant la copie, la page copiée n'est
