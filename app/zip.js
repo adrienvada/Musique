@@ -21,9 +21,23 @@ function crc32(octets) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-export function zipper(fichiers) {
+/**
+ * La date d'un fichier, à la façon du zip (MS-DOS, heure locale, à deux
+ * secondes près). Laissée à zéro, elle se lisait « 0 janvier 1980 » : le
+ * fichier sorti du .zip semblait plus vieux que tout le reste.
+ */
+function dateDos(date) {
+  const an = Math.min(2107, Math.max(1980, date.getFullYear()));
+  return {
+    jour: ((an - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+    heure: (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1),
+  };
+}
+
+export function zipper(fichiers, { date = new Date() } = {}) {
   const enc = new TextEncoder();
   const morceaux = [], central = [];
+  const { jour, heure } = dateDos(date);
   let decalage = 0;
   for (const { nom, donnees } of fichiers) {
     const n = enc.encode(nom);
@@ -32,6 +46,8 @@ export function zipper(fichiers) {
     local.setUint32(0, 0x04034b50, true);
     local.setUint16(4, 20, true);
     local.setUint16(6, 0x0800, true); // noms en UTF-8
+    local.setUint16(10, heure, true);
+    local.setUint16(12, jour, true);
     local.setUint32(14, crc, true);
     local.setUint32(18, donnees.length, true);
     local.setUint32(22, donnees.length, true);
@@ -42,6 +58,8 @@ export function zipper(fichiers) {
     c.setUint16(4, 20, true);
     c.setUint16(6, 20, true);
     c.setUint16(8, 0x0800, true);
+    c.setUint16(12, heure, true);
+    c.setUint16(14, jour, true);
     c.setUint32(16, crc, true);
     c.setUint32(20, donnees.length, true);
     c.setUint32(24, donnees.length, true);

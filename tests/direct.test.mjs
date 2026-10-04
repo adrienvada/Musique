@@ -151,6 +151,11 @@ test("arrondir : la même prise, trois grilles", () => {
   assert.deepEqual(arrondir(fine, 4, 16).map((n) => [n.d, n.l]), [[16, 4], [20, 4]]);
   // Ce qui a été joué avant le premier temps (pendant le décompte) ne s'écrit pas.
   assert.deepEqual(arrondir([{ h: 60, debut: 10, fin: 11 }], 2, 16), []);
+  // Des noires un peu détachées restent des noires, la dernière de la prise comprise.
+  const detachees = [16, 20, 24, 28].map((d, i) => ({ h: 60 + i, debut: d + 0.2, fin: d + 2.6 }));
+  assert.deepEqual(arrondir(detachees, 2, 16).map((n) => [n.d, n.l]), [[16, 4], [20, 4], [24, 4], [28, 4]]);
+  // Deux attaques de la même note dans le même pas de grille n'en font qu'une : « 2 notes gardées », pas 3.
+  assert.equal(arrondir([{ h: 60, debut: 16, fin: 16.6 }, { h: 60, debut: 16.8, fin: 17.6 }, { h: 60, debut: 18, fin: 19 }], 2, 16).length, 2);
 });
 
 test("les icônes du jeu en direct existent", () => {

@@ -34,7 +34,38 @@ test("assembler : les blocs se suivent, mesure entière par mesure entière", ()
   assert.equal(a.tempo, 90);
   // Le tempo du morceau l'emporte ; le MIDI a une piste par voix.
   const midi = midiDuMorceau({ titre: "Chanson", tempo: 120, blocs: [{ id: "b", idee: "refrain", nom: "Refrain", fois: 1 }] }, idees);
-  assert.equal(new TextDecoder("latin1").decode(midi).match(/MTrk/g).length, 3);
+  // La piste de tempo, la mélodie, les accords et leur basse.
+  assert.equal(new TextDecoder("latin1").decode(midi).match(/MTrk/g).length, 4);
+});
+
+test("un morceau dont les blocs changent de mesure et de tonalité : chaque bloc garde les siennes", () => {
+  const a = idee("a", [[0, 16, 60], [16, 16, 64]], { tempo: 100 }, [{ d: 0, nom: "C" }]);
+  const b = idee("b", [[0, 4, 67], [4, 4, 71], [8, 4, 74], [12, 12, 79]], { mesure: [3, 4], tonalite: "G" }, [{ d: 0, nom: "G" }, { d: 12, nom: "D7" }]);
+  const idees = new Map([["a", a], ["b", b]]);
+  const morceau = { titre: "Morceau d'essai", tempo: 100, blocs: [{ id: 1, idee: "a", nom: "Couplet", fois: 2 }, { id: 2, idee: "b", nom: "Refrain", fois: 1 }] };
+  const asm = assembler(morceau, idees);
+  // Deux fois 2 mesures de 4/4 (64 pas), puis 2 mesures de 3/4 (24 pas).
+  assert.deepEqual(asm.sections, [{ d: 0, mesure: [4, 4], tonalite: "C" }, { d: 64, mesure: [3, 4], tonalite: "G" }]);
+  assert.deepEqual(asm.accords.map((x) => [x.d, x.nom]), [[0, "C"], [32, "C"], [64, "G"], [76, "D7"]]);
+  assert.equal(asm.fin, 88);
+  // Le MIDI : mesure et armure au début du bloc, fin à la dernière barre (relu par un petit lecteur).
+  const octets = midiDuMorceau(morceau, idees);
+  const metas = [];
+  let i = 14, t = 0;
+  const vlq = () => { let v = 0, x; do { x = octets[i++]; v = (v << 7) | (x & 0x7f); } while (x & 0x80); return v; };
+  const finPiste = i + 8 + ((octets[i + 4] << 24) | (octets[i + 5] << 16) | (octets[i + 6] << 8) | octets[i + 7]);
+  i += 8;
+  while (i < finPiste) {
+    t += vlq();
+    i++; // 0xff : la piste de tempo n'a que des méta-événements
+    const type = octets[i++], n = vlq();
+    metas.push([t, type, [...octets.slice(i, i + n)]]);
+    i += n;
+  }
+  assert.deepEqual(metas.filter((m) => m[1] === 0x58).map((m) => [m[0], m[2][0], 2 ** m[2][1]]), [[0, 4, 4], [64 * 120, 3, 4]]);
+  assert.deepEqual(metas.filter((m) => m[1] === 0x59).map((m) => [m[0], m[2][0]]), [[0, 0], [64 * 120, 1]]);
+  assert.equal(metas.at(-1)[1], 0x2f);
+  assert.equal(metas.at(-1)[0], 88 * 120);
 });
 
 test("le nom de la section suivante", () => {

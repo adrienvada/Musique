@@ -6,8 +6,8 @@
  * En dessous, une carte par bloc : compacte, sauf celle qu'on a choisie, qui
  * montre ses gestes (plus tôt, plus tard, une fois de plus, écouter, ouvrir
  * l'idée, retirer). On ajoute une partie depuis une feuille « Quelle idée ? »,
- * on règle le tempo, le MIDI et la suppression depuis « ••• ». Tout
- * s'enregistre tout seul.
+ * on règle le tempo, le MIDI, le MusicXML et la suppression depuis « ••• ».
+ * Tout s'enregistre tout seul.
  *
  * Les cartes ne sont reconstruites que quand le morceau change : choisir une
  * carte ou lire un bloc ne touche qu'à des classes. Reconstruire sous le
@@ -481,6 +481,12 @@ export function creerVueMorceau(deps) {
     await fermer();
     if (!m.id) { toast("Le morceau est vide : ajoute une idée."); return; }
     deps.partager({ id: m.id, type: "morceau", titre: m.titre, blocs: m.blocs, tempo: m.tempo });
+  });
+  // Le morceau entier pour MuseScore : ses blocs bout à bout, chacun avec sa mesure et sa tonalité.
+  $("morceau-musicxml").addEventListener("click", async () => {
+    await fermer();
+    if (!m.id) { toast("Le morceau est vide : ajoute une idée."); return; }
+    deps.exporterMusicXml({ id: m.id, type: "morceau", titre: m.titre, blocs: m.blocs, tempo: m.tempo });
   });
   $("morceau-supprimer").addEventListener("click", async () => {
     if (!m.id) { deps.quitter(); return; }

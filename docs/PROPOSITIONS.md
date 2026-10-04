@@ -752,7 +752,239 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Notation, harmonie et exports (N1 à N7)
 
-<!-- lot notation -->
+- **N1 · En 6/8, 9/8 et 12/8, chaque temps se voit.** Une note posée sur
+  un temps n'y prend d'abord qu'un nombre entier de temps (noire, blanche ou
+  ronde pointée), puis le reste, lié. Avant, le plus grand signe gagnait :
+  quatre croches en tête d'un 6/8 devenaient une blanche, qui finit au
+  milieu du deuxième temps, et une mesure entière de 12/8 s'écrivait ronde,
+  croche et noire pointée. La ronde pointée (24 pas) rejoint les durées
+  écrites. La partition et le MusicXML passent par la même mise en mesures
+  (`mettreEnMesures`) : MuseScore reçoit la même chose. Les mesures simples
+  (2/4, 3/4, 4/4, 2/2) ne changent pas.
+- **B8 · En 3/8, les trois croches de la mesure se lient**, comme on les
+  écrit à la main. Le temps reste la croche pour le métronome et le
+  découpage : seule la ligature change (`groupeDeLigature`).
+  - Un accord aux durées différentes (do noire, mi blanche, sol blanche
+    pointée, partant ensemble) : abcjs le dessine en couches qui partagent
+    une hampe ; on lit les têtes (pleine, vides, le point), pas trois voix
+    bien séparées. abcjs ne sait pas mieux : une liaison par note dans un
+    accord y suit le rang de la note, pas sa hauteur (le piège déjà noté).
+    Le MIDI et le MusicXML, eux, sont justes : music21 relit trois voix
+    (sol blanche pointée, mi blanche, do noire), mido les trois durées.
+  - Pas demandé, pas fait : une levée en tête d'idée reste une mesure de
+    silences (une idée commence sur une barre). Une page lue, elle, cale
+    sa levée en fin de mesure de silences pour l'idée et le MIDI, et en fait
+    une vraie mesure incomplète dans le MusicXML quand elle arrive en cours
+    de page.
+- **N2 · Les notes s'épellent d'après l'accord, puis d'après la ligne.**
+  Une note hors de la tonalité s'écrivait d'après l'armure seule : ré 7 en
+  fa donnait sol♭ au lieu de fa♯, mi 7 en do un la♭, si♭ en sol un la♯. Dans
+  l'ordre, maintenant (`epeler`) : la gamme, puis la note de l'accord posé à
+  ce moment, telle que l'accord l'écrit, puis la sixte et la sensible du
+  mineur, puis, pour une note étrangère à tout cela, le sens de la ligne :
+  dièse si elle monte (do do♯ ré), bémol si elle descend (ré ré♭ do).
+  L'accompagnement, fait des notes de ses accords, s'écrit donc toujours
+  comme eux ; la partition et le MusicXML aussi (music21 relit fa♯, sol♯,
+  ré♯, mi♭ là où il lisait sol♭, la♭, mi♭, ré♯).
+  - La lecture des noms d'accords passe dans `app/accords.js` : la
+    partition en a besoin, et `harmonie.js` importe déjà `sequence.js` (un
+    import dans l'autre sens aurait fait un cycle). `harmonie.js` redonne
+    `lireAccord` et `QUALITES` : rien ne change pour les écrans.
+  - Hors partition (le nom d'une note sur la grille, `nomNote`), rien ne
+    change : sans accord ni ligne, c'est l'armure qui décide.
+- **N3 · L'accompagnement se joue comme un pianiste.** **Tes idées avec
+  des accords sonneront autrement** (mieux, on l'espère) : comme il est
+  calculé à chaque écoute, rien n'est à refaire, mais rien n'est comme
+  avant. Chaque accord était plaqué en position fondamentale à partir du
+  do3 ; tout bougeait en parallèle et passait parfois au-dessus de la
+  mélodie. Maintenant :
+  - chaque accord prend le renversement le plus proche du précédent, sous
+    la note la plus grave que la mélodie joue pendant qu'il sonne (jamais
+    plus haut que do5), et la basse reste dessous, dans l'octave du do2.
+    L'enchaînement se choisit en entier (`conduire`), pas accord par accord ;
+  - mesuré avec le script de l'audit : C Am F G C passe de 64 à 12
+    demi-tons parcourus par les voix du dessus, sans enchaînement parallèle
+    ni note au-dessus de la mélodie ; C G7 Am Em F C F G de 81 à 25 (trois
+    voix serrées ne peuvent guère faire moins : fa → sol en coûte déjà 6) ;
+    G B♭ E♭ B sous un ré4, de 5 notes au-dessus de la mélodie à aucune ;
+  - l'arpège joue toutes les notes de l'accord, la septième et la neuvième
+    comprises (E7 a son ré, « Septième » s'entend enfin), en montant puis
+    en redescendant ;
+  - avec une neuvième, les voix du dessus laissent la racine à la basse et
+    sonnent en tierces (fa la do mi pour Dm9) au lieu d'une grappe ;
+  - le style « Basse et accords » joue l'accord sans sa racine après la
+    basse, comme avant ; les cartes des styles dessinent le nouveau motif
+    (elles le calculent avec le même code).
+- **N4 · « Harmoniser toute l'idée » respecte les cadences.**
+  **L'harmonisation proposée changera** sur tes idées (seulement si tu la
+  redemandes : les accords déjà posés ne bougent pas). Avant : un accord par
+  mesure, et « garder l'accord d'avant » effaçait la demi-cadence (l'Hymne
+  à la joie restait en ré à la 4ᵉ mesure). Maintenant (`harmoniser`) :
+  - les phrases vont par quatre mesures (une levée à part) ; la fin de
+    chaque phrase prend la dominante quand la mélodie s'y prête
+    (demi-cadence), la dernière mesure finit sur la tonique, la dominante
+    d'abord si la mesure se partage (cadence parfaite : « la ré » à la fin
+    de l'Hymne) ;
+  - deux accords par mesure quand une moitié de mesure passe les trois
+    quarts de son temps hors de l'accord de la mesure : « do mi | ré ré »
+    dans Au clair de la lune devient do puis sol ; une note de passage ne
+    suffit pas (Frère Jacques reste en do). Seules les mesures qui se
+    coupent en deux temps égaux se partagent (4/4, 2/4, 2/2, 6/8, 12/8) ;
+  - une règle (cadence, tonique, résolution) ne choisit qu'un accord presque
+    aussi bon que le meilleur (`MARGE`) : elle départage, elle n'impose pas
+    un accord qui jure ;
+  - les dominantes secondaires entrent dans `suggerer` quand la mélodie joue
+    leur note étrangère (fa♯ en do appelle D7, sol♯ E7, si♭ C7, do♯ A7 en la
+    mineur), et `harmoniser` les résout sur leur accord : une ligne
+    chromatique en do donne C D7 G E7 Am G7 C. La roue, elle, ne montre
+    toujours que ses sept accords : une dominante secondaire n'y apparaît
+    pas (à voir avec l'écran des accords, si tu veux la proposer là aussi).
+- **N5 · Le MIDI, pensé pour Live.** Relu avec mido, @tonejs/midi et
+  music21, comme pendant l'audit :
+  - **la basse et les accords sur deux pistes** : l'accompagnement devient
+    deux voix, « Accords » et « Basse des accords » (pas « Basse » : ta
+    propre piste de basse ne s'y mélange pas, dans un morceau non plus).
+    Dans Live, la basse part vers une vraie basse. La partition et le
+    MusicXML les gardent sur une seule portée en clé de fa, comme avant
+    (les voix partagent une `portee`) ;
+  - **des noms lisibles partout : en ASCII** (« Melodie »). Un fichier
+    MIDI ne dit pas l'encodage de ses textes, chaque logiciel devine :
+    mido et @tonejs/midi lisaient « MÃ©lodie » (Latin-1), music21 l'UTF-8,
+    et Live, impossible à essayer ici, dépend de son système. L'ASCII est
+    le seul texte lu pareil par tous ; perdre l'accent vaut mieux qu'un nom
+    illisible. Les signes se traduisent (♯ → #), les emoji partent ;
+  - **chaque piste finit à la barre** de la dernière mesure, piste de tempo
+    comprise : un clip tombe juste et boucle sans trou ;
+  - **une même note n'est jamais rejouée pendant qu'elle sonne** : la
+    première s'arrête où la suivante commence (deux do posés qui se
+    chevauchent sur la grille) ;
+  - **un morceau garde le chiffrage et l'armure de chaque bloc**, au début
+    du bloc (un refrain en 3/4 et en sol dans un morceau en 4/4 et en do) ;
+  - **les pages lues passent par le même écrivain**, plus par abcjs
+    (`getMidiFile`), qui écrivait des pistes sans nom, une piste vide de
+    plus pour une page de piano, et perdait les changements de la page
+    (Live restait en 4/4 et en do sur ta page de mélodie, qui passe en
+    12/8 et en mi♭). `lirePage` (`sequence.js`) fait jouer la page par
+    abcjs, au temps exact (un triolet reste un triolet : 160 tics la
+    croche) ; `midiDeLaPage` (`midi.js`) écrit « Main droite » et « Main
+    gauche » (ou « Melodie »), chaque changement de tonalité où il arrive,
+    chaque changement de mesure à la barre qui suit, précédé d'une mesure
+    de la longueur de la levée (1/8 sur ta page) : la grille de Live tombe
+    sur les barres de la page. Les notes y ont leur durée écrite (abcjs les
+    raccourcissait un peu pour le son). Pourquoi pas une idée au passage :
+    une idée vit au pas de double croche, le triolet y serait arrondi ;
+  - « Continuer en idée » profite de `lirePage` : une idée n'a qu'une
+    mesure et une tonalité, celles de la plus longue section de la page
+    (ta page de mélodie devient une idée en 12/8 et en mi♭, plus en 4/4 et
+    en do), et ses barres tombent sur celles de l'idée ; une levée en tête
+    de page tombe à la fin d'une mesure de silences, comme dans une idée.
+    Une tonalité que le menu n'a pas prend son nom enharmonique (sol♭ →
+    fa♯) au lieu de do ;
+  - le zip (claude.ai) est daté du jour, plus du « 0 janvier 1980 » ;
+  - l'en-tête de `midi.js` dit vrai : « Basse » n'existe que si tu as
+    ajouté une piste de basse.
+- **N6 · Le MusicXML dit tout ce que la partition dit.** Validé contre le
+  schéma officiel 4.0 (xmllint) et relu par music21 :
+  - **les accords que MusicXML n'a pas** s'écrivent avec leurs degrés :
+    G7sus4 en « suspended-fourth » plus une septième mineure, Cadd9 et
+    Dmadd9 en majeur et mineur plus une neuvième. music21 lisait « Gsus »
+    et un do majeur ; il lit « Gsus add b7 » (sol do ré fa), « C add 9 » ;
+  - **le tempo dans l'unité du temps** : en 6/8, 9/8 et 12/8, la noire
+    pointée (90 à la noire devient 60 à la noire pointée), arrondie à
+    l'unité pour l'affichage ; `<sound>` garde le tempo exact, à la noire,
+    comme le veut MusicXML ;
+  - **un morceau s'exporte** (« ••• » du morceau, « MusicXML ») : ses blocs
+    bout à bout, comme pour le MIDI, chacun avec sa mesure, sa tonalité et
+    ses accords à sa première mesure (`musicXmlDuMorceau`). La mise en
+    mesures sait maintenant qu'une partition a des sections ;
+  - **une page lue** (`musicXmlDeLaPage`) garde ses changements de
+    tonalité et de mesure, et sa levée devient une mesure incomplète
+    (« implicit ») sous le nouveau chiffrage, comme on l'écrit à la main :
+    ta page de mélodie fait deux mesures de 4/4 (la gamme, en mesure
+    libre), une croche de levée, puis huit mesures de 12/8 en mi♭. Un
+    changement de tonalité seul prend effet à la barre qui suit ;
+  - **pas fait : le triolet d'une page.** La mise en mesures est celle des
+    idées, qui vivent au pas de double croche : un triolet s'y arrondit.
+    Le garder demanderait des n-olets dans cette mise en mesures commune
+    (des durées en tiers de pas, `<time-modification>`), pour des pages que
+    le lecteur ne sait pas encore lire (L12). En attendant, l'arrondi se
+    fait aux bornes des notes, pour qu'elles se touchent : double, croche,
+    double, au lieu de do, ré, silence, mi. Le MIDI de la page, lui, garde
+    le triolet exact.
+- **N7 · La transposition d'une page la suit partout.** Le MIDI la prenait,
+  le MusicXML et « Continuer en idée » l'oubliaient. Les deux la prennent
+  maintenant (`transposerIdee` après `sequenceDepuisAbc`, et la
+  transposition passée à `musicXmlDeLaPage`, armures comprises). Le MIDI
+  de la page transposée change aussi d'armure : abcjs, avant, montait les
+  notes et laissait l'armure (une page en do jouée en ré arrivait en do
+  dans Live).
+- **N8 (nouveau) · Un fichier MIDI devient une idée : l'aller-retour avec
+  Live.** Venu de l'audit de l'interface : une phrase retravaillée dans
+  Ableton revenait dans Portée… par le clavier. Maintenant, un `.mid`
+  déposé sur l'accueil ou choisi par « Importer un PDF » (qui accepte aussi
+  les fichiers MIDI) devient une nouvelle idée, titrée par le nom du
+  fichier, et s'ouvre.
+  - Le lecteur est à nous (`lireFichierMidi`, `midi.js`), comme l'écrivain :
+    un fichier MIDI standard est simple à lire, et une bibliothèque aurait
+    été une dépendance de plus pour le site et pour claude.ai. Il lit les
+    formats 0 et 1, le « running status », le note-on de vélocité 0 qui vaut
+    note-off, les noms de pistes en UTF-8 ou en Latin-1, et saute le reste
+    (sysex, contrôleurs, blocs inconnus). Vérifié contre mido sur 49
+    fichiers (les nôtres, ceux d'abcjs, un fichier fabriqué à la main) :
+    mêmes notes, vélocités, canaux, tempo, mesure et armure.
+  - L'idée (`ideeDepuisMidi`) : une piste par piste du fichier qui joue, et
+    par canal quand une piste en mêle plusieurs (format 0) ; au plus quatre
+    pistes (une idée n'est pas un arrangement), sans la batterie (canal
+    10) : le message dit ce qui est laissé de côté. Les notes sont recalées
+    au pas de double croche par le même arrondi que le jeu en direct
+    (`quantifier`, avec ton jeu lié) : un fichier sorti de Live, déjà sur la
+    grille, ne bouge pas. Le tempo, la mesure et la tonalité sont ceux du
+    fichier (les premiers : une idée n'en a qu'un) ; sans eux, 120, 4/4 et
+    do, comme le veut la norme. « Melodie », que Portée écrit en ASCII,
+    redevient « Mélodie ».
+  - Hors de mes fichiers, deux retouches d'une ligne : l'`accept` du bouton
+    d'import (`index.html`) et le filtre du dépôt (`accueil.js`), qui ne
+    laissait passer que les PDF. Le libellé du bouton dit encore « Importer
+    un PDF » : à ajuster avec l'interface.
+- **B9 · L'arrondi traite la dernière note comme les autres.** Ta règle du
+  jeu lié ne change pas (une note relâchée au plus un pas de grille avant la
+  suivante tient jusqu'à elle). Mais la dernière note d'une prise n'a pas de
+  suivante : des noires un peu détachées restaient des noires, sauf la
+  dernière, qui devenait une croche. Elle tient maintenant jusqu'à la fin du
+  temps où elle commence, avec la même tolérance ; une syncope finale (qui
+  dépasse déjà son temps) ne bouge pas, et au-delà d'un pas de grille c'est
+  toujours un silence.
+  - Deux attaques de la même note dans le même pas de grille n'en font plus
+    qu'une, la plus longue, dès l'arrondi. Avant, `poser` en effaçait une
+    ensuite, mais le message disait « 3 notes gardées » pour deux écrites.
+  - À intégrer (lot son) : `arrondir` (`idee-direct.js`) peut passer
+    `temps: sq.pasParTemps(e.seq)` à `quantifier`. Sans, le temps vaut la
+    noire : juste en 2/4, 3/4 et 4/4 ; en 6/8, la dernière note se règle
+    sur la noire au lieu de la noire pointée.
+  - Pas touché, comme tu l'as décidé : à la grille noire, des croches swing
+    ou un triolet se fondent encore en accords. C'est le prix d'une grille
+    grossière ; la croche ou la double croche les gardent.
+- **Vérifié dans l'appli assemblée** (Chromium, version autonome) : les
+  pages d'essai importées, la page de mélodie transposée de +2 exportée en
+  MIDI (ré puis fa, 1/8 puis 12/8) et en MusicXML (valide), « Continuer en
+  idée » en 12/8 et fa majeur, un `.mid` importé en idée, harmonisé (cinq
+  accords) et gravé (l'accompagnement sur une portée, plaqué et arpégé),
+  un morceau exporté en MusicXML et en MIDI ; aucune erreur dans la page.
+  Pas essayé ici : Ableton Live lui-même, MuseScore (music21 et le schéma
+  officiel en tiennent lieu).
+- **Pièges rencontrés en chemin :**
+  - `i += vlq()` quand `vlq` avance `i` : JavaScript lit l'ancien `i`
+    avant l'appel, l'octet lu se perd. Calculer d'abord, ajouter ensuite ;
+  - abcjs prend « M:none » pour du 4/4 (`getMeterFraction`) : la mesure
+    libre se lit dans l'en-tête de l'ABC ;
+  - abcjs range un `[K:][M:]` écrit en début de ligne à la fin de la ligne
+    d'avant ; `lirePage` suit donc les éléments dans l'ordre, lignes
+    comprises, et regarde si une barre précède le changement ;
+  - mido refuse un bloc inconnu dans un fichier MIDI (la norme dit de le
+    sauter, notre lecteur le saute) : pour comparer avec mido, un fichier
+    sans bloc inconnu ;
+  - `sequence.js` ne peut pas importer `harmonie.js` (qui l'importe) : ce
+    qu'ils partagent sur les noms d'accords est dans `accords.js`.
 
 ### Architecture (T3 à T5)
 
