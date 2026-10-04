@@ -39,8 +39,11 @@ Ces conseils seront affinés quand le lecteur aura vu tes premières pages.
 - Écris l'armure et le chiffrage juste après la clé imprimée, sur la première
   portée (ou le premier système).
 - Centre les têtes de notes sur leur ligne ou leur interligne. La tolérance
-  est d'un quart d'interligne.
-- Pour les têtes pleines, un petit gribouillis rempli ou un point appuyé.
+  est d'un quart d'interligne ; au-delà de 0,2 interligne, Portée te demande
+  quelle note c'était.
+- Pour les têtes pleines, un petit gribouillis rempli, d'au moins un
+  demi-interligne de haut ou de large. Pas un simple point appuyé : il se
+  confondrait avec un point de durée, et Portée ne le lit pas comme une tête.
   Pour les têtes vides, une boucle fermée.
 - Accroche les hampes aux têtes. Trace les ligatures en traits droits.
 - Fais traverser toute la portée à tes barres de mesure (au piano, les deux
@@ -53,13 +56,26 @@ Ces conseils seront affinés quand le lecteur aura vu tes premières pages.
 - `outils/generer_modeles.py` refait les PDF, les JSON et les aperçus
   (`apercu/*.svg`). Il suffit de lancer `pip install -r outils/requirements.txt`
   puis `python outils/generer_modeles.py`. Le résultat est identique au
-  pixel près, et le sujet du PDF (`portee:<modèle>:v1`) identifie le modèle.
+  pixel près, et le sujet du PDF (`portee:<modèle>:v<N>`) identifie le modèle
+  et sa version.
+- **Chaque version garde sa calibration** : le générateur écrit
+  `<modèle>-v<N>.json` à côté de `<modèle>.json` (la version en cours), et
+  n'efface jamais une version passée. Une page se lit avec la calibration de
+  sa version ; une version que Portée ne connaît pas est refusée avec un
+  message clair. Changer la géométrie d'un modèle (ses lignes, sa taille),
+  c'est incrémenter `VERSION` : les pages déjà écrites gardent la leur.
+- Les lignes grises du modèle restent dans le PDF exporté par la tablette :
+  Portée s'en sert pour reconnaître le modèle quand le sujet manque ou se
+  trompe, et pour recaler une page qui aurait bougé (`lecteur/modeles.js`).
 - Dans le JSON, les coordonnées sont en pixels de l'écran (1404 × 1872,
   226 ppp), avec l'origine en haut à gauche. Pour chaque portée, `lignes`
   donne les 5 ordonnées de haut en bas et `ligne_du_bas` la note posée
-  dessus (mi4 en clé de sol, sol2 en clé de fa).
-- **À vérifier** sur la première page écrite : dans les fichiers `.rm` v6,
-  l'abscisse des traits semble centrée sur la page (`x_page = x_rm + 702`).
+  dessus (mi4 en clé de sol, sol2 en clé de fa). `x_apres_cle` dit où
+  commence ce que tu écris : l'en-tête d'une ligne (armure, chiffrage) ne
+  va pas plus de 9 interlignes au-delà.
+- Dans les fichiers `.rm` v6 (le connecteur), l'abscisse des traits est
+  centrée sur la page et compte 227 unités par pouce : vérifié le 30/09 sur
+  les pages d'essai (`supabase/functions/portee-remarkable/rm.js`).
 - Clés et accolade viennent de la police Bravura (SIL OFL 1.1, voir
   `outils/LICENCE-Bravura-OFL.txt`), extraites une fois pour toutes par
   `outils/extraire_glyphes.py`.

@@ -13,20 +13,60 @@ import { fileURLToPath } from "node:url";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { lireDocument } from "../lecteur/extraction.js";
 import { lirePartition } from "../lecteur/partition.js";
+import { ajuster, fichierCalibration, identifierModele, recaler, verifierVersion } from "../lecteur/modeles.js";
 
 const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-export async function lireFichier(chemin) {
+/** Les calibrations en cours des modèles du dépôt (modeles/<id>.json), pour reconnaître une page. */
+export function calibrationsConnues() {
+  const dossier = path.join(racine, "modeles");
+  return fs.readdirSync(dossier).filter((f) => /^[a-z0-9-]+\.json$/.test(f) && !/-v\d+\.json$/.test(f) && f !== "index.json")
+    .map((f) => JSON.parse(fs.readFileSync(path.join(dossier, f), "utf8")));
+}
+
+/**
+ * La calibration d'un modèle à sa version (modeles/<id>-v<N>.json), ou celle
+ * en cours si c'est la même version. Un modèle ou une version inconnus : un
+ * message clair plutôt qu'un ENOENT, et jamais la calibration d'une autre version.
+ */
+export function chargerCalibration(modele, version) {
+  const dossier = path.join(racine, "modeles");
+  const v = version || 1;
+  const versionnee = path.join(dossier, fichierCalibration(modele, v));
+  if (fs.existsSync(versionnee)) return JSON.parse(fs.readFileSync(versionnee, "utf8"));
+  const courante = path.join(dossier, fichierCalibration(modele, null));
+  if (!fs.existsSync(courante)) throw new Error(`Cette page a été écrite sur le modèle « ${modele} », que cette version de Portée ne connaît pas.`);
+  const cal = JSON.parse(fs.readFileSync(courante, "utf8"));
+  verifierVersion(cal, { modele, version: v });
+  return cal;
+}
+
+/**
+ * Lit un PDF exporté de la tablette. Le modèle vient du sujet du PDF ; ses
+ * lignes grises le confirment, le trouvent quand le sujet manque, et
+ * l'emportent quand il se trompe (`avertissement` le dit). Chaque page est
+ * recalée sur ses lignes grises quand elles ont bougé.
+ */
+export async function lireFichier(chemin, { gabarits = null } = {}) {
   const data = new Uint8Array(fs.readFileSync(chemin));
   const doc = await pdfjs.getDocument({ data, isEvalSupported: false, verbosity: 0 }).promise;
   const lu = await lireDocument(pdfjs, doc);
-  if (!lu.modele) throw new Error(`${chemin} n'a pas été écrit sur un modèle Portée`);
-  const fichier = path.join(racine, "modeles", `${lu.modele}.json`);
-  // Un nom de modèle que ce dépôt ne connaît pas : un message clair plutôt qu'un ENOENT.
-  if (!fs.existsSync(fichier)) throw new Error(`${chemin} a été écrit sur le modèle « ${lu.modele} », que cette version de Portée ne connaît pas.`);
-  const cal = JSON.parse(fs.readFileSync(fichier, "utf8"));
+  let { modele, version } = lu;
+  let avertissement = null;
+  const reconnu = lu.pages.length ? identifierModele(lu.pages[0], calibrationsConnues()) : null;
+  if (reconnu && reconnu.cal.modele !== modele) {
+    avertissement = modele
+      ? `Le PDF dit « ${modele} », mais ses lignes sont celles de « ${reconnu.cal.modele} » : lu avec « ${reconnu.cal.modele} ».`
+      : `Le PDF ne dit pas son modèle ; ses lignes sont celles de « ${reconnu.cal.modele} ».`;
+    modele = reconnu.cal.modele;
+    version = reconnu.cal.version;
+  }
+  if (!modele) throw new Error(`${chemin} n'a pas été écrit sur un modèle Portée`);
+  let cal;
+  try { cal = chargerCalibration(modele, version); } catch (e) { throw new Error(`${chemin} : ${e.message}`); }
   const titre = path.basename(chemin, ".pdf");
-  return { ...lirePartition(lu.pages.map((p) => p.traits), cal, { titre }), cal, pages: lu.pages, modele: lu.modele, version: lu.version };
+  const traits = lu.pages.map((p) => { const t = ajuster(p, cal); return t && t.ecart < 1.5 ? recaler(p.traits, t) : p.traits; });
+  return { ...lirePartition(traits, cal, { titre, gabarits }), cal, pages: lu.pages, modele, version, avertissement };
 }
 
 const COULEURS = {
@@ -35,6 +75,8 @@ const COULEURS = {
   soupir: "#00838f", "demi-soupir": "#00838f", "bemol-armure": "#8a6d00", "diese-armure": "#8a6d00",
   bemol: "#8a6d00", diese: "#8a6d00", becarre: "#8a6d00", entete: "#999", articulation: "#bbb",
   liaison: "#bbb", "hors-portee": "#bbb", inconnu: "#e00000",
+  "ligne-sup": "#7a7a7a", "liaison-duree": "#0a8a3a", "hampe-seule": "#e00000", "triolet?": "#d1006f",
+  "quart-soupir": "#00838f", chiffre: "#999",
 };
 
 export function svgControle(res, numeroPage = 0) {
@@ -70,10 +112,15 @@ export function svgControle(res, numeroPage = 0) {
 async function main() {
   const args = process.argv.slice(2);
   const svg = args.includes("--svg");
-  for (const f of args.filter((a) => !a.startsWith("--"))) {
-    const res = await lireFichier(f);
+  // --gabarits fichier.json : tes gabarits (page d'étalonnage, corrections), pour lire avec eux (L16).
+  const g = args.indexOf("--gabarits");
+  const gabarits = g >= 0 ? JSON.parse(fs.readFileSync(args[g + 1], "utf8")) : null;
+  for (const f of args.filter((a, i) => !a.startsWith("--") && (g < 0 || i !== g + 1))) {
+    let res;
+    try { res = await lireFichier(f, { gabarits }); } catch (e) { console.error(`\n=== ${f}\n  ${e.message}`); process.exitCode = 1; continue; }
     console.log(`\n=== ${f}\n${res.abc}`);
-    for (const d of res.doutes) console.log(`  doute p${d.page} portée ${d.portee + 1}${d.mesure ? ` mesure ${d.mesure}` : ""} : ${d.message}`);
+    if (res.avertissement) console.log(`  attention : ${res.avertissement}`);
+    for (const d of res.doutes) console.log(`  doute ${d.id} p${d.page} portée ${d.portee + 1}${d.mesure ? ` mesure ${d.mesure}` : ""} : ${d.message}`);
     if (svg) {
       res.lues.forEach((_, i) => {
         const sortie = f.replace(/\.pdf$/, `-controle-p${i + 1}.svg`);

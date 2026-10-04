@@ -716,6 +716,28 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   déplaçant toute la page de ±0,1 px (des tests le vérifient). Les doutes de
   marge, eux, peuvent apparaître ou disparaître au ras de leur propre seuil :
   c'est leur nature.
+- **Chaque version de modèle garde sa calibration (L9).** Une page écrite
+  sur un modèle v2 aurait été lue avec la calibration v1, sans rien dire. Le
+  générateur écrit maintenant `<modèle>-v<N>.json` à côté de `<modèle>.json`
+  (la version en cours) et n'efface jamais une version passée ; une version
+  inconnue est refusée (« mets l'appli à jour »). Les PDF et les aperçus
+  sont identiques à l'octet près ; les JSON perdent la note « à vérifier »
+  sur les `.rm`, vérifiée depuis le 30/09. `VERSION` reste 1 : la géométrie
+  n'a pas changé.
+  - **Le modèle se reconnaît à ses lignes grises** (`lecteur/modeles.js`) :
+    quand le sujet du PDF manque ou se trompe, les lignes décident (et
+    l'appli peut le dire). Une page qui a bougé (boîte agrandie, export
+    redimensionné) se recale dessus. Les cinq PDF abîmés de l'audit (sans
+    sujet, mauvais modèle, modèle inconnu, v2, boîte décalée) se lisent
+    juste, ou sont refusés avec un message clair pour la v2.
+  - `x_apres_cle`, jamais lu, sert maintenant : l'en-tête d'une ligne ne va
+    pas plus de 9 interlignes au-delà. Une ligne dont aucune tête n'était lue
+    devenait tout entière un « en-tête », sans un doute.
+- **Ta page redessinée suit la taille de la calibration (L19).** `manuscrit.js`
+  écrivait 1872, 1330, 1370 et 40 en dur (le seul format de la reMarkable 2) ;
+  `cadrePage(cal)` les calcule. Le README des modèles ne promet plus qu'un
+  point appuyé fait une tête pleine : le lecteur ne le lit pas, et c'est
+  voulu (il se confondrait avec un point de durée).
 
 ### Connecteur (S3 à S5, C1 à C6)
 

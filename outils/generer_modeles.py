@@ -116,13 +116,10 @@ def mise_en_page(m: Modele) -> dict:
         "ecart_entre_blocs": round(ecart, 1),
         "x_debut": X_DEBUT,
         "x_fin": X_FIN,
-        # Au-delà de cette abscisse commence ce que tu écris (armure, chiffrage, notes).
+        # Au-delà de cette abscisse commence ce que tu écris (armure, chiffrage,
+        # notes) ; le lecteur borne l'en-tête de chaque ligne à 9 interlignes plus loin.
         "x_apres_cle": X_DEBUT + round(3.2 * m.interligne),
         "systemes": systemes,
-        "a_verifier": (
-            "Dans les fichiers .rm v6, l'abscisse des traits semble centrée sur la page "
-            "(x_page = x_rm + 702). À confirmer sur la première page écrite."
-        ),
     }
 
 
@@ -238,12 +235,26 @@ def ecrire_svg(m: Modele, cal: dict, chemin: Path) -> None:
     chemin.write_text("\n".join(parts) + "\n", encoding="utf-8")
 
 
+def ecrire_calibration(racine: Path, ident: str, cal: dict) -> None:
+    """La calibration en cours (<id>.json) et celle de sa version (<id>-v<N>.json).
+
+    POURQUOI DEUX FICHIERS. Une page écrite sur un modèle v1 doit toujours se
+    lire avec la calibration v1, même quand le modèle passe en v2 : le sujet du
+    PDF dit sa version, et le lecteur charge <id>-v<N>.json. Les versions
+    passées restent dans modeles/ (le générateur n'efface rien) ; <id>.json
+    reste la version en cours, pour ce qui ne connaît pas la version.
+    """
+    texte = json.dumps(cal, ensure_ascii=False, indent=2) + "\n"
+    (racine / f"{ident}.json").write_text(texte, encoding="utf-8")
+    (racine / f"{ident}-v{cal['version']}.json").write_text(texte, encoding="utf-8")
+
+
 def main() -> None:
     racine = Path(__file__).resolve().parent.parent / "modeles"
     (racine / "apercu").mkdir(parents=True, exist_ok=True)
     for m in MODELES:
         cal = mise_en_page(m)
-        (racine / f"{m.ident}.json").write_text(json.dumps(cal, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        ecrire_calibration(racine, m.ident, cal)
         ecrire_pdf(m, cal, racine / f"{m.ident}.pdf")
         ecrire_svg(m, cal, racine / "apercu" / f"{m.ident}.svg")
         print(f"{m.ident}: {m.blocs} {'portées' if m.genre == 'melodie' else 'systèmes'}, "
