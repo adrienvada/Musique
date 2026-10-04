@@ -182,6 +182,8 @@ export function creerEditeurIdee(deps) {
     e.mesureChoisie = Math.max(0, Math.floor(Math.max(0, e.curseur - 1) / sq.pasParMesure(e.seq)));
     e.annuler = []; e.refaire = [];
     e.version++;
+    // Une autre idée : sa partition se grave tout de suite, avec sa propre mise en page.
+    gravee = null; miseEnPage = null;
     // Une idée née d'une partition (« continuer en idée ») s'enregistre tout de suite.
     if (!p && seq) planifierSauvegarde(0);
     $("idee-titre").value = e.titre;
@@ -341,10 +343,9 @@ export function creerEditeurIdee(deps) {
     const autres = tenues.size > 0;
     tenues.set(h, null);
     clavierMode.montrer(h, true);
-    if (!muet) {
-      if (piano.echantillons) tenues.set(h, piano.debut(h, v));
-      else piano.pret().then(() => { if (tenues.has(h) && !tenues.get(h)) tenues.set(h, piano.debut(h, v)); }).catch(() => {});
-    }
+    // Même avant que le piano soit là : la note attend son échantillon et part à son arrivée
+    // (piano.js), au lieu d'être perdue comme le premier toucher l'était.
+    if (!muet) tenues.set(h, piano.debut(h, v));
     // En direct, la touche est notée à l'instant ; elle ne s'écrit qu'à la fin.
     if (direct.enfoncer(h, v)) return;
     const sel = [...e.selection];
@@ -514,8 +515,10 @@ export function creerEditeurIdee(deps) {
     try {
       await transport.jouer(source, {
         depuis, boucle, metronome: e.metronome,
+        // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
+        titre: e.titre, relancer: () => { if (e.ouverte && !transport.actif) jouer(); },
         surPosition: suivreLecture,
-        surFin: () => { majJouer(false); suivreLecture(null); apresSon(); },
+        surFin: () => { majJouer(false); suivreLecture(null); apresSon(); apresLecture(); },
       });
     } catch (err) {
       majJouer(false);
@@ -686,8 +689,53 @@ export function creerEditeurIdee(deps) {
         boucle: e.boucle ? etendueBoucle() : null, pas: Math.min(dureeCourante(), sq.pasParTemps(e.seq)),
         mesureChoisie: e.mesureChoisie, accordsVisibles: true,
       });
-    } else graverPartition();
+    } else planifierGravure();
     selection.placer();
+  }
+
+  // La gravure se regroupe (audit du 04/10, M2, et audit de l'interface).
+  // abcjs regrave toute la partition : de 10 à 40 ms pour une idée courte au
+  // téléphone, plus de 400 ms pour 64 mesures, et jusqu'à trois gravures par
+  // changement (six sur grand écran) pour ajuster la mise en page.
+  //   - Pendant la lecture : une gravure toutes les 300 ms au plus, d'un seul
+  //     passage, avec la mise en page d'avant ; sinon le transport manquait
+  //     des notes. L'arrêt regrave en entier.
+  //   - En écrivant : 150 ms après la dernière note, d'un seul passage tant
+  //     que le nombre de mesures ne change pas ; dix notes tapées vite ne
+  //     coûtent qu'une gravure.
+  //   - Choisir une note ne regrave plus rien : seules ses couleurs changent.
+  const GRAVURE_EN_LECTURE = 300, GRAVURE_EN_ECRIVANT = 150;
+  let gravureFaite = 0, gravureAttendue = null, gravureRapide = false;
+  let gravee = null; // { id, version, largeur, hauteur, mesures } : ce que montre la gravure en place
+  const tailleGravure = () => ({ largeur: $("idee-gravure").clientWidth || 600, hauteur: Math.max(160, ($("idee-partition").clientHeight || 400) - 36) });
+  function planifierGravure() {
+    const zone = $("idee-gravure");
+    const { largeur, hauteur } = tailleGravure();
+    const fraiche = gravee && gravee.id === e.id && gravee.version === e.version && gravee.largeur === largeur && gravee.hauteur === hauteur && zone.querySelector("svg");
+    clearTimeout(gravureAttendue);
+    gravureAttendue = null;
+    if (fraiche) { marquerChoisies(); return; }
+    if (!gravee || gravee.id !== e.id) { graverPartition(); return; } // la première gravure de cette idée : tout de suite
+    const lecture = transport.actif;
+    const attente = lecture ? gravureFaite + GRAVURE_EN_LECTURE - performance.now() : GRAVURE_EN_ECRIVANT;
+    const graverMaintenant = () => {
+      gravureAttendue = null;
+      if (!e.ouverte || e.affichage !== "partition") return;
+      gravureFaite = performance.now();
+      const memes = gravee && gravee.mesures === sq.nbMesures(e.seq);
+      if (transport.actif) gravureRapide = true;
+      graverPartition({ unPassage: transport.actif || memes });
+      selection.placer();
+    };
+    if (attente <= 0) graverMaintenant();
+    else gravureAttendue = setTimeout(graverMaintenant, attente);
+  }
+  /** La lecture s'arrête : la partition gravée d'un seul passage retrouve sa mise en page ajustée. */
+  function apresLecture() {
+    if (!gravureRapide || !e.ouverte || e.affichage !== "partition") return;
+    gravureRapide = false;
+    gravee = null;
+    rafraichir();
   }
 
   function majCommandes() {
@@ -730,12 +778,13 @@ export function creerEditeurIdee(deps) {
 
   // --- La partition (gravée par abcjs) ----------------------------------------------
 
-  function graverPartition() {
+  let miseEnPage = null; // { largeur, parLigne, largeurPortee } : celle de la dernière gravure ajustée
+  /** @param o { unPassage : pendant la lecture, une seule gravure, avec la mise en page d'avant (M2) } */
+  function graverPartition({ unPassage = false } = {}) {
     const lib = deps.abcjs();
     const zone = $("idee-gravure");
     if (!lib) { zone.textContent = "La partition n'a pas pu se charger (connexion ?). La grille marche sans."; return; }
-    const largeur = zone.clientWidth || 600;
-    const hauteur = Math.max(160, ($("idee-partition").clientHeight || 400) - 36);
+    const { largeur, hauteur } = tailleGravure();
     const toutes = voixCompletes(e.seq);
     const couleur = getComputedStyle(document.body).getPropertyValue("--stylo").trim() || "#2B48B0";
     // La gravure remplit la place de la grille. Au téléphone, deux mesures
@@ -749,6 +798,8 @@ export function creerEditeurIdee(deps) {
     const etroite = largeur / agrandiMax; // la portée la plus étroite permise
     let parLigne = Math.max(1, Math.min(6, Math.floor(largeur / 170)));
     let largeurPortee = parLigne * 200, h = 0, objet = null, jetons = [];
+    const reprise = unPassage && miseEnPage && miseEnPage.largeur === largeur;
+    if (reprise) ({ parLigne, largeurPortee } = miseEnPage);
     const graver = () => {
       const ecrit = sq.ecrireAbc(e.seq, { voix: toutes, mesuresParLigne: parLigne });
       jetons = ecrit.jetons;
@@ -763,7 +814,7 @@ export function creerEditeurIdee(deps) {
     // Pas plus de 420 px par mesure : sur un grand écran, une ligne de plus
     // pour remplir la hauteur étalerait les notes d'un bord à l'autre.
     const moinsParLigne = Math.max(1, Math.floor(largeur / 420));
-    while (parLigne > moinsParLigne && h < hauteur * 0.6) {
+    while (!reprise && parLigne > moinsParLigne && h < hauteur * 0.6) {
       // La hauteur qu'aurait la gravure avec une mesure de moins par ligne.
       const autre = Math.max((parLigne - 1) * 200, etroite);
       const ensuite = h * (largeurPortee / autre) * (Math.ceil(mesures / (parLigne - 1)) / Math.ceil(mesures / parLigne));
@@ -772,11 +823,12 @@ export function creerEditeurIdee(deps) {
       largeurPortee = autre;
       graver();
     }
-    if (h < hauteur * 0.6) {
+    if (!reprise && h < hauteur * 0.6) {
       // Encore de la place : les mêmes lignes, gravées plus grand.
       const voulue = Math.max(parLigne * 130, etroite, (largeurPortee * h) / (hauteur * 0.85));
       if (voulue < largeurPortee - 10) { largeurPortee = Math.round(voulue); graver(); }
     }
+    if (!reprise) miseEnPage = { largeur, parLigne, largeurPortee };
     e.jetons = jetons;
     e.elements = new Map();
     dernierJeton = null;
@@ -791,7 +843,16 @@ export function creerEditeurIdee(deps) {
         }
       }
     }
-    for (const [j, els] of e.elements) if (j.ids.some((id) => e.selection.has(id)) && j.voix === e.piste) els.forEach((x) => x.classList.add("choisie"));
+    gravee = { id: e.id, version: e.version, largeur, hauteur, mesures };
+    marquerChoisies();
+  }
+
+  /** Les notes choisies en couleur sur la gravure en place, et le curseur : sans rien regraver. */
+  function marquerChoisies() {
+    for (const [j, els] of e.elements) {
+      const oui = j.voix === e.piste && j.ids.some((id) => e.selection.has(id));
+      els.forEach((x) => x.classList.toggle("choisie", oui));
+    }
     placerCaret();
   }
 

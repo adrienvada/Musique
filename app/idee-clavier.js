@@ -49,9 +49,20 @@ export function creerModeClavier(ctx) {
   const clavier = creerClavier($("idee-clavier"), {
     surNote: (h, bas, v) => (bas ? ctx.enfoncer(h, v) : ctx.relever(h)),
     // Un geste sur les chevrons ou la carte : les touches de l'ordinateur suivent l'octave montrée.
-    surOctave: (bas) => { octaveOrdi = bas; },
+    surOctave: (bas) => { octaveOrdi = bas; preferer(); },
     surFacon: (f) => ecrirePref(CLE_FACON, f),
   });
+
+  /**
+   * Le piano télécharge d'abord les sons de l'octave montrée (piano.js) : le
+   * premier toucher n'attend pas le reste du clavier. À l'ouverture d'une
+   * idée, ils se téléchargent même avant le premier toucher.
+   */
+  function preferer({ prechauffer = false, vers = null } = {}) {
+    // Le clavier pas encore dessiné (caché) : l'octave de la note qu'il va montrer.
+    const bas = clavier.bas ?? (vers !== null ? 12 * Math.floor(vers / 12) : octaveOrdi);
+    if (ctx.piano && ctx.piano.preferer) ctx.piano.preferer(bas, bas + 12, { prechauffer });
+  }
 
   /** Les préférences, lues à l'ouverture d'une idée et quand le mode reparaît : l'accueil les change entre-temps. */
   function lirePrefs() {
@@ -104,6 +115,7 @@ export function creerModeClavier(ctx) {
     if (ev.code === "KeyZ" || ev.code === "KeyX") {
       octaveOrdi = ev.code === "KeyZ" ? Math.max(24, octaveOrdi - 12) : Math.min(96, octaveOrdi + 12);
       clavier.aller(octaveOrdi);
+      preferer();
       toast(`Clavier de l'ordinateur : à partir de ${nomNote(octaveOrdi)}`, 1500);
       return true;
     }
@@ -155,7 +167,9 @@ export function creerModeClavier(ctx) {
     ouvrir(notes) {
       lirePrefs();
       choixVu = "";
-      clavier.amener(notes.length ? notes[notes.length - 1].h : 60);
+      const derniere = notes.length ? notes[notes.length - 1].h : 60;
+      clavier.amener(derniere);
+      preferer({ prechauffer: true, vers: derniere });
       if (lirePref("portee:midi") === "1") brancherMidi(false);
     },
     toucheBas, toucheHaut,

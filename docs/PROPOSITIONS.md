@@ -535,6 +535,104 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Son, temps, notation et exports (M1 à M12, N1 à N7)
 
+**Son, temps et micro**
+
+Mesures avant et après dans Chromium, avec les bancs d'essai de l'audit
+(contexte audio hors ligne, l'appli assemblée, téléphone simulé), et en Node
+avec un faux contexte audio (`tests/faux-audio.mjs`).
+
+- **« Arrêter » coupe vraiment (M1).** Le transport programme les notes un
+  peu d'avance ; à l'arrêt, le piano baissait seulement le gain de ce qui
+  sonnait, et le gain programmé d'une note à venir la faisait repartir après
+  coup. Chaque voix, programmée ou qui sonne, est maintenant tenue dans une
+  liste (`piano.js`) : celles qui n'ont pas commencé ne partent pas, les
+  autres s'éteignent en 100 ms ; les clics du métronome aussi, et couper le
+  métronome pendant la lecture retire ceux qui étaient déjà programmés.
+  Mesuré dans l'appli (arpège, six pauses) : 0 note et 0 clic après la
+  pause, contre 2 notes et un clic sur 6 avant ; 150 ms après, le niveau
+  passe de −12 à −40 dB à moins de −100 dB.
+  - La fin naturelle d'une écoute, elle, ne coupe rien : la dernière note
+    finit de sonner.
+  - Une écoute arrêtée pendant que le piano se télécharge ne part plus quand
+    il arrive (avant, elle partait seule) ; touchée deux fois, seule la
+    dernière demande part.
+- **La boucle ne bégaie plus au téléphone (M2).** 350 ms d'avance de
+  planification au lieu de 150, et la partition se regrave moins souvent :
+  pendant la lecture, une fois toutes les 300 ms au plus, d'un seul passage
+  (avec la mise en page de la gravure d'avant) ; en écrivant, 150 ms après la
+  dernière note (une idée de 64 mesures coûtait 424 ms par note au
+  téléphone, relevé par l'audit de l'interface) ; et choisir une note ne
+  regrave plus rien, seules ses couleurs changent. Mesuré (téléphone
+  simulé, processeur ralenti 4 puis 6 fois, vue Partition, dix notes
+  ajoutées pendant la boucle) : 0 note en retard, contre 2 sur 56 et 14 sur
+  58 avant.
+  - Pourquoi pas plus d'avance : ce qu'on change pendant la boucle s'entend
+    après elle ; 350 ms reste sous la demi-seconde, et la plus longue tâche
+    mesurée à 6 fois plus lent (300 ms) y tient.
+- **Le premier son vient vite (audit de l'interface), et le piano se
+  recharge après un échec (M3).** Les 29 échantillons partaient ensemble :
+  en 4G lente, rien ne sonnait avant dix secondes, et un toucher bref avant
+  ce moment était perdu (même sur un bon réseau, le premier l'était). Ils se
+  téléchargent maintenant quatre à la fois : celui de la note touchée
+  d'abord, puis ceux de l'octave montrée par le clavier, puis le reste. Une
+  note touchée trop tôt attend son échantillon et part à son arrivée (relevée
+  entre-temps, elle s'entend brièvement) ; « Piano en chargement… La
+  première fois, il se télécharge avec le réseau » s'affiche si l'attente
+  dure. À l'ouverture d'une idée, l'octave montrée se télécharge d'avance,
+  sans être décodée (il faudrait un contexte audio, qui attend un geste), et
+  pas du tout si le navigateur demande d'économiser les données. Mesuré au
+  téléphone (processeur 4 fois plus lent, 4G lente : 1,6 Mbit/s, 150 ms),
+  dix touchers à une demi-seconde d'écart : avant, aucun son ; après, le
+  premier son 0,6 s après le premier toucher (1,3 s si l'on touche 0,3 s
+  après l'ouverture), et chaque toucher sonne.
+  - Un échec ne se garde plus : la liste des échantillons se redemande au
+    toucher suivant, un échantillon manquant est remplacé par son voisin et
+    redemandé cinq secondes plus tard. Le problème est dit, en français
+    (`surProbleme`, branché sur les messages de l'appli), même quand le
+    geste qui jouait l'ignorait : avant, « Failed to fetch », ou rien.
+- **Un son plus propre (M4).** Un limiteur (seuil −6 dB, sans genou, ratio
+  20, attaque d'1 ms) et une sortie à 0,6 au lieu d'un compresseur à
+  −14 dB et 0,9 : un accord de six notes à 127 culminait à +4,1 dBFS (531
+  échantillons écrêtés), il reste à −0,8 dBFS ; une note seule sonne comme
+  avant (−7,3 dBFS de crête contre −8,5).
+  - Les échantillons sont repris des enregistrements d'origine
+    (`outils/echantillons-piano.mjs`, voir `app/piano/LISEZMOI.md`) : −1 dB
+    de marge (9 fichiers sur 29 s'écrêtaient au décodage, aucun sur 82
+    maintenant), et un gain par échantillon qui ramène chaque note sur une
+    courbe lisse du clavier : chaque enregistrement est normalisé à sa
+    crête, et deux voisins pouvaient sonner à 10 dB l'un de l'autre ; ils
+    restent à ±3 dB.
+  - Le la5 (81) s'éteignait très vite (−55 dB à une seconde, −35 à −42 pour
+    ses voisins) : le la♯5 (82) le remplace. À égale distance de deux
+    échantillons, celui du dessus est pris (descendre un son s'entend moins
+    que le monter).
+  - Les nuances : un passe-bas d'autant plus bas que la note est douce, et
+    deux couches de plus, PP et FF (0,9 et 0,8 Mo), téléchargées seulement
+    quand une note jouée doucement (jusqu'à 64) ou fort (dès 101) les
+    demande ; en attendant, la couche MF les remplace. Pourquoi les trois
+    couches à la même hauteur sonore : les enregistrements sont normalisés
+    chacun à sa crête, la force fait déjà le volume ; les couches donnent le
+    timbre, sans saut de volume quand on passe de l'une à l'autre.
+  - Les fichiers changent de nom (`060-mf.mp3`, `echantillons.json`) : le
+    service worker garde le piano sans jamais le redemander, et les anciens
+    noms auraient gardé les anciens sons.
+- **Les pages lues jouent sur l'horloge du son (M5).** abcjs les jouait au
+  fil de ses minuteries, au rythme des images de l'écran : des croches de
+  250 ms en faisaient de 238 à 270 ms au repos, de 119 à 392 ms quand le fil
+  principal était occupé (150 ms toutes les 700 ms). Leurs notes passent
+  maintenant par le transport (`ecoute-page.js`), comme une idée, avec leur
+  force (accents et temps forts), la transposition et les mains coupées ;
+  TimingCallbacks ne sert plus qu'à surligner, à la position du transport.
+  Mesuré : chaque croche à 250 ms exactement, au repos comme sous charge.
+  - Au passage : abcjs compte son tempo en temps de la mesure (la noire
+    pointée en 6/8 ou 12/8). L'écoute d'avant lui donnait des noires : une
+    page en 12/8 allait une fois et demie trop vite, notes chevauchées. Le
+    transport compte en noires, comme le curseur de l'écran.
+- **Le contexte du son, l'écran, l'écran verrouillé (base de M8).** Un seul
+  petit module, `eveil.js`, tient la session audio de l'iPhone, le verrou de
+  l'écran et les commandes de l'écran verrouillé ; le transport l'appelle
+  pour toute écoute (détails plus bas, avec M8).
+
 <!-- lot musique -->
 
 ### Outillage, hors ligne et dépendances (S2, I5, T1, T2, T6)
@@ -711,9 +809,12 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
   MuseScore sert pour les gros chantiers.
 - **Afficher** : [abcjs](https://www.abcjs.net/) 6.7.1 (MIT), qui gère
   gravure, curseur et transposition. Verovio reste en réserve.
-- **Piano** : [smplr](https://github.com/danigb/smplr) `SplendidGrandPiano`,
-  un Steinway sur 4 nuances en domaine public. Le Salamander (CC-BY) reste en
-  réserve.
+- **Piano** : un lecteur maison (`app/piano.js`) sur les échantillons du
+  Steinway de SplendidGrandPiano (AKAI, domaine public), tels que
+  [smplr](https://github.com/danigb/smplr) les sert ; smplr lui-même n'est
+  pas utilisé. Trois couches de nuances (MF au premier son, PP et FF à la
+  demande), reprises des enregistrements par `outils/echantillons-piano.mjs`
+  (voir `app/piano/LISEZMOI.md`). Le Salamander (CC-BY) reste en réserve.
 - **Ableton Live 12 (licence d'Adrien) et ses VST**, en plus du navigateur.
   - L'appli exporte un MIDI avec une piste par main et le tempo (vérifié :
     `ABCJS.synth.getMidiFile` sort un format 1 avec une piste par voix).
