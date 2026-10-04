@@ -646,6 +646,27 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     autoriser que `main` (Settings → Environments → supabase). Tant qu'ils
     restent des secrets du dépôt, tout marche comme avant, mais un workflow
     poussé sur une autre branche peut encore les lire.
+- **Une sentinelle chaque lundi (C4).** Le projet Supabase gratuit s'endort
+  après une semaine sans activité, et tu ne le découvrais qu'à l'import
+  suivant. `sentinelle.yml` appelle le connecteur le lundi à 6 h 47 UTC
+  (et à la main, « Run workflow ») : l'outil `arborescence`, comme le
+  bouton de l'appli. Si le connecteur ne répond pas 200, ou répond par une
+  erreur, la tâche échoue, et GitHub t'écrit. Une tablette déliée donne
+  seulement un avertissement.
+  - Muette : `curl -s` sans message, ni l'adresse (elle porte la clé) ni la
+    réponse (les noms de tes documents) ne s'affichent, et un test le
+    vérifie en faisant tourner le script avec un faux `curl`.
+  - `permissions: {}` ; `PORTEE_CLE` n'est donné qu'à l'étape ; même
+    environnement `supabase` que le déploiement (sans relecteur obligatoire,
+    sinon la tâche du lundi attendrait ton accord).
+  - Pourquoi 6 h 47 : à une heure ronde, la tâche attend derrière toutes
+    celles de GitHub, et saute parfois.
+  - **La règle des 60 jours** : dans un dépôt public, GitHub désactive une
+    tâche planifiée après 60 jours sans commit. Il te prévient ; un commit,
+    ou « Enable workflow » dans l'onglet Actions, la relance.
+  - Supabase compte surtout l'activité de la base : si le projet s'endort
+    quand même, la sentinelle te le dira dès le lundi ; on pourra alors
+    passer à un appel par jour.
 
 ### Données et synchronisation (S6, D1 à D10)
 
@@ -968,6 +989,12 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 Changer la clé : mettre la nouvelle valeur dans le secret `PORTEE_CLE`, relancer
 le workflow « Connecteur reMarkable » (Actions → Run workflow), puis mettre la
 nouvelle adresse dans claude.ai et sur le site.
+
+La sentinelle (« Sentinelle du connecteur », chaque lundi) appelle le
+connecteur avec ce même secret : si elle échoue, GitHub t'écrit. Si
+reMarkable change un jour l'adresse de sa synchro, pose le secret
+facultatif `PORTEE_HOTE_SYNC` (Supabase → Edge Functions → Secrets) avec la
+nouvelle adresse en `https://…`.
 
 Pour couper l'accès : retirer l'appareil « desktop-linux » sur my.remarkable.com,
 ou supprimer la fonction dans Supabase.
