@@ -527,7 +527,216 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Connecteur (S3 à S5, C1 à C6)
 
-<!-- lot connecteur -->
+- **Les nouvelles clés de Supabase (C1).** Supabase retire les clés
+  `service_role` d'ici fin 2026, et un projet réveillé peut déjà revenir
+  sans elles : plus de tablette ni de synchro. La fonction lit maintenant
+  `SUPABASE_SECRET_KEYS` (la clé `default`), et l'ancienne clé seulement à
+  défaut (`supabase.js`). Rien à faire de ton côté : Supabase donne les deux
+  à la fonction.
+  - Une clé `sb_secret_…` n'est pas un JWT : elle part dans l'en-tête
+    `apikey`, et seulement là. En `Authorization: Bearer`, la plateforme
+    répond « Invalid JWT ». L'ancienne clé garde ses deux en-têtes.
+  - Le faux stockage des tests refuse une clé secrète en `Bearer`, comme
+    la plateforme : un retour en arrière ne passerait pas les tests.
+- **La porte du connecteur (S4, côté HTTP).** Trois gardes avant le
+  protocole (`http.js`) :
+  - **la clé se compare à temps constant** : `!==` s'arrête au premier
+    caractère faux, et le temps de réponse pouvait dire combien étaient
+    justes. On compare les empreintes SHA-256 jusqu'au bout ;
+  - **l'en-tête `Origin` est vérifié**, comme la spécification MCP l'exige :
+    une page d'ailleurs reçoit 403, même avec la bonne clé (avant, elle
+    faisait agir le connecteur, le navigateur lui cachait seulement la
+    réponse). Passent : sans `Origin` (les serveurs de claude.ai, le
+    script de déploiement), ton site (et `PORTEE_ORIGINES`), et les
+    origines de Claude (`claude.ai`, `claude.com`, `anthropic.com` et leurs
+    sous-domaines) au cas où ses serveurs en mettraient une ;
+  - **le corps est borné à 6 Mo** (413 au-delà), compté en lisant : la
+    longueur annoncée peut manquer ou mentir. Une page dense pèse 60 Ko.
+- **MCP 2026-07-28 et les versions d'avant, sur la même adresse (C2).** La
+  version du 28 juillet 2026 n'a plus d'`initialize` : chaque requête porte
+  sa version dans `params._meta`, redite par l'en-tête
+  `MCP-Protocol-Version`, avec `Mcp-Method` et `Mcp-Name`. claude.ai la
+  déploie ; on sert les deux époques requête par requête (`mcp.js`), sans
+  rien changer à ce qui marche.
+  - Pourquoi les deux plutôt que la nouvelle seule : ton site appelle
+    `tools/call` directement, sans `initialize` ni en-tête, et claude.ai
+    passera d'une version à l'autre quand il voudra. Une requête sans
+    version dans `_meta` est servie comme avant.
+  - Nouveau : `server/discover` (versions, capacités, identité du
+    serveur) ; en 2026-07-28, chaque résultat dit `resultType` et l'identité
+    du serveur, et les listes disent combien de temps les garder (cinq
+    minutes, `private` : l'adresse porte une clé).
+  - Corrigé (écarts relevés par l'audit) : une version inconnue n'est plus
+    renvoyée telle quelle (`initialize` répond 2025-11-25 ; en 2026-07-28,
+    400 et l'erreur -32022 avec la liste) ; un outil inconnu est une erreur
+    de protocole (-32602) ; une notification `tools/call` n'écrit plus rien
+    (202) ; une réponse JSON-RPC du client reçoit 202 ; un en-tête absent
+    ou contraire au corps, 400 (-32020) ; `ping` et une méthode inconnue,
+    404 en 2026-07-28 ; GET et DELETE, 405.
+  - On ne réclame pas `clientCapabilities`, que la spécification veut à
+    chaque requête : le serveur ne dépend d'aucune capacité du client, et un
+    client un peu en retard sur ce point ne doit pas perdre la tablette.
+  - Les échanges de la synchro et les traits d'un document ne sont plus
+    redits en texte : ils voyageaient deux fois (JSON dans le JSON). Un mot
+    les résume ; l'appli lit le résultat structuré, comme avant.
+- **La lecture de la tablette, durcie (C3).** reMarkable renvoie des 429
+  depuis avril 2026, et une seule erreur faisait tout échouer.
+  - **Nouvel essai** sur un 429, un 5xx ou une coupure : quatre essais au
+    plus, en attendant ce que dit `Retry-After`, sinon 0,5 puis 1 puis 2 s
+    environ (la moitié tirée au hasard, pour ne pas revenir tous ensemble),
+    jamais plus de 30 s (claude.ai coupe un appel à 240 s). Pas pour
+    `relier` : le code ne sert qu'une fois.
+  - **Six requêtes à la fois** au lieu de douze : une rafale de douze est
+    la première à se faire refuser (429).
+  - **Un document illisible** ne fait plus tomber l'arborescence : il est
+    dans `illisibles` ({ id, raison }), les autres s'affichent. **Une page
+    illisible** est dans `pagesIllisibles`, les autres pages arrivent.
+  - **L'hôte de synchro se règle** par un secret facultatif,
+    `PORTEE_HOTE_SYNC`, s'il change un jour d'adresse. S'il ne répond plus
+    (réseau, 5xx, 404), on se replie sur `eu.tectonic.remarkable.com`,
+    celui que rmapi-js lit par défaut, et on y reste.
+  - **Le sujet du PDF sans tout le PDF** : on lit ses 32 premiers Ko
+    (reportlab y écrit le sujet de tes modèles, à 3 Ko), puis ses 32
+    derniers s'il le faut (un PDF réenregistré l'y met). Si le cloud ignore
+    `Range`, la lecture s'arrête quand même après la tête ; seul un PDF de
+    plus de 2 Mo dont le sujet est à la fin serait alors manqué. Un même
+    modèle importé plusieurs fois a la même empreinte : il n'est lu qu'une
+    fois par instance. Avant, un livre de 50 Mo ouvert par erreur était
+    téléchargé en entier. Pas pu vérifier sur le vrai cloud qu'il sert
+    `Range` : les deux cas sont testés sur le faux.
+  - **`document` par pages** : un paramètre facultatif `pages` ([1, 2] ou
+    { de, a }) ; la réponse dit `nombrePages` et `pagesEcrites`, et s'arrête
+    avant 140 000 caractères (claude.ai coupe vers 150 000, trois pages
+    denses suffisaient) en listant `pagesRestantes`. **Sans paramètre, rien
+    ne change** : toutes les pages, comme l'appli les attend.
+- **Le jeton de la tablette, chiffré au repos (S5).** Il dormait en clair
+  dans le stockage, et il permet d'écrire dans ton cloud reMarkable (même
+  si Portée ne le fait jamais). Il est maintenant chiffré en AES-GCM
+  (WebCrypto, le même code sous Deno et Node), avec une clé tirée par HKDF
+  d'un secret de la fonction, `PORTEE_COFFRE` (`coffre.js`).
+  - **Rien à faire de ton côté** : le script de déploiement crée ce secret
+    s'il n'existe pas (il lit la liste des noms de secrets, jamais leurs
+    valeurs), ne l'affiche nulle part, et **ne le remplace jamais** : un
+    autre secret rendrait le jeton illisible.
+  - **Migration douce** : le jeton déjà rangé (en clair) se lit, puis se
+    range chiffré à la première lecture. Ta tablette reste reliée.
+  - **Secret perdu ou changé** : le jeton ne se déchiffre plus, la tablette
+    apparaît « à relier », comme après une révocation (un nouveau code de
+    my.remarkable.com, et c'est reparti). Pas d'erreur incompréhensible.
+  - Sans `PORTEE_COFFRE` (une fonction déployée à la main, sans le
+    script), le coffre range le jeton en clair, comme avant.
+  - Pourquoi pas la clé de service comme clé de chiffrement : quelqu'un qui
+    lit le stockage a justement cette clé. `PORTEE_COFFRE` vit ailleurs (les
+    secrets de la fonction), et ne sert qu'à ça.
+- **Le déploiement du connecteur, durci (S3).** Le jeton Supabase
+  (`SUPABASE_ACCESS_TOKEN`) ouvre tous tes projets ; il était dans
+  l'environnement de tout le job, donc lisible par `npm ci` et les tests
+  (une dépendance piégée l'aurait lu). Dans `connecteur.yml` :
+  - les deux secrets ne sont donnés qu'à l'étape « Déployer » ;
+  - `permissions: contents: read` : le jeton GitHub du job ne peut rien
+    écrire ; `checkout` ne le garde pas dans `.git/config`
+    (`persist-credentials: false`) ;
+  - `npm ci --ignore-scripts` : aucun script d'installation ne s'exécute ;
+  - `deno check` avant de déployer (CLAUDE.md le demandait, rien ne le
+    vérifiait) ;
+  - les actions sont épinglées par empreinte, la version en commentaire :
+    une étiquette (`@v4`) peut être déplacée vers un autre code ;
+  - le job tourne dans l'environnement `supabase`, que GitHub crée tout
+    seul. **À faire de ton côté** : y déplacer les deux secrets et n'y
+    autoriser que `main` (Settings → Environments → supabase). Tant qu'ils
+    restent des secrets du dépôt, tout marche comme avant, mais un workflow
+    poussé sur une autre branche peut encore les lire.
+- **Une sentinelle chaque lundi (C4).** Le projet Supabase gratuit s'endort
+  après une semaine sans activité, et tu ne le découvrais qu'à l'import
+  suivant. `sentinelle.yml` appelle le connecteur le lundi à 6 h 47 UTC
+  (et à la main, « Run workflow ») : l'outil `arborescence`, comme le
+  bouton de l'appli. Si le connecteur ne répond pas 200, ou répond par une
+  erreur, la tâche échoue, et GitHub t'écrit. Une tablette déliée donne
+  seulement un avertissement.
+  - Muette : `curl -s` sans message, ni l'adresse (elle porte la clé) ni la
+    réponse (les noms de tes documents) ne s'affichent, et un test le
+    vérifie en faisant tourner le script avec un faux `curl`.
+  - `permissions: {}` ; `PORTEE_CLE` n'est donné qu'à l'étape ; même
+    environnement `supabase` que le déploiement (sans relecteur obligatoire,
+    sinon la tâche du lundi attendrait ton accord).
+  - Pourquoi 6 h 47 : à une heure ronde, la tâche attend derrière toutes
+    celles de GitHub, et saute parfois.
+  - **La règle des 60 jours** : dans un dépôt public, GitHub désactive une
+    tâche planifiée après 60 jours sans commit. Il te prévient ; un commit,
+    ou « Enable workflow » dans l'onglet Actions, la relance.
+  - Supabase compte surtout l'activité de la base : si le projet s'endort
+    quand même, la sentinelle te le dira dès le lundi ; on pourra alors
+    passer à un appel par jour.
+- **Claude dans tes conversations (C5).** Les outils `bibliotheque_*`
+  servent la synchro : ils lisent ou réécrivent des fiches entières.
+  Dans une conversation, Claude ne pouvait que tout lire ou tout écraser.
+  Nouveaux outils (`conversation.js`), aux schémas stricts et aux
+  descriptions écrites pour lui :
+  - `partitions_lister` (titre, type, doutes à lever ; recherche sans
+    accents) et `partition_lire` : une partition sans ses traits (titre,
+    ABC, doutes encore ouverts, tempo, mesure, tonalité ; les notes d'une
+    idée ; les blocs d'un morceau). `partitions_lister` n'était pas dans la
+    liste de l'audit, mais sans lui Claude ne peut pas trouver
+    l'identifiant de « Pluie ».
+  - `idee_ecrire` : une **nouvelle** idée, avec un identifiant neuf (le
+    format de `nouvelId()`), jamais par-dessus une autre
+    (`destructiveHint: false`). Elle a exactement la forme d'une idée de
+    l'appli (vérifié : l'appli l'écrit en partition, et sa vraie synchro
+    la reçoit), plus `source: { claude: true }`. Son `abc` reste vide :
+    l'appli le réécrit d'après les notes. Les entrées sont bornées (hauteur
+    21 à 108, durées positives, 4 000 notes et 256 mesures au plus, deux
+    notes de même hauteur sans chevauchement, chiffrages que l'appli sait
+    jouer) et une erreur dit à Claude quel champ corriger.
+  - `suggestion_ecrire` (accords, suite, variation, ou un mot : titre,
+    étiquettes, réponse à un doute), `suggestions_lister`,
+    `suggestion_retirer` : la proposition est rangée à part,
+    `suggestions/<partition>/<sid>.json`, sans toucher la partition ni la
+    synchro (`suggestions.js`). C'est toi qui l'appliques d'un geste dans
+    Portée (l'écran viendra avec H3).
+  - Le prompt `relire_page` (argument `id`) : lire la page, regarder les
+    doutes, proposer chaque réponse par `suggestion_ecrire`, ne jamais
+    écrire dans la bibliothèque sans que tu l'aies demandé, et te parler en
+    noms de notes, pas en ABC.
+  - Les listes de l'appli (tonalités, mesures, chiffrages) sont recopiées
+    dans le connecteur, qui est déployé seul ; un test vérifie qu'elles ne
+    s'écartent pas.
+  - Pour lire une seule fiche, ces outils passent par
+    `changements(null)` (toute la bibliothèque) : c'est l'API publique de
+    la bibliothèque, et quelques centaines de fiches se lisent en une ou
+    deux secondes.
+- **Une partition jouable dans la conversation (C6).** claude.ai affiche
+  maintenant une petite page fournie par un connecteur (extension MCP Apps,
+  `io.modelcontextprotocol/ui`). L'outil `partition_montrer({ id })` porte
+  `_meta.ui.resourceUri` ; la ressource `ui://portee/partition`
+  (`text/html;profile=mcp-app`, `vue-partition.js`) grave l'ABC avec
+  abcjs 6.7.1 et le joue au piano, les notes jouées allumées.
+  - **Sans dépendance** : le protocole (JSON-RPC par postMessage :
+    `ui/initialize`, les arguments puis le résultat de l'outil, la hauteur
+    annoncée, `ping`, le démontage) est écrit à la main, d'après la
+    spécification du 2026-01-26 et l'exemple officiel `sheet-music-server`.
+    Si l'hôte garde le résultat structuré pour lui, la page le redemande à
+    l'outil, par l'hôte.
+  - **Ce qu'elle charge est déclaré** (`_meta.ui.csp`), sinon l'hôte le
+    bloque : abcjs sur cdnjs, vérifié par son empreinte (SRI : un CDN
+    détourné ne pourrait rien glisser ; un test vérifie qu'elle est celle
+    de `node_modules`), et les sons du synthé d'abcjs (paulrosen.github.io).
+  - Elle suit le clair ou sombre et les jetons de claude.ai, garde les
+    icônes de l'appli, et son bouton fait 44 px.
+  - **Une idée notée par Claude n'a pas encore d'ABC** (l'appli l'écrit à la
+    réception) : `abc.js` en écrit une partition simple d'après ses notes
+    (la mélodie, ses accords, silences et liaisons), pour la montrer tout
+    de suite. Pourquoi pas le code de l'appli : le connecteur est déployé
+    seul, et une copie de `sequence.js` divergerait. abcjs y relit les
+    mêmes notes sur deux cents idées au hasard (et quinze mille à l'essai).
+    Piège trouvé en chemin : abcjs ne compte pas l'altération écrite sur la
+    suite d'une liaison ; la même note, après, redit donc la sienne, comme
+    dans l'appli.
+  - **Essayée dans Chromium** avec un faux hôte qui joue le protocole et
+    applique la CSP que la spécification lui fait construire : gravure,
+    thème, hauteur, écoute (les sons viennent du domaine déclaré), `ping`,
+    démontage, redemande à l'outil, erreur dite en clair, aucune requête
+    ailleurs, aucune erreur de console. Sans Playwright (en CI), l'essai se
+    saute.
 
 ### Données et synchronisation (S6, D1 à D10)
 
@@ -828,11 +1037,18 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 
 1. **Déployer le connecteur** dans le projet Supabase du site. GitHub Actions
    s'en charge (`.github/workflows/connecteur.yml`) à chaque changement du
-   connecteur fusionné sur `main`. Il faut deux secrets du dépôt :
+   connecteur fusionné sur `main`. Il faut deux secrets, rangés dans
+   l'environnement `supabase` du dépôt (Settings → Environments → supabase,
+   avec `main` seule autorisée ; des secrets du dépôt marchent aussi, mais
+   tout workflow de n'importe quelle branche peut les lire) :
    - `SUPABASE_ACCESS_TOKEN` : un jeton d'accès Supabase
      (supabase.com/dashboard/account/tokens) ;
    - `PORTEE_CLE` : la clé de l'adresse, au moins 24 caractères aléatoires.
      Elle n'apparaît jamais dans les journaux, publics.
+
+   Le script pose aussi, la première fois, le secret `PORTEE_COFFRE` de la
+   fonction (la clé qui chiffre le jeton de la tablette dans le stockage) :
+   rien à faire, et ne le supprime pas, sinon la tablette sera à relier.
 
    L'adresse du connecteur est
    `https://omekkqjinvppadsoinvj.supabase.co/functions/v1/portee-remarkable/<PORTEE_CLE>`.
@@ -850,6 +1066,12 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 Changer la clé : mettre la nouvelle valeur dans le secret `PORTEE_CLE`, relancer
 le workflow « Connecteur reMarkable » (Actions → Run workflow), puis mettre la
 nouvelle adresse dans claude.ai et sur le site.
+
+La sentinelle (« Sentinelle du connecteur », chaque lundi) appelle le
+connecteur avec ce même secret : si elle échoue, GitHub t'écrit. Si
+reMarkable change un jour l'adresse de sa synchro, pose le secret
+facultatif `PORTEE_HOTE_SYNC` (Supabase → Edge Functions → Secrets) avec la
+nouvelle adresse en `https://…`.
 
 Pour couper l'accès : retirer l'appareil « desktop-linux » sur my.remarkable.com,
 ou supprimer la fonction dans Supabase.
