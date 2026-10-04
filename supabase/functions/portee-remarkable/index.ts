@@ -15,6 +15,10 @@
 //  SECRET (posé par outils/deployer-connecteur.mjs) :
 //    PORTEE_CLE  longue chaîne aléatoire, dernier segment de
 //                l'adresse du connecteur
+//  FACULTATIF :
+//    PORTEE_HOTE_SYNC  l'hôte de synchro de reMarkable, s'il change
+//                      d'adresse (https://…) ; sinon l'habituel, avec
+//                      repli sur eu.tectonic.remarkable.com
 //  SUPABASE_URL et la clé de service sont fournis d'office : la nouvelle
 //  (SUPABASE_SECRET_KEYS) d'abord, l'ancienne (SUPABASE_SERVICE_ROLE_KEY)
 //  à défaut (supabase.js).
@@ -31,7 +35,7 @@ import { Bibliotheque } from "./bibliotheque.js";
 import { coffreSupabase } from "./coffre.js";
 import { ORIGINES, repondreHttp } from "./http.js";
 import { objetsSupabase } from "./objets.js";
-import { CloudRemarkable } from "./remarkable.js";
+import { CloudRemarkable, hoteDeSynchro } from "./remarkable.js";
 import { cleDeService } from "./supabase.js";
 
 const CLE = Deno.env.get("PORTEE_CLE") ?? "";
@@ -41,6 +45,8 @@ const EN_PLUS = (Deno.env.get("PORTEE_ORIGINES") ?? "").split(",").map((o) => o.
 
 const URL_SUPABASE = Deno.env.get("SUPABASE_URL");
 const CLE_SERVICE = cleDeService((nom: string) => Deno.env.get(nom));
+// Une valeur qui n'a pas la forme d'une adresse https est ignorée.
+const HOTE_SYNC = hoteDeSynchro(Deno.env.get("PORTEE_HOTE_SYNC")) ?? undefined;
 
 // Une instance chaude garde le jeton utilisateur et les métadonnées déjà lues.
 let cloud: CloudRemarkable | null = null;
@@ -50,7 +56,7 @@ Deno.serve((req: Request) =>
   repondreHttp(req, {
     cle: CLE,
     origines: [...ORIGINES, ...EN_PLUS],
-    cloud: () => (cloud ??= new CloudRemarkable(coffreSupabase(URL_SUPABASE, CLE_SERVICE))),
+    cloud: () => (cloud ??= new CloudRemarkable(coffreSupabase(URL_SUPABASE, CLE_SERVICE), { sync: HOTE_SYNC })),
     bibliotheque: () => (bibliotheque ??= new Bibliotheque(objetsSupabase(URL_SUPABASE, CLE_SERVICE))),
   })
 );

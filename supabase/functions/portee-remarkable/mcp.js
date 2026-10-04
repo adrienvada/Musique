@@ -25,21 +25,35 @@ const OUTILS = [
   {
     name: "arborescence",
     title: "Arborescence de la reMarkable",
-    description: "Liste les dossiers et documents de la reMarkable d'Adrien (sans la corbeille). Renvoie { connectee: true, noeuds } ; chaque nœud : id, nom, type (dossier|document), parent (id du dossier, vide à la racine), modifie, pdf, pages. Si la tablette n'est pas reliée : { connectee: false, raison: jamais|revoquee }.",
+    description: "Liste les dossiers et documents de la reMarkable d'Adrien (sans la corbeille). Renvoie { connectee: true, noeuds, illisibles } ; chaque nœud : id, nom, type (dossier|document), parent (id du dossier, vide à la racine), modifie, pdf, pages. Un document que le cloud n'a pas su rendre est dans illisibles ({ id, raison }), sans empêcher les autres. Si la tablette n'est pas reliée : { connectee: false, raison: jamais|revoquee }.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
   },
   {
     name: "document",
     title: "Traits d'un document",
-    description: "Télécharge un document de la reMarkable et renvoie son nom, le modèle Portée sur lequel il a été écrit, et les traits de chaque page écrite (entiers au demi-pixel, x et y alternés, repère de l'écran 1404×1872).",
+    description: "Télécharge un document de la reMarkable : son nom, le modèle Portée sur lequel il a été écrit (null sinon), son nombre de pages (nombrePages), celles qui ont de l'encre (pagesEcrites), et les traits de chaque page écrite (entiers au demi-pixel, x et y alternés, repère de l'écran 1404×1872). Sans pages : toutes d'un coup. Avec pages (par exemple [1, 2] ou { de: 3, a: 5 }) : seulement celles-là, et la réponse s'arrête avant 140 000 caractères environ ; les pages qui n'y tenaient pas sont dans pagesRestantes, à demander ensuite. Une page illisible est dans pagesIllisibles, sans empêcher les autres.",
     inputSchema: {
       type: "object",
-      properties: { id: { type: "string", description: "Identifiant du document, tel que donné par l'arborescence." } },
+      properties: {
+        id: { type: "string", description: "Identifiant du document, tel que donné par l'arborescence." },
+        pages: {
+          description: "Facultatif : les numéros de page voulus (à partir de 1, dans l'ordre du document), en liste ou en plage.",
+          anyOf: [
+            { type: "array", items: { type: "integer", minimum: 1 }, minItems: 1, maxItems: 500, uniqueItems: true },
+            {
+              type: "object",
+              properties: { de: { type: "integer", minimum: 1 }, a: { type: "integer", minimum: 1, description: "Dernière page comprise ; sans lui, la seule page « de »." } },
+              required: ["de"],
+              additionalProperties: false,
+            },
+          ],
+        },
+      },
       required: ["id"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
   },
   {
     name: "relier",
@@ -51,7 +65,7 @@ const OUTILS = [
       required: ["code"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
   {
     name: "bibliotheque_changements",
@@ -98,9 +112,30 @@ const OUTILS = [
 
 const compacter = (traits) => traits.map((t) => t.flatMap(([x, y]) => [Math.round(x * 2), Math.round(y * 2)]));
 
+// Ce qu'un document peut peser quand on en demande quelques pages : claude.ai
+// coupe un résultat d'outil vers 150 000 caractères, et une page dense en
+// fait 60 000. Sans choix de pages, l'appli reçoit tout, comme avant.
+const BUDGET_DOCUMENT = 140000;
+
+/** Le paramètre `pages` de l'outil document → des numéros triés, ou une erreur lisible. */
+function lirePages(pages) {
+  const entier = (n) => Number.isInteger(n) && n >= 1 && n <= 10000;
+  if (Array.isArray(pages)) {
+    if (!pages.length || pages.length > 500 || !pages.every(entier)) throw new Error("pages : une liste de 1 à 500 numéros de page (entiers à partir de 1).");
+    return [...new Set(pages)].sort((a, b) => a - b);
+  }
+  if (pages && typeof pages === "object" && Object.keys(pages).every((k) => k === "de" || k === "a") && entier(pages.de)) {
+    const a = pages.a === undefined ? pages.de : pages.a;
+    if (!entier(a) || a < pages.de || a - pages.de >= 500) throw new Error("pages : « a » est un numéro de page, au moins égal à « de », 500 pages au plus.");
+    return Array.from({ length: a - pages.de + 1 }, (_, i) => pages.de + i);
+  }
+  throw new Error("pages : une liste de numéros ([1, 2]) ou une plage ({ de: 1, a: 3 }).");
+}
+
 async function arborescence(cloud) {
   try {
-    return { connectee: true, noeuds: await cloud.arborescence() };
+    const { noeuds, illisibles } = await cloud.arborescence();
+    return { connectee: true, noeuds, illisibles };
   } catch (e) {
     if (e instanceof NonReliee) return { connectee: false, raison: e.raison };
     throw e;
@@ -121,7 +156,10 @@ async function appeler(nom, args, cloud, bibliotheque) {
   }
   if (nom === "document") {
     if (!args || typeof args.id !== "string") throw new Error("Il faut l'identifiant du document.");
-    const d = await cloud.document(args.id);
+    const voulues = args.pages === undefined || args.pages === null ? null : lirePages(args.pages);
+    const options = voulues ? { pages: voulues, budget: BUDGET_DOCUMENT, mesure: (traits) => JSON.stringify(compacter(traits)).length } : {};
+    const d = await cloud.document(args.id, options);
+    if (voulues && !voulues.some((n) => n <= d.nombrePages)) throw new Error(`Ce document n'a que ${d.nombrePages} page${d.nombrePages > 1 ? "s" : ""}.`);
     return { ...d, pages: d.pages.map((p) => ({ numero: p.numero, traits: compacter(p.traits) })) };
   }
   throw new Error(`Outil inconnu : ${nom}`);
@@ -144,7 +182,10 @@ const pluriel = (n, un, plusieurs = un + "s") => `${n} ${n > 1 ? plusieurs : un}
 function texteDe(nom, resultat) {
   const r = resultat || {};
   if (nom === "document") {
-    return `« ${r.nom} » : ${pluriel((r.pages || []).length, "page écrite", "pages écrites")}, modèle ${r.modele || "inconnu"} (traits dans structuredContent).`;
+    const pages = (r.pages || []).map((p) => p.numero);
+    const reste = (r.pagesRestantes || []).length ? ` ; à demander ensuite : ${r.pagesRestantes.join(", ")}` : "";
+    const illisibles = (r.pagesIllisibles || []).length ? ` ; illisibles : ${r.pagesIllisibles.map((p) => p.numero).join(", ")}` : "";
+    return `« ${r.nom} » : ${pluriel(pages.length, "page")} (${pages.join(", ") || "aucune"}) sur ${r.nombrePages ?? "?"}, modèle ${r.modele || "inconnu"}${reste}${illisibles}. Traits dans structuredContent.`;
   }
   if (nom.startsWith("bibliotheque_")) {
     if (Array.isArray(r.partitions)) return `${pluriel(r.partitions.length, "partition écrite", "partitions écrites")} depuis le curseur (détail dans structuredContent).`;

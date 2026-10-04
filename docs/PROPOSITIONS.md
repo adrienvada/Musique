@@ -579,6 +579,36 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - Les échanges de la synchro et les traits d'un document ne sont plus
     redits en texte : ils voyageaient deux fois (JSON dans le JSON). Un mot
     les résume ; l'appli lit le résultat structuré, comme avant.
+- **La lecture de la tablette, durcie (C3).** reMarkable renvoie des 429
+  depuis avril 2026, et une seule erreur faisait tout échouer.
+  - **Nouvel essai** sur un 429, un 5xx ou une coupure : quatre essais au
+    plus, en attendant ce que dit `Retry-After`, sinon 0,5 puis 1 puis 2 s
+    environ (la moitié tirée au hasard, pour ne pas revenir tous ensemble),
+    jamais plus de 30 s (claude.ai coupe un appel à 240 s). Pas pour
+    `relier` : le code ne sert qu'une fois.
+  - **Six requêtes à la fois** au lieu de douze, qui se faisaient refuser
+    par paquets.
+  - **Un document illisible** ne fait plus tomber l'arborescence : il est
+    dans `illisibles` ({ id, raison }), les autres s'affichent. **Une page
+    illisible** est dans `pagesIllisibles`, les autres pages arrivent.
+  - **L'hôte de synchro se règle** par un secret facultatif,
+    `PORTEE_HOTE_SYNC`, s'il change un jour d'adresse. S'il ne répond plus
+    (réseau, 5xx, 404), on se replie sur `eu.tectonic.remarkable.com`,
+    celui que rmapi-js lit par défaut, et on y reste.
+  - **Le sujet du PDF sans tout le PDF** : on lit ses 32 premiers Ko
+    (reportlab y écrit le sujet de tes modèles, à 3 Ko), puis ses 32
+    derniers s'il le faut (un PDF réenregistré l'y met). Si le cloud ignore
+    `Range`, la lecture s'arrête quand même après la tête ; seul un PDF de
+    plus de 2 Mo dont le sujet est à la fin serait alors manqué. Un même
+    modèle importé plusieurs fois a la même empreinte : il n'est lu qu'une
+    fois par instance. Avant, un livre de 50 Mo ouvert par erreur était
+    téléchargé en entier. Pas pu vérifier sur le vrai cloud qu'il sert
+    `Range` : les deux cas sont testés sur le faux.
+  - **`document` par pages** : un paramètre facultatif `pages` ([1, 2] ou
+    { de, a }) ; la réponse dit `nombrePages` et `pagesEcrites`, et s'arrête
+    avant 140 000 caractères (claude.ai coupe vers 150 000, trois pages
+    denses suffisaient) en listant `pagesRestantes`. **Sans paramètre, rien
+    ne change** : toutes les pages, comme l'appli les attend.
 
 ### Données et synchronisation (S6, D1 à D10)
 

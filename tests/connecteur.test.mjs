@@ -58,7 +58,7 @@ test("du faux cloud à l'ABC : même lecture que le PDF exporté", async () => {
   try {
     const c = new CloudRemarkable(coffreMemoire("jeton-appareil-de-test"), { auth: cloud.url, sync: cloud.url });
     // Arborescence : le dossier, le document, pas la corbeille.
-    const noeuds = await c.arborescence();
+    const { noeuds } = await c.arborescence();
     assert.deepEqual(noeuds.map((n) => [n.nom, n.type]).sort(), [["Essai piano", "document"], ["Partitions", "dossier"]]);
     assert.equal(noeuds.find((n) => n.nom === "Essai piano").parent, "dossier-partitions");
     // Document, via le protocole MCP, comme l'appelle claude.ai.
