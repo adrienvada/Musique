@@ -96,6 +96,49 @@ test("deux dièses d'armure qui se touchent font ré majeur (ils faisaient do ma
   assert.equal(lire(pg).abc, "M:4/4 K:D | G2 A2 B2 c2 |");
 });
 
+test("du texte au-dessus et entre les portées ne fait plus de notes (titre, paroles, accords chiffrés)", async () => {
+  const f = await chargerFabrique();
+  const pg = new Page(f);
+  pg.texte(300, 120); pg.texte(340, 125); pg.texte(380, 118); // un mot au-dessus de la 1ʳᵉ portée
+  [2, 3, 4, 5].forEach((p, i) => pg.note(260 + i * 90, p)); pg.barre(680);
+  pg.texte(300, 395); pg.texte(345, 398); // des paroles entre la 1ʳᵉ et la 2ᵉ portée
+  const r = lire(pg);
+  assert.equal(r.corps, "G2 A2 B2 c2 |");
+  assert.deepEqual(r.doutes, []);
+  // Une boucle seule, à deux interlignes de la portée et sans ligne supplémentaire : gardée, mais demandée.
+  const seule = new Page(f);
+  [2, 3, 4].forEach((p, i) => seule.note(260 + i * 90, p)); seule.teteVide(560, 12); seule.barre(680);
+  const s = lire(seule);
+  assert.equal(s.corps, "G2 A2 B2 c'8 |");
+  assert.deepEqual(s.doutes, ["sans-hampe"]);
+});
+
+test("une note entre deux portées va à la portée de ses lignes supplémentaires et de sa hampe", async () => {
+  const f = await chargerFabrique();
+  const hautes = new Page(f, 1); // 2ᵉ portée : do6 et la5, au-dessus d'elle
+  const y = (pas) => hautes.p.y(pas);
+  hautes.bas(280, 12); hautes.traits.push([[260, y(10)], [300, y(10)]], [[260, y(12)], [300, y(12)]]);
+  hautes.bas(400, 10); hautes.traits.push([[380, y(10)], [420, y(10)]]);
+  hautes.bas(520, 4); hautes.bas(640, 5); hautes.barre(760);
+  assert.equal(lire(hautes).corps, "c'2 a2 B2 c2 |");
+  const basses = new Page(f, 0); // 1ʳᵉ portée : la3 et do4, sous elle
+  const z = (pas) => basses.p.y(pas);
+  basses.haut(280, -4); basses.traits.push([[260, z(-2)], [300, z(-2)]], [[260, z(-4)], [300, z(-4)]]);
+  basses.haut(400, -2); basses.traits.push([[380, z(-2)], [420, z(-2)]]);
+  basses.haut(520, 2); basses.bas(640, 5); basses.barre(760);
+  assert.equal(lire(basses).corps, "A,2 C2 G2 c2 |");
+});
+
+test("une hampe sans tête n'est plus un soupir : elle demande s'il manque une note", async () => {
+  const r = await lireFichier("tests/pages/2026-09-30-melodie-standard.pdf");
+  const sans = r.pages[0].traits.filter((_, i) => i !== 9); // la tête du sol4 de la gamme, retirée
+  const res = lirePartition([sans], r.cal, { titre: "x" });
+  assert.equal(res.abc.split("\n").find((l) => l.startsWith("C2 D2")), "C2 D2 E2 F2 A2 B2 c2");
+  const d = res.doutes.find((x) => x.type === "tete-manquante");
+  assert.ok(d, "doute « tête manquante » absent");
+  assert.equal(res.abc.slice(d.cible.debut, d.cible.fin), "F2"); // la note d'avant
+});
+
 test("une armure mêlée de bémols et de dièses : les plus nombreux, et un doute", async () => {
   const f = await chargerFabrique();
   const pg = new Page(f);

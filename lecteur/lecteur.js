@@ -489,6 +489,78 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     if (Math.max(g.l, g.h) < 0.45 * il && g.longueur < 1.6 * il) g.nature = "point";
   }
 
+  // Lignes supplémentaires : un trait court, droit, presque horizontal, hors
+  // de la portée, à côté d'une tête. Elles disent à quelle portée une note
+  // appartient quand elle tombe entre deux portées.
+  const lignesSup = [];
+  for (const g of signes) {
+    if (g.nature || g.partiel || (g.membres && g.membres.length > 1)) continue;
+    const droit = dist(g.points[0], g.points[g.points.length - 1]) / Math.max(g.longueur, 1e-6);
+    if (droit < 0.9 || g.h > 0.45 * il || g.l < 0.6 * il || g.l > 3 * il) continue;
+    const p = porteeDe(portees, g.cy);
+    if (g.cy > p.haut - 0.6 * il && g.cy < p.bas + 0.6 * il) continue;
+    if (!tetes.some((t) => t.cx > g.x0 - 0.5 * il && t.cx < g.x1 + 0.5 * il && Math.abs(t.cy - g.cy) < 2.6 * il)) continue;
+    g.nature = "ligne-sup"; g.portee = p.index;
+    lignesSup.push(g);
+  }
+  const lignesSupDe = (t) => lignesSup.filter((l) => t.cx > l.x0 - 0.5 * il && t.cx < l.x1 + 0.5 * il && Math.abs(l.cy - t.cy) < 2.6 * il);
+
+  // La portée de chaque tête (L7). Dans sa bande (aux positions juste au-dessus
+  // et juste au-dessous, qui n'ont pas besoin de ligne supplémentaire), c'est
+  // la plus proche. Entre deux portées, la plus proche se trompait : le do6 de
+  // la 2ᵉ portée, à deux lignes supplémentaires au-dessus d'elle, était lu sur
+  // la 1ʳᵉ. Décident alors : les lignes supplémentaires (combien il en faut
+  // pour rejoindre chaque portée, et celles qui sont entre la note et sa
+  // portée), la hampe (elle pointe vers sa portée : vers le haut sous la
+  // portée, vers le bas au-dessus), la ligature (ses autres notes).
+  for (const t of tetes) {
+    if (portees.some((p) => t.cy > p.haut - 0.75 * il && t.cy < p.bas + 0.75 * il)) continue;
+    const dessus = portees.filter((p) => p.bas <= t.cy).sort((a, b) => b.bas - a.bas)[0];
+    const dessous = portees.filter((p) => p.haut >= t.cy).sort((a, b) => a.haut - b.haut)[0];
+    if (!dessus || !dessous) continue;
+    let pour = 0; // > 0 : la portée du dessus, < 0 : celle du dessous
+    const sup = lignesSupDe(t);
+    if (sup.length) {
+      const pourDessus = Math.floor((t.cy - dessus.bas) / il + 0.25), pourDessous = Math.floor((dessous.haut - t.cy) / il + 0.25);
+      if (sup.length === pourDessus && sup.length !== pourDessous) pour += 2;
+      if (sup.length === pourDessous && sup.length !== pourDessus) pour -= 2;
+    }
+    for (const l of sup) {
+      if (l.cy > dessus.bas + 0.5 * il && l.cy < t.cy - 0.3 * il) pour += 2;
+      if (l.cy < dessous.haut - 0.5 * il && l.cy > t.cy + 0.3 * il) pour -= 2;
+    }
+    if (t.hampe) pour += t.hampe.bout[1] < t.cy ? 1 : -1;
+    if (t.hampe && t.hampe.groupe !== null) {
+      for (const h of hampes) {
+        if (h === t.hampe || h.groupe !== t.hampe.groupe) continue;
+        const u = h.tetes[0];
+        if (u.cy > dessus.haut && u.cy < dessus.bas + 0.6 * il) pour += 1;
+        if (u.cy > dessous.haut - 0.6 * il && u.cy < dessous.bas) pour -= 1;
+      }
+    }
+    const p = pour > 0 ? dessus : pour < 0 ? dessous : porteeDe(portees, t.cy);
+    if (p.index === t.portee) continue;
+    const exact = pasDe(p, t.cy, il);
+    Object.assign(t, { portee: p.index, pas: Math.round(exact), ecart: exact - Math.round(exact) });
+  }
+
+  // Du texte n'est pas de la musique (L6) : un titre, des paroles, des
+  // accords chiffrés, une nuance écrite à la main faisaient des rondes et des
+  // noires. Une « tête » sans hampe ni ligne supplémentaire, hors de la portée,
+  // est du texte si elle en est loin (plus de 2,5 interlignes), ou si une autre
+  // boucle pareille est écrite à côté d'elle (les lettres d'un mot).
+  const horsBande = (t) => { const p = portees[t.portee]; return (t.cy < p.haut ? p.haut - t.cy : t.cy > p.bas ? t.cy - p.bas : 0) / il; };
+  const seules = tetes.filter((t) => !t.hampe && horsBande(t) > 0.75 && !lignesSupDe(t).length);
+  const texte = new Set(seules.filter((t) => horsBande(t) > 2.5
+    || seules.some((u) => u !== t && Math.abs(u.cy - t.cy) < 0.4 * il && Math.abs(u.cx - t.cx) < 1.6 * il)));
+  for (let i = tetes.length - 1; i >= 0; i--) {
+    if (!texte.has(tetes[i])) continue;
+    for (const id of tetes[i].traits) classe[id] = "texte";
+    tetes.splice(i, 1);
+  }
+  // Une tête sans hampe ni ligne supplémentaire, à plus d'un interligne de la portée : on la garde, mais on le demande.
+  for (const t of seules) if (!texte.has(t) && horsBande(t) > 1.2) t.loin = true;
+
   // Zone d'en-tête de chaque portée (armure, chiffrage) : avant la première note ou barre.
   const debutMusique = portees.map((p) => {
     const xs = [
@@ -538,6 +610,9 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     }
     const silence = typeSilence(g, il, tetes.filter((t) => t.portee === p.index));
     if (silence) { g.nature = silence; continue; }
+    // Un trait seul, droit et vertical, sans tête : une hampe dont la tête
+    // n'a pas été lue (L8). Avant, s'il était un peu courbé, c'était un soupir.
+    if (hampeSeule(g, il)) { g.nature = "hampe-seule"; continue; }
     if (g.l > 1.8 * il && g.h < 1.3 * il) { g.nature = "liaison"; continue; }
     if (pres && Math.max(g.l, g.h) < 1.4 * il && (g.cy < p.lignes[1] || g.cy > p.lignes[3])) { g.nature = "articulation"; continue; }
     g.nature = "inconnu";
@@ -727,19 +802,32 @@ function formeAlteration(g, il) {
   return null;
 }
 
-/** Soupir (noire) : grand trait sinueux ; demi-soupir (croche) : petit « 7 ». */
+/**
+ * Soupir (noire) : grand trait sinueux ; demi-soupir (croche) : petit « 7 ».
+ * Un soupir doit zigzaguer (L8) : une hampe sans tête, un peu courbée, haute
+ * de plus de 2,3 interlignes, passait pour un soupir en silence. Mesuré sur
+ * tes cinq silences du 30/09 : droiture 0,42 à 0,72, au moins trois
+ * allers-retours d'un dixième d'interligne pour les soupirs.
+ */
 function typeSilence(g, il, tetesPortee) {
   if (g.partiel || (g.membres && g.membres.length > 2)) return null;
   const loinDesTetes = !tetesPortee.some((t) => Math.abs(t.cx - g.cx) < 0.8 * il && Math.abs(t.cy - g.cy) < 2 * il);
   if (!loinDesTetes) return null;
   const droit = dist(g.points[0], g.points[g.points.length - 1]) / Math.max(g.longueur, 1);
-  if (droit > 0.95 || g.l > 1.5 * il || g.h < 0.8 * il || g.h > 4.5 * il) return null;
+  if (droit > 0.85 || g.l > 1.5 * il || g.h < 0.8 * il || g.h > 4.5 * il) return null;
   // Réglé sur les pages du 30/09 : le « 7 » du demi-soupir reste sous 2,3
   // interlignes et zigzague peu ; le soupir est plus grand ou zigzague.
   const zig = retournements(g.points, 0.18 * il);
-  if (g.h >= 2.3 * il || zig >= 3) return g.l <= 1.4 * il ? "soupir" : null;
-  if (g.l >= 0.3 * il) return "demi-soupir";
+  if (g.h >= 2.3 * il || zig >= 3) return g.l <= 1.4 * il && retournements(g.points, 0.1 * il) >= 2 ? "soupir" : null;
+  if (g.l >= 0.3 * il && droit <= 0.8) return "demi-soupir";
   return null;
+}
+
+/** Une hampe sans tête : un trait seul, droit, vertical, assez long pour une hampe. */
+function hampeSeule(g, il) {
+  if (g.partiel || (g.membres && g.membres.length > 1)) return false;
+  const droit = dist(g.points[0], g.points[g.points.length - 1]) / Math.max(g.longueur, 1e-6);
+  return droit > 0.85 && g.h >= 1.4 * il && g.l < 0.6 * il;
 }
 
 // ------------------------------------------------------------------------
@@ -778,6 +866,9 @@ export function assembler(lue, cal) {
     const duree = dureeNote(t, null);
     const ev = { type: "note", x: t.cx, tetes: [t], hampe: null, duree: duree ?? 2, points: 0, ligature: null };
     if (duree === null) doutes.push(doute(lue, t.portee, t, "Tête pleine sans hampe : lue comme une noire.", { type: "sans-hampe", _ev: ev }));
+    // Une tête vide sans hampe est une ronde ; loin de la portée, sans ligne
+    // supplémentaire, c'est peut-être du texte (L6) : on le demande.
+    else if (t.loin) doutes.push(doute(lue, t.portee, t, "Tête vide sans hampe, loin de la portée : lue comme une ronde.", { type: "sans-hampe", _ev: ev }));
     parPortee[t.portee].push(ev);
   }
 
@@ -832,6 +923,13 @@ export function assembler(lue, cal) {
     const chiffres = gs.filter((g) => g.nature === "entete");
     return { bemols, dieses, chiffrage: chiffres.length > 0, chiffres };
   });
+
+  // Une hampe sans tête (L8) : la note manque peut-être. Le doute vise la
+  // note d'avant sur la même portée (« Je corrige moi-même » la choisit).
+  for (const g of signes.filter((g) => g.nature === "hampe-seule")) {
+    const avant = parPortee[g.portee].filter((e) => e.type === "note" && e.x < g.cx).sort((a, b) => b.x - a.x)[0];
+    doutes.push(doute(lue, g.portee, g, "Un trait droit sans tête : une note manque peut-être ici.", { type: "tete-manquante", _ev: avant || null }));
+  }
 
   // Armure ou altération de la première note : la lecture choisie, et l'autre
   // en réponse fermée. partition.js y ajoute les tonalités et la ligne visée.

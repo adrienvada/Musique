@@ -141,6 +141,13 @@ test("les autres doutes : une question fermée chacun", () => {
   assert.equal(sans.reponses[1].geste("e c2 d").abc, "e d");
   assert.equal(poser({ type: "signe" }, "").reponses.length, 1);
   assert.equal(poser({ type: "chiffrage" }, "").reponses.length, 1);
+  // Une ronde loin de la portée (L6) et une hampe sans tête (L8).
+  const ronde = poser({ type: "sans-hampe", message: "Tête vide sans hampe, loin de la portée : lue comme une ronde.", vise: { debut: 0, fin: 3 } }, "c'8 d2");
+  assert.equal(ronde.titre, "Est-ce une ronde ?");
+  assert.deepEqual(ronde.reponses.map((x) => x.id), ["ronde", "enlever"]);
+  const manque = poser({ type: "tete-manquante", vise: { debut: 0, fin: 2 } }, "F2 A2");
+  assert.equal(manque.titre, "Il manque une note ?");
+  assert.deepEqual([manque.reponses.map((x) => x.id), manque.manuel, manque.cible.genre], [["ignorer"], true, "note"]);
   assert.equal(poser({ message: "?" }, "").titre, "À vérifier");
 });
 

@@ -600,6 +600,28 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   jamais un silence, c'est un signe à relire. Deux dièses d'armure qui se
   touchent sont séparés par leurs barres verticales : la ligne était lue en
   do majeur au lieu de ré.
+- **Du texte n'est plus de la musique (L6).** Quelques « o » d'un titre ou
+  de paroles devenaient des rondes. Une « tête » sans hampe ni ligne
+  supplémentaire, hors de la portée, est du texte si elle en est à plus de
+  2,5 interlignes, ou si une autre boucle pareille est écrite à côté (les
+  lettres d'un mot). Seule et plus proche, elle reste une note, mais le
+  doute « Est-ce une ronde ? » le demande.
+- **Une note entre deux portées va à la sienne (L7).** La plus proche se
+  trompait : le do6 de la 2ᵉ portée, à deux lignes supplémentaires, était lu
+  sur la 1ʳᵉ (sur tes modèles standard, il n'y a que 3,2 interlignes entre
+  deux portées). Décident les lignes supplémentaires (combien il en faut
+  pour rejoindre chaque portée, et celles qui sont entre la note et sa
+  portée), puis la hampe (elle pointe vers sa portée), puis la ligature.
+  Une note dans sa bande, ou juste au bord, ne change pas : tes deux pages se
+  lisent comme avant (le do4 et le la5 de la mélodie ont leur ligne
+  supplémentaire).
+- **Un soupir doit zigzaguer (L8).** Une hampe dont la tête n'a pas été lue,
+  un peu courbée et haute de plus de 2,3 interlignes, passait pour un soupir
+  en silence (13 têtes sur 54 retirées une à une changeaient la lecture sans
+  rien dire). Réglé sur tes cinq silences : un soupir a au moins trois
+  allers-retours d'un dixième d'interligne et n'est pas droit. Un trait seul,
+  droit et vertical, sans tête, lève le doute « Il manque une note ? », qui
+  vise la note d'avant (« Je corrige moi-même » la choisit).
 
 ### Connecteur (S3 à S5, C1 à C6)
 

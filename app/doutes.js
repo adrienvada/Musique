@@ -174,7 +174,7 @@ export function jetonsDeLaMesure(d, abc) {
 export function cibleVisible(d, abc) {
   const t = typeDe(d);
   if (t === "mesure") return jetonsDeLaMesure(d, abc) ? { ...d.vise, genre: "mesure" } : null;
-  if (["crochet", "sans-hampe"].includes(t) || (t === "armure" && d.variante === "premiere-note")) return noteVisee(d, abc) ? { ...d.vise, genre: "note" } : null;
+  if (["crochet", "sans-hampe", "tete-manquante"].includes(t) || (t === "armure" && d.variante === "premiere-note")) return noteVisee(d, abc) ? { ...d.vise, genre: "note" } : null;
   return null;
 }
 
@@ -325,14 +325,25 @@ export function poser(d, abc) {
 
   if (type === "sans-hampe") {
     const j = noteVisee(d, abc);
+    // Une tête vide sans hampe, loin de la portée (L6) : une ronde, ou une lettre ?
+    const ronde = /ronde/.test(d.message || "") || (j && Math.abs(j.croches - 8) < 1e-9);
     return {
       ...base, manuel: true,
-      titre: "Est-ce une noire ?",
-      detail: "Je vois une tête de note pleine, sans queue : je l'ai lue comme une noire.",
+      titre: ronde ? "Est-ce une ronde ?" : "Est-ce une noire ?",
+      detail: ronde ? "Je vois une tête de note vide, sans queue ni ligne supplémentaire, loin de la portée : je l'ai lue comme une ronde. C'est peut-être une lettre." : "Je vois une tête de note pleine, sans queue : je l'ai lue comme une noire.",
       reponses: !j ? [] : [
-        reponse("noire", "Oui, une noire", "d4", null, "La note reste une noire."),
+        ronde ? reponse("ronde", "Oui, une ronde", "d16", null, "La note reste une ronde.") : reponse("noire", "Oui, une noire", "d4", null, "La note reste une noire."),
         reponse("enlever", "Non, l'enlever", "corbeille", (a) => ed.supprimer(a, noteVisee(d, a)), "La note est enlevée."),
       ],
+    };
+  }
+
+  if (type === "tete-manquante") {
+    return {
+      ...base, manuel: true,
+      titre: "Il manque une note ?",
+      detail: "Je vois un trait droit, comme une queue de note, mais sans tête : une note manque peut-être juste après celle-ci.",
+      reponses: [reponse("ignorer", "Non, l'ignorer", "ok", null, "Le trait est ignoré.")],
     };
   }
 
