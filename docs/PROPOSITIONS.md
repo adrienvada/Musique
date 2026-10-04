@@ -748,7 +748,12 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Outillage, hors ligne et dépendances (S2, I5, T1, T2, T6)
 
-<!-- lot outillage -->
+- **pdf.js passe en 6.4.299 (T6),** la version du 03/10. Toujours sa
+  version `legacy/` : la version moderne appelle
+  `Map.prototype.getOrInsertComputed`, que Safari ne connaît que depuis
+  iOS 26.2 ; sur un iPhone plus ancien, plus aucun PDF ne se lirait. La
+  lecture des pages d'essai n'a pas bougé (`npm test`), et l'import marche
+  dans Chromium avec le nouveau worker.
 
 ### Notation, harmonie et exports (N1 à N7)
 
@@ -1084,8 +1089,10 @@ ou supprimer la fonction dans Supabase.
   anciens. `assembler-appli.mjs` versionne les imports `"./x.js"` du site :
   écrire les imports sous cette forme littérale (il refuse les autres).
 
-- **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, absent des
-  navigateurs de 2026 : il faut prendre la version `legacy/`.
+- **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, disponible
+  partout seulement depuis le 14/02/2026 (Chrome 145, Firefox 144,
+  Safari 26.2) : garder la version `legacy/` tant qu'un iPhone antérieur à
+  iOS 26.2 doit pouvoir lire un PDF.
 - **Le publieur de claude.ai refuse les caractères de contrôle bruts.** Le
   worker de pdf.js en contient 719 dans une table de données.
   `assembler-appli.mjs` les réécrit en `\xNN`, ce qui revient au même.
