@@ -527,7 +527,216 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Connecteur (S3 à S5, C1 à C6)
 
-<!-- lot connecteur -->
+- **Les nouvelles clés de Supabase (C1).** Supabase retire les clés
+  `service_role` d'ici fin 2026, et un projet réveillé peut déjà revenir
+  sans elles : plus de tablette ni de synchro. La fonction lit maintenant
+  `SUPABASE_SECRET_KEYS` (la clé `default`), et l'ancienne clé seulement à
+  défaut (`supabase.js`). Rien à faire de ton côté : Supabase donne les deux
+  à la fonction.
+  - Une clé `sb_secret_…` n'est pas un JWT : elle part dans l'en-tête
+    `apikey`, et seulement là. En `Authorization: Bearer`, la plateforme
+    répond « Invalid JWT ». L'ancienne clé garde ses deux en-têtes.
+  - Le faux stockage des tests refuse une clé secrète en `Bearer`, comme
+    la plateforme : un retour en arrière ne passerait pas les tests.
+- **La porte du connecteur (S4, côté HTTP).** Trois gardes avant le
+  protocole (`http.js`) :
+  - **la clé se compare à temps constant** : `!==` s'arrête au premier
+    caractère faux, et le temps de réponse pouvait dire combien étaient
+    justes. On compare les empreintes SHA-256 jusqu'au bout ;
+  - **l'en-tête `Origin` est vérifié**, comme la spécification MCP l'exige :
+    une page d'ailleurs reçoit 403, même avec la bonne clé (avant, elle
+    faisait agir le connecteur, le navigateur lui cachait seulement la
+    réponse). Passent : sans `Origin` (les serveurs de claude.ai, le
+    script de déploiement), ton site (et `PORTEE_ORIGINES`), et les
+    origines de Claude (`claude.ai`, `claude.com`, `anthropic.com` et leurs
+    sous-domaines) au cas où ses serveurs en mettraient une ;
+  - **le corps est borné à 6 Mo** (413 au-delà), compté en lisant : la
+    longueur annoncée peut manquer ou mentir. Une page dense pèse 60 Ko.
+- **MCP 2026-07-28 et les versions d'avant, sur la même adresse (C2).** La
+  version du 28 juillet 2026 n'a plus d'`initialize` : chaque requête porte
+  sa version dans `params._meta`, redite par l'en-tête
+  `MCP-Protocol-Version`, avec `Mcp-Method` et `Mcp-Name`. claude.ai la
+  déploie ; on sert les deux époques requête par requête (`mcp.js`), sans
+  rien changer à ce qui marche.
+  - Pourquoi les deux plutôt que la nouvelle seule : ton site appelle
+    `tools/call` directement, sans `initialize` ni en-tête, et claude.ai
+    passera d'une version à l'autre quand il voudra. Une requête sans
+    version dans `_meta` est servie comme avant.
+  - Nouveau : `server/discover` (versions, capacités, identité du
+    serveur) ; en 2026-07-28, chaque résultat dit `resultType` et l'identité
+    du serveur, et les listes disent combien de temps les garder (cinq
+    minutes, `private` : l'adresse porte une clé).
+  - Corrigé (écarts relevés par l'audit) : une version inconnue n'est plus
+    renvoyée telle quelle (`initialize` répond 2025-11-25 ; en 2026-07-28,
+    400 et l'erreur -32022 avec la liste) ; un outil inconnu est une erreur
+    de protocole (-32602) ; une notification `tools/call` n'écrit plus rien
+    (202) ; une réponse JSON-RPC du client reçoit 202 ; un en-tête absent
+    ou contraire au corps, 400 (-32020) ; `ping` et une méthode inconnue,
+    404 en 2026-07-28 ; GET et DELETE, 405.
+  - On ne réclame pas `clientCapabilities`, que la spécification veut à
+    chaque requête : le serveur ne dépend d'aucune capacité du client, et un
+    client un peu en retard sur ce point ne doit pas perdre la tablette.
+  - Les échanges de la synchro et les traits d'un document ne sont plus
+    redits en texte : ils voyageaient deux fois (JSON dans le JSON). Un mot
+    les résume ; l'appli lit le résultat structuré, comme avant.
+- **La lecture de la tablette, durcie (C3).** reMarkable renvoie des 429
+  depuis avril 2026, et une seule erreur faisait tout échouer.
+  - **Nouvel essai** sur un 429, un 5xx ou une coupure : quatre essais au
+    plus, en attendant ce que dit `Retry-After`, sinon 0,5 puis 1 puis 2 s
+    environ (la moitié tirée au hasard, pour ne pas revenir tous ensemble),
+    jamais plus de 30 s (claude.ai coupe un appel à 240 s). Pas pour
+    `relier` : le code ne sert qu'une fois.
+  - **Six requêtes à la fois** au lieu de douze : une rafale de douze est
+    la première à se faire refuser (429).
+  - **Un document illisible** ne fait plus tomber l'arborescence : il est
+    dans `illisibles` ({ id, raison }), les autres s'affichent. **Une page
+    illisible** est dans `pagesIllisibles`, les autres pages arrivent.
+  - **L'hôte de synchro se règle** par un secret facultatif,
+    `PORTEE_HOTE_SYNC`, s'il change un jour d'adresse. S'il ne répond plus
+    (réseau, 5xx, 404), on se replie sur `eu.tectonic.remarkable.com`,
+    celui que rmapi-js lit par défaut, et on y reste.
+  - **Le sujet du PDF sans tout le PDF** : on lit ses 32 premiers Ko
+    (reportlab y écrit le sujet de tes modèles, à 3 Ko), puis ses 32
+    derniers s'il le faut (un PDF réenregistré l'y met). Si le cloud ignore
+    `Range`, la lecture s'arrête quand même après la tête ; seul un PDF de
+    plus de 2 Mo dont le sujet est à la fin serait alors manqué. Un même
+    modèle importé plusieurs fois a la même empreinte : il n'est lu qu'une
+    fois par instance. Avant, un livre de 50 Mo ouvert par erreur était
+    téléchargé en entier. Pas pu vérifier sur le vrai cloud qu'il sert
+    `Range` : les deux cas sont testés sur le faux.
+  - **`document` par pages** : un paramètre facultatif `pages` ([1, 2] ou
+    { de, a }) ; la réponse dit `nombrePages` et `pagesEcrites`, et s'arrête
+    avant 140 000 caractères (claude.ai coupe vers 150 000, trois pages
+    denses suffisaient) en listant `pagesRestantes`. **Sans paramètre, rien
+    ne change** : toutes les pages, comme l'appli les attend.
+- **Le jeton de la tablette, chiffré au repos (S5).** Il dormait en clair
+  dans le stockage, et il permet d'écrire dans ton cloud reMarkable (même
+  si Portée ne le fait jamais). Il est maintenant chiffré en AES-GCM
+  (WebCrypto, le même code sous Deno et Node), avec une clé tirée par HKDF
+  d'un secret de la fonction, `PORTEE_COFFRE` (`coffre.js`).
+  - **Rien à faire de ton côté** : le script de déploiement crée ce secret
+    s'il n'existe pas (il lit la liste des noms de secrets, jamais leurs
+    valeurs), ne l'affiche nulle part, et **ne le remplace jamais** : un
+    autre secret rendrait le jeton illisible.
+  - **Migration douce** : le jeton déjà rangé (en clair) se lit, puis se
+    range chiffré à la première lecture. Ta tablette reste reliée.
+  - **Secret perdu ou changé** : le jeton ne se déchiffre plus, la tablette
+    apparaît « à relier », comme après une révocation (un nouveau code de
+    my.remarkable.com, et c'est reparti). Pas d'erreur incompréhensible.
+  - Sans `PORTEE_COFFRE` (une fonction déployée à la main, sans le
+    script), le coffre range le jeton en clair, comme avant.
+  - Pourquoi pas la clé de service comme clé de chiffrement : quelqu'un qui
+    lit le stockage a justement cette clé. `PORTEE_COFFRE` vit ailleurs (les
+    secrets de la fonction), et ne sert qu'à ça.
+- **Le déploiement du connecteur, durci (S3).** Le jeton Supabase
+  (`SUPABASE_ACCESS_TOKEN`) ouvre tous tes projets ; il était dans
+  l'environnement de tout le job, donc lisible par `npm ci` et les tests
+  (une dépendance piégée l'aurait lu). Dans `connecteur.yml` :
+  - les deux secrets ne sont donnés qu'à l'étape « Déployer » ;
+  - `permissions: contents: read` : le jeton GitHub du job ne peut rien
+    écrire ; `checkout` ne le garde pas dans `.git/config`
+    (`persist-credentials: false`) ;
+  - `npm ci --ignore-scripts` : aucun script d'installation ne s'exécute ;
+  - `deno check` avant de déployer (CLAUDE.md le demandait, rien ne le
+    vérifiait) ;
+  - les actions sont épinglées par empreinte, la version en commentaire :
+    une étiquette (`@v4`) peut être déplacée vers un autre code ;
+  - le job tourne dans l'environnement `supabase`, que GitHub crée tout
+    seul. **À faire de ton côté** : y déplacer les deux secrets et n'y
+    autoriser que `main` (Settings → Environments → supabase). Tant qu'ils
+    restent des secrets du dépôt, tout marche comme avant, mais un workflow
+    poussé sur une autre branche peut encore les lire.
+- **Une sentinelle chaque lundi (C4).** Le projet Supabase gratuit s'endort
+  après une semaine sans activité, et tu ne le découvrais qu'à l'import
+  suivant. `sentinelle.yml` appelle le connecteur le lundi à 6 h 47 UTC
+  (et à la main, « Run workflow ») : l'outil `arborescence`, comme le
+  bouton de l'appli. Si le connecteur ne répond pas 200, ou répond par une
+  erreur, la tâche échoue, et GitHub t'écrit. Une tablette déliée donne
+  seulement un avertissement.
+  - Muette : `curl -s` sans message, ni l'adresse (elle porte la clé) ni la
+    réponse (les noms de tes documents) ne s'affichent, et un test le
+    vérifie en faisant tourner le script avec un faux `curl`.
+  - `permissions: {}` ; `PORTEE_CLE` n'est donné qu'à l'étape ; même
+    environnement `supabase` que le déploiement (sans relecteur obligatoire,
+    sinon la tâche du lundi attendrait ton accord).
+  - Pourquoi 6 h 47 : à une heure ronde, la tâche attend derrière toutes
+    celles de GitHub, et saute parfois.
+  - **La règle des 60 jours** : dans un dépôt public, GitHub désactive une
+    tâche planifiée après 60 jours sans commit. Il te prévient ; un commit,
+    ou « Enable workflow » dans l'onglet Actions, la relance.
+  - Supabase compte surtout l'activité de la base : si le projet s'endort
+    quand même, la sentinelle te le dira dès le lundi ; on pourra alors
+    passer à un appel par jour.
+- **Claude dans tes conversations (C5).** Les outils `bibliotheque_*`
+  servent la synchro : ils lisent ou réécrivent des fiches entières.
+  Dans une conversation, Claude ne pouvait que tout lire ou tout écraser.
+  Nouveaux outils (`conversation.js`), aux schémas stricts et aux
+  descriptions écrites pour lui :
+  - `partitions_lister` (titre, type, doutes à lever ; recherche sans
+    accents) et `partition_lire` : une partition sans ses traits (titre,
+    ABC, doutes encore ouverts, tempo, mesure, tonalité ; les notes d'une
+    idée ; les blocs d'un morceau). `partitions_lister` n'était pas dans la
+    liste de l'audit, mais sans lui Claude ne peut pas trouver
+    l'identifiant de « Pluie ».
+  - `idee_ecrire` : une **nouvelle** idée, avec un identifiant neuf (le
+    format de `nouvelId()`), jamais par-dessus une autre
+    (`destructiveHint: false`). Elle a exactement la forme d'une idée de
+    l'appli (vérifié : l'appli l'écrit en partition, et sa vraie synchro
+    la reçoit), plus `source: { claude: true }`. Son `abc` reste vide :
+    l'appli le réécrit d'après les notes. Les entrées sont bornées (hauteur
+    21 à 108, durées positives, 4 000 notes et 256 mesures au plus, deux
+    notes de même hauteur sans chevauchement, chiffrages que l'appli sait
+    jouer) et une erreur dit à Claude quel champ corriger.
+  - `suggestion_ecrire` (accords, suite, variation, ou un mot : titre,
+    étiquettes, réponse à un doute), `suggestions_lister`,
+    `suggestion_retirer` : la proposition est rangée à part,
+    `suggestions/<partition>/<sid>.json`, sans toucher la partition ni la
+    synchro (`suggestions.js`). C'est toi qui l'appliques d'un geste dans
+    Portée (l'écran viendra avec H3).
+  - Le prompt `relire_page` (argument `id`) : lire la page, regarder les
+    doutes, proposer chaque réponse par `suggestion_ecrire`, ne jamais
+    écrire dans la bibliothèque sans que tu l'aies demandé, et te parler en
+    noms de notes, pas en ABC.
+  - Les listes de l'appli (tonalités, mesures, chiffrages) sont recopiées
+    dans le connecteur, qui est déployé seul ; un test vérifie qu'elles ne
+    s'écartent pas.
+  - Pour lire une seule fiche, ces outils passent par
+    `changements(null)` (toute la bibliothèque) : c'est l'API publique de
+    la bibliothèque, et quelques centaines de fiches se lisent en une ou
+    deux secondes.
+- **Une partition jouable dans la conversation (C6).** claude.ai affiche
+  maintenant une petite page fournie par un connecteur (extension MCP Apps,
+  `io.modelcontextprotocol/ui`). L'outil `partition_montrer({ id })` porte
+  `_meta.ui.resourceUri` ; la ressource `ui://portee/partition`
+  (`text/html;profile=mcp-app`, `vue-partition.js`) grave l'ABC avec
+  abcjs 6.7.1 et le joue au piano, les notes jouées allumées.
+  - **Sans dépendance** : le protocole (JSON-RPC par postMessage :
+    `ui/initialize`, les arguments puis le résultat de l'outil, la hauteur
+    annoncée, `ping`, le démontage) est écrit à la main, d'après la
+    spécification du 2026-01-26 et l'exemple officiel `sheet-music-server`.
+    Si l'hôte garde le résultat structuré pour lui, la page le redemande à
+    l'outil, par l'hôte.
+  - **Ce qu'elle charge est déclaré** (`_meta.ui.csp`), sinon l'hôte le
+    bloque : abcjs sur cdnjs, vérifié par son empreinte (SRI : un CDN
+    détourné ne pourrait rien glisser ; un test vérifie qu'elle est celle
+    de `node_modules`), et les sons du synthé d'abcjs (paulrosen.github.io).
+  - Elle suit le clair ou sombre et les jetons de claude.ai, garde les
+    icônes de l'appli, et son bouton fait 44 px.
+  - **Une idée notée par Claude n'a pas encore d'ABC** (l'appli l'écrit à la
+    réception) : `abc.js` en écrit une partition simple d'après ses notes
+    (la mélodie, ses accords, silences et liaisons), pour la montrer tout
+    de suite. Pourquoi pas le code de l'appli : le connecteur est déployé
+    seul, et une copie de `sequence.js` divergerait. abcjs y relit les
+    mêmes notes sur deux cents idées au hasard (et quinze mille à l'essai).
+    Piège trouvé en chemin : abcjs ne compte pas l'altération écrite sur la
+    suite d'une liaison ; la même note, après, redit donc la sienne, comme
+    dans l'appli.
+  - **Essayée dans Chromium** avec un faux hôte qui joue le protocole et
+    applique la CSP que la spécification lui fait construire : gravure,
+    thème, hauteur, écoute (les sons viennent du domaine déclaré), `ping`,
+    démontage, redemande à l'outil, erreur dite en clair, aucune requête
+    ailleurs, aucune erreur de console. Sans Playwright (en CI), l'essai se
+    saute.
 
 ### Données et synchronisation (S6, D1 à D10)
 
@@ -701,7 +910,239 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Notation, harmonie et exports (N1 à N7)
 
-<!-- lot notation -->
+- **N1 · En 6/8, 9/8 et 12/8, chaque temps se voit.** Une note posée sur
+  un temps n'y prend d'abord qu'un nombre entier de temps (noire, blanche ou
+  ronde pointée), puis le reste, lié. Avant, le plus grand signe gagnait :
+  quatre croches en tête d'un 6/8 devenaient une blanche, qui finit au
+  milieu du deuxième temps, et une mesure entière de 12/8 s'écrivait ronde,
+  croche et noire pointée. La ronde pointée (24 pas) rejoint les durées
+  écrites. La partition et le MusicXML passent par la même mise en mesures
+  (`mettreEnMesures`) : MuseScore reçoit la même chose. Les mesures simples
+  (2/4, 3/4, 4/4, 2/2) ne changent pas.
+- **B8 · En 3/8, les trois croches de la mesure se lient**, comme on les
+  écrit à la main. Le temps reste la croche pour le métronome et le
+  découpage : seule la ligature change (`groupeDeLigature`).
+  - Un accord aux durées différentes (do noire, mi blanche, sol blanche
+    pointée, partant ensemble) : abcjs le dessine en couches qui partagent
+    une hampe ; on lit les têtes (pleine, vides, le point), pas trois voix
+    bien séparées. abcjs ne sait pas mieux : une liaison par note dans un
+    accord y suit le rang de la note, pas sa hauteur (le piège déjà noté).
+    Le MIDI et le MusicXML, eux, sont justes : music21 relit trois voix
+    (sol blanche pointée, mi blanche, do noire), mido les trois durées.
+  - Pas demandé, pas fait : une levée en tête d'idée reste une mesure de
+    silences (une idée commence sur une barre). Une page lue, elle, cale
+    sa levée en fin de mesure de silences pour l'idée et le MIDI, et en fait
+    une vraie mesure incomplète dans le MusicXML quand elle arrive en cours
+    de page.
+- **N2 · Les notes s'épellent d'après l'accord, puis d'après la ligne.**
+  Une note hors de la tonalité s'écrivait d'après l'armure seule : ré 7 en
+  fa donnait sol♭ au lieu de fa♯, mi 7 en do un la♭, si♭ en sol un la♯. Dans
+  l'ordre, maintenant (`epeler`) : la gamme, puis la note de l'accord posé à
+  ce moment, telle que l'accord l'écrit, puis la sixte et la sensible du
+  mineur, puis, pour une note étrangère à tout cela, le sens de la ligne :
+  dièse si elle monte (do do♯ ré), bémol si elle descend (ré ré♭ do).
+  L'accompagnement, fait des notes de ses accords, s'écrit donc toujours
+  comme eux ; la partition et le MusicXML aussi (music21 relit fa♯, sol♯,
+  ré♯, mi♭ là où il lisait sol♭, la♭, mi♭, ré♯).
+  - La lecture des noms d'accords passe dans `app/accords.js` : la
+    partition en a besoin, et `harmonie.js` importe déjà `sequence.js` (un
+    import dans l'autre sens aurait fait un cycle). `harmonie.js` redonne
+    `lireAccord` et `QUALITES` : rien ne change pour les écrans.
+  - Hors partition (le nom d'une note sur la grille, `nomNote`), rien ne
+    change : sans accord ni ligne, c'est l'armure qui décide.
+- **N3 · L'accompagnement se joue comme un pianiste.** **Tes idées avec
+  des accords sonneront autrement** (mieux, on l'espère) : comme il est
+  calculé à chaque écoute, rien n'est à refaire, mais rien n'est comme
+  avant. Chaque accord était plaqué en position fondamentale à partir du
+  do3 ; tout bougeait en parallèle et passait parfois au-dessus de la
+  mélodie. Maintenant :
+  - chaque accord prend le renversement le plus proche du précédent, sous
+    la note la plus grave que la mélodie joue pendant qu'il sonne (jamais
+    plus haut que do5), et la basse reste dessous, dans l'octave du do2.
+    L'enchaînement se choisit en entier (`conduire`), pas accord par accord ;
+  - mesuré avec le script de l'audit : C Am F G C passe de 64 à 12
+    demi-tons parcourus par les voix du dessus, sans enchaînement parallèle
+    ni note au-dessus de la mélodie ; C G7 Am Em F C F G de 81 à 25 (trois
+    voix serrées ne peuvent guère faire moins : fa → sol en coûte déjà 6) ;
+    G B♭ E♭ B sous un ré4, de 5 notes au-dessus de la mélodie à aucune ;
+  - l'arpège joue toutes les notes de l'accord, la septième et la neuvième
+    comprises (E7 a son ré, « Septième » s'entend enfin), en montant puis
+    en redescendant ;
+  - avec une neuvième, les voix du dessus laissent la racine à la basse et
+    sonnent en tierces (fa la do mi pour Dm9) au lieu d'une grappe ;
+  - le style « Basse et accords » joue l'accord sans sa racine après la
+    basse, comme avant ; les cartes des styles dessinent le nouveau motif
+    (elles le calculent avec le même code).
+- **N4 · « Harmoniser toute l'idée » respecte les cadences.**
+  **L'harmonisation proposée changera** sur tes idées (seulement si tu la
+  redemandes : les accords déjà posés ne bougent pas). Avant : un accord par
+  mesure, et « garder l'accord d'avant » effaçait la demi-cadence (l'Hymne
+  à la joie restait en ré à la 4ᵉ mesure). Maintenant (`harmoniser`) :
+  - les phrases vont par quatre mesures (une levée à part) ; la fin de
+    chaque phrase prend la dominante quand la mélodie s'y prête
+    (demi-cadence), la dernière mesure finit sur la tonique, la dominante
+    d'abord si la mesure se partage (cadence parfaite : « la ré » à la fin
+    de l'Hymne) ;
+  - deux accords par mesure quand une moitié de mesure passe les trois
+    quarts de son temps hors de l'accord de la mesure : « do mi | ré ré »
+    dans Au clair de la lune devient do puis sol ; une note de passage ne
+    suffit pas (Frère Jacques reste en do). Seules les mesures qui se
+    coupent en deux temps égaux se partagent (4/4, 2/4, 2/2, 6/8, 12/8) ;
+  - une règle (cadence, tonique, résolution) ne choisit qu'un accord presque
+    aussi bon que le meilleur (`MARGE`) : elle départage, elle n'impose pas
+    un accord qui jure ;
+  - les dominantes secondaires entrent dans `suggerer` quand la mélodie joue
+    leur note étrangère (fa♯ en do appelle D7, sol♯ E7, si♭ C7, do♯ A7 en la
+    mineur), et `harmoniser` les résout sur leur accord : une ligne
+    chromatique en do donne C D7 G E7 Am G7 C. La roue, elle, ne montre
+    toujours que ses sept accords : une dominante secondaire n'y apparaît
+    pas (à voir avec l'écran des accords, si tu veux la proposer là aussi).
+- **N5 · Le MIDI, pensé pour Live.** Relu avec mido, @tonejs/midi et
+  music21, comme pendant l'audit :
+  - **la basse et les accords sur deux pistes** : l'accompagnement devient
+    deux voix, « Accords » et « Basse des accords » (pas « Basse » : ta
+    propre piste de basse ne s'y mélange pas, dans un morceau non plus).
+    Dans Live, la basse part vers une vraie basse. La partition et le
+    MusicXML les gardent sur une seule portée en clé de fa, comme avant
+    (les voix partagent une `portee`) ;
+  - **des noms lisibles partout : en ASCII** (« Melodie »). Un fichier
+    MIDI ne dit pas l'encodage de ses textes, chaque logiciel devine :
+    mido et @tonejs/midi lisaient « MÃ©lodie » (Latin-1), music21 l'UTF-8,
+    et Live, impossible à essayer ici, dépend de son système. L'ASCII est
+    le seul texte lu pareil par tous ; perdre l'accent vaut mieux qu'un nom
+    illisible. Les signes se traduisent (♯ → #), les emoji partent ;
+  - **chaque piste finit à la barre** de la dernière mesure, piste de tempo
+    comprise : un clip tombe juste et boucle sans trou ;
+  - **une même note n'est jamais rejouée pendant qu'elle sonne** : la
+    première s'arrête où la suivante commence (deux do posés qui se
+    chevauchent sur la grille) ;
+  - **un morceau garde le chiffrage et l'armure de chaque bloc**, au début
+    du bloc (un refrain en 3/4 et en sol dans un morceau en 4/4 et en do) ;
+  - **les pages lues passent par le même écrivain**, plus par abcjs
+    (`getMidiFile`), qui écrivait des pistes sans nom, une piste vide de
+    plus pour une page de piano, et perdait les changements de la page
+    (Live restait en 4/4 et en do sur ta page de mélodie, qui passe en
+    12/8 et en mi♭). `lirePage` (`sequence.js`) fait jouer la page par
+    abcjs, au temps exact (un triolet reste un triolet : 160 tics la
+    croche) ; `midiDeLaPage` (`midi.js`) écrit « Main droite » et « Main
+    gauche » (ou « Melodie »), chaque changement de tonalité où il arrive,
+    chaque changement de mesure à la barre qui suit, précédé d'une mesure
+    de la longueur de la levée (1/8 sur ta page) : la grille de Live tombe
+    sur les barres de la page. Les notes y ont leur durée écrite (abcjs les
+    raccourcissait un peu pour le son). Pourquoi pas une idée au passage :
+    une idée vit au pas de double croche, le triolet y serait arrondi ;
+  - « Continuer en idée » profite de `lirePage` : une idée n'a qu'une
+    mesure et une tonalité, celles de la plus longue section de la page
+    (ta page de mélodie devient une idée en 12/8 et en mi♭, plus en 4/4 et
+    en do), et ses barres tombent sur celles de l'idée ; une levée en tête
+    de page tombe à la fin d'une mesure de silences, comme dans une idée.
+    Une tonalité que le menu n'a pas prend son nom enharmonique (sol♭ →
+    fa♯) au lieu de do ;
+  - le zip (claude.ai) est daté du jour, plus du « 0 janvier 1980 » ;
+  - l'en-tête de `midi.js` dit vrai : « Basse » n'existe que si tu as
+    ajouté une piste de basse.
+- **N6 · Le MusicXML dit tout ce que la partition dit.** Validé contre le
+  schéma officiel 4.0 (xmllint) et relu par music21 :
+  - **les accords que MusicXML n'a pas** s'écrivent avec leurs degrés :
+    G7sus4 en « suspended-fourth » plus une septième mineure, Cadd9 et
+    Dmadd9 en majeur et mineur plus une neuvième. music21 lisait « Gsus »
+    et un do majeur ; il lit « Gsus add b7 » (sol do ré fa), « C add 9 » ;
+  - **le tempo dans l'unité du temps** : en 6/8, 9/8 et 12/8, la noire
+    pointée (90 à la noire devient 60 à la noire pointée), arrondie à
+    l'unité pour l'affichage ; `<sound>` garde le tempo exact, à la noire,
+    comme le veut MusicXML ;
+  - **un morceau s'exporte** (« ••• » du morceau, « MusicXML ») : ses blocs
+    bout à bout, comme pour le MIDI, chacun avec sa mesure, sa tonalité et
+    ses accords à sa première mesure (`musicXmlDuMorceau`). La mise en
+    mesures sait maintenant qu'une partition a des sections ;
+  - **une page lue** (`musicXmlDeLaPage`) garde ses changements de
+    tonalité et de mesure, et sa levée devient une mesure incomplète
+    (« implicit ») sous le nouveau chiffrage, comme on l'écrit à la main :
+    ta page de mélodie fait deux mesures de 4/4 (la gamme, en mesure
+    libre), une croche de levée, puis huit mesures de 12/8 en mi♭. Un
+    changement de tonalité seul prend effet à la barre qui suit ;
+  - **pas fait : le triolet d'une page.** La mise en mesures est celle des
+    idées, qui vivent au pas de double croche : un triolet s'y arrondit.
+    Le garder demanderait des n-olets dans cette mise en mesures commune
+    (des durées en tiers de pas, `<time-modification>`), pour des pages que
+    le lecteur ne sait pas encore lire (L12). En attendant, l'arrondi se
+    fait aux bornes des notes, pour qu'elles se touchent : double, croche,
+    double, au lieu de do, ré, silence, mi. Le MIDI de la page, lui, garde
+    le triolet exact.
+- **N7 · La transposition d'une page la suit partout.** Le MIDI la prenait,
+  le MusicXML et « Continuer en idée » l'oubliaient. Les deux la prennent
+  maintenant (`transposerIdee` après `sequenceDepuisAbc`, et la
+  transposition passée à `musicXmlDeLaPage`, armures comprises). Le MIDI
+  de la page transposée change aussi d'armure : abcjs, avant, montait les
+  notes et laissait l'armure (une page en do jouée en ré arrivait en do
+  dans Live).
+- **N8 (nouveau) · Un fichier MIDI devient une idée : l'aller-retour avec
+  Live.** Venu de l'audit de l'interface : une phrase retravaillée dans
+  Ableton revenait dans Portée… par le clavier. Maintenant, un `.mid`
+  déposé sur l'accueil ou choisi par « Importer un PDF » (qui accepte aussi
+  les fichiers MIDI) devient une nouvelle idée, titrée par le nom du
+  fichier, et s'ouvre.
+  - Le lecteur est à nous (`lireFichierMidi`, `midi.js`), comme l'écrivain :
+    un fichier MIDI standard est simple à lire, et une bibliothèque aurait
+    été une dépendance de plus pour le site et pour claude.ai. Il lit les
+    formats 0 et 1, le « running status », le note-on de vélocité 0 qui vaut
+    note-off, les noms de pistes en UTF-8 ou en Latin-1, et saute le reste
+    (sysex, contrôleurs, blocs inconnus). Vérifié contre mido sur 49
+    fichiers (les nôtres, ceux d'abcjs, un fichier fabriqué à la main) :
+    mêmes notes, vélocités, canaux, tempo, mesure et armure.
+  - L'idée (`ideeDepuisMidi`) : une piste par piste du fichier qui joue, et
+    par canal quand une piste en mêle plusieurs (format 0) ; au plus quatre
+    pistes (une idée n'est pas un arrangement), sans la batterie (canal
+    10) : le message dit ce qui est laissé de côté. Les notes sont recalées
+    au pas de double croche par le même arrondi que le jeu en direct
+    (`quantifier`, avec ton jeu lié) : un fichier sorti de Live, déjà sur la
+    grille, ne bouge pas. Le tempo, la mesure et la tonalité sont ceux du
+    fichier (les premiers : une idée n'en a qu'un) ; sans eux, 120, 4/4 et
+    do, comme le veut la norme. « Melodie », que Portée écrit en ASCII,
+    redevient « Mélodie ».
+  - Hors de mes fichiers, deux retouches d'une ligne : l'`accept` du bouton
+    d'import (`index.html`) et le filtre du dépôt (`accueil.js`), qui ne
+    laissait passer que les PDF. Le libellé du bouton dit encore « Importer
+    un PDF » : à ajuster avec l'interface.
+- **B9 · L'arrondi traite la dernière note comme les autres.** Ta règle du
+  jeu lié ne change pas (une note relâchée au plus un pas de grille avant la
+  suivante tient jusqu'à elle). Mais la dernière note d'une prise n'a pas de
+  suivante : des noires un peu détachées restaient des noires, sauf la
+  dernière, qui devenait une croche. Elle tient maintenant jusqu'à la fin du
+  temps où elle commence, avec la même tolérance ; une syncope finale (qui
+  dépasse déjà son temps) ne bouge pas, et au-delà d'un pas de grille c'est
+  toujours un silence.
+  - Deux attaques de la même note dans le même pas de grille n'en font plus
+    qu'une, la plus longue, dès l'arrondi. Avant, `poser` en effaçait une
+    ensuite, mais le message disait « 3 notes gardées » pour deux écrites.
+  - À intégrer (lot son) : `arrondir` (`idee-direct.js`) peut passer
+    `temps: sq.pasParTemps(e.seq)` à `quantifier`. Sans, le temps vaut la
+    noire : juste en 2/4, 3/4 et 4/4 ; en 6/8, la dernière note se règle
+    sur la noire au lieu de la noire pointée.
+  - Pas touché, comme tu l'as décidé : à la grille noire, des croches swing
+    ou un triolet se fondent encore en accords. C'est le prix d'une grille
+    grossière ; la croche ou la double croche les gardent.
+- **Vérifié dans l'appli assemblée** (Chromium, version autonome) : les
+  pages d'essai importées, la page de mélodie transposée de +2 exportée en
+  MIDI (ré puis fa, 1/8 puis 12/8) et en MusicXML (valide), « Continuer en
+  idée » en 12/8 et fa majeur, un `.mid` importé en idée, harmonisé (cinq
+  accords) et gravé (l'accompagnement sur une portée, plaqué et arpégé),
+  un morceau exporté en MusicXML et en MIDI ; aucune erreur dans la page.
+  Pas essayé ici : Ableton Live lui-même, MuseScore (music21 et le schéma
+  officiel en tiennent lieu).
+- **Pièges rencontrés en chemin :**
+  - `i += vlq()` quand `vlq` avance `i` : JavaScript lit l'ancien `i`
+    avant l'appel, l'octet lu se perd. Calculer d'abord, ajouter ensuite ;
+  - abcjs prend « M:none » pour du 4/4 (`getMeterFraction`) : la mesure
+    libre se lit dans l'en-tête de l'ABC ;
+  - abcjs range un `[K:][M:]` écrit en début de ligne à la fin de la ligne
+    d'avant ; `lirePage` suit donc les éléments dans l'ordre, lignes
+    comprises, et regarde si une barre précède le changement ;
+  - mido refuse un bloc inconnu dans un fichier MIDI (la norme dit de le
+    sauter, notre lecteur le saute) : pour comparer avec mido, un fichier
+    sans bloc inconnu ;
+  - `sequence.js` ne peut pas importer `harmonie.js` (qui l'importe) : ce
+    qu'ils partagent sur les noms d'accords est dans `accords.js`.
 
 ### Architecture (T3 à T5)
 
@@ -715,7 +1156,7 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 <!-- lot écrans des données -->
 
-### Interface (I1 à I4)
+### Interface (I1 à I4, I6 à I15)
 
 <!-- lot interface -->
 
@@ -989,11 +1430,18 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 
 1. **Déployer le connecteur** dans le projet Supabase du site. GitHub Actions
    s'en charge (`.github/workflows/connecteur.yml`) à chaque changement du
-   connecteur fusionné sur `main`. Il faut deux secrets du dépôt :
+   connecteur fusionné sur `main`. Il faut deux secrets, rangés dans
+   l'environnement `supabase` du dépôt (Settings → Environments → supabase,
+   avec `main` seule autorisée ; des secrets du dépôt marchent aussi, mais
+   tout workflow de n'importe quelle branche peut les lire) :
    - `SUPABASE_ACCESS_TOKEN` : un jeton d'accès Supabase
      (supabase.com/dashboard/account/tokens) ;
    - `PORTEE_CLE` : la clé de l'adresse, au moins 24 caractères aléatoires.
      Elle n'apparaît jamais dans les journaux, publics.
+
+   Le script pose aussi, la première fois, le secret `PORTEE_COFFRE` de la
+   fonction (la clé qui chiffre le jeton de la tablette dans le stockage) :
+   rien à faire, et ne le supprime pas, sinon la tablette sera à relier.
 
    L'adresse du connecteur est
    `https://omekkqjinvppadsoinvj.supabase.co/functions/v1/portee-remarkable/<PORTEE_CLE>`.
@@ -1011,6 +1459,12 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
 Changer la clé : mettre la nouvelle valeur dans le secret `PORTEE_CLE`, relancer
 le workflow « Connecteur reMarkable » (Actions → Run workflow), puis mettre la
 nouvelle adresse dans claude.ai et sur le site.
+
+La sentinelle (« Sentinelle du connecteur », chaque lundi) appelle le
+connecteur avec ce même secret : si elle échoue, GitHub t'écrit. Si
+reMarkable change un jour l'adresse de sa synchro, pose le secret
+facultatif `PORTEE_HOTE_SYNC` (Supabase → Edge Functions → Secrets) avec la
+nouvelle adresse en `https://…`.
 
 Pour couper l'accès : retirer l'appareil « desktop-linux » sur my.remarkable.com,
 ou supprimer la fonction dans Supabase.

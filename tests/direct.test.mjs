@@ -152,6 +152,11 @@ test("arrondir : la même prise, trois grilles", () => {
   assert.deepEqual(arrondir(fine, 4, 16).map((n) => [n.d, n.l]), [[16, 4], [20, 4]]);
   // Ce qui a été joué avant le premier temps (pendant le décompte) ne s'écrit pas.
   assert.deepEqual(arrondir([{ h: 60, debut: 10, fin: 11 }], 2, 16), []);
+  // Des noires un peu détachées restent des noires, la dernière de la prise comprise.
+  const detachees = [16, 20, 24, 28].map((d, i) => ({ h: 60 + i, debut: d + 0.2, fin: d + 2.6 }));
+  assert.deepEqual(arrondir(detachees, 2, 16).map((n) => [n.d, n.l]), [[16, 4], [20, 4], [24, 4], [28, 4]]);
+  // Deux attaques de la même note dans le même pas de grille n'en font qu'une : « 2 notes gardées », pas 3.
+  assert.equal(arrondir([{ h: 60, debut: 16, fin: 16.6 }, { h: 60, debut: 16.8, fin: 17.6 }, { h: 60, debut: 18, fin: 19 }], 2, 16).length, 2);
 });
 
 test("les icônes du jeu en direct et de la capture existent", () => {
@@ -227,6 +232,17 @@ test("la levée jouée pendant le décompte : on dit combien de notes ne sont pa
   // Une note commencée pendant le décompte mais tenue au-delà du premier temps est gardée (raccourcie).
   assert.equal(nonGardees([{ h: 60, debut: 15, fin: 19 }], 2, 16), 0);
   assert.equal(nonGardees([{ h: 60, debut: 16.2, fin: 19 }], 2, 16), 0);
+  // Deux attaques d'une même note, dans le même pas, n'en font qu'une (sequence.js) : aucune n'est perdue.
+  const doublee = [{ h: 60, debut: 15.4, fin: 18 }, { h: 60, debut: 15.8, fin: 19 }];
+  assert.equal(arrondir(doublee, 2, 16).length, 1);
+  assert.equal(nonGardees(doublee, 2, 16), 0);
+});
+
+test("arrondir en 6/8 : la dernière note tient jusqu'à la fin de son temps, la noire pointée", () => {
+  // Une noire pointée jouée un peu détachée (5 pas sur 6), seule note de la prise.
+  const derniere = [{ h: 67, debut: 0.1, fin: 4.6 }];
+  assert.deepEqual(arrondir(derniere, 2, 0, 6).map((n) => [n.d, n.l]), [[0, 6]]);
+  assert.deepEqual(arrondir(derniere, 2, 0, 4).map((n) => [n.d, n.l]), [[0, 4]], "à la noire, elle se réglait sur la noire");
 });
 
 test("la capture : la dernière phrase, calée sur le tempo à partir de la première note, ou dans la boucle qui tourne", () => {

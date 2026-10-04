@@ -21,11 +21,12 @@ import { creerEditeurIdee, midiDeLIdee } from "./idee.js";
 import { Transport } from "./transport.js";
 import { notesDePage, surlignage } from "./ecoute-page.js";
 import { installerEveil } from "./eveil.js";
-import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
-import { voixCompletes } from "./harmonie.js";
+import { sequenceDepuisAbc, pasParMesure, pasParTemps, ecrireAbc } from "./sequence.js";
+import { voixCompletes, transposerIdee } from "./harmonie.js";
 import { creerVueMorceau } from "./vue-morceau.js";
-import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
-import { ecrireMusicXml } from "./musicxml.js";
+import { midiDuMorceau, musicXmlDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
+import { ecrireMusicXml, musicXmlDeLaPage } from "./musicxml.js";
+import { midiDeLaPage, ideeDepuisMidi } from "./midi.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerHistorique } from "./historique.js";
@@ -530,6 +531,7 @@ async function importer(fichiers) {
   for (const f of fichiers) {
     try {
       toast(`Lecture de « ${f.name} »…`, 60000);
+      if (/\.midi?$/i.test(f.name) || /midi/i.test(f.type)) { dernier = (await importerMidi(f)) || dernier; continue; }
       const pdfjs = await chargerPdfjs();
       const doc = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise;
       const lu = await lireDocument(pdfjs, doc);
@@ -547,6 +549,29 @@ async function importer(fichiers) {
     }
   }
   if (dernier && fichiers.length === 1) ouvrir(dernier, "atelier");
+}
+
+/**
+ * Un fichier MIDI devient une idée : l'aller-retour avec Ableton (une phrase
+ * retravaillée dans Live revient dans Portée). Les notes sont recalées au
+ * pas (midi.js, ideeDepuisMidi) ; l'idée s'enregistre comme une autre, et
+ * s'ouvre si c'est le seul fichier importé.
+ */
+async function importerMidi(f) {
+  const titre = f.name.replace(/\.midi?$/i, "").replace(/[_]+/g, " ").trim() || "Idée MIDI";
+  const { sequence, ecartees } = ideeDepuisMidi(new Uint8Array(await f.arrayBuffer()));
+  const nb = sequence.pistes.reduce((n, p) => n + p.notes.length, 0);
+  if (!nb) { toast(`« ${f.name} » ne contient aucune note à garder.`, 6000); return null; }
+  const id = nouvelId();
+  const maintenant = new Date().toISOString();
+  await etat.stockage.creer(id, {
+    type: "idee", titre, sequence, abc: ecrireAbc(sequence, { voix: voixCompletes(sequence), titre }).abc,
+    statut: "idee", nbPages: 0, modele: null, tempo: sequence.tempo, note: "", etiquettes: [], favori: false, memo: null,
+    creeLe: maintenant, modifieLe: maintenant,
+  }, []);
+  const laisse = [ecartees.pistes ? `${ecartees.pistes} piste${ecartees.pistes > 1 ? "s" : ""} de plus` : "", ecartees.batterie ? "la batterie" : ""].filter(Boolean).join(" et ");
+  toast(`« ${titre} » : ${nb} note${nb > 1 ? "s" : ""}, une idée de plus.${laisse ? ` Laissées de côté : ${laisse} (une idée garde quatre pistes, sans percussions).` : ""}`, laisse ? 8000 : 4000);
+  return id;
 }
 
 /**
@@ -1475,19 +1500,20 @@ function graverLecteur() {
 
 const nomDeFichier = (p) => (p.titre || "").replace(/[\\/:*?"<>|]+/g, " ").trim() || "partition";
 
-/** Le MIDI d'une partition : une piste par voix (par main au piano), tempo et transposition compris. */
-function midiDe(abc, { tempo, transposition = 0 } = {}) {
-  const options = { midiOutputType: "binary", midiTranspose: transposition };
-  if (tempo) options.qpm = tempo; // sinon, le tempo écrit dans l'ABC (Q:)
-  const [binaire] = ABCJS().synth.getMidiFile(abc, options);
-  return binaire instanceof Uint8Array ? binaire : new Uint8Array(binaire);
+/**
+ * Le MIDI d'une page lue : une piste par main, tempo, transposition et
+ * changements de la page compris. Par le même écrivain que les idées
+ * (midi.js) : abcjs écrivait des pistes sans nom et perdait les changements.
+ */
+function midiDe(abc, { tempo, transposition = 0, titre = "" } = {}) {
+  return midiDeLaPage(abc, ABCJS(), { tempo, transposition, titre });
 }
 
 /** Le MIDI de n'importe quelle partition : une idée part de ses notes, une page lue, de son ABC. */
 function midiDePartition(p, reglages = {}) {
   if (p.type === "idee") return midiDeLIdee(p);
   if (p.type === "morceau") return midiDuMorceau(p, ideesParId());
-  return midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0 });
+  return midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0, titre: p.titre });
 }
 
 /** Télécharge le .mid (dans un .zip sur claude.ai, dont la liste des formats ignore .mid). */
@@ -1577,20 +1603,22 @@ function resumeIdee(seq) {
 }
 
 /**
- * Le MusicXML (MuseScore) : une idée part de ses notes, une page lue de son
- * ABC joué en notes. Sur claude.ai, dans un .zip (liste fermée des formats).
+ * Le MusicXML (MuseScore) : une idée part de ses notes, un morceau de ses
+ * blocs assemblés (comme pour le MIDI), une page lue de son ABC joué en
+ * notes, avec la transposition choisie à l'écoute (le MIDI la prenait, le
+ * MusicXML l'oubliait). Sur claude.ai, dans un .zip (liste fermée des formats).
  */
 async function exporterMusicXml(p) {
   try {
-    let seq, voix;
-    if (p.type === "idee") { seq = p.sequence; voix = voixCompletes(seq); }
+    let texte;
+    if (p.type === "idee") texte = ecrireMusicXml(p.sequence, { voix: voixCompletes(p.sequence), titre: p.titre });
+    else if (p.type === "morceau") texte = musicXmlDuMorceau(p, ideesParId());
     else {
       if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
-      seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
-      voix = seq.pistes;
+      texte = musicXmlDeLaPage(p.abc, ABCJS(), { tempo: p.tempo, transposition: p.transposition || 0, titre: p.titre });
     }
     const nom = `${nomDeFichier(p)}.musicxml`;
-    const octets = new TextEncoder().encode(ecrireMusicXml(seq, { voix, titre: p.titre }));
+    const octets = new TextEncoder().encode(texte);
     if (etat.stockage.midiDirect) await etat.stockage.enregistrerFichier(nom, new Blob([octets], { type: "application/vnd.recordare.musicxml+xml" }));
     else await etat.stockage.enregistrerFichier(`${nomDeFichier(p)} (MusicXML).zip`, zipper([{ nom, donnees: octets }]));
   } catch (e) {
@@ -1758,6 +1786,8 @@ function brancher() {
     if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
     try {
       const seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
+      // Ce qu'on entend (et ce que le MIDI exporte) : la page transposée.
+      transposerIdee(seq, p.transposition || 0);
       ouvrirIdee(null, { seq, titre: `${p.titre} (idée)` });
       toast("Une copie en idée : la page d'origine ne change pas.");
     } catch (e) {
@@ -1915,6 +1945,7 @@ function creerVueDuMorceau() {
     stockage: () => etat.stockage,
     partitions: () => etat.partitions,
     partager: partagerMidi,
+    exporterMusicXml,
     ouvrirIdee: (id) => ouvrir(id),
     quitter: () => montrer("biblio"),
     veutSupprimer,

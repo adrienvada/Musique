@@ -246,10 +246,11 @@ export function htmlLignes({ de, a, mesure, temps, grille = 0, numeros = false }
  * Les notes jouées, arrondies : instants bruts (en pas depuis le début de la
  * partition, comme transport.position()) → notes posées sur la grille.
  * C'est sq.quantifier, qui connaît le « jeu lié » (une note relâchée un pas
- * de grille avant la suivante tient jusqu'à elle).
+ * de grille avant la suivante tient jusqu'à elle ; la dernière, jusqu'à la
+ * fin de son temps : `temps`, celui de la mesure, la noire pointée en 6/8).
  */
-export function arrondir(brutes, grille, depuis) {
-  return sq.quantifier(brutes.map((n) => ({ ...n, debut: n.debut - depuis, fin: n.fin - depuis })), { grille, origine: depuis });
+export function arrondir(brutes, grille, depuis, temps = 4) {
+  return sq.quantifier(brutes.map((n) => ({ ...n, debut: n.debut - depuis, fin: n.fin - depuis })), { grille, origine: depuis, temps });
 }
 
 /**
@@ -259,8 +260,14 @@ export function arrondir(brutes, grille, depuis) {
  * on le dit, au lieu de la faire disparaître sans un mot.
  */
 export function nonGardees(brutes, grille, depuis) {
-  const avant = brutes.filter((n) => n.debut < depuis);
-  return avant.length - arrondir(avant, grille, depuis).length;
+  // La règle de sq.quantifier : une note attaquée avant le premier temps (arrondie) et finie avant lui
+  // ne s'écrit pas. Compter ce qu'il rend ne suffirait pas : deux attaques d'une même note, dans le même
+  // pas, n'en font qu'une, sans être perdues.
+  return brutes.filter((n) => {
+    const d = Math.round((n.debut - depuis) / grille) * grille;
+    const f = Math.round((n.fin - depuis) / grille) * grille;
+    return d < 0 && f <= 0;
+  }).length;
 }
 
 // --- La prise : ce qu'on joue, touche par touche (sans page) -----------------------
@@ -508,7 +515,7 @@ export function creerDirect(ctx) {
     fermerPrise(r.prise, transport.position());
     r.notes = r.prise.notes;
     r.perdues = nonGardees(r.notes, r.grille, r.depuis);
-    const jouees = arrondir(r.notes, r.grille, r.depuis);
+    const jouees = arrondir(r.notes, r.grille, r.depuis, sq.pasParTemps(e.seq));
     if (!jouees.length) {
       finir();
       // M11 : tout a été joué pendant le décompte ; on le dit, plutôt que « rien n'a été joué ».
@@ -541,7 +548,7 @@ export function creerDirect(ctx) {
     e.enregistrement = null; // avant de fermer la feuille : sa fermeture ne refait rien
     fermerFeuille(feuille);
     majBouton();
-    const notes = arrondir(r.notes, r.grille, r.depuis);
+    const notes = arrondir(r.notes, r.grille, r.depuis, sq.pasParTemps(e.seq));
     if (!notes.length) { ctx.rafraichir(); return; }
     ctx.modifier(() => {
       if (r.ecrites && r.ecrites.length) {
@@ -579,7 +586,7 @@ export function creerDirect(ctx) {
     if (!r || r.phase !== "arrondi") return;
     const mesure = sq.pasParMesure(e.seq), temps = sq.pasParTemps(e.seq);
     const brutes = r.notes.map((n) => ({ d: n.debut, f: n.fin, h: n.h }));
-    const arrondies = arrondir(r.notes, r.grille, r.depuis).map((n) => ({ d: n.d, f: n.d + n.l, h: n.h }));
+    const arrondies = arrondir(r.notes, r.grille, r.depuis, sq.pasParTemps(e.seq)).map((n) => ({ d: n.d, f: n.d + n.l, h: n.h }));
     $("idee-arrondi-titre").textContent = `${pluriel(r.total, "note")} ${r.capture ? "capturée" : "jouée"}${r.total > 1 ? "s" : ""}`;
     $("idee-arrondi-aide").textContent = r.capture
       ? (r.ecrites && r.ecrites.length ? "Garder remplace les notes écrites pendant que tu jouais par celles-ci, avec leur rythme." : "Garder les écrit dans l'idée, avec leur rythme.") + " Choisis comment l'arrondir."
@@ -764,7 +771,7 @@ export function creerDirect(ctx) {
     oublierCapture();
     transport.arreter();
     const r = { phase: "arrondi", capture: true, depuis, decompte: 0, prise: nouvellePrise(), notes, grille: e.recalage, total: 0, perdues: 0, ecrites };
-    r.total = arrondir(notes, r.grille, depuis).length;
+    r.total = arrondir(notes, r.grille, depuis, sq.pasParTemps(e.seq)).length;
     if (!r.total) return;
     e.enregistrement = r;
     majBouton();

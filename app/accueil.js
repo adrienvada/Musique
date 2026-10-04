@@ -460,8 +460,9 @@ export function creerAccueil(deps) {
       // Sans preventDefault, le navigateur quitterait Portée pour afficher le PDF.
       e.preventDefault();
       depot.classList.remove("survol");
-      const pdf = [...e.dataTransfer.files].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
-      if (pdf.length) deps.importer(pdf); else toast("Dépose un fichier PDF exporté de la tablette.");
+      // Un PDF de la tablette devient une page à relire, un MIDI (de Live, par exemple) une idée.
+      const pdf = [...e.dataTransfer.files].filter((f) => /\.(pdf|midi?)$/i.test(f.name) || f.type === "application/pdf" || /midi/i.test(f.type));
+      if (pdf.length) deps.importer(pdf); else toast("Dépose un PDF exporté de la tablette, ou un fichier MIDI.");
     });
     // Un <label> ne prend pas le focus de lui-même : sans cela, le clavier ne l'atteint pas.
     for (const l of document.querySelectorAll("#vue-biblio label[for][tabindex]")) {

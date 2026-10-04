@@ -2,16 +2,19 @@
  * LE STOCKAGE SUPABASE, EN OBJETS JSON
  *
  * Un petit client du stockage Supabase (compartiment privé, clé de service
- * donnée d'office à la fonction) : lire, écrire, supprimer un objet JSON,
- * lister un dossier avec la date de dernière écriture de chaque objet.
- * La bibliothèque synchronisée s'en sert (bibliotheque.js). Aucun schéma à
- * créer dans la base du site : juste des fichiers dans un compartiment privé.
+ * donnée d'office à la fonction, supabase.js) : lire, écrire, supprimer un
+ * objet JSON, lister un dossier avec la date de dernière écriture de chaque
+ * objet. La bibliothèque synchronisée s'en sert (bibliotheque.js). Aucun
+ * schéma à créer dans la base du site : juste des fichiers dans un
+ * compartiment privé.
  */
+import { entetesSupabase, MANQUE_CLE } from "./supabase.js";
+
 const COMPARTIMENT = "portee-remarkable";
 
 export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
-  if (!url || !cle) throw new Error("Il manque SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY à la fonction.");
-  const entetes = { apikey: cle, authorization: `Bearer ${cle}` };
+  if (!url || !cle) throw new Error(MANQUE_CLE);
+  const entetes = entetesSupabase(cle);
   const adresse = (chemin) => `${url}/storage/v1/object/${compartiment}/${chemin}`;
   let compartimentPret = false;
 
@@ -24,6 +27,26 @@ export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
     });
     await r.body?.cancel(); // 200, ou 400/409 s'il existe déjà
     compartimentPret = true;
+  }
+
+  /** Tout ce que le stockage range sous `dossier`, objets et sous-dossiers, page par page. */
+  async function listerTout(dossier) {
+    const sortie = [];
+    for (let decalage = 0; ; decalage += 1000) {
+      const r = await fetch(`${url}/storage/v1/object/list/${compartiment}`, {
+        method: "POST",
+        headers: { ...entetes, "content-type": "application/json" },
+        body: JSON.stringify({ prefix: dossier, limit: 1000, offset: decalage, sortBy: { column: "name", order: "asc" } }),
+      });
+      if (!r.ok) {
+        await r.body?.cancel();
+        if (r.status === 400 || r.status === 404) return sortie; // pas encore de compartiment
+        throw new Error(`Le stockage Supabase refuse de lister ${dossier} (HTTP ${r.status}).`);
+      }
+      const page = await r.json();
+      sortie.push(...page);
+      if (page.length < 1000) return sortie;
+    }
   }
 
   return {
@@ -52,23 +75,12 @@ export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
     },
     /** Les objets d'un dossier : [{ nom, maj }] (maj : date ISO de la dernière écriture). */
     async lister(dossier) {
-      const sortie = [];
-      for (let decalage = 0; ; decalage += 1000) {
-        const r = await fetch(`${url}/storage/v1/object/list/${compartiment}`, {
-          method: "POST",
-          headers: { ...entetes, "content-type": "application/json" },
-          body: JSON.stringify({ prefix: dossier, limit: 1000, offset: decalage, sortBy: { column: "name", order: "asc" } }),
-        });
-        if (!r.ok) {
-          await r.body?.cancel();
-          if (r.status === 400 || r.status === 404) return sortie; // pas encore de compartiment
-          throw new Error(`Le stockage Supabase refuse de lister ${dossier} (HTTP ${r.status}).`);
-        }
-        const page = await r.json();
-        // Les sous-dossiers reviennent avec un id nul : on ne garde que les objets.
-        for (const o of page) if (o.id) sortie.push({ nom: o.name, maj: o.updated_at || o.created_at });
-        if (page.length < 1000) return sortie;
-      }
+      // Les sous-dossiers reviennent avec un id nul : on ne garde que les objets.
+      return (await listerTout(dossier)).filter((o) => o.id).map((o) => ({ nom: o.name, maj: o.updated_at || o.created_at }));
+    },
+    /** Les sous-dossiers d'un dossier : leurs noms (les suggestions, rangées par partition). */
+    async listerDossiers(dossier) {
+      return (await listerTout(dossier)).filter((o) => !o.id).map((o) => o.name);
     },
   };
 }

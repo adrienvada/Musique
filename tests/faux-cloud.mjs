@@ -9,6 +9,7 @@
  */
 import crypto from "node:crypto";
 import http from "node:http";
+import { estJwt } from "../supabase/functions/portee-remarkable/supabase.js";
 
 /** Écrit une page .rm v6 minimale : un bloc « ligne » par trait. */
 export function ecrireRm(traits, outil = 4) {
@@ -47,34 +48,67 @@ export function ecrireRm(traits, outil = 4) {
 const empreinte = (b) => crypto.createHash("sha256").update(b).digest("hex");
 
 /**
- * Démarre le faux cloud. `document` : { id, nom, pdf (octets), pages: [traits] }.
- * @returns {Promise<{url, fermer, requetes}>}
+ * Démarre le faux cloud. `document` : { id, nom, pdf (octets), pages: [traits] }
+ * (une page `null` n'a pas de fichier .rm : elle est blanche).
+ *
+ * `options` (tests du durcissement) :
+ *   - autres : d'autres documents, de la même forme ;
+ *   - illisibles : ajoute deux documents que le cloud rend mal (index
+ *     introuvable, fiche qui n'est pas du JSON) ;
+ *   - pageCassee : le numéro (à partir de 1) d'une page dont le .rm est abîmé ;
+ *   - sansRange : le cloud ignore l'en-tête Range (il envoie tout le blob) ;
+ *   - lenteur : millisecondes d'attente avant chaque blob (pour compter les
+ *     requêtes simultanées, `maxEnCours()`).
+ * Et, sur l'objet rendu, `panne(motif, statut, { fois, entetes })` : les
+ * `fois` prochaines requêtes dont l'adresse correspond reçoivent `statut`
+ * (« coupure » : la connexion est coupée sans réponse).
+ * @returns {Promise<{url, fermer, requetes, panne, revoquer, empreinteDe, maxEnCours}>}
  */
-export async function demarrerFauxCloud(document) {
+export async function demarrerFauxCloud(document, options = {}) {
+  const { autres = [], illisibles = false, pageCassee = null, sansRange = false, lenteur = 0 } = options;
+  let enCours = 0, maxEnCours = 0;
   const blobs = new Map();
-  const ajouter = (octets) => { const h = empreinte(octets); blobs.set(h, octets); return h; };
+  const noms = new Map(); // nom de fichier → empreinte
+  const ajouter = (octets, nom = null) => { const h = empreinte(octets); blobs.set(h, octets); if (nom) noms.set(nom, h); return h; };
   const docs = [];
   const nouveau = (id, meta, fichiers) => {
-    const entrees = [[`${id}.metadata`, Buffer.from(JSON.stringify(meta))], ...fichiers];
-    const lignes = entrees.map(([nom, o]) => `${ajouter(o)}:0:${nom}:0:${o.length}`);
+    const fiche = Buffer.isBuffer(meta) ? meta : Buffer.from(JSON.stringify(meta));
+    const entrees = [[`${id}.metadata`, fiche], ...fichiers];
+    const lignes = entrees.map(([nom, o]) => `${ajouter(o, nom)}:0:${nom}:0:${o.length}`);
     const index = Buffer.from(["3", ...lignes].join("\n") + "\n");
     docs.push(`${ajouter(index)}:80000000:${id}:${entrees.length}:0`);
   };
   nouveau("dossier-partitions", { visibleName: "Partitions", type: "CollectionType", parent: "" }, []);
   nouveau("dans-la-corbeille", { visibleName: "Vieux brouillon", type: "DocumentType", parent: "trash" }, []);
-  const idsPages = document.pages.map((_, i) => `page-${i + 1}`);
-  const contenu = { fileType: "pdf", cPages: { pages: idsPages.map((p, i) => ({ id: p, idx: { value: "b" + String.fromCharCode(97 + i) }, redir: { value: i } })) } };
-  nouveau(document.id, { visibleName: document.nom, type: "DocumentType", parent: "dossier-partitions", lastModified: "1790000000000" }, [
-    [`${document.id}.content`, Buffer.from(JSON.stringify(contenu))],
-    [`${document.id}.pdf`, document.pdf],
-    ...document.pages.map((t, i) => [`${document.id}/${idsPages[i]}.rm`, ecrireRm(t)]),
-  ]);
+  for (const doc of [document, ...autres]) {
+    const idsPages = doc.pages.map((_, i) => `page-${i + 1}`);
+    const contenu = { fileType: "pdf", cPages: { pages: idsPages.map((p, i) => ({ id: p, idx: { value: "b" + String.fromCharCode(97 + i) }, redir: { value: i } })) } };
+    nouveau(doc.id, { visibleName: doc.nom, type: "DocumentType", parent: "dossier-partitions", lastModified: "1790000000000" }, [
+      [`${doc.id}.content`, Buffer.from(JSON.stringify(contenu))],
+      ...(doc.pdf ? [[`${doc.id}.pdf`, doc.pdf]] : []),
+      ...doc.pages
+        .map((t, i) => [`${doc.id}/${idsPages[i]}.rm`, doc === document && pageCassee === i + 1 ? Buffer.from("pas une page .rm") : t && ecrireRm(t)])
+        .filter(([, o]) => o),
+    ]);
+  }
+  if (illisibles) {
+    docs.push(`${"f".repeat(64)}:80000000:doc-sans-index:2:0`); // index absent : le cloud répond 404
+    nouveau("doc-fiche-abimee", Buffer.from("{pas du json"), []);
+  }
   const racine = ajouter(Buffer.from(["4", `0:.:${docs.length}:0`, ...docs].join("\n") + "\n"));
 
   const requetes = [];
+  const pannes = [];
   const etat = { revoque: false };
   const serveur = http.createServer(async (req, res) => {
-    requetes.push(`${req.method} ${req.url}`);
+    res.on("error", () => {}); // un client qui coupe en route (lecture partielle) n'est pas une erreur
+    requetes.push(`${req.method} ${req.url}${req.headers.range ? ` [${req.headers.range}]` : ""}`);
+    const panne = pannes.find((p) => p.fois > 0 && p.motif.test(req.url));
+    if (panne) {
+      panne.fois--;
+      if (panne.statut === "coupure") { req.socket.destroy(); return; }
+      res.writeHead(panne.statut, panne.entetes); res.end(); return;
+    }
     const auth = req.headers.authorization || "";
     if (req.url === "/token/json/2/device/new") {
       const { code } = JSON.parse(await lireCorps(req));
@@ -89,7 +123,25 @@ export async function demarrerFauxCloud(document) {
     if (auth !== "Bearer jeton-utilisateur-de-test") { res.writeHead(401); res.end(); return; }
     if (req.url === "/sync/v4/root") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ hash: racine, generation: 1, schemaVersion: 4 })); return; }
     const m = req.url.match(/^\/sync\/v3\/files\/([0-9a-f]{64})$/);
-    if (m && blobs.has(m[1])) { res.end(blobs.get(m[1])); return; }
+    if (m && blobs.has(m[1])) {
+      enCours++;
+      maxEnCours = Math.max(maxEnCours, enCours);
+      if (lenteur) await new Promise((ok) => setTimeout(ok, lenteur));
+      enCours--;
+      const octets = blobs.get(m[1]);
+      const r = !sansRange && /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || "");
+      if (r) {
+        // bytes=a-b, bytes=a- ou bytes=-n (les n derniers), comme un vrai serveur.
+        const debut = r[1] === "" ? Math.max(0, octets.length - Number(r[2])) : Number(r[1]);
+        const fin = r[1] === "" || r[2] === "" ? octets.length - 1 : Math.min(Number(r[2]), octets.length - 1);
+        if (debut >= octets.length) { res.writeHead(416, { "content-range": `bytes */${octets.length}` }); res.end(); return; }
+        res.writeHead(206, { "content-range": `bytes ${debut}-${fin}/${octets.length}`, "content-length": fin - debut + 1 });
+        res.end(octets.subarray(debut, fin + 1));
+        return;
+      }
+      res.end(octets);
+      return;
+    }
     res.writeHead(404); res.end();
   });
   await new Promise((r) => serveur.listen(0, "127.0.0.1", r));
@@ -97,7 +149,11 @@ export async function demarrerFauxCloud(document) {
   return {
     url, requetes,
     revoquer: () => { etat.revoque = true; },
-    fermer: () => new Promise((r) => serveur.close(r)),
+    panne: (motif, statut, { fois = 1, entetes = {} } = {}) => { pannes.push({ motif, statut, fois, entetes }); },
+    /** L'empreinte d'un fichier du cloud, par son nom (« doc.pdf »). */
+    empreinteDe: (nom) => noms.get(nom),
+    maxEnCours: () => maxEnCours,
+    fermer: () => new Promise((r) => { serveur.closeAllConnections?.(); serveur.close(r); }),
   };
 }
 
@@ -111,14 +167,28 @@ const lireCorps = (req) => new Promise((ok) => {
  * Un faux stockage Supabase : créer un compartiment, y ranger, relire,
  * supprimer et lister des objets, avec les réponses du vrai (400
  * « introuvable », 409…) et une date d'écriture par objet (updated_at).
+ *
+ * Il contrôle la clé comme la plateforme : toujours dans `apikey` ; une clé
+ * secrète (`sb_secret_…`, pas un JWT) glissée dans `Authorization: Bearer`
+ * reçoit « Invalid JWT » ; l'ancienne clé (un JWT) doit voyager dans les
+ * deux en-têtes, comme le connecteur l'a toujours envoyée.
  */
 export async function demarrerFauxStockage(cle = "cle-de-service-de-test") {
   const compartiments = new Map();
   let derniere = 0;
   const maintenant = () => { derniere = Math.max(Date.now(), derniere + 1); return new Date(derniere).toISOString(); };
+  const refus = (req) => {
+    if (req.headers.apikey !== cle) return [403, { statusCode: "403", error: "Unauthorized" }];
+    const auth = req.headers.authorization;
+    if (auth === undefined) return estJwt(cle) ? [403, { statusCode: "403", error: "Unauthorized" }] : null;
+    const jeton = auth.replace(/^Bearer\s+/i, "");
+    if (!estJwt(jeton)) return [401, { message: "Invalid JWT" }];
+    return jeton === cle ? null : [403, { statusCode: "403", error: "Unauthorized" }];
+  };
   const serveur = http.createServer(async (req, res) => {
     const json = (statut, corps) => { res.writeHead(statut, { "content-type": "application/json" }); res.end(JSON.stringify(corps)); };
-    if (req.headers.apikey !== cle || req.headers.authorization !== `Bearer ${cle}`) return json(403, { statusCode: "403", error: "Unauthorized" });
+    const refuse = refus(req);
+    if (refuse) return json(...refuse);
     const corps = await lireCorps(req);
     if (req.method === "POST" && req.url === "/storage/v1/bucket") {
       const { id, public: publique } = JSON.parse(corps);
