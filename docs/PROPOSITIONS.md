@@ -890,6 +890,17 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   Safari efface au bout de 7 jours sans visite tout ce qu'un site non
   installé garde. `demanderProtection()` redemande, et rend la réponse
   (avant, `persist()` était appelé sans la lire).
+- **Les seize scénarios de perte de données de l'audit deviennent des
+  tests** (`tests/synchro-scenarios.test.mjs`). L'audit les avait écrits
+  pour montrer chaque défaut, avec les vrais modules ; ils vérifient
+  maintenant le comportement corrigé, avec deux cas trouvés en chemin (une
+  réception mise de côté puis dépassée, deux versions de même date). Les
+  tests d'origine de l'audit, rejoués sur ce code, ne reproduisent plus
+  aucun défaut ; S11, son contrôle positif, passe toujours. Essayé aussi
+  dans Chromium sur le site assemblé : deux appareils synchronisés par le
+  vrai code du connecteur, la sauvegarde empoisonnée de l'audit, deux
+  onglets, une base tenue par un vieil onglet, la migration 2 → 3, et la
+  version claude.ai simulée.
 - **Ce qui reste à brancher** (lot « Écrans des données ») : les écrans de
   la quarantaine (`synchro.quarantaine()`, `reessayer`), des copies de
   conflit (champ `conflitDe`), de la corbeille et des versions
