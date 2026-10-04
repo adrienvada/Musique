@@ -774,6 +774,49 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - Deux appareils ont pu donner le même numéro à deux notes différentes :
     les deux restent, l'une renumérotée. La même note posée des deux côtés
     n'en fait qu'une, la plus longue, comme quand on la pose deux fois.
+- **La bibliothèque commune vérifie ce qu'elle range (S4, S6,
+  `bibliotheque.js`).** Elle acceptait 20 Mo de pages, une date « zzz », et
+  une pierre tombale datée de l'an 9999, qu'aucune correction ne pouvait
+  plus défaire. Maintenant : 256 Ko de fiche au plus (comme un document de
+  claude.ai : une fiche passe partout ou nulle part), 5 Mo de pages (un
+  mémo d'une minute, même quand Safari ignore le débit demandé ; avec la
+  fiche, sous les 6 Mo que `http.js` laisse entrer), une date ISO à moins
+  d'un jour dans le futur, et les types de base des champs (des étiquettes
+  en liste de mots, une séquence avec ses pistes…).
+  - Un refus n'est plus une erreur : `{ accepte: false, refus }` dit
+    pourquoi, et l'appareil met la partition de côté sans bloquer les
+    autres. Un appareil d'avant le prend pour un succès : il garde la fiche
+    chez lui au lieu de tout bloquer.
+- **Une écriture dit d'où elle part, et une seule passe à la fois (D4,
+  S9).** L'appareil envoie la version d'où part sa modification (`base`,
+  et son numéro `baseRev`) : si la bibliothèque a changé entre-temps, elle
+  refuse et rend la sienne ; l'appareil fusionne et renvoie. Un verrou par
+  partition (`verrous/<id>.json`, créé « seulement s'il n'existe pas » : le
+  stockage n'en laisse réussir qu'un, `objets.creer`) empêche deux
+  écritures de se croiser ; avant, la plus ancienne pouvait passer en
+  dernier.
+  - Pourquoi un numéro de révision (`rev`) en plus de la date : deux
+    appareils dont l'horloge retarde datent tous deux « la version d'avant
+    + 1 ms ». Trouvé en écrivant les tests : sans lui, un appareil prenait
+    la version de l'autre pour la sienne.
+  - Sans `base`, un appareil d'avant (et `idee_ecrire`) garde « le plus
+    récent gagne ». `base: null` veut dire « elle ne doit pas exister ».
+    Un verrou abandonné (une coupure en route) se lève au bout de 30 s.
+- **Versions et corbeille (D6).** Un effacement par erreur partait partout
+  en quelques secondes, sans retour. À chaque écriture acceptée, la version
+  d'avant est gardée (`versions/<id>/<date>-r<rev>.json`) : 20 au plus par
+  partition, 30 jours. Une partition supprimée garde 30 jours sa dernière
+  version et ses traits (`corbeille/<id>.json`), puis part pour de bon ; sa
+  pierre tombale reste, pour les appareils qui ne l'ont pas encore vue.
+  Trois outils : `bibliotheque_versions`, `bibliotheque_version`,
+  `bibliotheque_corbeille`.
+  - On élague en écrivant (toutes les cinq versions, et à chaque
+    suppression) : l'historique reste loin du quota gratuit (1 Go), sans
+    tâche planifiée à part.
+- **Le curseur relit dix secondes (D10, S10).** Une écriture datée juste
+  avant le curseur mais visible juste après n'arrivait jamais sur un
+  appareil. `bibliotheque_changements` relit les dix dernières secondes ;
+  l'appareil reconnaît ce qu'il a déjà.
 
 ### Son, temps, notation et exports (M1 à M12, N1 à N7)
 

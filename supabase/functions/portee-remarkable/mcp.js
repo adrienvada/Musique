@@ -95,7 +95,7 @@ const OUTILS = [
   {
     name: "bibliotheque_ecrire",
     title: "Bibliothèque : enregistrer une partition",
-    description: "Enregistre une partition (ou sa suppression) dans la bibliothèque commune. Le plus récent gagne : si la bibliothèque a plus récent, renvoie { accepte: false, actuelle }.",
+    description: "Enregistre une partition (ou sa suppression) dans la bibliothèque commune ; la version remplacée reste 30 jours dans les versions (une suppression, dans la corbeille). Avec base (le modifieLe de la version d'où part l'écriture, null pour une partition qui ne doit pas encore exister) : si la bibliothèque a changé depuis, renvoie { accepte: false, actuelle } pour fusionner puis renvoyer. Sans base, le plus récent gagne. Renvoie { accepte: true, fiche }, ou { accepte: false, refus } si l'écriture est invalide (date, taille : 256 Ko de données et 5 Mo de pages au plus, format).",
     inputSchema: {
       type: "object",
       properties: {
@@ -104,11 +104,48 @@ const OUTILS = [
         pages: { type: ["array", "null"], description: "Traits compactés, page par page ; absent si inchangés." },
         supprime: { type: "boolean" },
         modifieLe: { type: "string", description: "Date ISO de la modification, sur l'appareil." },
+        base: { type: ["string", "null"], description: "Le modifieLe de la version d'où part cette écriture ; null : la partition ne doit pas déjà exister." },
+        baseRev: { type: ["integer", "null"], description: "Le numéro (rev) de cette même version, quand on le connaît : il départage deux versions de même date." },
       },
       required: ["id", "modifieLe"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  },
+  {
+    name: "bibliotheque_versions",
+    title: "Bibliothèque : versions d'une partition",
+    description: "Les versions d'une partition gardées par la bibliothèque commune (20 au plus, 30 jours), la plus récente d'abord : { versions: [{ modifieLe, rev, actuelle, supprime, ecritLe }] }. Le contenu d'une version : bibliotheque_version.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: "bibliotheque_version",
+    title: "Bibliothèque : une version d'une partition",
+    description: "Une version d'une partition, entière : { fiche: { id, donnees, modifieLe, supprime, pagesLe } }, ou { fiche: null } si elle n'est plus gardée. La reprendre, c'est l'écrire comme une modification neuve (bibliotheque_ecrire).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        modifieLe: { type: "string", description: "La date de la version, telle que bibliotheque_versions la donne." },
+        rev: { type: ["integer", "null"], description: "Son numéro (bibliotheque_versions), si deux versions ont la même date." },
+      },
+      required: ["id", "modifieLe"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: "bibliotheque_corbeille",
+    title: "Bibliothèque : la corbeille",
+    description: "Les partitions supprimées depuis moins de 30 jours : { corbeille: [{ id, titre, type, supprimeLe, modifieLe, rev, expireLe }] }. modifieLe et rev désignent la dernière version avant la suppression (bibliotheque_version), et ses traits restent lisibles par bibliotheque_pages jusqu'à expireLe.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true },
   },
 ];
 
@@ -150,6 +187,9 @@ async function appeler(nom, args, cloud, bibliotheque) {
     if (nom === "bibliotheque_changements") return bibliotheque.changements((args && args.depuis) || null);
     if (nom === "bibliotheque_pages") return { pages: await bibliotheque.pages(args && args.id) };
     if (nom === "bibliotheque_ecrire") return bibliotheque.ecrire(args || {});
+    if (nom === "bibliotheque_versions") return { versions: await bibliotheque.versions(args && args.id) };
+    if (nom === "bibliotheque_version") return { fiche: await bibliotheque.version(args && args.id, args && args.modifieLe, Number.isInteger(args && args.rev) ? args.rev : null) };
+    if (nom === "bibliotheque_corbeille") return { corbeille: await bibliotheque.corbeille() };
   }
   if (nom === "arborescence") return arborescence(cloud);
   if (nom === "relier") {
@@ -192,7 +232,11 @@ function texteDe(nom, resultat) {
   if (nom.startsWith("bibliotheque_")) {
     if (Array.isArray(r.partitions)) return `${pluriel(r.partitions.length, "partition écrite", "partitions écrites")} depuis le curseur (détail dans structuredContent).`;
     if (Array.isArray(r.pages)) return `Traits de ${pluriel(r.pages.length, "page")} (dans structuredContent).`;
-    if ("accepte" in r) return r.accepte ? "Enregistrée dans la bibliothèque commune." : "Refusée : la bibliothèque commune a plus récent (voir structuredContent).";
+    // Un refus dit pourquoi : une écriture invalide (refus), ou une bibliothèque qui a changé depuis la base (actuelle).
+    if ("accepte" in r) return r.accepte ? "Enregistrée dans la bibliothèque commune." : r.refus ? `Refusée : ${r.refus}` : "Refusée : la bibliothèque commune a une autre version, à fusionner (voir structuredContent).";
+    if (Array.isArray(r.versions)) return `${pluriel(r.versions.length, "version gardée", "versions gardées")} (détail dans structuredContent).`;
+    if (Array.isArray(r.corbeille)) return `${pluriel(r.corbeille.length, "partition")} dans la corbeille (détail dans structuredContent).`;
+    if ("fiche" in r) return r.fiche ? "La version demandée (dans structuredContent)." : "Cette version n'est plus gardée.";
     return "Fait (détail dans structuredContent).";
   }
   const json = JSON.stringify(resultat);
