@@ -15,7 +15,9 @@ const corps = (abc) => abc.split("\n").filter((l) => !/^[A-Za-z]:|^%%/.test(l)).
 test("page de piano : main droite liée, main gauche avec soupirs, 4/4 deviné", async () => {
   const r = await lireFichier("tests/pages/2026-09-30-piano-standard.pdf");
   assert.match(r.abc, /^M:4\/4$/m);
-  assert.equal(corps(r.abc), "[V:1] GABc dcAG |\n[V:2] C,2 z2 G,,2 z2 ||");
+  // La barre finale de la main gauche est un seul trait repassé (deux traits à
+  // 0,1 interligne) : depuis le 04/10 (audit, L19), c'est « | », plus « || ».
+  assert.equal(corps(r.abc), "[V:1] GABc dcAG |\n[V:2] C,2 z2 G,,2 z2 |");
   assert.equal(r.doutes.length, 0);
 });
 
@@ -28,7 +30,9 @@ test("page de mélodie : gamme, puis 12/8 en mi bémol avec levée et reprise", 
       "[K:Eb][M:12/8]G |: c2 c2 edc g2 GG G | c2 c edc g2 z GG",
       // Deux ligatures séparées (sol do do | la sol fa), groupées par trois
       // comme en 12/8. Avant le 30/09 au soir, le lecteur les soudait à tort.
-      "c2 c agf gcc agf || gcc dedc z z2 G :|",
+      // La barre du milieu est un trait repassé, à 0,1 interligne du premier :
+      // une barre simple, plus « || » (audit du 04/10, L19).
+      "c2 c agf gcc agf | gcc dedc z z2 G :|",
     ].join("\n"),
   );
   // Deux doutes attendus : un petit trait au bout d'une hampe, et la mesure

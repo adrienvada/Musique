@@ -556,6 +556,26 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - `lirePageRm` rend `{ traits, erreur }` sans jamais lever d'erreur : à
     `remarkable.js` (lot connecteur) de s'en servir pour qu'une page
     illisible ne fasse plus échouer tout le document.
+- **Repasser un trait ne change plus rien (L3).** Un trait repassé à
+  l'identique, ou à moins de 0,15 interligne d'un autre qu'il ne prolonge
+  pas, est écarté avant toute lecture. Avant, une hampe repassée devenait une
+  barre, un bémol d'armure repassé un dièse (la ligne passait en do), un
+  point repassé n'était plus un point. Les têtes n'y passent pas : leurs
+  coups de stylo se réunissent déjà, et en retirer un déplacerait leur boîte.
+  Les retouches de hampe sont cherchées avant les barres de mesure. Vérifié
+  sur tes deux pages : chaque trait repassé, tel quel ou décalé de
+  0,08 interligne, laisse la lecture identique (28 lectures changeaient).
+- **Le point d'une noire pointée à hampe montante (L4).** Il tombe juste à
+  côté de la hampe : il était pris pour une retouche de hampe, ou avalé par
+  la tête. Une retouche de hampe fait maintenant au moins une
+  demi-interligne, et un trait de la taille d'un point n'appartient à une
+  tête que s'il tombe dedans.
+- **Une barre repassée est une barre simple (L19).** Deux traits à moins
+  d'un quart d'interligne s'écrivaient « || ». Tes deux pages en ont une
+  (main gauche du piano, milieu de la 3ᵉ ligne de la mélodie), et l'image
+  montre un seul trait appuyé : elles se lisent maintenant « | ».
+  `tests/lecteur.test.mjs` est mis à jour en ce sens. Une vraie double barre
+  a ses deux traits nettement séparés (au moins un quart d'interligne).
 
 ### Connecteur (S3 à S5, C1 à C6)
 

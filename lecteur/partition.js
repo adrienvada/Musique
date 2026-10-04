@@ -90,7 +90,7 @@ function barreABC(b, derniere) {
   if (gauche) return ":|";
   if (droite) return "|:";
   if (b.double && derniere) return "|]";
-  if (b.double || b.epais) return "||";
+  if (b.double) return "||";
   return "|";
 }
 

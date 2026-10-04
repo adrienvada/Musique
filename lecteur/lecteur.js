@@ -139,6 +139,38 @@ function estTeteVide(t, il) {
   return compacte && boucle && tour;
 }
 
+/** Un point (de durée ou de reprise) : un tout petit trait, court. */
+function estPoint(t, il) {
+  return Math.max(t.l, t.h) < 0.45 * il && t.longueur < 1.6 * il;
+}
+
+/**
+ * Les traits repassés : [repassé, original]. Un trait B est un doublon de A
+ * quand tous ses points sont à moins de `tol` du tracé de A et qu'il n'est
+ * pas plus long que lui (B ne prolonge pas A : une retouche qui allonge une
+ * hampe reste lue comme telle plus loin). Deux traits identiques : le second
+ * est le doublon. Les formes de tête ne comptent pas (voir lirePage).
+ */
+function doublons(traits, formes, tol) {
+  const sortie = [];
+  const pris = new Set();
+  const dedans = (b, a) => b.points.every((p) => {
+    for (let i = 1; i < a.points.length; i++) if (distSegment(p, a.points[i - 1], a.points[i]) < tol) return true;
+    return a.points.length === 1 && dist(p, a.points[0]) < tol;
+  });
+  for (const b of traits) {
+    if (b.vide || formes[b.id]) continue;
+    for (const a of traits) {
+      if (a === b || a.vide || formes[a.id] || pris.has(a.id)) continue;
+      if (b.x0 < a.x0 - tol || b.x1 > a.x1 + tol || b.y0 < a.y0 - tol || b.y1 > a.y1 + tol) continue;
+      if (b.longueur > 1.1 * a.longueur + tol) continue;
+      // Deux traits identiques : le premier reste, le second est le doublon.
+      if (dedans(b, a) && (!dedans(a, b) || a.id < b.id)) { sortie.push([b, a]); pris.add(b.id); break; }
+    }
+  }
+  return sortie;
+}
+
 /** Plusieurs coups de stylo pour noircir une même tête : on les réunit. */
 function fusionnerTetes(tetes, il) {
   const groupes = [];
@@ -168,11 +200,24 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
   const traits = preparerTraits(traitsBruts, cal.page).map((pts, i) => mesurer(pts, i));
   const classe = traits.map((t) => (t.vide ? "vide" : null)); // ce qu'est devenu chaque trait
 
+  // 0. Les formes de tête, et les traits repassés. Un trait repassé à
+  //    l'identique (ou presque) sur un autre n'est pas un nouveau signe : une
+  //    hampe repassée devenait une barre de mesure, un bémol d'armure repassé
+  //    un dièse (trop de traits), un point repassé n'était plus un point. On
+  //    l'écarte avant tout le reste. Les têtes ne sont pas concernées : leurs
+  //    coups de stylo se réunissent déjà (fusionnerTetes), et en retirer un
+  //    déplacerait la boîte, donc peut-être la hauteur.
+  const formes = traits.map((t) => (t.vide ? null : estTetePleine(t, il) ? "pleine" : estTeteVide(t, il) ? "vide" : null));
+  for (const [b, a] of doublons(traits, formes, 0.15 * il)) {
+    classe[b.id] = "doublon";
+    b.doublonDe = a.id;
+  }
+
   // 1. Têtes
   const candidates = [];
   for (const t of traits) {
-    if (estTetePleine(t, il)) candidates.push({ ...t, pleine: true });
-    else if (estTeteVide(t, il)) candidates.push({ ...t, pleine: false });
+    if (classe[t.id] || !formes[t.id]) continue;
+    candidates.push({ ...t, pleine: formes[t.id] === "pleine" });
   }
   const tetes = fusionnerTetes(candidates, il).map((t, i) => {
     const portee = porteeDe(portees, t.cy);
@@ -181,9 +226,13 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
   });
   for (const t of tetes) for (const id of t.traits) classe[id] = "tete";
   // Un petit trait posé sur une tête (retouche, second passage) en fait partie.
+  // Un trait de la taille d'un point n'en fait partie que s'il tombe dans la
+  // tête elle-même : juste à côté, c'est le point d'une note pointée (avant,
+  // il était avalé par la tête à 0,25 interligne près, et la note perdait son point).
   for (const t of traits) {
     if (classe[t.id] || Math.max(t.l, t.h) > 1.2 * il) continue;
-    const tete = tetes.find((u) => t.cx > u.x0 - 0.25 * il && t.cx < u.x1 + 0.25 * il && t.cy > u.y0 - 0.25 * il && t.cy < u.y1 + 0.25 * il);
+    const marge = estPoint(t, il) ? 0 : 0.25 * il;
+    const tete = tetes.find((u) => t.cx > u.x0 - marge && t.cx < u.x1 + marge && t.cy > u.y0 - marge && t.cy < u.y1 + marge);
     if (tete) { tete.traits.push(t.id); classe[t.id] = "tete"; }
   }
 
@@ -240,6 +289,27 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
   }
   for (const t of tetes) t.hampe = hampes.find((h) => h.tetes.includes(t)) || null;
 
+  // Retouches : un trait repassé sur une hampe ou une barre, ou qui la
+  // prolonge de quelques millimètres, n'est pas un nouveau signe.
+  const colleA = (s, lignes) => {
+    const y0 = Math.min(s.a[1], s.b[1]), y1 = Math.max(s.a[1], s.b[1]);
+    return lignes.some((v) => {
+      const vy0 = Math.min(v.a[1], v.b[1]), vy1 = Math.max(v.a[1], v.b[1]);
+      const x = xA(v.a, v.b, (y0 + y1) / 2);
+      const recouvre = Math.min(y1, vy1 + 0.6 * il) - Math.max(y0, vy0 - 0.6 * il);
+      return Math.abs(x - (s.a[0] + s.b[0]) / 2) < 0.4 * il && recouvre > 0.5 * s.lg;
+    });
+  };
+  // 3b. Retouches de hampe, avant les barres : une hampe repassée qui traverse
+  //     la portée devenait une barre de mesure. Elles font au moins une
+  //     demi-interligne : plus court, c'est le point d'une noire pointée,
+  //     posé juste à côté d'une hampe montante, que la retouche avalait.
+  const lignesHampes = hampes.map((h) => ({ a: h.seg.a, b: h.seg.b }));
+  for (const s of segments) {
+    if (s.role || s.ang < 65 || s.lg < 0.5 * il) continue;
+    if (colleA(s, lignesHampes)) s.role = "retouche";
+  }
+
   // 4. Barres de mesure : verticales sans tête, qui traversent une portée.
   const barres = [];
   for (const s of segments) {
@@ -252,25 +322,14 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     });
     if (!couvertes.length) continue;
     s.role = "barre";
-    for (const p of couvertes) barres.push({ portee: p.index, x, y0, y1, epaisse: false, traits: [s.trait] });
+    for (const p of couvertes) barres.push({ portee: p.index, x, y0, y1, traits: [s.trait] });
   }
 
-  // 4b. Retouches : un trait repassé sur une hampe ou une barre, ou qui la
-  //     prolonge de quelques millimètres, n'est pas un nouveau signe.
-  const lignesVerticales = [
-    ...hampes.map((h) => ({ a: h.seg.a, b: h.seg.b })),
-    ...segments.filter((s) => s.role === "barre").map((s) => ({ a: s.a, b: s.b })),
-  ];
+  // 4b. Retouches de barre, de toute longueur.
+  const lignesBarres = segments.filter((s) => s.role === "barre").map((s) => ({ a: s.a, b: s.b }));
   for (const s of segments) {
     if (s.role || s.ang < 65) continue;
-    const y0 = Math.min(s.a[1], s.b[1]), y1 = Math.max(s.a[1], s.b[1]);
-    const colle = lignesVerticales.some((v) => {
-      const vy0 = Math.min(v.a[1], v.b[1]), vy1 = Math.max(v.a[1], v.b[1]);
-      const x = xA(v.a, v.b, (y0 + y1) / 2);
-      const recouvre = Math.min(y1, vy1 + 0.6 * il) - Math.max(y0, vy0 - 0.6 * il);
-      return Math.abs(x - (s.a[0] + s.b[0]) / 2) < 0.4 * il && recouvre > 0.5 * s.lg;
-    });
-    if (colle) s.role = "retouche";
+    if (colleA(s, lignesBarres)) s.role = "retouche";
   }
   // Une retouche qui prolonge une hampe au-delà de son bout (pour rejoindre
   // la ligature, typiquement) déplace ce bout : sinon la hampe « s'arrête »
@@ -630,15 +689,19 @@ export function assembler(lue, cal) {
     parPortee[g.portee].push({ type: "silence", x: g.cx, duree: g.nature === "soupir" ? 2 : 1, signe: g });
   }
 
-  // Barres (fusion des traits doublés, double barre, reprises).
+  // Barres (fusion des traits doublés, double barre, reprises). Deux traits à
+  // moins d'un quart d'interligne sont une seule barre, repassée : elle
+  // s'écrivait « || » (une double barre), alors qu'on ne voit qu'un trait
+  // appuyé (piano du 30/09, à la main gauche ; mélodie, 3ᵉ ligne). Une double
+  // barre a ses deux traits nettement séparés.
   for (const p of portees) {
     const bs = barres.filter((b) => b.portee === p.index).sort((a, b) => a.x - b.x);
     const groupes = [];
     for (const b of bs) {
       const g = groupes[groupes.length - 1];
-      if (g && b.x - g.x1 < 0.25 * il) { g.x1 = b.x; g.traits.push(...b.traits); g.epais = true; }
+      if (g && b.x - g.x1 < 0.25 * il) { g.x1 = b.x; g.traits.push(...b.traits); g.repassee = true; }
       else if (g && b.x - g.x1 < 1.0 * il) { g.x1 = b.x; g.double = true; g.traits.push(...b.traits); }
-      else groupes.push({ x0: b.x, x1: b.x, traits: [...b.traits], double: false, epais: false, reprise: { gauche: false, droite: false } });
+      else groupes.push({ x0: b.x, x1: b.x, traits: [...b.traits], double: false, repassee: false, reprise: { gauche: false, droite: false } });
     }
     for (const r of pointsReprise.filter((r) => r.barre.portee === p.index)) {
       const g = groupes.find((g) => r.barre.x >= g.x0 - 1 && r.barre.x <= g.x1 + 1);
