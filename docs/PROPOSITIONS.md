@@ -894,7 +894,7 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - TypeScript 7, la version native : moins d'une seconde pour tout.
 - **Des essais de bout en bout dans Chromium (T1).** `npm run e2e` assemble
   le site, le sert comme GitHub Pages (`max-age=600`, empreintes, sous
-  `/Musique/`) et y joue vingt parcours dans Chromium, réseau extérieur
+  `/Musique/`) et y joue vingt et un essais dans Chromium, réseau extérieur
   coupé, en une vingtaine de secondes. Aucun écran n'était testé, et trois
   des quatre bogues de l'audit avaient été trouvés par de courts essais au
   navigateur.
@@ -905,8 +905,9 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     traits compris.
   - L'éditeur d'idée : A S D F au clavier, la grille puis la partition,
     l'idée retrouvée après rechargement ; une note chantée au faux micro
-    (un chanteur de synthèse, la4 puis do5) ; « précédent » ferme la
-    feuille du bas, puis revient au carnet sans quitter Portée.
+    (un chanteur de synthèse, la4 puis do5) ; un mémo vocal enregistré
+    puis réécouté ; « précédent » ferme la feuille du bas, puis revient au
+    carnet sans quitter Portée.
   - La sécurité : une sauvegarde piégée (du HTML dans le titre, les
     étiquettes, le nom de piste, la durée du mémo, un accord, un
     identifiant de note) ne fait rien exécuter et n'atteint même pas la

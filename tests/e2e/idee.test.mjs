@@ -3,7 +3,8 @@
  *
  * Noter une idée au clavier de l'ordinateur, la voir en grille puis en
  * partition, la retrouver après rechargement ; chanter une note dans le
- * faux micro de Chromium (un chanteur de synthèse) ; et le bouton
+ * faux micro de Chromium (un chanteur de synthèse), et un mémo vocal qu'on
+ * enregistre puis réécoute (sous la CSP : media-src blob:) ; et le bouton
  * « précédent », qui ferme une feuille du bas puis recule d'un écran au
  * lieu de quitter Portée.
  */
@@ -66,6 +67,34 @@ test("chanter une note au micro l'écrit", async () => {
     await page.waitForFunction(() => document.querySelectorAll("#idee-grille .g-note:not(.autre)").length >= 2, null, { timeout: 15000 });
     const notes = await notesDeLaGrille(page).evaluateAll((n) => n.map((x) => x.textContent.trim()));
     assert.ok(notes.includes("la4") && notes.includes("do5"), `notes chantées : ${notes.join(" ")}`);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("un mémo vocal s'enregistre au micro et se réécoute", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    await ctx.grantPermissions(["microphone"], { origin: serveur.origine });
+    // Le mémo joué : l'élément audio qui part (le son ne s'entend pas ici).
+    await ctx.addInitScript(() => {
+      window.__lectures = 0;
+      const jouer = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function (...a) { window.__lectures++; return jouer.apply(this, a); };
+    });
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.click("#nouvelle-idee");
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    await page.keyboard.press("KeyA"); // une idée qui existe, pour y ranger le mémo
+    await page.click("#idee-plus");
+    await page.click('#idee-menu [data-menu="infos"]');
+    await page.waitForSelector("#idee-infos[open]");
+    await page.click("#memo-enregistrer");
+    await page.waitForFunction(() => document.getElementById("memo-enregistrer").getAttribute("aria-pressed") === "true");
+    await page.waitForFunction(() => /[1-9]/.test(document.getElementById("memo-etat").textContent), null, { timeout: 10000 });
+    await page.click("#memo-enregistrer");
+    await page.waitForSelector("#memo-ecouter:not([hidden])");
+    await page.click("#memo-ecouter");
+    await page.waitForFunction(() => window.__lectures > 0);
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });
