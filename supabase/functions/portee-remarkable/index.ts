@@ -12,9 +12,11 @@
 //  synchronisée entre les appareils (bibliotheque.js), dans ce même
 //  compartiment.
 //
-//  SECRET (posé par outils/deployer-connecteur.mjs) :
-//    PORTEE_CLE  longue chaîne aléatoire, dernier segment de
-//                l'adresse du connecteur
+//  SECRETS (posés par outils/deployer-connecteur.mjs) :
+//    PORTEE_CLE     longue chaîne aléatoire, dernier segment de
+//                   l'adresse du connecteur
+//    PORTEE_COFFRE  la clé qui chiffre le jeton de la tablette dans le
+//                   stockage (coffre.js) ; créée une fois, jamais changée
 //  FACULTATIF :
 //    PORTEE_HOTE_SYNC  l'hôte de synchro de reMarkable, s'il change
 //                      d'adresse (https://…) ; sinon l'habituel, avec
@@ -47,6 +49,7 @@ const URL_SUPABASE = Deno.env.get("SUPABASE_URL");
 const CLE_SERVICE = cleDeService((nom: string) => Deno.env.get(nom));
 // Une valeur qui n'a pas la forme d'une adresse https est ignorée.
 const HOTE_SYNC = hoteDeSynchro(Deno.env.get("PORTEE_HOTE_SYNC")) ?? undefined;
+const SECRET_COFFRE = Deno.env.get("PORTEE_COFFRE") || null;
 
 // Une instance chaude garde le jeton utilisateur et les métadonnées déjà lues.
 let cloud: CloudRemarkable | null = null;
@@ -56,7 +59,7 @@ Deno.serve((req: Request) =>
   repondreHttp(req, {
     cle: CLE,
     origines: [...ORIGINES, ...EN_PLUS],
-    cloud: () => (cloud ??= new CloudRemarkable(coffreSupabase(URL_SUPABASE, CLE_SERVICE), { sync: HOTE_SYNC })),
+    cloud: () => (cloud ??= new CloudRemarkable(coffreSupabase(URL_SUPABASE, CLE_SERVICE, { secret: SECRET_COFFRE }), { sync: HOTE_SYNC })),
     bibliotheque: () => (bibliotheque ??= new Bibliotheque(objetsSupabase(URL_SUPABASE, CLE_SERVICE))),
   })
 );

@@ -24,9 +24,10 @@
  * échouer ; et si l'hôte de synchro ne répond plus, on essaie celui que
  * rmapi-js lit par défaut.
  */
+import { JetonIlisible } from "./coffre.js";
 import { traitsDePage } from "./rm.js";
 
-const AUTH = "https://webapp-prod.cloud.remarkable.engineering";
+const AUTH ="https://webapp-prod.cloud.remarkable.engineering";
 const SYNC = "https://internal.cloud.remarkable.com";
 // L'hôte que rmapi-js lit par défaut ; il marque l'autre comme ancien pour
 // l'envoi. Notre repli si le premier se tait.
@@ -73,9 +74,6 @@ export class NonReliee extends Error {
     this.raison = raison; // "jamais" | "revoquee"
   }
 }
-
-/** Le jeton du coffre ne se lit plus (clé du coffre perdue ou changée) : comme une révocation. */
-export class JetonIlisible extends Error {}
 
 /** Le cloud a répondu, mais par une erreur. */
 class ErreurCloud extends Error {

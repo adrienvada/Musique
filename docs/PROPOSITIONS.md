@@ -609,6 +609,25 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     avant 140 000 caractères (claude.ai coupe vers 150 000, trois pages
     denses suffisaient) en listant `pagesRestantes`. **Sans paramètre, rien
     ne change** : toutes les pages, comme l'appli les attend.
+- **Le jeton de la tablette, chiffré au repos (S5).** Il dormait en clair
+  dans le stockage, et il permet d'écrire dans ton cloud reMarkable (même
+  si Portée ne le fait jamais). Il est maintenant chiffré en AES-GCM
+  (WebCrypto, le même code sous Deno et Node), avec une clé tirée par HKDF
+  d'un secret de la fonction, `PORTEE_COFFRE` (`coffre.js`).
+  - **Rien à faire de ton côté** : le script de déploiement crée ce secret
+    s'il n'existe pas (il lit la liste des noms de secrets, jamais leurs
+    valeurs), ne l'affiche nulle part, et **ne le remplace jamais** : un
+    autre secret rendrait le jeton illisible.
+  - **Migration douce** : le jeton déjà rangé (en clair) se lit, puis se
+    range chiffré à la première lecture. Ta tablette reste reliée.
+  - **Secret perdu ou changé** : le jeton ne se déchiffre plus, la tablette
+    apparaît « à relier », comme après une révocation (un nouveau code de
+    my.remarkable.com, et c'est reparti). Pas d'erreur incompréhensible.
+  - Sans `PORTEE_COFFRE` (une fonction déployée à la main, sans le
+    script), le coffre range le jeton en clair, comme avant.
+  - Pourquoi pas la clé de service comme clé de chiffrement : quelqu'un qui
+    lit le stockage a justement cette clé. `PORTEE_COFFRE` vit ailleurs (les
+    secrets de la fonction), et ne sert qu'à ça.
 
 ### Données et synchronisation (S6, D1 à D10)
 
@@ -910,6 +929,10 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
      (supabase.com/dashboard/account/tokens) ;
    - `PORTEE_CLE` : la clé de l'adresse, au moins 24 caractères aléatoires.
      Elle n'apparaît jamais dans les journaux, publics.
+
+   Le script pose aussi, la première fois, le secret `PORTEE_COFFRE` de la
+   fonction (la clé qui chiffre le jeton de la tablette dans le stockage) :
+   rien à faire, et ne le supprime pas, sinon la tablette sera à relier.
 
    L'adresse du connecteur est
    `https://omekkqjinvppadsoinvj.supabase.co/functions/v1/portee-remarkable/<PORTEE_CLE>`.
