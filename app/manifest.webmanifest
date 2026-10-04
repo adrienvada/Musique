@@ -1,7 +1,7 @@
 {
   "name": "Portée",
   "short_name": "Portée",
-  "description": "Tes partitions écrites à la main sur la reMarkable, lues, corrigées, jouées au piano et exportées en MIDI.",
+  "description": "Ton carnet d'idées musicales : note une mélodie au clavier ou en la chantant, écoute-la au piano, envoie-la en MIDI vers Ableton. Tes pages écrites sur la reMarkable y sont lues et corrigées.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",

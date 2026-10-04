@@ -740,7 +740,174 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Données et synchronisation (S6, D1 à D10)
 
-<!-- lot données -->
+- **Chaque fiche est vérifiée et remise en forme (S6, `app/fiche.js`).**
+  Une sauvegarde abîmée, ou une fiche venue d'un autre appareil, dont les
+  étiquettes n'étaient pas une liste, vidait le carnet partout.
+  `normaliserFiche` redonne à chaque champ son type et ses bornes : titre,
+  étiquettes, favori, note, mémo, notes et accords d'une idée, mesure,
+  tonalité, tempo, transposition, doutes, blocs d'un morceau, dates. Une
+  idée écrite sans ABC (par Claude, avec `idee_ecrire`) le retrouve d'après
+  ses notes, comme dans l'éditeur.
+  - Un champ inconnu reste, s'il est du JSON raisonnable : une version plus
+    récente de l'appli a pu l'ajouter, et l'effacer ici l'effacerait partout.
+  - Les dates sortent toujours sur 24 caractères : l'appli les trie comme
+    des textes, et « +275760-… » passait avant « 1970-… ».
+  - Le coût : 26 ms pour 300 fiches lourdes, dix fois moins que leur
+    lecture dans IndexedDB. Pas besoin de cache.
+- **Fusionner deux versions au lieu d'écraser la plus ancienne (D4,
+  `fusionnerFiches`).** Une étoile posée sur le téléphone effaçait les
+  notes ajoutées sur l'ordinateur : la fiche entière la plus récente
+  gagnait (« le plus récent gagne », décision du 30/09). Maintenant, à
+  partir de la dernière version que les deux connaissaient (la « base »),
+  chaque champ garde le côté qui l'a changé. Changé des deux côtés : les
+  étiquettes se réunissent (ajouts et retraits des deux côtés), les notes se
+  fusionnent une par une (un retrait d'un côté s'applique si l'autre n'a pas
+  touché la note ; changée des deux côtés, la plus récente), les accords
+  position par position, le reste au plus récent. Le texte d'une page lue
+  (son ABC et ses doutes) ne se mélange pas : la fiche garde celui d'ici,
+  et l'autre devient une copie « titre (version de l'autre appareil) ».
+  - Pourquoi une base plutôt qu'une horloge par champ (HLC) : l'éditeur
+    d'idée, le morceau et l'accueil enregistrent la fiche entière. Dater
+    chaque champ et chaque note aurait demandé de toucher tous les écrans ;
+    la base marche avec ce qui s'écrit déjà. Une fiche sans base (d'avant)
+    fusionne comme avant : la plus récente, entière.
+  - Deux appareils ont pu donner le même numéro à deux notes différentes :
+    les deux restent, l'une renumérotée. La même note posée des deux côtés
+    n'en fait qu'une, la plus longue, comme quand on la pose deux fois.
+- **La bibliothèque commune vérifie ce qu'elle range (S4, S6,
+  `bibliotheque.js`).** Elle acceptait 20 Mo de pages, une date « zzz », et
+  une pierre tombale datée de l'an 9999, qu'aucune correction ne pouvait
+  plus défaire. Maintenant : 256 Ko de fiche au plus (comme un document de
+  claude.ai : une fiche passe partout ou nulle part), 5 Mo de pages (un
+  mémo d'une minute, même quand Safari ignore le débit demandé ; avec la
+  fiche, sous les 6 Mo que `http.js` laisse entrer), une date ISO à moins
+  d'un jour dans le futur, et les types de base des champs (des étiquettes
+  en liste de mots, une séquence avec ses pistes…).
+  - Un refus n'est plus une erreur : `{ accepte: false, refus }` dit
+    pourquoi, et l'appareil met la partition de côté sans bloquer les
+    autres. Un appareil d'avant le prend pour un succès : il garde la fiche
+    chez lui au lieu de tout bloquer.
+- **Une écriture dit d'où elle part, et une seule passe à la fois (D4,
+  S9).** L'appareil envoie la version d'où part sa modification (`base`,
+  et son numéro `baseRev`) : si la bibliothèque a changé entre-temps, elle
+  refuse et rend la sienne ; l'appareil fusionne et renvoie. Un verrou par
+  partition (`verrous/<id>.json`, créé « seulement s'il n'existe pas » : le
+  stockage n'en laisse réussir qu'un, `objets.creer`) empêche deux
+  écritures de se croiser ; avant, la plus ancienne pouvait passer en
+  dernier.
+  - Pourquoi un numéro de révision (`rev`) en plus de la date : deux
+    appareils dont l'horloge retarde datent tous deux « la version d'avant
+    + 1 ms ». Trouvé en écrivant les tests : sans lui, un appareil prenait
+    la version de l'autre pour la sienne.
+  - Sans `base`, un appareil d'avant (et `idee_ecrire`) garde « le plus
+    récent gagne ». `base: null` veut dire « elle ne doit pas exister ».
+    Un verrou abandonné (une coupure en route) se lève au bout de 30 s.
+- **Versions et corbeille (D6).** Un effacement par erreur partait partout
+  en quelques secondes, sans retour. À chaque écriture acceptée, la version
+  d'avant est gardée (`versions/<id>/<date>-r<rev>.json`) : 20 au plus par
+  partition, 30 jours. Une partition supprimée garde 30 jours sa dernière
+  version et ses traits (`corbeille/<id>.json`), puis part pour de bon ; sa
+  pierre tombale reste, pour les appareils qui ne l'ont pas encore vue.
+  Trois outils : `bibliotheque_versions`, `bibliotheque_version`,
+  `bibliotheque_corbeille`.
+  - On élague en écrivant (toutes les cinq versions, et à chaque
+    suppression) : l'historique reste loin du quota gratuit (1 Go), sans
+    tâche planifiée à part.
+- **Le curseur relit dix secondes (D10, S10).** Une écriture datée juste
+  avant le curseur mais visible juste après n'arrivait jamais sur un
+  appareil. `bibliotheque_changements` relit les dix dernières secondes ;
+  l'appareil reconnaît ce qu'il a déjà.
+- **Recevoir avant d'envoyer, à partir d'une base (D1, D4, `synchro.js`).**
+  Une synchro reçoit d'abord, puis envoie : une modification d'ici part de
+  la dernière version au lieu de l'écraser. Chaque appareil garde, pour
+  chaque partition, la dernière version convenue avec la bibliothèque
+  commune (magasin `bases`, IndexedDB version 3) : la fusion part d'elle.
+  La migration garde tout ; une fiche déjà synchronisée (rien en attente)
+  devient sa propre base, et la première fusion se fait déjà champ par
+  champ.
+  - Une correction enregistrée pendant la synchro n'est plus écrasée (S7) :
+    ce que la synchro range vérifie, dans la même transaction, que la
+    partition n'a pas bougé depuis qu'elle l'a lue ; sinon, elle recommence.
+    `modifier` lit et écrit aussi dans une seule transaction.
+  - Son propre envoi, dont la réponse s'est perdue, est reconnu à sa date
+    et à l'empreinte de son contenu : pas de fusion avec soi-même.
+- **Un refus ne bloque plus rien (D2).** Un envoi refusé (l'identifiant
+  d'une vieille sauvegarde, une date absente) levait une erreur : plus rien
+  ne partait ni n'arrivait, pour toujours. Il est maintenant mis de côté (la
+  « quarantaine », dans `meta`, avec la raison), compté dans l'état de la
+  synchro, et repart quand la fiche change, à la session suivante, ou avec
+  `synchro.reessayer()`. Une réception qu'on ne peut pas ranger (stockage
+  plein) aussi : le curseur avance, elle réessaie à chaque passage, et une
+  version plus récente la remplace.
+  - Une panne passagère du connecteur (son stockage) laisse l'envoi en file ;
+    à la cinquième dans la session, il est mis de côté. Le réseau coupé,
+    lui, arrête le passage sans rien mettre de côté : tout attend.
+  - Trop lourd pour le connecteur (plus de 6 Mo, HTTP 413) : mis de côté
+    avant même l'envoi, sinon il aurait été refusé à chaque passage.
+- **Suppressions et mémos (D3).** Une suppression refusée (la partition a
+  changé ailleurs entre-temps) rend la version gagnante, au lieu d'une
+  partition disparue ici et vivante ailleurs. La pierre tombale est datée
+  après la version d'ici, même quand l'horloge retarde. Une modification pas
+  encore partie l'emporte sur une suppression faite ailleurs : rien de ce
+  que tu as écrit ne disparaît sans toi, et la corbeille rattrape l'inverse.
+  Un mémo enregistré avance la date de sa fiche, et la synchro n'efface plus
+  que l'envoi qu'elle a fait partir (un numéro par envoi, plus la date) :
+  un mémo enregistré pendant une synchro, ou sans autre changement, ne
+  restait jamais sur l'appareil (S6, S14).
+- **Restaurer (D5).** La restauration disait « 1 partition restaurée »,
+  puis la synchro la re-supprimait. Une partition absente revient
+  maintenant datée d'aujourd'hui (dans l'ordre d'origine), même supprimée
+  ailleurs depuis ; une partition déjà là reste telle quelle ; une erreur
+  sur l'une n'arrête plus les autres. Le message dit combien sont revenues,
+  combien étaient déjà là (dont modifiées depuis), et lesquelles n'ont pas
+  pu revenir, avec la raison. Un identifiant que la bibliothèque refuserait
+  (sauvegarde bricolée) est remplacé, et les morceaux qui le citent suivent.
+- **Plusieurs onglets (D7).** Un seul synchronise à la fois
+  (`navigator.locks`, « portee-synchro »). Une partition changée dans un
+  onglet rafraîchit la liste des autres (`BroadcastChannel("portee")`). Une
+  version plus récente de Portée, ouverte ailleurs, reçoit la base : cet
+  onglet la lâche et dit de recharger. Un vieil onglet qui ne la lâche pas
+  ne fait plus démarrer l'appli sur une bibliothèque vide (le repli sur
+  localStorage) : un message dit « Ferme l'autre onglet de Portée », et la
+  bibliothèque s'ouvre dès qu'il l'est.
+  - La reprise d'une bibliothèque rangée dans localStorage garde les mémos
+    et met tout à envoyer : ce qui avait été noté pendant un repli ne
+    quittait jamais l'appareil (S16).
+  - `stockage.modifier(id, donnees, { depuis })` fusionne au lieu d'écraser
+    quand la partition a changé depuis que l'écran l'a ouverte. L'éditeur
+    d'idée et le morceau, qui enregistrent la fiche entière, pourront s'en
+    servir (voir la fin de cette section).
+- **Le mémo en morceaux sur claude.ai (D8).** Un document de la base de
+  claude.ai ne dépasse pas 256 Kio ; un mémo d'une minute en fait environ
+  320 en base64 : sa restauration échouait. Le son se range par morceaux de
+  180 000 caractères (`partitions/<id>/memo/audio-0…`, et un index là où
+  était le document) ; l'ancien format se lit toujours, et les morceaux
+  partent avec la partition. Essayé dans Chromium avec une fausse base qui
+  a la même limite : un mémo de 700 Ko revient d'une sauvegarde.
+- **L'état du stockage (D9).** `etatStockage()` dit si le navigateur a
+  promis de garder la bibliothèque (`persisted()`), la place prise et le
+  quota, si Portée est installée (écran d'accueil), et s'il y a un risque :
+  Safari efface au bout de 7 jours sans visite tout ce qu'un site non
+  installé garde. `demanderProtection()` redemande, et rend la réponse
+  (avant, `persist()` était appelé sans la lire).
+- **Les seize scénarios de perte de données de l'audit deviennent des
+  tests** (`tests/synchro-scenarios.test.mjs`). L'audit les avait écrits
+  pour montrer chaque défaut, avec les vrais modules ; ils vérifient
+  maintenant le comportement corrigé, avec deux cas trouvés en chemin (une
+  réception mise de côté puis dépassée, deux versions de même date). Les
+  tests d'origine de l'audit, rejoués sur ce code, ne reproduisent plus
+  aucun défaut ; S11, son contrôle positif, passe toujours. Essayé aussi
+  dans Chromium sur le site assemblé : deux appareils synchronisés par le
+  vrai code du connecteur, la sauvegarde empoisonnée de l'audit, deux
+  onglets, une base tenue par un vieil onglet, la migration 2 → 3, et la
+  version claude.ai simulée.
+- **Ce qui reste à brancher** (lot « Écrans des données ») : les écrans de
+  la quarantaine (`synchro.quarantaine()`, `reessayer`), des copies de
+  conflit (champ `conflitDe`), de la corbeille et des versions
+  (`synchro.corbeille()`, `versions`, `recupererSupprimee`,
+  `recupererVersion`), de l'état du stockage ; et, dans l'éditeur d'idée et
+  le morceau, `{ depuis }` à l'enregistrement et un rechargement quand un
+  autre onglet change la partition (`stockage.surAutreOnglet`).
 
 ### Son, temps, notation et exports (M1 à M12, N1 à N7)
 
@@ -962,7 +1129,213 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Outillage, hors ligne et dépendances (S2, I5, T1, T2, T6)
 
-<!-- lot outillage -->
+- **pdf.js passe en 6.4.299 (T6),** la version du 03/10. Toujours sa
+  version `legacy/` : la version moderne appelle
+  `Map.prototype.getOrInsertComputed`, que Safari ne connaît que depuis
+  iOS 26.2 ; sur un iPhone plus ancien, plus aucun PDF ne se lirait. La
+  lecture des pages d'essai n'a pas bougé (`npm test`), et l'import marche
+  dans Chromium avec le nouveau worker.
+- **abcjs et les polices viennent du site (S2).** abcjs venait de cdnjs
+  sans empreinte, et les polices de Google Fonts : chaque visite donnait
+  l'adresse IP du visiteur à Google, une panne du CDN laissait la partition
+  vide, et la gravure hors ligne dépendait d'une première visite réussie.
+  L'assembleur les copie depuis `node_modules`, dans les deux assemblages
+  (site et claude.ai), aux versions de `package.json` (abcjs 6.7.1,
+  `@fontsource` 5.3.0).
+  - Les mêmes polices qu'avant : Young Serif, IBM Plex Sans (400, 500, 600,
+    400 italique), IBM Plex Mono (400, 500), en latin et latin étendu. Leur
+    licence (SIL OFL 1.1) voyage avec elles dans `polices/`, celle d'abcjs
+    (MIT) dans `vendor/abcjs/` : les deux le demandent.
+  - `app/styles/polices.css` dit quels fichiers prendre ; l'assembleur
+    copie exactement ceux-là et s'arrête si l'un manque, ou si la page
+    appelle encore une ressource d'un autre domaine.
+  - abcjs contient, comme pdf.js, des caractères de contrôle bruts que le
+    publieur de claude.ai refuse : il passe par la même réécriture.
+- **Le site a une politique de sécurité du contenu (CSP, S2).** Elle ne
+  laisse passer que les fichiers du site, et le connecteur
+  (`https://*.supabase.co`). Un texte entré dans la page sans être échappé
+  ne peut plus rien exécuter, même si `echapper` (S1) était oublié quelque
+  part : c'est la seconde porte.
+  - Chaque permission a sa raison, écrite dans `outils/assembler-appli.mjs`
+    (les styles en ligne de la grille et d'abcjs, le worker de pdf.js, le
+    mémo vocal…).
+  - Dans un `<meta>` au début de la page : GitHub Pages ne laisse pas
+    choisir ses en-têtes. La version claude.ai n'en porte pas, claude.ai
+    pose la sienne.
+  - Essayée dans Chromium sur tous les parcours, sans une violation :
+    import des pages d'essai (pdf.js et son worker), gravure, correction,
+    écoute, MIDI, idée au clavier, chant au faux micro, mémo vocal,
+    sauvegarde.
+- **Hors ligne dès la première visite (I5).** Le service worker ne gardait
+  que ce qu'on avait déjà ouvert, et chaque mise en ligne vidait tout : le
+  nouveau effaçait l'ancien cache dès son arrivée, avant d'avoir rien
+  copié. Rejoué dans Chromium (serveur qui cache comme Pages) : après une
+  mise en ligne, l'appli ne s'ouvrait plus hors ligne (`net::ERR_FAILED`).
+  - À l'installation, il copie la coquille (84 fichiers : la page, les
+    modules et feuilles de style de la version, abcjs, les polices, les
+    modèles, les pages d'essai, les icônes). Une fois l'appli ouverte,
+    pdf.js et le piano suivent en tâche de fond, un fichier après l'autre :
+    3,4 Mo qui ne servent pas au démarrage. L'assembleur lui écrit la liste
+    exacte.
+  - L'ancien cache ne part qu'une fois le nouveau complet : une copie ratée
+    laisse l'ancienne version entière, qui retente à la visite suivante.
+    Seules les réponses `ok` sont gardées : une erreur de cdnjs restait
+    servie toute une version (abcjs absent).
+  - Le piano a son propre cache, nommé d'après l'empreinte de ses
+    fichiers : il ne se retélécharge que s'il change, et s'il change,
+    l'ancien part (`portee-piano-1` n'était jamais remplacé).
+  - La navigation garde la règle du 02/10 : la page est redemandée au
+    serveur, la copie ne sert que s'il manque, s'il est en panne ou s'il
+    tarde (plus bas). La copie de la page n'est jamais remplacée en
+    route : une page plus récente, venue du réseau, n'irait pas avec les
+    modules copiés ; elle entre dans la copie avec sa version.
+  - Quand une nouvelle version prend la main, une page ouverte d'une autre
+    version dit « Une nouvelle version de Portée est prête » et propose
+    « Recharger » : rien ne se recharge tout seul, tu peux être au milieu
+    d'une prise. En revenant sur l'appli (au plus toutes les dix minutes),
+    Portée demande s'il y a du neuf : une appli installée reste ouverte des
+    jours.
+  - Il ne touche plus qu'aux caches de Portée : il effaçait tous ceux du
+    domaine, qui sert aussi tes autres sites.
+  - Prouvé avec les deux essais de l'audit, adaptés : hors ligne après une
+    première visite ; après une mise en ligne ratée (la v1 reste entière) ;
+    après une mise en ligne réussie (le message, « Recharger », puis la v2
+    hors ligne : pages d'essai lues, gravées, jouées) ; un 503 sur abcjs
+    n'est plus gardé. Le service worker s'inscrit aussi sur l'ordinateur
+    lui-même (`isSecureContext` plutôt que `https:`), pour ces essais.
+- **Un réseau qui traîne n'arrête plus l'appli (I5).** L'audit de
+  l'interface l'a mesuré : un serveur qui répond en 8 s, tout dans la
+  copie, et pourtant 16 s avant le premier affichage, 40 s avant l'appli,
+  parce que le service worker attendait toujours le réseau.
+  - La page n'attend plus le serveur que 2,5 s, puis prend la copie.
+    Pourquoi pas la copie tout de suite : la page doit rester la dernière
+    mise en ligne (décision du 02/10), et 2,5 s couvrent une réponse sur
+    un réseau mobile ordinaire.
+  - Ce dont l'adresse porte une version vient de la copie d'abord : les
+    modules, les feuilles de style, et maintenant pdf.js, abcjs et les
+    polices, qui portent la version de leur paquet (`?v=6.4.299`…). Leur
+    adresse ne change que s'ils changent : ils passent d'une version de
+    Portée à l'autre sans être retéléchargés.
+  - L'inscription du service worker attend que la page soit chargée : la
+    copie de l'appli ne lui dispute plus le réseau à la première visite.
+  - Mesuré dans les mêmes conditions (8 s par réponse, téléphone simulé,
+    médiane de trois) : premier affichage 24,1 s → 2,6 s, appli prête
+    80,1 s → 2,6 s.
+- **Un démarrage plus rapide au téléphone, une page bien rangée (B1).**
+  Mesuré avec le script de l'audit de l'interface (téléphone simulé,
+  processeur ×4, « Slow 4G », serveur qui imite GitHub Pages, médiane de
+  cinq chargements à froid) : icônes visibles 5,34 s → 2,17 s, appli
+  prête 5,40 s → 3,96 s.
+  - Le jeu d'icônes est écrit dans la page à l'assemblage (`jeuDIcones()` ;
+    `app/icones.js` reste la seule source, et `injecterIcones()` ne le
+    double pas) : les icônes arrivent avec le premier affichage, au lieu
+    d'attendre les modules.
+  - abcjs se charge en `defer` : il ne retient plus la page, et passe
+    toujours avant `app.js`.
+  - Les modules partent tous d'un coup (`<link rel="modulepreload">`, la
+    liste que l'assembleur calcule en suivant les imports), au lieu d'être
+    découverts import après import, une demi-seconde d'aller-retour à
+    chaque fois sur un réseau mobile.
+  - Le prix, dans cette mesure : le premier affichage arrive 0,7 s plus
+    tard (1,56 s → 2,23 s), parce que les modules partagent le débit avec
+    les feuilles de style ; le serveur de mesure ne suit pas les priorités
+    du navigateur, qui demande les feuilles de style d'abord. Sans les
+    `modulepreload`, le premier affichage serait à 1,53 s mais l'appli
+    prête à 4,73 s : on a préféré l'appli utilisable plus tôt.
+  - Le titre et les feuilles de style sont dans `<head>` (ils étaient dans
+    `<body>`). La description de la page et du manifeste parle du carnet
+    d'idées, du MIDI vers Ableton et des pages de la reMarkable ; la barre
+    du navigateur prend la couleur du papier, clair ou sombre.
+- **Lint et types (T2).** `npm run lint` (ESLint, ses règles recommandées)
+  et `npm run types` (TypeScript lit les JSDoc et vérifie, sans rien
+  compiler : le code reste du JavaScript pur).
+  - Chaque dossier a les globales de l'endroit où il tourne : navigateur,
+    service worker, Node, et « navigateur et Node à la fois » pour le
+    lecteur et le connecteur (Deno et Node les lisent tous deux : rien de
+    propre à l'un des deux n'y est permis). Les deux faux positifs de
+    l'audit disparaissent.
+  - Deux avertissements de plus, `require-atomic-updates` (une valeur lue
+    avant un `await` et écrite après) et `no-throw-literal`. Ils ne
+    bloquent pas : ils montrent un endroit à relire. Il y en a 29, dont
+    celui de l'audit (`app.js:1427`, la double lecture pendant le
+    chargement du piano). L'argument `cal` inutilisé de `lecteur.js:548`
+    n'est qu'un avertissement le temps que le lot du lecteur le retire.
+    `conversation.js` nomme exprès des caractères de contrôle (il les
+    refuse dans ce qu'il reçoit) : la règle qui s'en méfie s'y tait.
+  - Les types ne couvrent d'abord que des modules sans DOM qui passent à
+    zéro erreur : le lecteur (sauf l'extraction), l'édition de l'ABC, les
+    doutes, le zip, `echapper` et le connecteur (sauf `conversation.js`, et
+    `mcp.js` et `http.js` qui l'importent). Ils sont vérifiés avec la
+    bibliothèque « WebWorker » : un de ces modules qui toucherait à la page
+    le dirait. Attendent une JSDoc corrigée : `extraction`, `sequence` (et
+    avec lui `harmonie` et `musicxml`), `midi`, `morceau`, `synchro` ; et
+    `conversation.js`, une fiche dont TypeScript ne devine pas le genre. Les
+    écrans attendraient un typage du DOM que le mode normal ne devine pas,
+    pour aucun bogue trouvé : pas maintenant. Le mode strict n'en vaut pas
+    la peine.
+  - TypeScript 7, la version native : moins d'une seconde pour tout.
+- **Des essais de bout en bout dans Chromium (T1).** `npm run e2e` assemble
+  le site, le sert comme GitHub Pages (`max-age=600`, empreintes, sous
+  `/Musique/`) et y joue vingt et un essais dans Chromium, réseau extérieur
+  coupé, en une vingtaine de secondes. Aucun écran n'était testé, et trois
+  des quatre bogues de l'audit avaient été trouvés par de courts essais au
+  navigateur.
+  - Les parcours de CLAUDE.md d'abord : la page s'ouvre sans erreur (ses
+    polices et abcjs viennent du site), import des pages d'essai, un doute
+    réglé et une note corrigée puis annulés, écoute puis arrêt, le MIDI
+    (`MThd`), sauvegarde puis restauration dans un navigateur vierge,
+    traits compris.
+  - L'éditeur d'idée : A S D F au clavier, la grille puis la partition,
+    l'idée retrouvée après rechargement ; une note chantée au faux micro
+    (un chanteur de synthèse, la4 puis do5) ; un mémo vocal enregistré
+    puis réécouté ; « précédent » ferme la feuille du bas, puis revient au
+    carnet sans quitter Portée.
+  - La sécurité : une sauvegarde piégée (du HTML dans le titre, les
+    étiquettes, le nom de piste, la durée du mémo, un accord, un
+    identifiant de note) ne fait rien exécuter et n'atteint même pas la
+    CSP ; sur la version d'avant S1, l'essai échoue (quatorze violations).
+    Et le connecteur appelé par le site, sous sa CSP : le vrai
+    `repondreHttp`, sur le faux cloud et le faux stockage (relier,
+    importer, synchroniser).
+  - Hors ligne : après une première visite (import, gravure, piano) ;
+    une mise en ligne ratée, puis réussie (le message, « Recharger ») ;
+    une erreur jamais gardée ; un réseau qui traîne (la copie à 2,5 s).
+  - La version claude.ai simulée : le vrai assemblage (`npm run appli`) et
+    un faux `window.claude` (la base, les téléchargements, et `use("mcp")`
+    qui appelle `traiter()` du connecteur sur le faux cloud) : relier la
+    tablette, importer, le MIDI zippé, la base retrouvée après
+    rechargement, la sauvegarde piégée sans CSP.
+  - L'interface : chaque bouton à icône a un nom, sur chaque écran et
+    chaque feuille. Les 44 px au doigt (à 390 et 320 px) sont mesurés mais
+    notés « à faire » : l'essai liste les cibles trop petites sans arrêter
+    la suite, en attendant le lot de l'interface (I1).
+  - Les deux assemblages vérifiés sans navigateur : la page ne demande
+    rien d'ailleurs, le service worker garde tout ce qu'elle demande sous
+    la même adresse, la version claude.ai n'a ni caractère de contrôle ni
+    fichier d'un type inconnu.
+  - Pourquoi `node:test` plutôt que le lanceur de Playwright : comme les
+    autres tests ; seule la bibliothèque est ajoutée, en 1.56.1, la version
+    des navigateurs installés ici (en CI, `npx playwright install`).
+  - Trouvé en route, pas corrigé ici : une idée rechargée moins de 0,7 s
+    après sa dernière note est perdue (son premier enregistrement attend
+    encore ; rien ne l'écrit quand la page se ferme).
+- **La CI du site vérifie tout, à chaque PR (S3, côté site).** Un job
+  `verifier`, sur chaque PR et avant chaque mise en ligne : `npm test`,
+  `npm run lint`, `npm run types`, `npm run e2e` (Chromium installé par
+  `npx playwright install`) et `deno check` pour le connecteur. CLAUDE.md
+  demandait ces vérifications avant de pousser ; rien ne les faisait.
+  - Les actions sont épinglées par empreinte, la version en commentaire :
+    une étiquette comme `v4` peut être déplacée vers un autre code. Le
+    jeton GitHub ne reste plus dans le dépôt cloné
+    (`persist-credentials: false`), aucun script d'installation de
+    dépendance ne s'exécute (`npm ci --ignore-scripts`), et seul le job qui
+    publie peut écrire, sur Pages.
+  - Dependabot passe le lundi : une PR pour les dépendances, une pour les
+    actions, que les mêmes vérifications jugent. Sauf Playwright, qui va
+    avec les navigateurs installés là où Claude travaille (Chromium 1194) :
+    il se monte à la main, avec eux.
+  - `engines` : Node 22 au moins, la version de la CI et des essais
+    (ESLint 10 demande déjà au moins Node 20.19).
 
 ### Notation, harmonie et exports (N1 à N7)
 
@@ -1532,9 +1905,19 @@ ou supprimer la fonction dans Supabase.
   version dans les adresses, une page neuve tournait avec des modules
   anciens. `assembler-appli.mjs` versionne les imports `"./x.js"` du site :
   écrire les imports sous cette forme littérale (il refuse les autres).
+  Le service worker copie à l'installation tout ce que l'assembleur met
+  dans `dist/` (sauf le piano, à part, et les licences) : un fichier que
+  l'appli demande doit donc sortir de l'assembleur, sinon il manque hors
+  ligne. Les fichiers tiers (pdf.js, abcjs, polices) portent la version de
+  leur paquet, que l'assembleur met dans leur adresse (`app.js`, la page,
+  `polices.css`) : il cherche pdf.js sous la forme
+  `"./vendor/pdfjs/pdf.min.mjs"` dans `app.js`, et s'arrête s'il ne la
+  trouve plus.
 
-- **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, absent des
-  navigateurs de 2026 : il faut prendre la version `legacy/`.
+- **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, disponible
+  partout seulement depuis le 14/02/2026 (Chrome 145, Firefox 144,
+  Safari 26.2) : garder la version `legacy/` tant qu'un iPhone antérieur à
+  iOS 26.2 doit pouvoir lire un PDF.
 - **Le publieur de claude.ai refuse les caractères de contrôle bruts.** Le
   worker de pdf.js en contient 719 dans une table de données.
   `assembler-appli.mjs` les réécrit en `\xNN`, ce qui revient au même.
@@ -1562,10 +1945,16 @@ ou supprimer la fonction dans Supabase.
   recevoir, et la bibliothèque commune refuserait sa correction.
   `stockage.modifier` rend donc chaque `modifieLe` strictement plus récent que
   le précédent. Un envoi refusé applique aussitôt la version gagnante.
-- **IndexedDB `portee`, version 2** : magasins `partitions`, `pages`, `envois`
-  (file à synchroniser) et `meta` (curseur, adresse, « rejoint »). Changer
-  l'adresse du connecteur remet le curseur à zéro : une autre adresse, c'est
-  une autre bibliothèque commune.
+- **IndexedDB `portee`, version 3** : magasins `partitions`, `pages`,
+  `envois` (file à synchroniser, un numéro par envoi), `meta` (curseur,
+  adresse, « rejoint », et la quarantaine : `quarantaine:<envoi|reception>:<id>`)
+  et `bases` (depuis la version 3 : la dernière version de chaque partition
+  convenue avec la bibliothèque commune, d'où part la fusion). La migration
+  2 → 3 garde tout. Changer l'adresse du connecteur remet le curseur à zéro
+  et vide les bases et la quarantaine : une autre adresse, c'est une autre
+  bibliothèque commune. Une version plus récente de la base fait lâcher la
+  base aux onglets ouverts (`onversionchange`) ; un vieil onglet qui ne la
+  lâche pas bloque l'ouverture : l'appli le dit, et attend.
 - **Domaine du site** : GitHub Pages sert le site sous le domaine personnalisé
   d'Adrien (`adrienvada.fr/Musique/`). Le navigateur envoie donc l'origine
   `https://adrienvada.fr`, qui doit figurer dans `ORIGINES` (`http.js`).
@@ -1601,11 +1990,17 @@ ou supprimer la fonction dans Supabase.
 - **localStorage dans la page claude.ai** : il peut être refusé (cadre
   isolé). Les préférences de l'éditeur (affichage, tempo par défaut, clavier
   MIDI) passent par `lirePref` / `ecrirePref`, qui font sans.
-- **Essais Chromium derrière le proxy** : sans `ignoreHTTPSErrors`, abcjs
-  (cdnjs) ne se charge pas et la partition reste vide ; le proxy laisse
-  aussi parfois tomber les polices (`ERR_TOO_MANY_RETRIES`). Ce n'est pas
-  l'appli. Un faux micro : `--use-fake-device-for-media-stream
-  --use-file-for-fake-audio-capture=chant.wav` (un chanteur de synthèse).
+- **Essais Chromium derrière le proxy** : depuis le 04/10, abcjs et les
+  polices viennent du site ; plus rien ne passe par le proxy, et les
+  essais de bout en bout (`tests/e2e/`) coupent tout le réseau extérieur.
+  Pour couper ou ralentir le réseau, c'est le serveur d'essai qu'on coupe
+  (`serveur.reseau(false)`, `serveur.ralentir(ms)`) : ni
+  `context.setOffline` ni le bridage de Chromium ne touchent les requêtes
+  du service worker. `page.waitForFunction` n'attend pas une promesse :
+  pour une condition asynchrone (les caches), `attendreQue`. Un faux
+  micro : `--use-fake-device-for-media-stream
+  --use-file-for-fake-audio-capture=chant.wav` (un chanteur de synthèse,
+  `ecrireChant`).
 - **Micro et clavier MIDI** : ni l'un ni l'autre dans la page claude.ai
   (cadre sans ces permissions) ; Safari (iPhone, iPad) ne lit pas les
   claviers MIDI. Le micro et le son ne marchent pas en même temps : on coupe

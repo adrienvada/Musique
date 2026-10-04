@@ -283,7 +283,11 @@ function ouvrirIdee(p = null, options = {}) {
 /** Toutes les étiquettes de la bibliothèque, les plus employées d'abord. */
 function toutesEtiquettes() {
   const compte = new Map();
-  for (const p of etat.partitions) for (const t of p.etiquettes || []) compte.set(t, (compte.get(t) || 0) + 1);
+  // Une fiche abîmée (des étiquettes qui ne sont pas une liste) vidait tout le
+  // carnet (audit, S6) : le stockage les remet en forme, et ceci ne casse plus.
+  for (const p of etat.partitions) {
+    for (const t of Array.isArray(p.etiquettes) ? p.etiquettes : []) if (typeof t === "string" && t) compte.set(t, (compte.get(t) || 0) + 1);
+  }
   return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
 }
 
@@ -498,12 +502,32 @@ async function sauvegarderBibliotheque() {
 async function restaurerBibliotheque(fichier) {
   try {
     const contenu = JSON.parse(await fichier.text());
-    const { ajoutees, ignorees } = await restaurer(etat.stockage, contenu, new Set(etat.partitions.map((p) => p.id)));
-    const deja = ignorees ? ` (${ignorees} déjà dans ta bibliothèque)` : "";
-    toast(ajoutees ? `${ajoutees} partition${ajoutees > 1 ? "s" : ""} restaurée${ajoutees > 1 ? "s" : ""}${deja}.` : `Rien à restaurer : tout est déjà dans ta bibliothèque.`);
+    const bilan = await restaurer(etat.stockage, contenu, new Set(etat.partitions.map((p) => p.id)));
+    toast(bilanRestauration(bilan), bilan.echecs.length ? 10000 : 5000);
   } catch (e) {
     toast(e instanceof SyntaxError ? "Ce fichier n'est pas une sauvegarde de Portée." : (e.message || "La restauration n'a pas abouti."), 7000);
   }
+}
+
+/**
+ * Ce que la restauration a fait, en une phrase : combien sont revenues
+ * (même supprimées ailleurs depuis), combien étaient déjà là (gardées telles
+ * quelles), et lesquelles n'ont pas pu revenir, avec la raison.
+ */
+function bilanRestauration({ revenues = 0, ignorees = 0, differentes = 0, echecs = [] }) {
+  const pluriel = (n, un, plusieurs) => (n > 1 ? plusieurs : un);
+  if (!revenues && !echecs.length) return ignorees ? "Rien à restaurer : tout est déjà dans ta bibliothèque." : "Cette sauvegarde est vide.";
+  const morceaux = [];
+  if (revenues) morceaux.push(`${revenues} ${pluriel(revenues, "partition revenue", "partitions revenues")}`);
+  if (ignorees) {
+    const changees = differentes ? ` (dont ${differentes} ${pluriel(differentes, "modifiée depuis, gardée telle quelle", "modifiées depuis, gardées telles quelles")})` : "";
+    morceaux.push(`${ignorees} déjà là${changees}`);
+  }
+  if (echecs.length) {
+    const lesquelles = echecs.slice(0, 3).map((x) => `« ${x.titre} » (${x.raison})`).join(", ") + (echecs.length > 3 ? "…" : "");
+    morceaux.push(`${echecs.length} ${pluriel(echecs.length, "n'a pas pu revenir", "n'ont pas pu revenir")} : ${lesquelles}`);
+  }
+  return morceaux.join(" · ") + ".";
 }
 
 function nomModele(m) {
@@ -1979,6 +2003,65 @@ function creerEditeur() {
   });
 }
 
+/**
+ * Le service worker (sw.js) garde l'appli pour le hors-ligne. Une version
+ * mise en ligne s'installe en arrière-plan, puis prend la main ; si la page
+ * ouverte n'est pas de cette version, un message passager propose de
+ * recharger. Rien ne se recharge tout seul : on peut être au milieu d'une
+ * prise ou d'une correction.
+ *
+ * Une appli installée reste ouverte des jours : en y revenant (au plus une
+ * fois toutes les dix minutes), on demande s'il y a une nouvelle version,
+ * sans attendre que le navigateur y pense.
+ *
+ * L'inscription attend que la page soit chargée : la copie de l'appli ne
+ * lui dispute pas le réseau. Ce qui est lourd et ne sert pas au démarrage
+ * (pdf.js, le piano) se copie ensuite, en tâche de fond.
+ */
+function brancherServiceWorker() {
+  // La version de la page : celle de l'adresse de ce module (app.js?v=…).
+  const maVersion = new URL(import.meta.url).searchParams.get("v");
+  const copierEnFond = (sw) => sw && sw.postMessage({ type: "portee-precharger" });
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    const m = e.data;
+    if (!m || m.type !== "portee-version") return;
+    copierEnFond(e.source); // une version qui vient de prendre la main
+    if (maVersion && m.version !== maVersion) proposerRechargement();
+  });
+  let verifiee = Date.now();
+  const inscrire = () => navigator.serviceWorker.register("sw.js").then((inscription) => {
+    navigator.serviceWorker.ready.then((r) => copierEnFond(r.active));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || Date.now() - verifiee < 10 * 60 * 1000) return;
+      verifiee = Date.now();
+      inscription.update().catch(() => {}); // hors ligne : la prochaine fois
+    });
+  }).catch(() => {});
+  if (document.readyState === "complete") inscrire();
+  else addEventListener("load", inscrire, { once: true });
+}
+
+/** « Une nouvelle version est prête » : un message passager, avec de quoi recharger. */
+function proposerRechargement() {
+  if ($("toast-version")) return;
+  const m = document.createElement("div");
+  m.className = "toast toast-action";
+  m.id = "toast-version";
+  m.setAttribute("role", "status");
+  m.setAttribute("popover", "manual");
+  const texte = document.createElement("span");
+  texte.textContent = "Une nouvelle version de Portée est prête.";
+  const recharger = document.createElement("button");
+  recharger.className = "btn btn-petit";
+  recharger.textContent = "Recharger";
+  recharger.addEventListener("click", () => location.reload());
+  m.append(texte, recharger);
+  document.body.appendChild(m);
+  // En « popover », comme les autres messages : au-dessus d'une feuille ouverte.
+  if (m.showPopover) { try { m.showPopover(); } catch { /* sans popover : il s'affiche quand même */ } }
+  setTimeout(() => m.remove(), 20000);
+}
+
 async function demarrer() {
   injecterIcones();
   // Un appui long sur une icône dit ce qu'elle fait.
@@ -1990,7 +2073,23 @@ async function demarrer() {
   creerEditeur();
   creerVueDuMorceau();
   afficherBibliotheque();
-  etat.stockage = await ouvrirStockage();
+  let bloquee = false;
+  try {
+    etat.stockage = await ouvrirStockage({
+      // Un autre onglet garde la base ouverte sur une version précédente : on
+      // le dit, et la bibliothèque s'ouvre dès qu'il la lâche (audit, S13).
+      surBloque: (message) => { bloquee = true; $("mode").textContent = message; toast(message, 120000); },
+    });
+  } catch (e) {
+    // Base déjà passée à une version plus récente : pas de bibliothèque vide en douce.
+    const message = (e && e.message) || "La bibliothèque ne s'ouvre pas : recharge la page.";
+    $("mode").textContent = message;
+    toast(message, 120000);
+    return;
+  }
+  if (bloquee) toast("Ta bibliothèque est ouverte.");
+  // Une version plus récente de Portée, ouverte dans un autre onglet, a besoin de la base : celle-ci la lâche.
+  if (etat.stockage.surFermeture) etat.stockage.surFermeture(() => toast("Portée a été mise à jour dans un autre onglet : recharge cette page pour continuer.", 120000));
   // Le bouton « précédent » du téléphone recule dans l'appli au lieu de la quitter.
   creerHistorique({ racine: aLaRacine, reculer }).synchroniser();
   // Raccourci de l'appli installée (« Nouvelle idée ») : on y va tout droit.
@@ -2004,9 +2103,8 @@ async function demarrer() {
   demarrerSynchro();
   $("changer-adresse").hidden = dansClaude() || !adresseEnregistree();
   // Hors ligne et installable, hors de claude.ai (sw.js n'existe que sur le site).
-  if (!dansClaude() && "serviceWorker" in navigator && location.protocol === "https:") {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  }
+  // Un contexte sûr : https, ou l'ordinateur lui-même (les essais de bout en bout).
+  if (!dansClaude() && "serviceWorker" in navigator && window.isSecureContext) brancherServiceWorker();
   etat.stockage.ecouter(
     (liste) => {
       etat.partitions = liste;

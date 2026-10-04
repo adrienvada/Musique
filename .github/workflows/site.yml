@@ -1,11 +1,17 @@
 # Publie Portée sur GitHub Pages (https://adrienvada.fr/Musique/, le domaine du
-# site d'Adrien ; adrienvada.github.io/Musique/ y redirige) à
-# chaque changement sur main : tests, assemblage de la version autonome
-# (npm run appli -- --autonome), puis mise en ligne. Sur une PR, on vérifie
-# seulement que le site s'assemble.
+# site d'Adrien ; adrienvada.github.io/Musique/ y redirige) à chaque
+# changement sur main : vérifications, assemblage de la version autonome
+# (npm run appli -- --autonome), puis mise en ligne. Sur une PR : les mêmes
+# vérifications et l'assemblage, sans mise en ligne.
 #
 # Une fois pour toutes : Settings → Pages → Build and deployment → Source :
 # « GitHub Actions ».
+#
+# Les actions sont épinglées par empreinte (une étiquette « v4 » peut être
+# déplacée vers un autre code), la version en commentaire ; Dependabot les
+# tient à jour (.github/dependabot.yml). Aucune étape ne garde le jeton
+# GitHub (persist-credentials: false), et seul le job qui publie a le droit
+# d'écrire, sur Pages seulement.
 name: Site
 
 on:
@@ -22,18 +28,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  assembler:
+  # Tout ce que CLAUDE.md demande avant de pousser : les tests, le lint, les
+  # types, les essais de bout en bout dans Chromium, et deno check pour le
+  # connecteur (la vérification que fait Supabase à sa mise en ligne).
+  verifier:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # Aucun script d'installation de dépendance ne s'exécute.
+      - run: npm ci --ignore-scripts
+      # Le Chromium de la version de Playwright figée par package.json.
+      - run: npx playwright install --with-deps chromium
       - run: npm test
+      - run: npm run lint
+      - run: npm run types
+      - run: npm run e2e
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/portee-remarkable/index.ts
+
+  assembler:
+    needs: verifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
       - run: npm run appli -- --autonome
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: dist
 
@@ -41,6 +77,7 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: assembler
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       pages: write
       id-token: write
@@ -49,4 +86,4 @@ jobs:
       url: ${{ steps.pages.outputs.page_url }}
     steps:
       - id: pages
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
