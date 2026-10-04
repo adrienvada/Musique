@@ -594,6 +594,30 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - le style « Basse et accords » joue l'accord sans sa racine après la
     basse, comme avant ; les cartes des styles dessinent le nouveau motif
     (elles le calculent avec le même code).
+- **N4 · « Proposer pour toute l'idée » respecte les cadences.**
+  **L'harmonisation proposée changera** sur tes idées (seulement si tu la
+  redemandes : les accords déjà posés ne bougent pas). Avant : un accord par
+  mesure, et « garder l'accord d'avant » effaçait la demi-cadence (l'Hymne
+  à la joie restait en ré à la 4ᵉ mesure). Maintenant (`harmoniser`) :
+  - les phrases vont par quatre mesures (une levée à part) ; la fin de
+    chaque phrase prend la dominante quand la mélodie s'y prête
+    (demi-cadence), la dernière mesure finit sur la tonique, la dominante
+    d'abord si la mesure se partage (cadence parfaite : « la ré » à la fin
+    de l'Hymne) ;
+  - deux accords par mesure quand une moitié de mesure passe les trois
+    quarts de son temps hors de l'accord de la mesure : « do mi | ré ré »
+    dans Au clair de la lune devient do puis sol ; une note de passage ne
+    suffit pas (Frère Jacques reste en do). Seules les mesures qui se
+    coupent en deux temps égaux se partagent (4/4, 2/4, 2/2, 6/8, 12/8) ;
+  - une règle (cadence, tonique, résolution) ne choisit qu'un accord presque
+    aussi bon que le meilleur (`MARGE`) : elle départage, elle n'impose pas
+    un accord qui jure ;
+  - les dominantes secondaires entrent dans `suggerer` quand la mélodie joue
+    leur note étrangère (fa♯ en do appelle D7, sol♯ E7, si♭ C7, do♯ A7 en la
+    mineur), et `harmoniser` les résout sur leur accord : une ligne
+    chromatique en do donne C D7 G E7 Am G7 C. La roue, elle, ne montre
+    toujours que ses sept accords : une dominante secondaire n'y apparaît
+    pas (à voir avec l'écran des accords, si tu veux la proposer là aussi).
 - **B9 · L'arrondi traite la dernière note comme les autres.** Ta règle du
   jeu lié ne change pas (une note relâchée au plus un pas de grille avant la
   suivante tient jusqu'à elle). Mais la dernière note d'une prise n'a pas de

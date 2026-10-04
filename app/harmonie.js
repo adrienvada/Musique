@@ -57,23 +57,48 @@ export function accordsDeLaTonalite(tonalite) {
 }
 
 const PREFERENCES = { I: 0.3, i: 0.3, V: 0.25, IV: 0.25, iv: 0.25, vi: 0.15, VI: 0.15, V7: 0.15, ii: 0.1, III: 0.1, VII: 0.1, iii: 0.05, v: 0.05, "vii°": -0.1, "ii°": -0.1 };
+// Une dominante secondaire n'est proposée que si la mélodie l'appelle : elle
+// part avec le même petit avantage qu'un accord peu courant de la tonalité.
+const PREFERENCE_SECONDAIRE = 0.1;
 
 /**
- * Les accords qui vont avec les notes entre `debut` et `fin` (pas) de la
- * première piste : une note de l'accord compte pour, une note à un
- * demi-ton d'une note de l'accord compte contre ; le premier temps pèse
- * plus. Rend les noms, du meilleur au moins bon.
+ * Les dominantes secondaires de la tonalité : le 7 qui mène à chaque accord
+ * de la roue (sauf la tonique, qui a déjà la sienne, et l'accord diminué).
+ * Chacune porte ses notes étrangères à la gamme (`appel`) : fa♯ pour D7 en
+ * do, qui mène à sol ; sol♯ pour E7, qui mène à la mineur ; si♭ pour C7, qui
+ * mène à fa. Sans note étrangère (G7 vers do en la mineur), rien ne la
+ * distingue d'un accord de la tonalité : elle n'est pas proposée.
  */
-export function suggerer(seq, debut, fin, combien = 6) {
+function dominantesSecondaires(tonalite) {
+  const k = lireTonalite(tonalite);
+  const gamme = (k.mineur ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11]).map((x) => mod12(k.pc + x));
+  return roueDeLaTonalite(tonalite).filter((r) => r.indice > 0 && r.qualite !== "dim").map((r) => {
+    const racine = mod12(r.racine + 7);
+    const appel = [0, 4, 7, 10].map((x) => mod12(racine + x)).filter((pc) => !gamme.includes(pc));
+    return { nom: nomRacine(racine, tonalite) + "7", degre: `V/${r.degre}`, appel, cible: r.nom };
+  }).filter((c) => c.appel.length);
+}
+
+/**
+ * Chaque accord candidat, noté d'après les notes entre `debut` et `fin`
+ * (pas) de la première piste : une note de l'accord compte pour, une note à
+ * un demi-ton d'une note de l'accord compte contre ; le premier temps pèse
+ * plus. Les candidats : les accords de la tonalité, et les dominantes
+ * secondaires dont la mélodie joue une note étrangère. Du meilleur au moins
+ * bon : [{ nom, degre, score }].
+ */
+function noter(seq, debut, fin) {
   const notes = seq.pistes[0].notes.filter((n) => n.d < fin && n.d + n.l > debut);
   const candidats = accordsDeLaTonalite(seq.tonalite);
-  if (!notes.length) return candidats.slice(0, combien).map((c) => c.nom);
+  if (!notes.length) return candidats.map((c) => ({ ...c, score: 0 }));
+  const jouees = new Set(notes.map((n) => mod12(n.h)));
+  for (const s of dominantesSecondaires(seq.tonalite)) if (s.appel.some((pc) => jouees.has(pc))) candidats.push(s);
   const poids = notes.map((n) => {
     const recouvre = Math.min(fin, n.d + n.l) - Math.max(debut, n.d);
     return { pc: mod12(n.h), w: recouvre * (n.d === debut ? 1.5 : 1) };
   });
   const total = poids.reduce((s, p) => s + p.w, 0) || 1;
-  const notes1 = candidats.map((c) => {
+  return candidats.map((c) => {
     const a = lireAccord(c.nom);
     const tons = new Set(a.intervalles.map((i) => mod12(a.racine + i)));
     let score = 0;
@@ -82,25 +107,111 @@ export function suggerer(seq, debut, fin, combien = 6) {
       else if (tons.has(mod12(pc + 1)) || tons.has(mod12(pc - 1))) score -= 0.5 * w;
       else score -= 0.1 * w;
     }
-    return { nom: c.nom, score: score / total + (PREFERENCES[c.degre] || 0) };
-  });
-  return notes1.sort((a, b) => b.score - a.score).slice(0, combien).map((c) => c.nom);
+    const prefere = c.degre.startsWith("V/") ? PREFERENCE_SECONDAIRE : PREFERENCES[c.degre] || 0;
+    return { nom: c.nom, degre: c.degre, cible: c.cible || null, score: score / total + prefere };
+  }).sort((a, b) => b.score - a.score);
 }
 
-/** Un accord par mesure, d'après la mélodie : le premier et le dernier tirent vers la tonique. */
-export function harmoniser(seq) {
-  const mesure = pasParMesure(seq);
-  const tonique = accordsDeLaTonalite(seq.tonalite)[0].nom;
-  const nb = nbMesures(seq);
-  const accords = [];
-  for (let m = 0; m < nb; m++) {
-    const propositions = suggerer(seq, m * mesure, (m + 1) * mesure, 3);
-    let choix = propositions[0];
-    if ((m === 0 || m === nb - 1) && propositions.includes(tonique)) choix = tonique;
-    else if (accords.length && propositions.slice(0, 2).includes(accords.at(-1).nom)) choix = accords.at(-1).nom;
-    accords.push({ d: m * mesure, nom: choix });
+/**
+ * Les accords qui vont avec les notes entre `debut` et `fin` (pas) de la
+ * première piste, du meilleur au moins bon (leurs noms). Sans note, ceux de
+ * la tonalité, du plus courant au plus rare.
+ */
+export function suggerer(seq, debut, fin, combien = 6) {
+  return noter(seq, debut, fin).slice(0, combien).map((c) => c.nom);
+}
+
+/**
+ * La part d'une moitié de mesure que la mélodie passe hors de l'accord
+ * `nom` : 1 si toutes ses notes y sont étrangères, 0 si toutes en sont.
+ */
+function horsDeLAccord(seq, debut, fin, nom) {
+  const a = lireAccord(nom);
+  const tons = new Set(a.intervalles.map((i) => mod12(a.racine + i)));
+  let dehors = 0, sonne = 0;
+  for (const n of seq.pistes[0].notes) {
+    const l = Math.min(fin, n.d + n.l) - Math.max(debut, n.d);
+    if (l <= 0) continue;
+    sonne += l;
+    if (!tons.has(mod12(n.h))) dehors += l;
   }
-  // Deux mesures de suite sur le même accord : un seul symbole.
+  return sonne ? dehors / sonne : 0;
+}
+
+// Une moitié de mesure qui passe les trois quarts de son temps hors de
+// l'accord de la mesure le demande clairement : une note de passage (une
+// croche, ou une noire sur deux) n'y suffit pas, une note tenue oui.
+const PARTAGE = 0.75;
+const PHRASE = 4; // les phrases vont par quatre mesures, comme dans presque toutes les chansons
+// Une règle (cadence, tonique, résolution) ne choisit qu'un accord presque
+// aussi bon que le meilleur : elle tranche entre deux accords qui vont tous
+// deux avec la mélodie, elle n'en impose pas un qui jure.
+const MARGE = 0.3;
+
+/**
+ * Les accords d'une idée, d'après sa mélodie, comme un harmoniste pressé :
+ *   - un accord par mesure, deux quand une moitié de mesure le demande
+ *     clairement (4/4, 2/4, 2/2, 6/8, 12/8 : des mesures qui se coupent en
+ *     deux temps égaux) ;
+ *   - la première mesure sur la tonique, si la mélodie le permet ;
+ *   - la fin de chaque phrase de quatre mesures sur une cadence : la
+ *     dernière mesure sur la tonique (la dominante d'abord, si la mesure se
+ *     partage : cadence parfaite), les autres sur la dominante quand la
+ *     mélodie s'y prête (demi-cadence). Une levée ne compte pas dans la
+ *     phrase ;
+ *   - une dominante secondaire (D7 en do, appelé par un fa♯) mène à son
+ *     accord (sol) quand la mélodie le permet ;
+ *   - ailleurs, le meilleur accord, mais on garde celui d'avant s'il est
+ *     parmi les deux meilleurs : une harmonie qui change à chaque mesure
+ *     fatigue. Cette règle ne joue plus aux fins de phrase : elle y effaçait
+ *     la demi-cadence (l'Hymne à la joie restait en ré à la 4ᵉ mesure).
+ */
+export function harmoniser(seq) {
+  const mesure = pasParMesure(seq), temps = pasParTemps(seq);
+  const nb = nbMesures(seq);
+  const tonalite = accordsDeLaTonalite(seq.tonalite);
+  const tonique = new Set([tonalite[0].nom]);
+  const dominantes = new Set(tonalite.filter((c) => c.degre === "V" || c.degre === "V7").map((c) => c.nom));
+  const melodie = seq.pistes[0].notes;
+  if (!melodie.length) return [];
+  const moitie = (mesure / temps) % 2 === 0 ? mesure / 2 : null;
+  // Une levée : la mélodie n'entre qu'à partir de la moitié de la première mesure.
+  const premiere = Math.min(...melodie.map((n) => n.d));
+  const levee = nb > 1 && premiere >= mesure / 2 && premiere < mesure;
+  // Parmi les trois meilleurs, et presque aussi bon que le premier, celui qu'on veut ; sinon le meilleur.
+  const preferer = (notes, voulus) => (voulus && notes.slice(0, 3).find((c) => voulus.has(c.nom) && c.score >= notes[0].score - MARGE)) || notes[0];
+  const accords = [];
+  let precedent = null; // le dernier accord posé (avec sa cible, si c'est une dominante secondaire)
+  for (let m = 0; m < nb; m++) {
+    const debut = m * mesure, fin = debut + mesure;
+    if (!melodie.some((n) => n.d < fin && n.d + n.l > debut)) continue; // l'accord d'avant continue
+    const rang = levee ? m : m + 1;
+    const cadence = m === nb - 1 ? "parfaite" : rang % PHRASE === 0 ? "demi" : null;
+    const resolution = precedent && precedent.cible ? new Set([precedent.cible]) : null;
+    const entiere = noter(seq, debut, fin);
+    // Deux accords dans la mesure ? Seulement si une moitié se passe clairement de l'accord de la mesure.
+    if (moitie && !(m === 0 && levee)) {
+      const moities = [[debut, debut + moitie], [debut + moitie, fin]];
+      if (moities.some(([a, b]) => horsDeLAccord(seq, a, b, entiere[0].nom) >= PARTAGE)) {
+        const [n1, n2] = moities.map(([a, b]) => noter(seq, a, b));
+        const c1 = preferer(n1, cadence === "parfaite" ? dominantes : m === 0 ? tonique : resolution);
+        const c2 = preferer(n2, cadence === "parfaite" ? tonique : cadence === "demi" ? dominantes : c1.cible ? new Set([c1.cible]) : null);
+        if (c1.nom !== c2.nom) {
+          accords.push({ d: debut, nom: c1.nom }, { d: debut + moitie, nom: c2.nom });
+          precedent = c2;
+          continue;
+        }
+      }
+    }
+    let choix = preferer(entiere, m === 0 || cadence === "parfaite" ? tonique : cadence === "demi" ? dominantes : resolution);
+    if (choix === entiere[0] && !cadence && m > 0 && !resolution) {
+      const garde = entiere.slice(0, 2).find((c) => precedent && c.nom === precedent.nom);
+      if (garde) choix = garde;
+    }
+    accords.push({ d: debut, nom: choix.nom });
+    precedent = choix;
+  }
+  // Deux fois de suite le même accord : un seul symbole.
   return accords.filter((a, i) => i === 0 || a.nom !== accords[i - 1].nom);
 }
 
