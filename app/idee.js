@@ -46,6 +46,7 @@ import { creerAccords } from "./idee-accords.js";
 import { creerSelection } from "./idee-selection.js";
 import { creerDirect } from "./idee-direct.js";
 import { tempoDesTapes } from "./transport.js";
+import { sessionAudio, garderEveille, laisserDormir } from "./eveil.js";
 
 const $ = (id) => document.getElementById(id);
 const MESURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8", "2/2"];
@@ -604,9 +605,13 @@ export function creerEditeurIdee(deps) {
     // Le mémo prend le micro : l'accordeur le rend (il reprendra en revenant au mode Chanter).
     if (e.modeOuvert && e.mode === "chanter") choisirMode("clavier");
     let flux;
+    // Sur l'iPhone, le micro demande une session « enregistrer et jouer », rendue à « jouer » à la fin :
+    // sans quoi le piano obéirait de nouveau au bouton silencieux (eveil.js, M8).
+    sessionAudio("play-and-record");
     try {
       flux = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
+      sessionAudio("playback");
       toast(messageMicro(err), 9000);
       return;
     }
@@ -624,6 +629,8 @@ export function creerEditeurIdee(deps) {
     rec.onstop = async () => {
       clearInterval(montre);
       for (const piste of flux.getTracks()) piste.stop();
+      sessionAudio("playback");
+      laisserDormir("memo");
       enregistreur = null;
       $("memo-enregistrer").setAttribute("aria-pressed", "false");
       const blob = new Blob(bouts, { type: rec.mimeType || type || "audio/webm" });
@@ -633,6 +640,8 @@ export function creerEditeurIdee(deps) {
       toast("Mémo gardé avec l'idée.");
     };
     rec.start(1000);
+    // Une minute sans toucher l'écran : il s'éteindrait en plein mémo, et l'iPhone couperait le micro.
+    garderEveille("memo");
     enregistreur = rec;
     $("memo-enregistrer").setAttribute("aria-pressed", "true");
     $("memo-enregistrer-texte").textContent = "Arrêter le mémo";

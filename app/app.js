@@ -1586,7 +1586,7 @@ async function ecouterIdee(p, bouton) {
   try {
     await transport.jouer(source, {
       // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
-      titre: p.titre, relancer: () => { if (!transport.actif) bouton.click(); },
+      titre: p.titre || (p.type === "morceau" ? "Morceau" : "Idée"), relancer: () => { if (!transport.actif) bouton.click(); },
       surFin: () => { bouton.innerHTML = libelle; transport.carte = null; },
     });
   } catch (e) {
@@ -1728,7 +1728,7 @@ function brancher() {
   $("manuel-fini").addEventListener("click", () => finirManuel(true));
   $("ecouter-atelier").addEventListener("click", () => ecouter({
     objet: objetAtelier, abc: $("abc").value, zone: $("gravure-atelier"), bouton: $("ecouter-atelier"), qpm: tempoInitial(objetAtelier),
-    titre: etat.courante && etat.courante.titre,
+    titre: (etat.courante && etat.courante.titre) || "Partition",
   }));
   // Le panneau du bas est fixé : chaque écran lui laisse sa hauteur.
   suivreDock($("vue-atelier"), $("dock-atelier"));
@@ -1759,7 +1759,7 @@ function brancher() {
   $("ecouter").addEventListener("click", () => ecouter({
     objet: objetLecteur, abc: etat.courante.abc, zone: $("gravure-lecteur"), bouton: $("ecouter"),
     qpm: Number($("tempo").value), transposition: etat.transposition, voixMuettes: voixMuettes(),
-    titre: etat.courante && etat.courante.titre,
+    titre: (etat.courante && etat.courante.titre) || "Partition",
   }));
   let minuterieTempo = null;
   $("tempo").addEventListener("input", () => {

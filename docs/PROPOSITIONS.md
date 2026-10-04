@@ -837,10 +837,37 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     pointée en 6/8 ou 12/8). L'écoute d'avant lui donnait des noires : une
     page en 12/8 allait une fois et demie trop vite, notes chevauchées. Le
     transport compte en noires, comme le curseur de l'écran.
-- **Le contexte du son, l'écran, l'écran verrouillé (base de M8).** Un seul
-  petit module, `eveil.js`, tient la session audio de l'iPhone, le verrou de
-  l'écran et les commandes de l'écran verrouillé ; le transport l'appelle
-  pour toute écoute (détails plus bas, avec M8).
+- **Le son, l'écran et l'écran verrouillé, sur l'iPhone surtout (M8).**
+  Un seul petit module, `eveil.js`, que le piano, le transport, le micro et
+  le mémo vocal appellent ; tout y est facultatif (un navigateur qui ne sait
+  pas, ou claude.ai, ne voit rien).
+  - La session audio (Safari, iOS 16.4 et plus) : « playback » avant de
+    créer le contexte du piano, qui sonne alors même quand l'iPhone est en
+    silencieux (avant, il obéissait au bouton, comme une sonnerie) ;
+    « play-and-record » le temps que le micro écoute (Chanter, le mémo
+    vocal), puis « playback » de nouveau.
+  - Au retour d'arrière-plan, d'un appel ou de l'écran verrouillé, le son
+    reprend (`piano.reveiller()`) ; si Safari garde le contexte endormi, un
+    autre le remplace, avec les sons déjà décodés, et le prochain toucher le
+    réveille. Une écoute en cours s'arrête alors proprement (son bouton
+    revient).
+  - L'écran reste allumé (Screen Wake Lock) pendant l'écoute, le jeu en
+    direct, Chanter et le mémo vocal : sinon il s'éteint au bout de trente
+    secondes sans toucher, en plein enregistrement. Le navigateur le rend
+    quand la page se cache ; il est redemandé au retour. Refusé (cadre
+    isolé, économie d'énergie), rien ne casse.
+  - L'écran verrouillé montre ce qui joue (le titre de l'idée, du morceau
+    ou de la page), avec lecture, pause et arrêt (Media Session). Le
+    navigateur ne montre ces commandes que pour un élément `<audio>` qui
+    joue : une seconde de silence en boucle tient ce rôle pendant l'écoute,
+    le piano passant par Web Audio. Pourquoi ce son muet plutôt que de faire
+    passer le piano par un `<audio>` : il faudrait un flux de sortie, et la
+    latence du jeu en direct y passerait.
+  - Essayé dans Chromium (l'appli assemblée) : pendant l'écoute d'une idée,
+    son titre et « playing », pause, arrêt et lecture ; « arrêt » depuis
+    l'écran verrouillé arrête l'idée, remet le bouton et rend le verrou ;
+    « lecture » la relance ; page cachée puis revenue : le verrou est
+    redemandé ; verrou refusé : tout joue pareil, sans erreur.
 - **Jeu en direct : chaque note à l'instant de son geste (M6).** L'instant
   était pris quand le code s'exécutait ; au téléphone, le fil principal
   occupé le retardait, et des doubles croches tombaient un cran trop tard.
@@ -1582,7 +1609,11 @@ ou supprimer la fonction dans Supabase.
 - **Micro et clavier MIDI** : ni l'un ni l'autre dans la page claude.ai
   (cadre sans ces permissions) ; Safari (iPhone, iPad) ne lit pas les
   claviers MIDI. Le micro et le son ne marchent pas en même temps : on coupe
-  l'un pour l'autre (sinon le piano repasse dans le micro).
+  l'un pour l'autre (sinon le piano repasse dans le micro). Sur l'iPhone,
+  tout ce qui ouvre le micro passe la session audio en « play-and-record »
+  et la rend à « playback » après, refus compris (`sessionAudio`,
+  `eveil.js`) : l'oublier, c'est un piano qui obéit de nouveau au bouton
+  silencieux.
 
 ## Questions ouvertes
 

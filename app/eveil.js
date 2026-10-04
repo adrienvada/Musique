@@ -8,10 +8,11 @@
  *     (avant, il obéissait au bouton) ; « play-and-record » pendant que le
  *     micro écoute, puis « playback » de nouveau. Elle se règle avant de
  *     créer ou de réveiller le contexte audio ;
- *   - l'ÉCRAN ALLUMÉ (Screen Wake Lock) pendant l'écoute, le jeu en direct
- *     et le mode Chanter : sinon il s'éteint au bout de trente secondes sans
- *     toucher, en plein enregistrement. Le navigateur le relâche quand la
- *     page passe en arrière-plan : on le redemande au retour ;
+ *   - l'ÉCRAN ALLUMÉ (Screen Wake Lock) pendant l'écoute, le jeu en direct,
+ *     le mode Chanter et le mémo vocal : sinon il s'éteint au bout de trente
+ *     secondes sans toucher, en plein enregistrement. Le navigateur le
+ *     relâche quand la page passe en arrière-plan : on le redemande au
+ *     retour ;
  *   - les COMMANDES DE L'ÉCRAN VERROUILLÉ (Media Session) : le titre de ce
  *     qui joue, lecture, pause, arrêt. Le navigateur ne les montre que pour
  *     un élément <audio> qui joue : un son muet d'une seconde, en boucle,
@@ -34,7 +35,7 @@ export function sessionAudio(type) {
 
 // --- L'écran allumé -----------------------------------------------------------------
 
-const raisons = new Set(); // "lecture", "direct", "chant" : tant qu'il en reste une, l'écran reste allumé
+const raisons = new Set(); // "lecture", "direct", "chant", "memo" : tant qu'il en reste une, l'écran reste allumé
 let verrou = null;
 let demande = null;
 
