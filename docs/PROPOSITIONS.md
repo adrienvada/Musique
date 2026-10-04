@@ -790,10 +790,12 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   nouveau effaçait l'ancien cache dès son arrivée, avant d'avoir rien
   copié. Rejoué dans Chromium (serveur qui cache comme Pages) : après une
   mise en ligne, l'appli ne s'ouvrait plus hors ligne (`net::ERR_FAILED`).
-  - À l'installation, il copie toute la coquille (86 fichiers : la page, les
-    modules et feuilles de style de la version, abcjs, pdf.js, les polices,
-    les modèles, les pages d'essai, les icônes), puis le piano.
-    L'assembleur lui écrit la liste exacte.
+  - À l'installation, il copie la coquille (84 fichiers : la page, les
+    modules et feuilles de style de la version, abcjs, les polices, les
+    modèles, les pages d'essai, les icônes). Une fois l'appli ouverte,
+    pdf.js et le piano suivent en tâche de fond, un fichier après l'autre :
+    3,4 Mo qui ne servent pas au démarrage. L'assembleur lui écrit la liste
+    exacte.
   - L'ancien cache ne part qu'une fois le nouveau complet : une copie ratée
     laisse l'ancienne version entière, qui retente à la visite suivante.
     Seules les réponses `ok` sont gardées : une erreur de cdnjs restait
@@ -802,8 +804,8 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     fichiers : il ne se retélécharge que s'il change, et s'il change,
     l'ancien part (`portee-piano-1` n'était jamais remplacé).
   - La navigation garde la règle du 02/10 : la page est redemandée au
-    serveur, la copie ne sert que sans réseau (ou si le serveur est en
-    panne). La copie de la page n'est jamais remplacée en route : une page
+    serveur, la copie ne sert que s'il manque, s'il est en panne ou s'il
+    tarde (plus bas). La copie de la page n'est jamais remplacée en route : une page
     plus récente, venue du réseau, n'irait pas avec les modules copiés ;
     elle entre dans la copie avec sa version.
   - Quand une nouvelle version prend la main, une page ouverte d'une autre
@@ -820,6 +822,48 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     hors ligne : pages d'essai lues, gravées, jouées) ; un 503 sur abcjs
     n'est plus gardé. Le service worker s'inscrit aussi sur l'ordinateur
     lui-même (`isSecureContext` plutôt que `https:`), pour ces essais.
+- **Un réseau qui traîne n'arrête plus l'appli (I5).** L'audit de
+  l'interface l'a mesuré : un serveur qui répond en 8 s, tout dans la
+  copie, et pourtant 16 s avant le premier affichage, 40 s avant l'appli,
+  parce que le service worker attendait toujours le réseau.
+  - La page n'attend plus le serveur que 2,5 s, puis prend la copie.
+    Pourquoi pas la copie tout de suite : la page doit rester la dernière
+    mise en ligne (décision du 02/10), et 2,5 s couvrent une réponse sur
+    un réseau mobile ordinaire.
+  - Ce dont l'adresse porte une version vient de la copie d'abord : les
+    modules, les feuilles de style, et maintenant pdf.js, abcjs et les
+    polices, qui portent la version de leur paquet (`?v=6.4.299`…). Leur
+    adresse ne change que s'ils changent : ils passent d'une version de
+    Portée à l'autre sans être retéléchargés.
+  - L'inscription du service worker attend que la page soit chargée : la
+    copie de l'appli ne lui dispute plus le réseau à la première visite.
+  - Mesuré dans les mêmes conditions (8 s par réponse, téléphone simulé,
+    médiane de trois) : premier affichage 24,1 s → 2,6 s, appli prête
+    80,1 s → 2,6 s.
+- **Un démarrage plus rapide au téléphone, une page bien rangée (B1).** Mesuré avec le script de
+  l'audit de l'interface (téléphone simulé, processeur ×4, « Slow 4G »,
+  serveur qui imite GitHub Pages, médiane de cinq chargements à froid) :
+  icônes visibles 5,34 s → 2,17 s, appli prête 5,40 s → 3,96 s.
+  - Le jeu d'icônes est écrit dans la page à l'assemblage (`jeuDIcones()` ;
+    `app/icones.js` reste la seule source, et `injecterIcones()` ne le
+    double pas) : les icônes arrivent avec le premier affichage, au lieu
+    d'attendre les modules.
+  - abcjs se charge en `defer` : il ne retient plus la page, et passe
+    toujours avant `app.js`.
+  - Les modules partent tous d'un coup (`<link rel="modulepreload">`, la
+    liste que l'assembleur calcule en suivant les imports), au lieu d'être
+    découverts import après import, une demi-seconde d'aller-retour à
+    chaque fois sur un réseau mobile.
+  - Le prix, dans cette mesure : le premier affichage arrive 0,7 s plus
+    tard (1,56 s → 2,23 s), parce que les modules partagent le débit avec
+    les feuilles de style ; le serveur de mesure ne suit pas les priorités
+    du navigateur, qui demande les feuilles de style d'abord. Sans les
+    `modulepreload`, le premier affichage serait à 1,53 s mais l'appli
+    prête à 4,73 s : on a préféré l'appli utilisable plus tôt.
+  - Le titre et les feuilles de style sont dans `<head>` (ils étaient dans
+    `<body>`). La description de la page et du manifeste parle du carnet
+    d'idées, du MIDI vers Ableton et des pages de la reMarkable ; la barre
+    du navigateur prend la couleur du papier, clair ou sombre.
 - **Lint et types (T2).** `npm run lint` (ESLint, ses règles recommandées)
   et `npm run types` (TypeScript lit les JSDoc et vérifie, sans rien
   compiler : le code reste du JavaScript pur).
@@ -1181,8 +1225,11 @@ ou supprimer la fonction dans Supabase.
   Le service worker copie à l'installation tout ce que l'assembleur met
   dans `dist/` (sauf le piano, à part, et les licences) : un fichier que
   l'appli demande doit donc sortir de l'assembleur, sinon il manque hors
-  ligne. Les fichiers tiers (pdf.js, abcjs, polices) gardent une adresse
-  fixe : figés par `package.json`, ils sont revalidés, pas versionnés.
+  ligne. Les fichiers tiers (pdf.js, abcjs, polices) portent la version de
+  leur paquet, que l'assembleur met dans leur adresse (`app.js`, la page,
+  `polices.css`) : il cherche pdf.js sous la forme
+  `"./vendor/pdfjs/pdf.min.mjs"` dans `app.js`, et s'arrête s'il ne la
+  trouve plus.
 
 - **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, disponible
   partout seulement depuis le 14/02/2026 (Chrome 145, Firefox 144,

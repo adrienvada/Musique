@@ -98,13 +98,18 @@ export function ico(nom, taille = "") {
   return `<svg class="ico${taille ? " " + taille : ""}" aria-hidden="true" focusable="false"><use href="#i-${nom}"></use></svg>`;
 }
 
-/** Met le jeu d'icônes dans la page (une fois) : les <use href="#i-…"> le trouvent. */
+/**
+ * Le jeu d'icônes, en HTML : un <svg> caché de <symbol>. L'assembleur
+ * (outils/assembler-appli.mjs) l'écrit d'avance dans la page, pour que les
+ * icônes soient là dès le premier affichage, sans attendre les modules.
+ */
+export function jeuDIcones() {
+  const symboles = Object.entries(ICONES).map(([nom, dessin]) => `<symbol id="i-${nom}" viewBox="0 0 24 24">${dessin}</symbol>`).join("");
+  return `<svg id="icones-portee" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">${symboles}</svg>`;
+}
+
+/** Met le jeu d'icônes dans la page, s'il n'y est pas déjà : les <use href="#i-…"> le trouvent. */
 export function injecterIcones(doc = document) {
   if (doc.getElementById("icones-portee")) return;
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.id = "icones-portee";
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("style", "position:absolute;width:0;height:0;overflow:hidden");
-  svg.innerHTML = Object.entries(ICONES).map(([nom, dessin]) => `<symbol id="i-${nom}" viewBox="0 0 24 24">${dessin}</symbol>`).join("");
-  doc.body.prepend(svg);
+  doc.body.insertAdjacentHTML("afterbegin", jeuDIcones());
 }

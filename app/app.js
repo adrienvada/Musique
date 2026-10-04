@@ -1952,22 +1952,32 @@ function creerEditeur() {
  * Une appli installée reste ouverte des jours : en y revenant (au plus une
  * fois toutes les dix minutes), on demande s'il y a une nouvelle version,
  * sans attendre que le navigateur y pense.
+ *
+ * L'inscription attend que la page soit chargée : la copie de l'appli ne
+ * lui dispute pas le réseau. Ce qui est lourd et ne sert pas au démarrage
+ * (pdf.js, le piano) se copie ensuite, en tâche de fond.
  */
 function brancherServiceWorker() {
   // La version de la page : celle de l'adresse de ce module (app.js?v=…).
   const maVersion = new URL(import.meta.url).searchParams.get("v");
+  const copierEnFond = (sw) => sw && sw.postMessage({ type: "portee-precharger" });
   navigator.serviceWorker.addEventListener("message", (e) => {
     const m = e.data;
-    if (m && m.type === "portee-version" && maVersion && m.version !== maVersion) proposerRechargement();
+    if (!m || m.type !== "portee-version") return;
+    copierEnFond(e.source); // une version qui vient de prendre la main
+    if (maVersion && m.version !== maVersion) proposerRechargement();
   });
   let verifiee = Date.now();
-  navigator.serviceWorker.register("sw.js").then((inscription) => {
+  const inscrire = () => navigator.serviceWorker.register("sw.js").then((inscription) => {
+    navigator.serviceWorker.ready.then((r) => copierEnFond(r.active));
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible" || Date.now() - verifiee < 10 * 60 * 1000) return;
       verifiee = Date.now();
       inscription.update().catch(() => {}); // hors ligne : la prochaine fois
     });
   }).catch(() => {});
+  if (document.readyState === "complete") inscrire();
+  else addEventListener("load", inscrire, { once: true });
 }
 
 /** « Une nouvelle version est prête » : un message passager, avec de quoi recharger. */

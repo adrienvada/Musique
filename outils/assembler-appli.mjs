@@ -24,18 +24,29 @@
  * sécurité du contenu (CSP, plus bas) : sans domaine extérieur à autoriser,
  * elle peut être stricte.
  *
+ * Pour un premier affichage rapide au téléphone, la page arrive avec ce
+ * dont elle a besoin tout de suite : le jeu d'icônes déjà écrit (avant, les
+ * icônes n'apparaissaient qu'une fois les modules chargés, quatre secondes
+ * sur un téléphone lent), et la liste de ses modules en `modulepreload`
+ * (le navigateur les demande tous d'un coup, au lieu de les découvrir
+ * import après import).
+ *
  * En autonome encore, chaque module et chaque feuille de style porte la
  * version dans son adresse (`idee.js?v=…`). GitHub Pages laisse les fichiers
  * dix minutes dans le cache du navigateur, et un rechargement reprend même
  * les modules gardés en mémoire sans rien demander : juste après une mise
  * en ligne, la page neuve tournait avec des modules anciens, et l'éditeur
  * plantait (02/10). Une adresse neuve à chaque version, et aucun cache ne
- * peut plus mélanger deux versions.
+ * peut plus mélanger deux versions. Les fichiers tiers (pdf.js, abcjs, les
+ * polices) portent la version de leur paquet : leur adresse ne change que
+ * s'ils changent, le service worker les garde d'une version à l'autre sans
+ * les retélécharger.
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { jeuDIcones } from "../app/icones.js";
 
 const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -82,6 +93,9 @@ const CSP = [
   "form-action 'none'",
 ].join("; ");
 
+/** Ce que dit Portée d'elle-même (moteurs de recherche, partage d'un lien) : le carnet d'abord, la tablette ensuite. */
+const DESCRIPTION = "Ton carnet d'idées musicales : note une mélodie au clavier ou en la chantant, écoute-la au piano, envoie-la en MIDI vers Ableton. Tes pages écrites sur la reMarkable y sont lues et corrigées.";
+
 fs.rmSync(dist, { recursive: true, force: true });
 const copier = (src, dst) => {
   fs.mkdirSync(path.dirname(path.join(dist, dst)), { recursive: true });
@@ -102,6 +116,9 @@ const copierScript = (src, dst) => {
   fs.writeFileSync(cible, texte, "latin1");
   return dst;
 };
+const versionDuPaquet = (paquet) => JSON.parse(fs.readFileSync(path.join(racine, "node_modules", paquet, "package.json"), "utf8")).version;
+const lire = (f) => fs.readFileSync(path.join(dist, f), "utf8");
+const ecrire = (f, texte) => fs.writeFileSync(path.join(dist, f), texte);
 
 const fichiers = [];
 // Tous les modules de l'appli (sw.js à part : il n'existe que sur le site).
@@ -119,13 +136,15 @@ fichiers.push(copier("node_modules/abcjs/LICENSE.md", "vendor/abcjs/LICENCE.txt"
 // Les polices : exactement les fichiers que nomme styles/polices.css, et le
 // texte de leur licence (SIL OFL 1.1), qui doit voyager avec elles.
 const PAQUETS_POLICES = [["young-serif-", "@fontsource/young-serif", "Young-Serif"], ["ibm-plex-sans-", "@fontsource/ibm-plex-sans", "IBM-Plex-Sans"], ["ibm-plex-mono-", "@fontsource/ibm-plex-mono", "IBM-Plex-Mono"]];
-const polices = new Set([...fs.readFileSync(path.join(racine, "app/styles/polices.css"), "utf8").matchAll(/url\("\.\.\/polices\/([^"]+)"\)/g)].map((m) => m[1]));
-if (!polices.size) throw new Error("polices.css : aucune police nommée");
-for (const f of [...polices].sort()) {
+const paquetDeLaPolice = (f) => {
   const paquet = PAQUETS_POLICES.find(([prefixe]) => f.startsWith(prefixe));
   if (!paquet || !f.endsWith(".woff2")) throw new Error(`polices.css : ${f} ne vient d'aucun paquet @fontsource connu`);
-  fichiers.push(copier(`node_modules/${paquet[1]}/files/${f}`, `polices/${f}`));
-}
+  return paquet[1];
+};
+const POLICE = /url\("\.\.\/polices\/([^"]+)"\)/g;
+const polices = new Set([...lire("styles/polices.css").matchAll(POLICE)].map((m) => m[1]));
+if (!polices.size) throw new Error("polices.css : aucune police nommée");
+for (const f of [...polices].sort()) fichiers.push(copier(`node_modules/${paquetDeLaPolice(f)}/files/${f}`, `polices/${f}`));
 for (const [, paquet, nom] of PAQUETS_POLICES) fichiers.push(copier(`node_modules/${paquet}/LICENSE`, `polices/LICENCE-${nom}-OFL.txt`));
 for (const f of fs.readdirSync(path.join(racine, "tests/pages")).filter((f) => f.endsWith(".pdf"))) fichiers.push(copier(`tests/pages/${f}`, `exemples/${f}`));
 
@@ -134,6 +153,28 @@ let page = fs.readFileSync(path.join(racine, "app/index.html"), "utf8");
 // (Un lien <a> qu'on suit d'un toucher, comme my.remarkable.com, n'est pas une ressource.)
 const externe = /(?:src|href)="https?:\/\/[^"]+"/.exec(page.replace(/<a [^>]*>/g, ""));
 if (externe) throw new Error(`index.html : une ressource vient encore d'ailleurs (${externe[0]})`);
+
+// Ce qui va dans <head> : le titre et les feuilles de style, en tête du
+// fichier ; le reste est le corps de la page.
+const lignes = page.split("\n");
+let n = 0;
+while (n < lignes.length && /^\s*(?:<title>.*<\/title>|<link [^>]*>|<!--.*-->|)\s*$/.test(lignes[n])) n++;
+let tete = lignes.slice(0, n).join("\n").trim();
+let corps = lignes.slice(n).join("\n");
+if (!tete.includes("<title>") || /<link rel="stylesheet"/.test(corps)) throw new Error("index.html : le titre et les feuilles de style doivent ouvrir le fichier");
+
+// Les modules que la page charge d'emblée : app.js et tout ce qu'il importe,
+// de proche en proche (pas les imports dynamiques, comme pdf.js, chargés à
+// la demande).
+const modules = [];
+for (const file = ["app.js"]; file.length;) {
+  const f = file.shift();
+  if (modules.includes(f)) continue;
+  modules.push(f);
+  for (const m of lire(f).matchAll(/(?:\bfrom|\bimport)\s+(["'])(\.\.?\/[^"']+?\.js)\1/g)) file.push(path.posix.normalize(path.posix.join(path.posix.dirname(f), m[2])));
+}
+
+let version = null;
 if (autonome) {
   fichiers.push(copier("app/manifest.webmanifest", "manifest.webmanifest"));
   for (const f of fs.readdirSync(path.join(racine, "app/icones"))) fichiers.push(copier(`app/icones/${f}`, `icones/${f}`));
@@ -143,58 +184,98 @@ if (autonome) {
   const empreinte = crypto.createHash("sha256");
   for (const f of [...fichiers].sort()) empreinte.update(f).update(fs.readFileSync(path.join(dist, f)));
   empreinte.update(page).update(source);
-  const version = empreinte.digest("hex").slice(0, 12);
-  // Le piano a la sienne : lourd, il ne se retélécharge que s'il change.
+  version = empreinte.digest("hex").slice(0, 12);
+
+  // La version dans l'adresse des modules : tous les imports relatifs, sans
+  // exception (un module importé sous deux adresses serait chargé deux fois,
+  // avec deux états).
+  const IMPORT = /((?:\bfrom|\bimport)\s*\(?\s*)(["'])(\.\.?\/[^"']+?\.js)\2/g;
+  for (const f of fichiers.filter((f) => f.endsWith(".js") && !f.startsWith("vendor/"))) {
+    const texte = lire(f).replace(IMPORT, `$1$2$3?v=${version}$2`);
+    const oublie = /(?:\bfrom|\bimport)\s*\(?\s*["']\.\.?\/[^"'?]+?\.js["']/.exec(texte);
+    if (oublie) throw new Error(`${f} : un import sans version (${oublie[0]})`);
+    ecrire(f, texte);
+  }
+  // Les fichiers tiers portent la version de leur paquet : pdf.js (son
+  // module et son worker, appelés par app.js), abcjs (la page), les polices
+  // (polices.css).
+  const pdfjs = versionDuPaquet("pdfjs-dist");
+  let app = lire("app.js");
+  for (const f of ["pdf.min.mjs", "pdf.worker.min.mjs"]) {
+    const adresse = `"./vendor/pdfjs/${f}"`;
+    if (!app.includes(adresse)) throw new Error(`app.js : ${adresse} introuvable (pdf.js a changé de place ?)`);
+    app = app.replaceAll(adresse, `"./vendor/pdfjs/${f}?v=${pdfjs}"`);
+  }
+  ecrire("app.js", app);
+  ecrire("styles/polices.css", lire("styles/polices.css").replace(POLICE, (_, f) => `url("../polices/${f}?v=${versionDuPaquet(paquetDeLaPolice(f))}")`));
+  const ABCJS = 'src="vendor/abcjs/abcjs-basic-min.js"';
+  if (!corps.includes(ABCJS)) throw new Error("index.html : abcjs introuvable");
+  corps = corps.replace(ABCJS, `src="vendor/abcjs/abcjs-basic-min.js?v=${versionDuPaquet("abcjs")}"`);
+  tete = tete.replace(/(<link rel="stylesheet" href=")(styles\/[^"]+\.css)(")/g, `$1$2?v=${version}$3`);
+  corps = corps.replace(/(<script type="module" src=")(app\.js)(")/, `$1$2?v=${version}$3`);
+  if (!corps.includes(`app.js?v=${version}`)) throw new Error("index.html : app.js sans version");
+
+  // Le service worker reçoit la liste exacte de ce qu'il garde, sous
+  // l'adresse que la page demandera (version comprise). À l'installation :
+  // la page (./) et tout ce qu'il faut pour l'ouvrir hors ligne. En tâche de
+  // fond, une fois l'appli ouverte : pdf.js (1,8 Mo, seulement pour importer
+  // un PDF). Le piano a son propre cache, d'après sa propre empreinte : lourd,
+  // il ne se retélécharge que s'il change. Les licences n'y sont pas : l'appli
+  // ne les demande jamais.
+  const adresse = (f) => {
+    if (f.startsWith("vendor/pdfjs/")) return `${f}?v=${pdfjs}`;
+    if (f.startsWith("vendor/abcjs/")) return `${f}?v=${versionDuPaquet("abcjs")}`;
+    if (f.startsWith("polices/")) return `${f}?v=${versionDuPaquet(paquetDeLaPolice(path.posix.basename(f)))}`;
+    if ((f.endsWith(".js") && !f.startsWith("vendor/")) || (f.startsWith("styles/") && f.endsWith(".css"))) return `${f}?v=${version}`;
+    return f;
+  };
   const piano = fichiers.filter((f) => f.startsWith("piano/")).sort();
   const empreintePiano = crypto.createHash("sha256");
   for (const f of piano) empreintePiano.update(f).update(fs.readFileSync(path.join(dist, f)));
-  // Ce que le service worker copie à l'installation, sous l'adresse exacte
-  // que la page demandera : la page elle-même (./), les modules et les
-  // feuilles de style avec leur version, le reste tel quel. Le piano à part,
-  // et les licences, que l'appli ne demande jamais.
-  const versionne = (f) => (f.endsWith(".js") && !f.startsWith("vendor/")) || (f.startsWith("styles/") && f.endsWith(".css"));
-  const coquille = ["./", ...fichiers.filter((f) => !f.startsWith("piano/") && !/\/LICENCE[^/]*\.txt$/.test(f)).map((f) => (versionne(f) ? `${f}?v=${version}` : f))];
+  const gardes = fichiers.filter((f) => !f.startsWith("piano/") && !/\/LICENCE[^/]*\.txt$/.test(f));
+  const enFond = gardes.filter((f) => f.startsWith("vendor/pdfjs/")).map(adresse);
+  const coquille = ["./", ...gardes.filter((f) => !f.startsWith("vendor/pdfjs/")).map(adresse)];
   const sw = source
     .replace('"__VERSION__"', JSON.stringify(version))
     .replace('["__COQUILLE__"]', JSON.stringify(coquille))
+    .replace('["__EN_FOND__"]', JSON.stringify(enFond))
     .replace('"__PIANO__"', JSON.stringify(empreintePiano.digest("hex").slice(0, 12)))
     .replace('["__PIANO_FICHIERS__"]', JSON.stringify(piano));
   if (/__[A-Z_]+__/.test(sw)) throw new Error("sw.js : une valeur n'a pas été remplie");
-  fs.writeFileSync(path.join(dist, "sw.js"), sw);
+  ecrire("sw.js", sw);
   fichiers.push("sw.js");
-  // La version dans l'adresse des modules : tous les imports relatifs, sans
-  // exception (un module importé sous deux adresses serait chargé deux fois,
-  // avec deux états). pdf.js (.mjs) et abcjs, figés par package.json, n'en
-  // ont pas besoin.
-  const IMPORT = /((?:\bfrom|\bimport)\s*\(?\s*)(["'])(\.\.?\/[^"']+?\.js)\2/g;
-  for (const f of fichiers.filter((f) => f.endsWith(".js") && f !== "sw.js" && !f.startsWith("vendor/"))) {
-    const cible = path.join(dist, f);
-    const texte = fs.readFileSync(cible, "utf8").replace(IMPORT, `$1$2$3?v=${version}$2`);
-    const oublie = /(?:\bfrom|\bimport)\s*\(?\s*["']\.\.?\/[^"'?]+?\.js["']/.exec(texte);
-    if (oublie) throw new Error(`${f} : un import sans version (${oublie[0]})`);
-    fs.writeFileSync(cible, texte);
-  }
-  page = page
-    .replace(/(<script type="module" src=")(app\.js)(")/, `$1$2?v=${version}$3`)
-    .replace(/(<link rel="stylesheet" href=")(styles\/[^"]+\.css)(")/g, `$1$2?v=${version}$3`);
-  if (!page.includes(`app.js?v=${version}`)) throw new Error("index.html : app.js sans version");
+}
+
+// La page : le jeu d'icônes en tête du corps (icones.js, la seule source ;
+// injecterIcones() ne le double pas), et la liste des modules à précharger
+// après les feuilles de style, avec la version de leur adresse.
+const precharger = modules.map((f) => `<link rel="modulepreload" href="${f}${version ? `?v=${version}` : ""}">`).join("\n");
+corps = `${jeuDIcones()}\n${corps}`;
+if (autonome) {
   page = [
     "<!doctype html>",
     '<html lang="fr"><head><meta charset="utf-8">',
     `<meta http-equiv="Content-Security-Policy" content="${CSP}">`,
     '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">',
-    '<meta name="description" content="Tes partitions écrites à la main sur la reMarkable, lues, corrigées, jouées au piano et exportées en MIDI.">',
-    '<meta name="theme-color" content="#2F4BC2">',
+    `<meta name="description" content="${DESCRIPTION}">`,
+    // La couleur de la barre du navigateur suit celle de Portée : le papier clair, ou sombre.
+    '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#EDEEEA">',
+    '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#17181B">',
     '<link rel="manifest" href="manifest.webmanifest">',
     '<link rel="icon" href="icones/icone.svg" type="image/svg+xml">',
     '<link rel="apple-touch-icon" href="icones/icone-180.png">',
+    tete,
+    precharger,
     "</head><body>",
-    page,
+    corps.trim(),
     "</body></html>",
     "",
   ].join("\n");
+} else {
+  // claude.ai enveloppe la page dans son propre document : elle reste un fragment.
+  page = [tete, precharger, corps.trim(), ""].join("\n");
 }
-fs.writeFileSync(path.join(dist, "index.html"), page);
+ecrire("index.html", page);
 
 // La liste des fichiers, dans le format que l'outil de publication attend
 // (chemins relatifs au dépôt, d'où l'on publie).
