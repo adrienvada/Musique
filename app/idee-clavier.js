@@ -34,6 +34,7 @@
 import { creerClavier } from "./clavier.js";
 import { nomNote } from "./sequence.js";
 import { lirePref, ecrirePref } from "./preferences.js";
+import { enBoucle } from "./sortie-midi.js";
 
 // Le clavier de l'ordinateur, comme dans Ableton : la rangée du milieu pour
 // les touches blanches, celle du dessus pour les noires (positions physiques :
@@ -159,20 +160,25 @@ export function creerModeClavier(ctx) {
 
   // --- Le clavier MIDI -------------------------------------------------------
 
+  // L'accès MIDI, demandé une seule fois (la promesse) : deux touchers rapides sur « Brancher » ne le
+  // demandent pas deux fois. Refusé, il pourra être redemandé.
   let accesMidi = null;
   async function brancherMidi(demande) {
     if (!navigator.requestMIDIAccess) {
       if (demande) toast("Ce navigateur ne lit pas les claviers MIDI (Safari, iPhone, iPad). Sur ordinateur ou Android, Chrome et Edge le font.", 8000);
       return;
     }
+    if (!accesMidi) accesMidi = navigator.requestMIDIAccess().catch((err) => { accesMidi = null; throw err; });
     try {
-      accesMidi = accesMidi || await navigator.requestMIDIAccess();
+      const acces = await accesMidi;
       const brancher = () => {
-        const entrees = [...accesMidi.inputs.values()];
-        for (const x of entrees) x.onmidimessage = surMessageMidi;
+        // L'entrée qui porte le nom de la sortie MIDI choisie (IAC, loopMIDI) renvoie les notes que
+        // Portée y joue : on ne l'écoute pas, sinon chaque écoute réécrirait l'idée (sortie-midi.js).
+        const entrees = [...acces.inputs.values()].filter((x) => !enBoucle(x));
+        for (const x of acces.inputs.values()) x.onmidimessage = enBoucle(x) ? null : surMessageMidi;
         $("idee-midi-etat").textContent = entrees.length ? `Branché : ${entrees.map((x) => x.name).join(", ")}` : "Aucun clavier MIDI branché pour l'instant.";
       };
-      accesMidi.onstatechange = brancher;
+      acces.onstatechange = brancher;
       brancher();
       ecrirePref("portee:midi", "1");
     } catch {
@@ -181,6 +187,8 @@ export function creerModeClavier(ctx) {
   }
 
   function surMessageMidi(m) {
+    // La sortie MIDI choisie après le branchement du clavier : son retour se tait aussi.
+    if (enBoucle(m.currentTarget || m.target)) return;
     const x = lireMessageMidi(m.data);
     if (!x) return;
     const quand = instantMidi(m.timeStamp);

@@ -1102,6 +1102,61 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   bat le métronome : la noire pointée en 6/8, 9/8 et 12/8, la blanche en
   2/2, la croche en 3/8 ; l'idée garde ses noires par minute. Avant, taper
   la noire pointée d'un 12/8 réglait le métronome aux deux tiers.
+- **Vers Live : la sortie MIDI et le dossier des .mid (M10).** Chrome et
+  Edge sur ordinateur ; ailleurs (téléphone, Safari, Firefox, claude.ai), la
+  section « Avec Live » des réglages reste cachée et rien n'est demandé au
+  navigateur (`reglages-live.js`).
+  - La sortie MIDI (`sortie-midi.js`) : le port choisi dans les réglages
+    (le Gestionnaire IAC sur Mac, un port loopMIDI sur Windows) reçoit ce
+    que joue le transport (idée, morceau, page lue), note à note, horodaté
+    à l'instant où le piano de Portée la joue (`send(octets, instant)`) ;
+    une piste MIDI de Live qui écoute ce port la joue avec son propre son.
+    Un interrupteur rend le piano de Portée muet pendant ce temps. À
+    l'arrêt, ce qui n'est pas parti ne part pas, ce qui sonne s'éteint
+    (note par note, puis All Notes Off) ; une écoute qui finit d'elle-même
+    laisse la dernière note finir. Une même hauteur tenue par deux voix
+    (les accords et la mélodie) est relancée, et ne s'éteint qu'avec la
+    dernière. Le port revient à la visite suivante (retrouvé par son nom
+    s'il a changé d'identifiant) ; débranché, le piano de Portée reprend.
+  - Pourquoi 100 ms d'avance seulement (le piano en prend 350) : un message
+    parti ne se rattrape pas, Chrome n'a pas `MIDIOutput.clear()`. Au pire,
+    une note qui devait partir dans les 100 ms suivant l'arrêt s'entend,
+    brève ; les extinctions partent après le dernier message envoyé, sans
+    quoi cette note tiendrait.
+  - Un piège évité : IAC et loopMIDI sont aussi une entrée du même nom, qui
+    renvoie à Portée ce qu'elle y joue. Le clavier MIDI de l'idée l'aurait
+    écrit, note à note, à chaque écoute : `idee-clavier.js` ignore l'entrée
+    qui porte le nom de la sortie choisie.
+  - Le dossier (`dossier-midi.js`) : choisi dans les réglages
+    (`showDirectoryPicker`), Portée y écrit le .mid de chaque idée et de
+    chaque morceau (`midiDeLIdee`, `midiDuMorceau`, tels quels), dans deux
+    sous-dossiers, Idées et Morceaux, une seconde après le dernier
+    changement, et seulement ce qui a changé (une empreinte par fichier).
+    Un titre changé renomme le fichier, une idée effacée efface le sien,
+    aucun autre fichier du dossier n'est touché. « Tout réécrire » remet un
+    fichier effacé à la main ; « Ne plus écrire dans ce dossier » l'oublie,
+    les fichiers restent. Le navigateur redemande la permission d'écrire à
+    chaque visite (sauf « Autoriser à chaque visite ») : « Autoriser Portée
+    à y écrire » la rend d'un toucher, et un message le dit, une fois par
+    visite, quand des changements attendent.
+  - Où le dossier se garde : dans une petite base à part, `portee-appareil`
+    (version 1, un magasin `reglages`), pas dans `meta` de la bibliothèque :
+    elle se synchronise, et un dossier de cet ordinateur n'aurait pas de
+    sens sur le téléphone. La base `portee` et ses magasins ne changent pas.
+  - Ce que ça coûte : une grosse bibliothèque (300 idées de 16 mesures, 30
+    morceaux) se refait en 230 ms. Seule la première passe d'une visite
+    refait tout, par tranches (la page ne s'arrête jamais plus de 18 ms) ;
+    ensuite, seules les partitions changées (leur date de modification, et
+    celles des idées d'un morceau) : 10 ms après une note changée.
+  - Essayé dans Chromium, avec un faux bus IAC qui renvoie ce qu'il reçoit
+    et un dossier de l'OPFS derrière un faux sélecteur : les quatre noires
+    d'une idée à 120 partent à 500 ms d'écart exactement, envoyées 115 à
+    140 ms d'avance ; leur retour par l'entrée du bus n'écrit rien, un vrai
+    clavier MIDI écrit toujours ; piano muet, aucune note du piano et toutes
+    au bus ; arrêt, All Notes Off ; le .mid s'écrit dans Idées et se renomme
+    avec le titre ; à la visite suivante, le port, l'interrupteur et le
+    dossier reviennent. Avec le vrai Live, reste à essayer (IAC ou loopMIDI,
+    le dossier dans les Emplacements).
 - **Proposé, à valider par Adrien : la capture après coup (M13).** Comme
   « Capture MIDI » dans Live et dans Ableton Note : sans avoir touché le
   bouton rouge, ce qu'on joue au clavier (à l'écran, de l'ordinateur ou
@@ -1127,8 +1182,10 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 - **Après la fusion des autres lots (lint, essais dans Chromium).**
   `npm run lint` ne trouve aucune erreur dans les fichiers du lot ; le
   démarrage du micro (`idee-chant.js`) relit la promesse en cours avant de
-  l'effacer, ce qui règle son avertissement `require-atomic-updates` sans
-  rien changer d'autre. `npm run e2e` : les 21 essais restent verts, dont
+  l'effacer, et l'accès MIDI du clavier (`idee-clavier.js`) est une
+  promesse demandée une fois (redemandable si elle est refusée) : leurs
+  avertissements `require-atomic-updates` sont réglés sans rien changer
+  d'autre. `npm run e2e` : les 21 essais restent verts, dont
   l'écoute, le chant au faux micro, le mémo et « hors ligne dès la première
   visite », qui garde les 82 fichiers du piano par la liste de
   l'assembleur.
@@ -2016,7 +2073,9 @@ ou supprimer la fonction dans Supabase.
   tout ce qui ouvre le micro passe la session audio en « play-and-record »
   et la rend à « playback » après, refus compris (`sessionAudio`,
   `eveil.js`) : l'oublier, c'est un piano qui obéit de nouveau au bouton
-  silencieux.
+  silencieux. La sortie MIDI vers IAC ou loopMIDI revient par l'entrée du
+  même nom : tout ce qui écoute les entrées MIDI doit l'ignorer
+  (`enBoucle`, `sortie-midi.js`), sinon chaque écoute réécrit l'idée.
 
 ## Questions ouvertes
 

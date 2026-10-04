@@ -21,6 +21,7 @@ import { creerEditeurIdee, midiDeLIdee } from "./idee.js";
 import { Transport } from "./transport.js";
 import { notesDePage, surlignage } from "./ecoute-page.js";
 import { installerEveil } from "./eveil.js";
+import { brancherLive } from "./reglages-live.js";
 import { sequenceDepuisAbc, pasParMesure, pasParTemps, ecrireAbc } from "./sequence.js";
 import { voixCompletes, transposerIdee } from "./harmonie.js";
 import { creerVueMorceau } from "./vue-morceau.js";
@@ -2113,6 +2114,12 @@ async function demarrer() {
     },
     (e) => toast("La bibliothèque ne répond plus : recharge la page. (" + (e.code || e.message) + ")", 9000),
   );
+  // Avec Live (audit du 04/10, M10) : la sortie MIDI et le dossier des .mid, sur ordinateur seulement.
+  const live = brancherLive({
+    transport, toast, dansClaude: dansClaude(),
+    fabriquer: (p, idees) => (p.type === "idee" ? midiDeLIdee(p) : midiDuMorceau(p, idees)),
+  });
+  if (live.dossier) etat.stockage.ecouter((liste) => live.surListe(liste), () => { /* le premier abonné le dit déjà */ });
 }
 
 demarrer();

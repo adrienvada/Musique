@@ -184,6 +184,27 @@
         </div>
       </section>
 
+      <!-- Avec Live : la sortie MIDI et le dossier des .mid (reglages-live.js). Chrome et Edge sur ordinateur seulement : caché ailleurs. -->
+      <section class="reglages-bloc" id="reglages-live" aria-labelledby="rg-live" hidden>
+        <h2 class="surtitre" id="rg-live">Avec Live</h2>
+        <div class="reglages-groupe" id="live-sortie" hidden>
+          <button class="reglages-ligne" id="sortie-midi" aria-haspopup="dialog" aria-controls="feuille-sortie-midi"><span>Sortie MIDI</span><span class="valeur" id="sortie-midi-nom">Aucune</span></button>
+          <button class="reglages-ligne" id="sortie-midi-muet" role="switch" aria-checked="false" hidden>
+            <span>Piano de Portée muet</span>
+            <span class="interrupteur" aria-hidden="true"></span>
+          </button>
+          <p class="reglages-texte">Ce que joue Portée part aussi vers ce port, à l'heure : dans Live, une piste MIDI qui l'écoute le joue avec son propre son. Sur Mac, mets en ligne le « Gestionnaire IAC » (Configuration audio et MIDI, Studio MIDI) ; sur Windows, crée un port avec loopMIDI.</p>
+        </div>
+        <div class="reglages-groupe" id="live-dossier" hidden>
+          <button class="reglages-ligne" id="dossier-midi"><span>Dossier des .mid</span><span class="valeur" id="dossier-midi-nom">Aucun</span></button>
+          <button class="reglages-ligne principal" id="dossier-midi-autoriser" hidden><span>Autoriser Portée à y écrire</span><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg></button>
+          <button class="reglages-ligne" id="dossier-midi-tout" hidden><span>Tout réécrire</span><svg class="ico s" aria-hidden="true"><use href="#i-refaire"></use></svg></button>
+          <button class="reglages-ligne" id="dossier-midi-oublier" hidden><span>Ne plus écrire dans ce dossier</span><svg class="ico s" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+          <p class="reglages-texte" id="dossier-midi-etat" role="status"></p>
+          <p class="reglages-texte">Portée y écrit le .mid de chaque idée et de chaque morceau (sous-dossiers Idées et Morceaux), et le réécrit une seconde après chaque changement. Dans Live, ajoute ce dossier aux Emplacements (Places) du navigateur : la dernière version y est toujours, à glisser sur une piste.</p>
+        </div>
+      </section>
+
       <section class="reglages-bloc" aria-labelledby="rg-sauvegarde">
         <h2 class="surtitre" id="rg-sauvegarde">Sauvegarde</h2>
         <div class="reglages-groupe">
@@ -204,6 +225,16 @@
     </div>
 
     <!-- Les actions d'une ligne ou d'une carte (« ••• ») : la même feuille pour toutes. -->
+    <!-- La sortie MIDI : un port de l'ordinateur, ou aucun (reglages-live.js). -->
+    <dialog class="feuille-bas" id="feuille-sortie-midi" aria-labelledby="sortie-midi-titre">
+      <div class="feuille-tete">
+        <h2 id="sortie-midi-titre">Sortie MIDI</h2>
+        <button class="btn rond btn-fantome" id="sortie-midi-fermer" aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+      </div>
+      <p class="remarque" id="sortie-midi-sous">Le port vers lequel Portée envoie ce qu'elle joue.</p>
+      <div class="feuille-liste" id="sortie-midi-liste"></div>
+    </dialog>
+
     <dialog class="feuille-bas" id="feuille-actions" aria-labelledby="feuille-titre">
       <div class="feuille-tete">
         <h2 id="feuille-titre"></h2>
