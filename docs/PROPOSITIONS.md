@@ -606,7 +606,7 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - le style « Basse et accords » joue l'accord sans sa racine après la
     basse, comme avant ; les cartes des styles dessinent le nouveau motif
     (elles le calculent avec le même code).
-- **N4 · « Proposer pour toute l'idée » respecte les cadences.**
+- **N4 · « Harmoniser toute l'idée » respecte les cadences.**
   **L'harmonisation proposée changera** sur tes idées (seulement si tu la
   redemandes : les accords déjà posés ne bougent pas). Avant : un accord par
   mesure, et « garder l'accord d'avant » effaçait la demi-cadence (l'Hymne
@@ -755,6 +755,27 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - Pas touché, comme tu l'as décidé : à la grille noire, des croches swing
     ou un triolet se fondent encore en accords. C'est le prix d'une grille
     grossière ; la croche ou la double croche les gardent.
+- **Vérifié dans l'appli assemblée** (Chromium, version autonome) : les
+  pages d'essai importées, la page de mélodie transposée de +2 exportée en
+  MIDI (ré puis fa, 1/8 puis 12/8) et en MusicXML (valide), « Continuer en
+  idée » en 12/8 et fa majeur, un `.mid` importé en idée, harmonisé (cinq
+  accords) et gravé (l'accompagnement sur une portée, plaqué et arpégé),
+  un morceau exporté en MusicXML et en MIDI ; aucune erreur dans la page.
+  Pas essayé ici : Ableton Live lui-même, MuseScore (music21 et le schéma
+  officiel en tiennent lieu).
+- **Pièges rencontrés en chemin :**
+  - `i += vlq()` quand `vlq` avance `i` : JavaScript lit l'ancien `i`
+    avant l'appel, l'octet lu se perd. Calculer d'abord, ajouter ensuite ;
+  - abcjs prend « M:none » pour du 4/4 (`getMeterFraction`) : la mesure
+    libre se lit dans l'en-tête de l'ABC ;
+  - abcjs range un `[K:][M:]` écrit en début de ligne à la fin de la ligne
+    d'avant ; `lirePage` suit donc les éléments dans l'ordre, lignes
+    comprises, et regarde si une barre précède le changement ;
+  - mido refuse un bloc inconnu dans un fichier MIDI (la norme dit de le
+    sauter, notre lecteur le saute) : pour comparer avec mido, un fichier
+    sans bloc inconnu ;
+  - `sequence.js` ne peut pas importer `harmonie.js` (qui l'importe) : ce
+    qu'ils partagent sur les noms d'accords est dans `accords.js`.
 
 ### Architecture (T3 à T5)
 
