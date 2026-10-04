@@ -936,6 +936,23 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - Trouvé en route, pas corrigé ici : une idée rechargée moins de 0,7 s
     après sa dernière note est perdue (son premier enregistrement attend
     encore ; rien ne l'écrit quand la page se ferme).
+- **La CI du site vérifie tout, à chaque PR (S3, côté site).** Un job
+  `verifier`, sur chaque PR et avant chaque mise en ligne : `npm test`,
+  `npm run lint`, `npm run types`, `npm run e2e` (Chromium installé par
+  `npx playwright install`) et `deno check` pour le connecteur. CLAUDE.md
+  demandait ces vérifications avant de pousser ; rien ne les faisait.
+  - Les actions sont épinglées par empreinte, la version en commentaire :
+    une étiquette comme `v4` peut être déplacée vers un autre code. Le
+    jeton GitHub ne reste plus dans le dépôt cloné
+    (`persist-credentials: false`), aucun script d'installation de
+    dépendance ne s'exécute (`npm ci --ignore-scripts`), et seul le job qui
+    publie peut écrire, sur Pages.
+  - Dependabot passe le lundi : une PR pour les dépendances, une pour les
+    actions, que les mêmes vérifications jugent. Sauf Playwright, qui va
+    avec les navigateurs installés là où Claude travaille (Chromium 1194) :
+    il se monte à la main, avec eux.
+  - `engines` : Node 22 au moins, la version de la CI (ESLint 10 et
+    TypeScript 7 ne tournent pas plus bas).
 
 ### Notation, harmonie et exports (N1 à N7)
 

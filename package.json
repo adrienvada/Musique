@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "description": "Portée : des partitions écrites sur la reMarkable à la partition jouée au piano.",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "e2e": "node outils/assembler-appli.mjs --autonome && node --test tests/e2e/*.test.mjs",
