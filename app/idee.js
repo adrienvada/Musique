@@ -16,8 +16,8 @@
  *
  * Ce module tient le cœur : l'état (e), annuler et refaire, la sauvegarde,
  * le dessin (grille.js ou la partition d'abcjs), le transport (écouter,
- * boucle, métronome), la barre du haut, les feuilles Tempo et •••, et le
- * choix du mode du pupitre. Le reste vit dans des modules qui
+ * boucle, métronome), la barre du haut, la feuille •••, et le choix du mode
+ * du pupitre. Le reste vit dans des modules qui
  * reçoivent un contexte explicite (ctx, plus bas) et ne partagent rien
  * d'autre :
  *   idee-clavier.js   le mode Clavier (durées, clavier à l'écran, de
@@ -27,7 +27,8 @@
  *   idee-selection.js la pilule, la boîte à outils, la rangée de
  *                     sélection, les transformations, le menu en cercle ;
  *   idee-direct.js    le jeu en direct (décompte, enregistrement, recalage) ;
- *   idee-carnet.js    la feuille Carnet (note, étiquettes, favori, mémo vocal).
+ *   idee-carnet.js    la feuille Carnet (note, étiquettes, favori, mémo vocal) ;
+ *   idee-tempo.js     la feuille Tempo et mesure (et les pistes).
  *
  * L'idée vit en notes (sequence.js) ; la partition n'en est qu'une
  * traduction. Ce module ne parle à l'appli que par les dépendances qu'on
@@ -35,10 +36,10 @@
  */
 import { lirePref, ecrirePref } from "./preferences.js";
 import * as sq from "./sequence.js";
-import { voixCompletes, transposerIdee, STYLES } from "./harmonie.js";
+import { voixCompletes } from "./harmonie.js";
 import { creerGrille } from "./grille.js";
 import { ico } from "./icones.js";
-import { $, dateCourte, echapper } from "./ui.js";
+import { $, dateCourte } from "./ui.js";
 import { creerEnregistreur } from "./enregistreur.js";
 import { cause, explication } from "./erreurs.js";
 import { egal } from "./fiche.js";
@@ -49,20 +50,14 @@ import { creerAccords } from "./idee-accords.js";
 import { creerSelection } from "./idee-selection.js";
 import { creerDirect } from "./idee-direct.js";
 import { creerCarnet } from "./idee-carnet.js";
-import { tempoDesTapes } from "./transport.js";
+import { creerTempo, defauts } from "./idee-tempo.js";
 
-const MESURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8", "2/2"];
-const CLE_DEFAUTS = "portee:idee-defauts";
 const CLE_MODE = "portee:mode-idee";
 const MODES = ["clavier", "chanter", "accords"];
 // Ce que l'éditeur montre d'une idée : une version d'ailleurs qui ne change rien de cela ne se recharge pas.
 const CHAMPS_MONTRES = ["titre", "sequence", "note", "etiquettes", "favori", "memo"];
 
 const titreDuJour = () => `Idée du ${dateCourte(new Date().toISOString())}`;
-
-function defauts() {
-  try { return { tempo: 90, mesure: [4, 4], tonalite: "C", ...JSON.parse(lirePref(CLE_DEFAUTS) || "{}") }; } catch { return { tempo: 90, mesure: [4, 4], tonalite: "C" }; }
-}
 
 /**
  * @param deps {
@@ -96,9 +91,6 @@ export function creerEditeurIdee(deps) {
   const tenues = new Map(); // hauteur → note qui sonne (piano)
   // Les enregistrements de l'idée, un instant après le dernier geste (enregistreur.js).
   const ecritures = creerEnregistreur({ ecrire: (s, x) => ecrire(s, x), secours: (s, x) => secours(s, x), delai: 700, fondre: (_avant, apres) => apres });
-  // Le tempo se règle par petits pas (−, +, le curseur) : on l'affiche tout
-  // de suite, on ne l'écrit qu'une fois le geste fini (un seul « Annuler »).
-  let tempoEnAttente = null, minuterieTempo = null;
 
   // --- La grille ---------------------------------------------------------------
 
@@ -140,10 +132,11 @@ export function creerEditeurIdee(deps) {
   const selection = creerSelection(ctx);
   const direct = creerDirect(ctx);
   const modes = { clavier: clavierMode, chanter: chant, accords };
-
-  $("idee-mesure").innerHTML = MESURES.map((m) => `<option value="${m}">${m}</option>`).join("");
-  $("idee-tonalite").innerHTML = sq.TONALITES.map((t) => `<option value="${t}">${sq.nomTonalite(t)}</option>`).join("");
-  $("idee-accomp").innerHTML = STYLES.map((s) => `<option value="${s.id}">${s.nom}</option>`).join("");
+  // La feuille Tempo et mesure (idee-tempo.js) ; le clavier à l'écran suit la piste choisie.
+  const tempo = creerTempo({
+    e, $, toast, grille, modifier, rafraichir,
+    notesPiste: () => notesPiste(), amener: (h) => clavierMode.amener(h),
+  });
   const feuilles = ["idee-reglages", "idee-menu", "idee-infos"].map((id) => brancherFeuille($(id)));
   for (const f of feuilles) f.addEventListener("click", (ev) => { if (ev.target.closest("[data-fermer]")) fermerFeuille(f); });
 
@@ -213,7 +206,7 @@ export function creerEditeurIdee(deps) {
   }
 
   /** Une écriture attend ou part, le tempo se règle, ou le jeu en direct tourne : on ne recharge pas sous les doigts. */
-  const occupe = () => ecritures.occupe || tempoEnAttente !== null || !!e.enregistrement;
+  const occupe = () => ecritures.occupe || tempo.enAttente || !!e.enregistrement;
 
   /**
    * L'idée a changé ailleurs (un autre appareil, un autre onglet) : on la
@@ -675,24 +668,15 @@ export function creerEditeurIdee(deps) {
     const dit = `Tempo ${k.tempo}, mesure ${k.mesure.join("/")}, ${sq.nomTonalite(k.tonalite)} : changer`;
     $("idee-reglages-bouton").title = dit;
     $("idee-reglages-bouton").setAttribute("aria-label", dit);
-    if (tempoEnAttente === null) { $("idee-tempo").value = k.tempo; $("idee-tempo-val").textContent = k.tempo; }
-    const mesure = k.mesure.join("/");
-    $("idee-mesure").value = mesure;
-    $("idee-mesures").querySelectorAll("[data-mesure]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mesure === mesure)));
-    $("idee-tonalite").value = k.tonalite;
-    $("idee-accomp").value = k.accompagnement || "aucun";
+    tempo.maj();
     $("idee-boucle").setAttribute("aria-pressed", String(e.boucle));
     $("idee-metronome").setAttribute("aria-pressed", String(e.metronome));
     $("idee-annuler").disabled = !e.annuler.length || !!e.enregistrement;
     $("idee-refaire").disabled = !e.refaire.length || !!e.enregistrement;
     // Les pistes : une puce dans la barre (dès qu'il y en a deux), le choix dans la feuille Tempo.
-    const plusieurs = k.pistes.length > 1;
-    $("idee-piste-puce").hidden = !plusieurs;
+    $("idee-piste-puce").hidden = k.pistes.length < 2;
     $("idee-piste-puce").textContent = k.pistes[e.piste].nom;
     $("idee-piste-puce").setAttribute("aria-label", `Piste : ${k.pistes[e.piste].nom} (toucher pour changer)`);
-    $("idee-pistes").hidden = !plusieurs;
-    $("idee-pistes").innerHTML = plusieurs ? k.pistes.map((p, i) => `<button data-piste="${i}" aria-pressed="${i === e.piste}">${echapper(p.nom)}</button>`).join("") : "";
-    $("idee-basse").hidden = plusieurs;
     // Une note choisie : la rangée de la sélection se glisse au-dessus du
     // mode, qui se resserre ; le pupitre garde sa hauteur, la grille ne bouge pas.
     $("idee-pupitre").classList.toggle("avec-selection", e.selection.size > 0);
@@ -833,7 +817,7 @@ export function creerEditeurIdee(deps) {
   });
   $("idee-reglages-bouton").addEventListener("click", () => ouvrirFeuille($("idee-reglages")));
   $("idee-plus").addEventListener("click", () => ouvrirFeuille($("idee-menu")));
-  $("idee-piste-puce").addEventListener("click", () => changerPiste((e.piste + 1) % e.seq.pistes.length));
+  $("idee-piste-puce").addEventListener("click", () => tempo.changerPiste((e.piste + 1) % e.seq.pistes.length));
   $("idee-menu").addEventListener("click", async (ev) => {
     const b = ev.target.closest("[data-menu]");
     if (!b) return;
@@ -850,70 +834,6 @@ export function creerEditeurIdee(deps) {
     const p = partitionCourante();
     if (!p) { toast("L'idée est vide : joue au moins une note."); return; }
     deps.partager(p);
-  });
-
-  // --- La feuille Tempo et mesure ---------------------------------------------------
-
-  const reglage = (f) => { modifier(f); memoriserDefauts(); };
-  function changerTempo(t) {
-    t = Math.max(40, Math.min(240, Math.round(t)));
-    tempoEnAttente = t;
-    $("idee-tempo-val").textContent = t;
-    $("idee-tempo").value = t;
-    clearTimeout(minuterieTempo);
-    minuterieTempo = setTimeout(() => {
-      const v = tempoEnAttente;
-      tempoEnAttente = null;
-      if (v !== e.seq.tempo) reglage(() => { e.seq.tempo = v; });
-    }, 350);
-  }
-  const tempoAffiche = () => (tempoEnAttente ?? e.seq.tempo);
-  $("idee-tempo").addEventListener("input", () => changerTempo(Number($("idee-tempo").value)));
-  $("idee-tempo-moins").addEventListener("click", () => changerTempo(tempoAffiche() - 1));
-  $("idee-tempo-plus").addEventListener("click", () => changerTempo(tempoAffiche() + 1));
-  const tapes = [];
-  $("idee-taper").addEventListener("click", () => {
-    const t = performance.now();
-    if (tapes.length && t - tapes[tapes.length - 1] > 2000) tapes.length = 0;
-    tapes.push(t);
-    if (tapes.length > 6) tapes.shift();
-    if (tapes.length < 3) { $("idee-taper-texte").textContent = "Encore…"; return; }
-    $("idee-taper-texte").textContent = "Taper le tempo";
-    const ecarts = tapes.slice(1).map((x, i) => x - tapes[i]);
-    // On tape les temps de la mesure, ceux que bat le métronome (la noire pointée en 6/8, la blanche
-    // en 2/2) ; l'idée garde des noires par minute (M12). Avant, en 12/8, le métronome battait aux
-    // deux tiers de ce qu'on avait tapé.
-    changerTempo(tempoDesTapes(ecarts, sq.pasParTemps(e.seq)));
-  });
-  const changerMesure = (m) => reglage(() => { e.seq.mesure = m.split("/").map(Number); });
-  $("idee-mesure").addEventListener("change", () => changerMesure($("idee-mesure").value));
-  $("idee-mesures").addEventListener("click", (ev) => { const b = ev.target.closest("[data-mesure]"); if (b) changerMesure(b.dataset.mesure); });
-  $("idee-tonalite").addEventListener("change", () => reglage(() => { e.seq.tonalite = $("idee-tonalite").value; }));
-  $("idee-transp-moins").addEventListener("click", () => modifier(() => transposerIdee(e.seq, -1)));
-  $("idee-transp-plus").addEventListener("click", () => modifier(() => transposerIdee(e.seq, 1)));
-  $("idee-accomp").addEventListener("change", () => modifier(() => { e.seq.accompagnement = $("idee-accomp").value; }));
-  $("idee-reglages").querySelector(".idee-zoom").addEventListener("click", (ev) => {
-    const b = ev.target.closest("[data-zoom]");
-    if (b) grille.zoom(Number(b.dataset.facteur), b.dataset.zoom);
-  });
-
-  // Les pistes
-  function changerPiste(i) {
-    e.piste = i;
-    e.selection.clear();
-    e.curseur = Math.max(0, ...notesPiste().map((n) => n.d + n.l));
-    clavierMode.amener(notesPiste().length ? notesPiste()[notesPiste().length - 1].h : (e.seq.pistes[i].cle === "fa" ? 36 : 60));
-    rafraichir();
-  }
-  $("idee-basse").addEventListener("click", () => {
-    modifier(() => { e.seq.pistes.push({ nom: "Basse", cle: "fa", notes: [] }); e.piste = e.seq.pistes.length - 1; e.selection.clear(); e.curseur = 0; });
-    clavierMode.amener(36);
-    fermerFeuille($("idee-reglages"));
-    toast("Piste de basse : ce que tu joues va maintenant dans la basse. Touche « Basse », en haut, pour revenir à la mélodie.", 6000);
-  });
-  $("idee-pistes").addEventListener("click", (ev) => {
-    const b = ev.target.closest("[data-piste]");
-    if (b) changerPiste(Number(b.dataset.piste));
   });
 
   // --- Le transport -------------------------------------------------------------
@@ -933,10 +853,6 @@ export function creerEditeurIdee(deps) {
   $("idee-refaire").addEventListener("click", () => revenir(e.refaire, e.annuler));
   new ResizeObserver(() => { if (e.ouverte) rafraichir(); }).observe($("idee-surface"));
   $("idee-partition").addEventListener("scroll", () => selection.placer());
-
-  function memoriserDefauts() {
-    ecrirePref(CLE_DEFAUTS, JSON.stringify({ tempo: e.seq.tempo, mesure: e.seq.mesure, tonalite: e.seq.tonalite }));
-  }
 
   const sauverMaintenant = () => ecritures.vider();
 

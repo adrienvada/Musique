@@ -2149,6 +2149,10 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - `app/idee-carnet.js` : la feuille Carnet (note, étiquettes, favori,
     mémo vocal). Le mémo s'arrête et se tait par `carnet.fermer()`, que
     l'éditeur appelle en se fermant.
+  - `app/idee-tempo.js` : la feuille Tempo et mesure, avec les pistes et
+    les réglages par défaut des idées suivantes (`defauts`). Le tempo qu'on
+    règle encore (`tempo.enAttente`) empêche toujours de recharger l'idée
+    sous les doigts.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 
