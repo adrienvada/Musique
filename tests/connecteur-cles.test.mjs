@@ -14,10 +14,14 @@ import { planDesSecrets } from "../outils/deployer-connecteur.mjs";
 import { demarrerFauxCloud, demarrerFauxStockage } from "./faux-cloud.mjs";
 
 // Des clés de la forme des vraies, inventées pour les tests.
-// Assemblée à l'exécution : écrite d'un seul tenant, elle a la forme exacte
-// d'une vraie clé, et la protection contre les fuites de GitHub refuse le dépôt.
+// Assemblées à l'exécution : écrites d'un seul tenant, elles ont la forme
+// exacte d'une vraie clé, et la protection contre les fuites de GitHub
+// refuse le dépôt (ou lève une alerte pour rien).
 const SECRETE = ["sb", "secret", "cle", "inventee", "pour", "les", "tests"].join("_");
-const ANCIENNE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UifQ.c2lnbmF0dXJlLWRlLXRlc3Q";
+const b64url = (objet) => Buffer.from(JSON.stringify(objet)).toString("base64url");
+/** Un faux JWT : en-tête et contenu encodés ici, signature inventée. */
+const fauxJwt = (contenu, signature) => [b64url({ alg: "HS256", typ: "JWT" }), b64url(contenu), signature].join(".");
+const ANCIENNE = fauxJwt({ role: "service_role", iss: "supabase" }, Buffer.from("signature-de-test").toString("base64url"));
 
 const env = (valeurs) => (nom) => valeurs[nom];
 
@@ -84,7 +88,7 @@ test("sans clé de service, un message qui dit laquelle manque", () => {
 // --- S5 : le jeton de la tablette, chiffré au repos ---------------------------
 
 const SECRET = "secret-du-coffre-de-test-0123456789abcdef";
-const JETON = "eyJhbGciOiJIUzI1NiJ9.eyJhcHBhcmVpbCI6InBvcnRlZSJ9.jeton-appareil-de-test";
+const JETON = fauxJwt({ appareil: "portee" }, "jeton-appareil-de-test");
 const brutDuCoffre = (stockage) => stockage.objet("portee-remarkable", "jeton-appareil");
 
 test("le jeton se range chiffré, et se relit", async () => {
