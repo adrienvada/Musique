@@ -9,8 +9,15 @@
  *    tabulation ; les onglets suivent les flèches (I11) ;
  *  - les messages passagers de l'écran qu'on quitte s'en vont ; le panneau
  *    « Ma reMarkable » sans connecteur ne propose ni Chercher ni Actualiser ;
- *  - (la suite de ce fichier : la grosse bibliothèque, le clavier AZERTY,
- *    les premiers pas, l'appli installée).
+ *  - l'appli installée : son manifeste (dans un profil normal, le seul
+ *    qu'on puisse installer), ses raccourcis, un fichier ouvert d'un double
+ *    clic (launchQueue, simulée), un PDF partagé (le POST qu'envoie
+ *    Android, reçu par le service worker) (I4) ;
+ *  - les premiers pas : essayer sans rien écrire est en vue, l'idée
+ *    d'exemple (I15) ;
+ *  - l'aide du clavier en AZERTY (I12) ;
+ *  - une grosse bibliothèque : une étoile ne refait que sa ligne, la
+ *    recherche se regroupe, le pincement étire sans redessiner (I9).
  */
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
@@ -319,8 +326,10 @@ test("un PDF partagé vers Portée (Android) : le service worker le garde, la pa
     await page.goto(`${serveur.url}?partage`);
     await page.waitForSelector("#vue-atelier:not([hidden]) #gravure-atelier svg .abcjs-note", { state: "attached", timeout: 30000 });
     assert.equal(await page.inputValue("#titre"), "Partagé de la tablette");
-    // Pris une fois : il quitte le cache, un rechargement ne l'importe pas deux fois.
+    // Pris une fois : il quitte le cache, et l'adresse redevient celle de l'appli (un rechargement
+    // ne cherche plus de partage).
     assert.equal(await page.evaluate(async () => (await (await caches.open("portee-partage")).keys()).length), 0);
+    assert.equal(new URL(page.url()).search, "");
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });

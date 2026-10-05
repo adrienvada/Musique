@@ -2825,7 +2825,21 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   collée. Et « Importer un PDF » dit « Importer un PDF ou un MIDI » : un
   .mid de Live y devient une idée depuis le lot notation.
 - Hors de mes fichiers, deux lignes : `ecran-atelier.js` appelle
-  `gravureSansTabulation` après sa gravure.
+  `gravureSansTabulation` après sa gravure. Et `navigation.js` fait un peu
+  plus que le titre et les messages : les flèches des onglets y sont, à côté
+  de la règle des fenêtres et des champs de texte, parce que c'est par lui
+  que passent toutes les touches.
+- Mesuré (axe-core, et à la main ; téléphone clair et sombre, ordinateur ;
+  le carnet, Corriger, Écouter, une idée en grille et en partition, un
+  morceau), avant → après : `page-has-heading-one`, 5 écrans → 0 ;
+  `scrollable-region-focusable`, 1 → 0 ; les notes gravées tabulables, 48
+  (Corriger) et 54 (la partition d'une idée) → 0 ; ce qu'une étoile fait
+  relire, tout le carnet (97 caractères pour deux pages, 8 000 pour un an)
+  → 48 (« « Essai… » est dans tes favoris. »). Restent les deux
+  `target-size`, d'I1.
+- Le contraste de la sélection (« noire », sous le nom de la note choisie,
+  4,17:1 en Studio et en sombre) est `--gris` sur `--surligneur-doux` : il
+  se corrige dans le jeton, avec I1 (l'autre moitié de l'interface).
 - **Une grosse bibliothèque reste fluide (I9).** Mesuré comme l'audit (150
   documents, téléphone simulé, processeur ralenti ×4, `perf-grosse.mjs`),
   avant → après : une lettre tapée dans la recherche, 584 à 936 ms →
@@ -2867,6 +2881,12 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     une seule fois » (`ecrans.test.mjs`) comptait les changements de la
     liste ; un dessin qui ne change rien ne la touche plus. Il compte
     maintenant ceux de ses filtres, que chaque dessin repose.
+  - À l'ordinateur aussi (même script) : une lettre, 184 → 32 ms au pire ;
+    une étoile, 123 ms → rien ; l'ouverture du carnet, 53 → 0 ms de blocage.
+  - Le prix : ouvrir l'éditeur prend 2 à 5 ms de plus (médiane de dix
+    ouvertures au processeur ×4, 153 à 164 → 165 à 181 ms). Le profil n'y
+    montre aucune fonction de plus d'une milliseconde (le titre de l'écran,
+    le nom des touches) : c'est le dessin de ces quelques attributs.
 - **L'aide du clavier montre les lettres de ton clavier (I12).** Les
   touches jouent par leur place, comme dans Ableton (le lot architecture
   l'a fait marcher en AZERTY) ; l'aide disait encore « A W S E D… Z X »,
@@ -2927,7 +2947,9 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     Portée. Le système l'envoie en POST : un site statique ne sait pas le
     recevoir, le service worker le garde dans un cache à part
     (`portee-partage`, qu'une mise à jour n'efface pas), rouvre la page sur
-    `?partage`, et la page l'importe une fois, comme un PDF choisi.
+    `?partage`, et la page l'importe une fois, comme un PDF choisi ; son
+    adresse redevient `/Musique/` (le même état d'historique) : un
+    rechargement plus tard n'y cherche plus de partage.
   - Piège : Chrome ignore `launch_handler` pour un partage (il navigue
     toujours, et le POST passe par le service worker), et ne l'applique
     qu'à l'ordinateur ; sur Android, un raccourci ouvre son adresse.

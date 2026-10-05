@@ -389,6 +389,9 @@ export function creerImport({ stockage, ouvrir, partitions = () => [] }) {
       if (r) fichiers.push(new File([await r.blob()], decodeURIComponent(r.headers.get("x-portee-nom") || "partage.pdf"), { type: r.headers.get("content-type") || "" }));
       await cache.delete(requete);
     }
+    // L'adresse redevient celle de l'appli (le même état d'historique, historique.js) : recharger
+    // plus tard n'y chercherait plus un partage déjà pris.
+    try { history.replaceState(history.state, "", location.pathname); } catch { /* un historique fermé : sans suite */ }
     if (fichiers.length) await recevoir(fichiers, { restaurer });
     else toast("Le partage n'a apporté aucun fichier : partage un PDF exporté de la tablette, ou un fichier MIDI.", 7000);
   }
