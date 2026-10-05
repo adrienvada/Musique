@@ -62,12 +62,17 @@
       <div id="vide" class="vide" hidden>
         <h2>Bienvenue dans Portée</h2>
         <p>Ton carnet de musique : note une mélodie dès qu'elle te vient, écoute-la au piano, ajoute des accords, et envoie-la en MIDI dans Ableton. Tes pages écrites à la main sur la reMarkable y entrent aussi.</p>
+        <!-- Essayer sans rien écrire, en tête : au premier lancement, au téléphone, l'essai avec les pages
+             d'essai tombait sous la barre d'onglets (I15). L'idée d'exemple ne s'écrit qu'une fois ouverte. -->
+        <div class="rangee vide-essayer">
+          <button class="btn" id="exemple-idee"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Ouvrir une idée d'exemple</button>
+          <button class="btn" id="exemples"><svg class="ico s" aria-hidden="true"><use href="#i-page"></use></svg>Essayer avec les pages d'essai</button>
+        </div>
         <ol class="etapes">
           <li><strong>Note une idée</strong><span class="remarque">Au clavier, en chantant les notes une à une, ou avec un mémo vocal : les trois tuiles, juste au-dessus.</span><button class="btn btn-petit btn-plein" id="vide-idee">Nouvelle idée</button></li>
           <li><strong>Ou écris sur la tablette</strong><span class="remarque">Sur un modèle Portée : des portées calibrées pour une mélodie ou le piano.</span><button class="btn btn-petit" id="vide-modeles">Voir les modèles</button></li>
           <li><strong>Et importe tes pages</strong><span class="remarque">Depuis ta reMarkable, ou en déposant le PDF exporté.</span><button class="btn btn-petit" id="vide-remarkable">Importer de ma reMarkable</button></li>
         </ol>
-        <div class="rangee"><button class="btn btn-petit" id="exemples">Essayer avec les pages d'essai</button></div>
       </div>
       <div class="filtres" id="filtres-carnet" role="group" aria-label="Filtrer le carnet">
         <button class="puce" data-filtre="tout" aria-pressed="true">Tout</button>

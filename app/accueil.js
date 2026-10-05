@@ -20,7 +20,7 @@
  */
 import { dessinerApercu, dessinerApercuMorceau, dessinerApercuPage } from "./apercus.js";
 import { assembler, sourceDuMorceau } from "./morceau.js";
-import { indexerParPas, pasParMesure, pasParTemps } from "./sequence.js";
+import { indexerParPas, nouvelleSequence, pasParMesure, pasParTemps } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
 import { creerEcoute } from "./ecoute.js";
 import { libelleLecture } from "./atelier.js";
@@ -125,6 +125,38 @@ export function compteVisible(liste) {
   const sortes = { idee: 0, morceau: 0, partition: 0 };
   for (const p of liste) sortes[sorteDe(p)]++;
   return compteParSorte(sortes).texte || "Rien ne correspond";
+}
+
+/** Le titre de l'idée d'exemple. */
+export const TITRE_EXEMPLE = "Exemple : Au clair de la lune";
+
+/**
+ * L'idée d'exemple du carnet vide (audit du 04/10, I15) : « Au clair de la
+ * lune », douze mesures (la première phrase, la seconde, la première), avec
+ * ses accords (do, sol, ré mineur) joués basse et accords. De quoi découvrir
+ * la grille, la partition et les accords sans rien écrire. L'ouvrir la range
+ * dans le carnet, comme une idée tirée d'une phrase (l'éditeur l'enregistre
+ * tout de suite, par le même chemin) : elle s'efface comme une autre. Rien
+ * ne s'écrit tant qu'on ne l'ouvre pas.
+ */
+export function ideeExemple() {
+  const seq = nouvelleSequence({ tempo: 100, mesure: [4, 4], tonalite: "C" });
+  const N = 4, B = 8, R = 16; // la noire, la blanche, la ronde, en pas
+  const premiere = [[60, N], [60, N], [60, N], [62, N], [64, B], [62, B], [60, N], [64, N], [62, N], [62, N], [60, R]];
+  const seconde = [[62, N], [62, N], [62, N], [62, N], [57, B], [57, B], [62, N], [60, N], [59, N], [57, N], [55, R]];
+  let d = 0;
+  for (const [h, l] of [...premiere, ...seconde, ...premiere]) {
+    seq.pistes[0].notes.push({ id: seq.suivant++, d, l, h, v: 90 });
+    d += l;
+  }
+  // Un accord au début de chaque mesure (la règle les montre tous), et sol au milieu des mesures 2 et 3.
+  const accordsPremiere = [["C", 0], ["C", 16], ["G", 24], ["C", 32], ["G", 40], ["C", 48]];
+  const accordsSeconde = [["G", 0], ["Dm", 16], ["G", 32], ["G", 48]];
+  for (const [debut, accords] of [[0, accordsPremiere], [64, accordsSeconde], [128, accordsPremiere]]) {
+    for (const [nom, x] of accords) seq.accords.push({ d: debut + x, nom });
+  }
+  seq.accompagnement = "basse";
+  return seq;
 }
 
 /** Toutes les étiquettes de la bibliothèque, les plus employées d'abord (le carnet, l'éditeur d'idée). */
@@ -793,6 +825,8 @@ export function creerAccueil(deps) {
   // Fredonner tout de suite : une idée neuve, le mémo qui enregistre déjà.
   $("nouveau-memo").addEventListener("click", () => deps.ouvrirIdee(null, { memo: true }));
   $("vide-idee").addEventListener("click", () => deps.ouvrirIdee(null, { mode: "clavier" }));
+  // Le carnet vide propose une idée toute faite, à écouter et à retoucher (I15).
+  $("exemple-idee").addEventListener("click", () => deps.ouvrirIdee(null, { seq: ideeExemple(), titre: TITRE_EXEMPLE, mode: "clavier" }));
   $("nouveau-morceau").addEventListener("click", () => deps.ouvrirMorceau(null));
 
   // Les filtres : un seul à la fois, plus une étiquette.

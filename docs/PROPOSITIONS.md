@@ -2881,6 +2881,20 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     compte pour « on ne sait pas ».
   - Essais : `tests/aide-clavier.test.mjs`, et « l'aide du clavier montre
     les lettres d'un AZERTY » (`tests/e2e/annonces.test.mjs`).
+- **Les premiers pas : essayer sans rien écrire est en vue (I15).** Au
+  premier lancement, au téléphone, « Essayer avec les pages d'essai »
+  tombait sous la barre d'onglets (y = 937 px pour un écran de 844) : il
+  passe en tête de l'accueil, juste sous la présentation, à côté d'« Ouvrir
+  une idée d'exemple ».
+  - **L'idée d'exemple** : « Au clair de la lune », douze mesures avec ses
+    accords (do, sol, ré mineur, en basse et accords), pour découvrir la
+    grille, la partition et les accords sans rien écrire (`ideeExemple`,
+    `accueil.js`). Rien ne s'écrit tant qu'on ne l'ouvre pas ; ouverte, elle
+    se range comme une idée tirée d'une phrase (l'éditeur l'enregistre tout
+    de suite, par le même chemin), et s'efface comme une autre (•••).
+  - Pourquoi pas une idée rangée d'office dans un carnet vide : un nouvel
+    appareil (ou la version claude.ai) l'ajouterait à chaque premier
+    lancement, et la synchronisation l'enverrait à tous tes appareils.
 - Essais : `tests/e2e/annonces.test.mjs`.
 
 ### Claude dans l'éditeur d'idée (H2)

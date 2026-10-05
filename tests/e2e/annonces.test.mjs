@@ -202,6 +202,44 @@ test("les onglets suivent les flèches au clavier ; touchés à la souris, ← �
 });
 
 // ---------------------------------------------------------------------------
+// Les premiers pas (I15)
+// ---------------------------------------------------------------------------
+
+test("premier lancement au téléphone : essayer sans rien écrire est en vue, et l'idée d'exemple s'efface comme une autre (I15)", async () => {
+  const ctx = await contexte(navigateur, { appareil: TELEPHONE });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.waitForSelector("#vide:not([hidden])");
+    // Au-dessus de la barre d'onglets, fixée en bas : on les voit sans faire défiler (avant : y = 937 px pour 844).
+    const places = await page.evaluate(() => {
+      const barre = document.getElementById("onglets-accueil").getBoundingClientRect().top;
+      return ["exemple-idee", "exemples"].map((id) => { const r = document.getElementById(id).getBoundingClientRect(); return { id, dessous: r.bottom <= barre, haut: Math.round(r.height) }; });
+    });
+    assert.deepEqual(places, [{ id: "exemple-idee", dessous: true, haut: places[0].haut }, { id: "exemples", dessous: true, haut: places[1].haut }]);
+    assert.ok(places.every((p) => p.haut >= 44), JSON.stringify(places));
+    // Rien n'est écrit tant qu'on ne l'ouvre pas.
+    assert.equal(await page.locator("#liste .ligne-carnet").count(), 0);
+    await page.locator("#exemple-idee").tap();
+    await page.waitForSelector("#vue-idee:not([hidden])");
+    await page.waitForFunction(() => document.querySelectorAll("#idee-grille .g-note:not(.autre)").length === 33);
+    assert.equal(await page.inputValue("#idee-titre"), "Exemple : Au clair de la lune");
+    // Ses accords sur la règle, et sa partition.
+    assert.ok(await page.locator("#idee-grille .g-accord").count() >= 12);
+    await page.locator('#idee-affichage [data-affichage="partition"]').tap();
+    await page.waitForSelector("#idee-gravure svg .abcjs-note", { state: "attached" });
+    await page.locator('#idee-affichage [data-affichage="grille"]').tap();
+    await page.locator("#vue-idee [data-retour]").tap();
+    await page.waitForSelector('#liste .ligne-carnet button[aria-label^="Ouvrir « Exemple : Au clair de la lune"]');
+    // Elle s'efface comme une autre, et le carnet vide revient.
+    await page.locator("#liste .ligne-carnet .plus").tap();
+    await page.locator("#feuille-liste button", { hasText: "Supprimer" }).tap();
+    await page.locator("#dialogue button", { hasText: "Supprimer" }).tap();
+    await page.waitForSelector("#vide:not([hidden])");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+// ---------------------------------------------------------------------------
 // Le clavier AZERTY (I12)
 // ---------------------------------------------------------------------------
 
