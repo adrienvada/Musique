@@ -8,7 +8,8 @@
  *   suggestions/<partition>/<suggestion>.json
  * et c'est Adrien qui l'applique d'un geste dans Portée, ou l'écarte. Ainsi
  * rien de ce que Claude écrit ne peut abîmer une partition, ni se mêler à
- * la synchronisation.
+ * la synchronisation. Quand une partition part pour de bon (30 jours dans la
+ * corbeille), ses suggestions partent avec elle (bibliotheque.js).
  *
  * Le contenu est vérifié par l'outil qui l'écrit (conversation.js) ; ici, on
  * range et on relit.

@@ -1051,6 +1051,12 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     coffre range le jeton en `text/plain`.
   - La bibliothèque et les suggestions partagent un seul client du stockage
     (`index.ts`) : une mise à jour par démarrage, pas une par outil.
+- **Les suggestions partent avec leur partition (D6, `bibliotheque.js`).**
+  Quand une partition quitte la corbeille pour de bon (30 jours), les
+  suggestions que Claude avait rangées pour elle (`suggestions/<id>/…`)
+  partent aussi : personne ne pourrait plus les appliquer, et elles
+  restaient dans le stockage pour rien. Une partition revenue entre-temps
+  garde les siennes.
 
 ### Données et synchronisation (S6, D1 à D10)
 
