@@ -846,7 +846,9 @@
         </div>
         <span class="remarque idee-zoom-aide">Ou pince la grille à deux doigts : en largeur pour le temps, en hauteur pour les notes.</span>
       </div>
-      <p class="remarque idee-raccourcis">Clavier de l'ordinateur, comme dans Ableton : <kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd>… pour jouer, <kbd>Z</kbd> <kbd>X</kbd> octave, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>0</kbd> silence, <kbd>Espace</kbd> écouter, <kbd>R</kbd> jouer en direct, <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> choisir et monter, <kbd>Ctrl</kbd> + molette pour zoomer dans le temps, <kbd>Alt</kbd> + molette en hauteur.</p>
+      <!-- Les lettres marquées data-touche jouent par leur place (comme dans Ableton) : idee-clavier.js les
+           réécrit avec celles de ton clavier (sur un AZERTY, la place de A porte Q ; I12). -->
+      <p class="remarque idee-raccourcis" id="idee-raccourcis">Clavier de l'ordinateur, comme dans Ableton : <kbd data-touche="KeyA">A</kbd> <kbd data-touche="KeyW">W</kbd> <kbd data-touche="KeyS">S</kbd> <kbd data-touche="KeyE">E</kbd> <kbd data-touche="KeyD">D</kbd>… pour jouer, <kbd data-touche="KeyZ">Z</kbd> <kbd data-touche="KeyX">X</kbd> octave, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>0</kbd> silence, <kbd>Espace</kbd> écouter, <kbd data-touche="KeyR">R</kbd> jouer en direct, <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> choisir et monter, <kbd>Ctrl</kbd> + molette pour zoomer dans le temps, <kbd>Alt</kbd> + molette en hauteur.<span id="idee-raccourcis-azerty"> Sur un clavier AZERTY : <kbd>Q</kbd> <kbd>Z</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd>… pour jouer, <kbd>W</kbd> <kbd>X</kbd> octave.</span></p>
       <button class="btn btn-plein idee-fini" data-fermer>C'est bon</button>
     </dialog>
 

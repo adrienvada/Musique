@@ -202,6 +202,48 @@ test("les onglets suivent les flèches au clavier ; touchés à la souris, ← �
 });
 
 // ---------------------------------------------------------------------------
+// Le clavier AZERTY (I12)
+// ---------------------------------------------------------------------------
+
+/** Les lettres que l'aide du clavier montre, et si la mention AZERTY est là. */
+const aideDuClavier = (page) => page.evaluate(() => ({
+  lettres: [...document.querySelectorAll("#idee-raccourcis kbd[data-touche]")].map((k) => k.textContent).join(" "),
+  mention: !document.getElementById("idee-raccourcis-azerty").hidden,
+}));
+
+test("l'aide du clavier montre les lettres d'un AZERTY : par le navigateur, ou apprises d'une touche jouée (I12)", async () => {
+  // Chromium sur l'ordinateur d'Adrien : la carte du clavier dit AZERTY.
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    await ctx.addInitScript(() => {
+      const azerty = { KeyA: "q", KeyW: "z", KeyS: "s", KeyE: "e", KeyD: "d", KeyZ: "w", KeyX: "x", KeyR: "r" };
+      Object.defineProperty(navigator, "keyboard", { configurable: true, value: { getLayoutMap: async () => new Map(Object.entries(azerty)) } });
+    });
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.click("#nouvelle-idee");
+    await page.waitForFunction(() => document.querySelector('#idee-raccourcis kbd[data-touche="KeyA"]').textContent === "Q");
+    assert.deepEqual(await aideDuClavier(page), { lettres: "Q Z S E D W X R", mention: false });
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+  // Sans carte (Safari, Firefox, la page dans claude.ai) : la mention, puis les lettres apprises.
+  const ctx2 = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    await ctx2.addInitScript(() => {
+      Object.defineProperty(navigator, "keyboard", { configurable: true, value: { getLayoutMap: async () => { throw new DOMException("refusée", "SecurityError"); } } });
+    });
+    const page = await ouvrirPortee(ctx2, serveur.url);
+    await page.click("#nouvelle-idee");
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    assert.deepEqual(await aideDuClavier(page), { lettres: "A W S E D Z X R", mention: true });
+    // La touche à la place de A, sur un AZERTY : elle porte Q, et joue une note.
+    await page.evaluate(() => { for (const type of ["keydown", "keyup"]) document.body.dispatchEvent(new KeyboardEvent(type, { key: "q", code: "KeyA", bubbles: true, cancelable: true })); });
+    await page.waitForFunction(() => document.querySelectorAll("#idee-grille .g-note:not(.autre)").length === 1);
+    assert.deepEqual(await aideDuClavier(page), { lettres: "Q Z S E D W X R", mention: false });
+    await verifierPropre(page);
+  } finally { await ctx2.close(); }
+});
+
+// ---------------------------------------------------------------------------
 // Une grosse bibliothèque (I9)
 // ---------------------------------------------------------------------------
 

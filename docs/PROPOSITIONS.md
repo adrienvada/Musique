@@ -2867,6 +2867,20 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     une seule fois » (`ecrans.test.mjs`) comptait les changements de la
     liste ; un dessin qui ne change rien ne la touche plus. Il compte
     maintenant ceux de ses filtres, que chaque dessin repose.
+- **L'aide du clavier montre les lettres de ton clavier (I12).** Les
+  touches jouent par leur place, comme dans Ableton (le lot architecture
+  l'a fait marcher en AZERTY) ; l'aide disait encore « A W S E D… Z X »,
+  les lettres d'un QWERTY, alors que sur ton clavier ce sont « Q Z S E D…
+  W X ». Chromium donne les vraies lettres (`navigator.keyboard`) ; sinon
+  (Safari, Firefox, la page dans claude.ai, où la carte est refusée),
+  Portée les apprend de la première touche jouée qui distingue les
+  dispositions (A, W, Z, Y : `dispositionDe`, `idee-clavier.js`) ; d'ici
+  là, une mention dit les lettres d'un AZERTY. Ctrl+Z, lui, se lit par
+  la lettre (la touche marquée Z) : l'aide le disait déjà juste.
+  - Piège : Chromium sans écran (les essais) rend une carte vide ; elle
+    compte pour « on ne sait pas ».
+  - Essais : `tests/aide-clavier.test.mjs`, et « l'aide du clavier montre
+    les lettres d'un AZERTY » (`tests/e2e/annonces.test.mjs`).
 - Essais : `tests/e2e/annonces.test.mjs`.
 
 ### Claude dans l'éditeur d'idée (H2)
