@@ -41,6 +41,8 @@
     "app/ui.js",
     "app/erreurs.js",
     "app/enregistreur.js",
+    "app/ecoute.js",
+    "app/page-ouverte.js",
     "supabase/functions/portee-remarkable/abc.js",
     "supabase/functions/portee-remarkable/bibliotheque.js",
     "supabase/functions/portee-remarkable/coffre.js",

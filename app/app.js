@@ -8,43 +8,37 @@
  * Adrien ne l'écrit jamais lui-même : il touche une note et choisit un
  * geste (plus haut, noire, dièse…), et edition.js réécrit l'ABC.
  */
-import { lirePartition } from "./lecteur/partition.js";
-import { dessinerPage } from "./manuscrit.js";
 import { Piano } from "./piano.js";
-import { nouvelId, ouvrirStockage, restaurer, sauvegarde } from "./stockage.js";
-import * as ed from "./edition.js";
-import { creerSynchronisation } from "./synchronisation-ui.js";
-import { egal } from "./fiche.js";
-import { creerEditeurIdee } from "./idee.js";
 import { Transport } from "./transport.js";
-import { notesDePage, surlignage } from "./ecoute-page.js";
-import { installerEveil } from "./eveil.js";
-import { brancherLive } from "./reglages-live.js";
-import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
-import { voixCompletes, transposerIdee } from "./harmonie.js";
-import { creerVueMorceau } from "./vue-morceau.js";
+import { nouvelId, ouvrirStockage, restaurer, sauvegarde } from "./stockage.js";
+import { egal } from "./fiche.js";
+import { pasParMesure, pasParTemps } from "./sequence.js";
+import { voixCompletes } from "./harmonie.js";
 import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
 import { midiDeLIdee } from "./midi.js";
+import { creerEditeurIdee } from "./idee.js";
+import { creerVueMorceau } from "./vue-morceau.js";
+import { creerAccueil } from "./accueil.js";
+import { creerEcranAtelier } from "./ecran-atelier.js";
+import { creerEcranLecteur } from "./ecran-lecteur.js";
+import { creerPageOuverte } from "./page-ouverte.js";
+import { creerEcoute } from "./ecoute.js";
+import { creerEcoutePage, libelleLecture } from "./atelier.js";
 import { creerExports } from "./exports.js";
 import { calibration, creerImport } from "./import-pdf.js";
 import { creerTablette } from "./tablette.js";
-import { ico, injecterIcones } from "./icones.js";
+import { creerSynchronisation } from "./synchronisation-ui.js";
+import { installerEveil } from "./eveil.js";
+import { brancherLive } from "./reglages-live.js";
+import { injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerHistorique } from "./historique.js";
 import { installerInfobulles } from "./infobulles.js";
-import { creerAccueil } from "./accueil.js";
-import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, suivre } from "./doutes.js";
-import { afficherVueAtelier, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes, placerOnglets, suivreDock } from "./atelier.js";
-import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
-import { $, accorde, dateRelative, pluriel, retirerToast, toast } from "./ui.js";
+import { cause, explication, expliquer } from "./erreurs.js";
+import { $, accorde, pluriel, retirerToast, toast } from "./ui.js";
 import { dialogue, veutSupprimer } from "./dialogue.js";
 
 const ABCJS = () => window.ABCJS;
-// Pour la gravure seulement : la dernière ligne s'étire sur toute la largeur,
-// sinon une pièce d'une mesure s'affiche minuscule. abcjs compte ses
-// positions (startChar) dans ce texte-là : on retranche le préfixe.
-const PREFIXE_GRAVURE = "%%stretchlast 1\n";
-const pourGravure = (abc) => PREFIXE_GRAVURE + abc;
 const dansClaude = () => !!(window.claude && typeof window.claude.use === "function");
 const etat = {
   stockage: null,
@@ -53,14 +47,7 @@ const etat = {
   etiquette: null,    // filtre par étiquette (carnet)
   onglet: "carnet",   // l'onglet de l'accueil, retenu dans une préférence (accueil.js)
   filtrePages: "tout", // filtre de l'onglet Partitions : tout, a-relire, prete
-  courante: null,     // la partition ouverte (document)
-  pages: [],          // ses traits, page par page
-  page: 0,            // page affichée dans l'atelier
-  douteActif: -1,
   vue: "biblio",
-  transposition: 0,
-  selection: null,    // début, dans l'ABC, de la note choisie dans « Corriger »
-  historique: [],     // l'état d'avant chaque geste (ABC et doutes), pour « Annuler »
   pile: [],           // les écrans d'où l'on vient (hors accueil), pour « précédent »
 };
 
@@ -76,6 +63,17 @@ let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
 let accueil = null; // l'accueil et ses quatre onglets (accueil.js)
 let tablette = null; // le panneau « Ma reMarkable », l'adresse du connecteur, les modèles (tablette.js)
 let synchronisation = null; // la bibliothèque synchronisée, vue de l'appli (synchronisation-ui.js)
+let atelier = null; // « Corriger » (ecran-atelier.js)
+let lecteur = null; // « Écouter et exporter » (ecran-lecteur.js)
+
+// La page lue ouverte, que « Corriger » et « Écouter » partagent, avec ses
+// enregistrements (page-ouverte.js) ; et leur écoute, une seule pour les deux.
+const pageOuverte = creerPageOuverte({
+  stockage: () => etat.stockage,
+  surEtat: (e, err) => { $("enregistre").textContent = e === "attente" ? "…" : e === "ok" ? "Enregistré" : `Non enregistré : ${cause(err)}`; },
+});
+const ecoutePage = creerEcoute(transport);
+const ecouterPage = creerEcoutePage({ ecoute: ecoutePage, abcjs: ABCJS });
 
 // ------------------------------------------------------------------------
 // Petits outils d'interface
@@ -97,8 +95,12 @@ function pastilleStatut(p) {
 
 function montrer(vue) {
   if (vue === "biblio") etat.pile = [];
+  // L'écran qu'on quitte s'arrête et fait partir ce qui attendait d'être enregistré.
   if (etat.vue === "idee" && vue !== "idee" && editeur) editeur.fermer();
   if (etat.vue === "morceau" && vue !== "morceau" && vueMorceau) vueMorceau.fermer();
+  if (etat.vue === "atelier" && vue !== "atelier" && atelier) atelier.fermer();
+  if (etat.vue === "lecteur" && vue !== "lecteur" && lecteur) lecteur.fermer();
+  ecoutePage.arreter();
   transport.arreter();
   etat.vue = vue;
   for (const v of ["biblio", "atelier", "lecteur", "idee", "morceau"]) $(`vue-${v}`).hidden = v !== vue;
@@ -119,34 +121,46 @@ function montrer(vue) {
   // Corriger ↔ Écouter : les onglets vivent dans la barre de l'écran de partition (atelier.js).
   $("onglet-atelier").setAttribute("aria-selected", String(vue === "atelier"));
   $("onglet-lecteur").setAttribute("aria-selected", String(vue === "lecteur"));
-  arreterLecture();
   if (vue === "biblio") afficherBibliotheque();
-  if (vue === "atelier") afficherAtelier();
-  if (vue === "lecteur") afficherLecteur();
+  if (vue === "atelier") atelier.afficher();
+  if (vue === "lecteur") lecteur.afficher();
   window.scrollTo({ top: 0 });
 }
 
+// Chaque ouverture a son numéro : deux ouvertures rapprochées, seule la dernière s'affiche.
+let ouvertures = 0;
+
 async function ouvrir(id, vue = "atelier") {
+  const demande = ++ouvertures;
   retenirEcran();
-  const p = await etat.stockage.lire(id);
+  let p, pages = [];
+  try {
+    p = await etat.stockage.lire(id);
+    if (p && !p.type) pages = await etat.stockage.pages(id, p.nbPages || 0).catch(() => []);
+  } catch (e) {
+    console.error(e);
+    toast(`Cette partition ne s'ouvre pas : ${explication(e)}`);
+    return;
+  }
+  if (demande !== ouvertures) return; // une autre ouverture est partie entre-temps
   if (!p) { toast("Cette partition n'existe plus."); return; }
   if (p.type === "idee") { ouvrirIdee(p); return; }
   if (p.type === "morceau") { ouvrirMorceau(p); return; }
-  etat.courante = p;
-  etat.page = 0;
-  etat.douteActif = -1;
-  etat.transposition = p.transposition || 0;
-  etat.selection = null;
-  etat.historique = [];
+  ouvrirPage(p, pages, vue);
+}
+
+/** Une page lue, dans « Corriger » ou « Écouter » : chacun repart de zéro pour elle. */
+function ouvrirPage(p, pages, vue) {
+  pageOuverte.ouvrir(p, pages);
+  atelier.ouvrir();
+  lecteur.ouvrir(p);
   $("fil-titre").textContent = p.titre;
-  etat.pages = await etat.stockage.pages(id, p.nbPages || 0).catch(() => []);
   montrer(vue);
 }
 
 /** Ouvre un morceau ; sans partition, un nouveau, qui ne s'enregistre qu'au premier bloc. */
 function ouvrirMorceau(p = null) {
   retenirEcran();
-  etat.courante = p;
   if (etat.vue === "morceau") vueMorceau.fermer();
   montrer("morceau");
   vueMorceau.ouvrir(p);
@@ -166,7 +180,7 @@ let enRetour = false;
 /** Retient l'écran qu'on quitte pour un autre (pas l'accueil), pour y revenir. */
 function retenirEcran() {
   if (enRetour || etat.vue === "biblio") return;
-  const id = etat.vue === "idee" ? editeur && editeur.id : etat.vue === "morceau" ? vueMorceau && vueMorceau.id : etat.courante && etat.courante.id;
+  const id = etat.vue === "idee" ? editeur && editeur.id : etat.vue === "morceau" ? vueMorceau && vueMorceau.id : pageOuverte.partition && pageOuverte.partition.id;
   if (!id) return; // pas encore enregistré (une idée encore vide) : rien où revenir
   const dernier = etat.pile.at(-1);
   if (dernier && dernier.id === id) { dernier.vue = etat.vue; return; }
@@ -236,7 +250,6 @@ const { exporterMidi, toutEnMidi, partagerMidi, exporterMusicXml, exporterAbc } 
 /** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */
 function ouvrirIdee(p = null, options = {}) {
   retenirEcran();
-  etat.courante = p;
   if (etat.vue === "idee") editeur.fermer();
   montrer("idee");
   editeur.ouvrir(p, options);
@@ -275,21 +288,15 @@ const CHAMPS_PAGE = ["titre", "abc", "doutes", "statut", "tempo", "transposition
 
 /** Une page lue a changé ailleurs : on la reprend, avec ses traits. */
 async function rechargerPage(neuve) {
-  const p = etat.courante;
+  const p = pageOuverte.partition;
   if (!p || (neuve.modifieLe || "") <= (p.modifieLe || "")) return false;
   if (CHAMPS_PAGE.every((c) => egal(neuve[c], p[c]))) return false;
   const pages = await etat.stockage.pages(neuve.id, neuve.nbPages || 0).catch(() => null);
-  if (etat.courante !== p) return false; // une autre partition s'est ouverte entre-temps
-  poserPage(neuve, pages || etat.pages);
+  if (pageOuverte.partition !== p) return false; // une autre partition s'est ouverte entre-temps
+  pageOuverte.ouvrir(neuve, pages || pageOuverte.pages);
+  $("fil-titre").textContent = neuve.titre;
   montrer(etat.vue);
   return true;
-}
-
-/** La page lue que montrent « Corriger » et « Écouter », avec ses traits. */
-function poserPage(p, pages) {
-  etat.courante = p;
-  etat.pages = pages;
-  $("fil-titre").textContent = p.titre;
 }
 
 const montrees = {
@@ -302,11 +309,11 @@ const montrees = {
     supprimee: () => "Ce morceau a été supprimé sur un autre appareil.",
   },
   page: {
-    partition: () => (etat.courante ? etat.courante.id : null),
+    partition: () => (pageOuverte.partition ? pageOuverte.partition.id : null),
     // Une correction en cours ici garde la main : elle partira à son tour.
-    occupe: () => $("enregistre").textContent === "…",
+    occupe: () => pageOuverte.occupe,
     recharger: rechargerPage,
-    supprimee: () => `« ${etat.courante.titre} » a été supprimée sur un autre appareil.`,
+    supprimee: () => `« ${pageOuverte.partition.titre} » a été supprimée sur un autre appareil.`,
   },
 };
 /** L'écran ouvert, s'il montre une partition. */
@@ -370,584 +377,32 @@ function nomModele(m) {
 }
 
 // ------------------------------------------------------------------------
-// Atelier
+// La page lue ouverte : la supprimer (« Corriger » et « Écouter »)
 // ------------------------------------------------------------------------
 
-let minuterieGravure = null, minuterieSauvegarde = null, minuterieEclat = null, objetAtelier = null;
-// Le doute que « Je corrige moi-même » règle en ce moment (son rang), ou null.
-let manuel = null;
-// Le texte ABC avant la dernière saisie : de quoi suivre les doutes pendant qu'on tape dans le mode avancé.
-let abcPrecedent = "";
-let historiqueVu = null;
-let renduDoutes = 0;
-let dockEnOutils = false;
-let dockReplie = false;
-
-const doutesDe = () => (etat.courante && etat.courante.doutes) || [];
-const premierOuvert = () => doutesDe().findIndex((d) => !d.leve);
-
-/** L'état d'une partition dans sa barre : « Prête », ou le nombre de doutes qui restent. */
-function pastilleBarre(p) {
-  const s = document.createElement("span");
-  const restants = (p.doutes || []).filter((d) => !d.leve).length;
-  if (p.statut === "prete") { s.className = "pastille p-ok"; s.textContent = "Prête"; }
-  else { s.className = "pastille p-doute"; s.textContent = restants ? pluriel(restants, "doute") : "À relire"; }
-  return s;
-}
-
-function majStatut() {
-  $("statut-atelier").replaceChildren(pastilleBarre(etat.courante));
-  $("statut-lecteur").replaceChildren(pastilleBarre(etat.courante));
-}
-
-/** « 2 pages · lue il y a 3 min », sous le titre. */
-function infosPage() {
-  const p = etat.courante;
-  const n = etat.pages.length || p.nbPages || 1;
-  return `${pluriel(n, "page")} · lue ${dateRelative(p.creeLe)}`;
-}
-
-/** Le texte ABC de l'atelier ; il en garde la valeur d'avant pour suivre les doutes. */
-function poserAbc(texte) {
-  $("abc").value = texte;
-  abcPrecedent = texte;
-}
-
-async function afficherAtelier() {
-  const p = etat.courante;
-  placerOnglets("vue-atelier");
-  // « Je corrige moi-même » ne survit pas à la fermeture de la partition (ouvrir() repart d'un historique neuf).
-  if (historiqueVu !== etat.historique) { historiqueVu = etat.historique; manuel = null; }
-  $("titre").value = p.titre;
-  poserAbc(p.abc);
-  $("infos-atelier").textContent = infosPage();
-  $("enregistre").textContent = "";
-  $("annuler").disabled = etat.historique.length === 0;
-  afficherVueAtelier();
-  initialiserVise(p.doutes || [], p.abc, p.abcLu);
-  await retrouverCibles(p);
-  await dessinerManuscrit();
-  graverAtelier();
-  majOutils();
-  afficherDoutes();
-}
-
-/**
- * Une partition lue avant que les doutes sachent où est leur note : tant que rien
- * n'a été corrigé, on relit ses traits (c'est déterministe) pour la leur donner.
- */
-async function retrouverCibles(p) {
-  const doutes = p.doutes || [];
-  if (!doutes.some((d) => !d.type) || p.abc !== p.abcLu || !etat.pages.length) return;
+/** Supprime la page ouverte, après la même question que depuis le carnet (dialogue.js). */
+async function supprimerOuverte() {
+  const p = pageOuverte.partition;
+  if (!p || !(await veutSupprimer(p, etat.partitions))) return;
   try {
-    const titre = (p.abcLu.match(/^T:(.*)$/m) || [])[1] ?? p.titre;
-    const res = lirePartition(etat.pages, await calibration(p.modele), { titre });
-    if (res.abc !== p.abcLu) return; // la lecture a changé depuis : on ne devine pas
-    p.doutes = completerDoutes(doutes, res.doutes);
-    await sauver({ doutes: p.doutes });
-  } catch (e) {
-    console.warn("Les doutes de cette partition restent sans cible", e);
-  }
-}
-
-async function dessinerManuscrit() {
-  const p = etat.courante;
-  const nav = $("pages-nav");
-  nav.textContent = "";
-  if (etat.pages.length > 1) {
-    etat.pages.forEach((_, i) => {
-      const b = document.createElement("button");
-      b.className = "puce"; b.textContent = `page ${i + 1}`;
-      b.setAttribute("aria-pressed", String(i === etat.page));
-      b.addEventListener("click", () => { etat.page = i; dessinerManuscrit(); });
-      nav.appendChild(b);
-    });
-  }
-  const cal = await calibration(p.modele);
-  const svg = $("page");
-  dessinerPage(svg, cal, etat.pages[etat.page] || []);
-  dessinerReperes($("reperes"), svg, cal, doutesDe(), etat.page + 1, etat.douteActif, ouvrirDoute);
-}
-
-const couleur = (nom, secours) => getComputedStyle(document.documentElement).getPropertyValue(nom).trim() || secours;
-
-function graverAtelier() {
-  const lib = ABCJS();
-  const zone = $("gravure-atelier");
-  if (!lib) { zone.textContent = "La gravure n'a pas pu se charger (connexion ?)."; return; }
-  const abc = $("abc").value;
-  const [objet] = lib.renderAbc(zone, pourGravure(abc), {
-    responsive: "resize", add_classes: true, paddingtop: 0, paddingleft: 0, paddingright: 0,
-    // Toucher une note la choisit ; la glisser change sa hauteur.
-    clickListener: surClicNote, dragging: true, selectTypes: ["note"],
-    selectionColor: couleur("--stylo", "#2B48B0"), dragColor: couleur("--stylo", "#2B48B0"),
-  });
-  objetAtelier = objet;
-  surligner();
-  // Un ABC que abcjs ne comprend pas (tapé à la main) : on le dit, sans jargon.
-  const e = $("etat-abc");
-  e.textContent = "";
-  const avert = (objet && objet.warnings) || [];
-  if (avert.length) {
-    const pastille = document.createElement("span");
-    pastille.className = "pastille p-doute"; pastille.textContent = "Texte ABC à revoir";
-    e.append(pastille, " " + avert[0].replace(/<[^>]+>/g, ""));
-  }
-}
-
-// ------------------------------------------------------------------------
-// Corriger au toucher
-// ------------------------------------------------------------------------
-
-const abcCourant = () => $("abc").value;
-const jetonChoisi = () => (etat.selection === null ? null : ed.lireJeton(abcCourant(), etat.selection));
-let derniereNote = { alteration: "", lettre: "C", octave: 5 };
-
-function surClicNote(abcelem, _numero, _classes, _analyse, glisse) {
-  if (!abcelem || abcelem.el_type !== "note") return;
-  const debut = abcelem.startChar - PREFIXE_GRAVURE.length;
-  const j = ed.lireJeton(abcCourant(), debut);
-  if (!j) return;
-  // abcjs compte les degrés vers le bas : un glissé vers le haut est négatif.
-  if (glisse && glisse.step) { appliquer(ed.deplacer(abcCourant(), j, -glisse.step), { entendre: true }); return; }
-  etat.selection = debut;
-  majOutils();
-  entendre(j);
-}
-
-/**
- * Surligne dans la partition lue : la note choisie ; à défaut, ce que vise le
- * doute ouvert (une note, ou toute la mesure), pour qu'on voie de quoi il parle.
- */
-function surligner() {
-  const gravure = objetAtelier && objetAtelier.engraver;
-  if (!gravure) return;
-  const j = jetonChoisi();
-  const d = doutesDe()[etat.douteActif];
-  const cible = j ? { debut: j.debut, fin: j.fin } : d && etat.vue === "atelier" ? cibleVisible(d, abcCourant()) : null;
-  try {
-    // rangeHighlight commence par effacer la sélection d'avant : une plage vide (-1) suffit à tout effacer.
-    if (cible) gravure.rangeHighlight(cible.debut + PREFIXE_GRAVURE.length, cible.fin + PREFIXE_GRAVURE.length);
-    else gravure.rangeHighlight(-1, -1);
-  } catch { /* gravure en cours */ }
-}
-
-/** Un instant, la note qu'une réponse vient de changer (puis on revient à ce qui est surligné d'ordinaire). */
-function eclat(debut, fin) {
-  const gravure = objetAtelier && objetAtelier.engraver;
-  if (!gravure || fin <= debut) return;
-  try { gravure.rangeHighlight(debut + PREFIXE_GRAVURE.length, fin + PREFIXE_GRAVURE.length); } catch { return; }
-  clearTimeout(minuterieEclat);
-  minuterieEclat = setTimeout(surligner, 1400);
-}
-
-/** Le panneau du bas : les outils quand une note est choisie, sinon le doute (ou « Tout est relu »). */
-function majDock(j = jetonChoisi()) {
-  const outils = !!j;
-  $("outils-note").hidden = !outils;
-  $("tete-note").hidden = !outils;
-  $("fermer-note").hidden = !outils;
-  $("tete-doutes").hidden = outils;
-  $("doutes").hidden = outils;
-  $("dock-manuel").hidden = manuel === null;
-  // Replié, il ne laisse que sa tête : on voit la page en entier. Choisir une note le redéplie.
-  const replie = dockReplie && !outils;
-  $("dock-atelier").classList.toggle("replie", replie);
-  const bascule = $("replier-dock");
-  bascule.hidden = outils;
-  bascule.setAttribute("aria-expanded", String(!replie));
-  bascule.setAttribute("aria-label", replie ? "Déplier le panneau" : "Replier le panneau");
-  bascule.querySelector("use").setAttribute("href", replie ? "#i-chevron-haut" : "#i-chevron-bas");
-  // De retour des outils, la loupe se redessine à sa vraie taille (elle ne se mesure pas cachée).
-  const etaitEnOutils = dockEnOutils;
-  dockEnOutils = outils;
-  if (etaitEnOutils && !outils) afficherDoutes();
-}
-
-function majOutils() {
-  const j = jetonChoisi();
-  const barre = $("outils-note");
-  majDock(j);
-  surligner();
-  if (!j) { $("note-choisie").textContent = ""; return; }
-  if (j.notes.length) derniereNote = { ...j.notes[0], alteration: "" };
-  $("note-choisie").textContent = ed.decrire(j);
-  const silence = j.type === "silence";
-  const base = ed.estPointee(j.croches) ? j.croches / 1.5 : j.croches;
-  barre.querySelectorAll("[data-duree]").forEach((b) => b.setAttribute("aria-pressed", String(Math.abs(Number(b.dataset.duree) - base) < 1e-9)));
-  barre.querySelector('[data-geste="point"]').setAttribute("aria-pressed", String(ed.estPointee(j.croches)));
-  barre.querySelectorAll("[data-alteration]").forEach((b) => {
-    b.disabled = silence;
-    b.setAttribute("aria-pressed", String(j.notes.length > 0 && j.notes.every((n) => n.alteration === b.dataset.alteration)));
-  });
-  barre.querySelectorAll('[data-geste="haut"], [data-geste="bas"]').forEach((b) => { b.disabled = silence; });
-  const bs = $("bouton-silence");
-  bs.setAttribute("aria-pressed", String(silence));
-  bs.setAttribute("aria-label", silence ? "Changer en note" : "Changer en silence");
-}
-
-/** Fait entendre la note choisie (ou l'accord), brièvement. */
-function entendre(j) {
-  if (!j || j.type === "silence") return;
-  const hauteurs = ed.hauteursMidi(j, ed.armureA(abcCourant(), j.debut));
-  piano.pret().then(() => hauteurs.forEach((h) => piano.note(h, 0.7, 80))).catch(() => {});
-}
-
-/**
- * Applique un geste : mémorise l'état d'avant, regrave, enregistre. Les doutes
- * suivent le texte qui bouge ; une réponse à un doute (`doute`) le règle dans
- * le même geste, pour qu'« Annuler » défasse les deux.
- */
-function appliquer(res, { entendre: jouer = false, doute = null, reponse = "", selectionner = true } = {}) {
-  if (!res) return;
-  arreterLecture();
-  memoriser(abcCourant());
-  poserAbc(res.abc);
-  suivre(doutesDe(), res.modif);
-  if (doute !== null) marquer(doute, true, reponse);
-  etat.selection = !selectionner ? null : res.fin > res.debut ? res.debut : prochaineNote(res.abc, res.debut);
-  graverAtelier();
-  majOutils();
-  planifierSauvegarde();
-  if (doute !== null) {
-    dessinerManuscrit();
-    afficherDoutes().then(() => eclat(res.debut, res.fin));
-  }
-  if (jouer) entendre(jetonChoisi());
-}
-
-/** L'état d'avant chaque geste, pour « Annuler » : l'ABC, et où en étaient les doutes. */
-function memoriser(abc = abcCourant()) {
-  etat.historique.push({
-    abc,
-    doutes: doutesDe().map((d) => ({ leve: !!d.leve, reponse: d.reponse, vise: d.vise ? { ...d.vise } : null })),
-    actif: etat.douteActif,
-  });
-  if (etat.historique.length > 200) etat.historique.shift();
-  $("annuler").disabled = false;
-}
-
-function annuler() {
-  const avant = etat.historique.pop();
-  if (avant === undefined) return;
-  arreterLecture();
-  poserAbc(avant.abc);
-  doutesDe().forEach((d, k) => {
-    const s = avant.doutes[k];
-    if (!s) return;
-    d.leve = s.leve; d.vise = s.vise;
-    if (s.reponse) d.reponse = s.reponse; else delete d.reponse;
-  });
-  // Défaire un geste pendant « Je corrige moi-même » n'en sort pas, tant que le doute reste ouvert.
-  if (manuel !== null && doutesDe()[manuel] && !doutesDe()[manuel].leve) etat.douteActif = manuel;
-  else { manuel = null; etat.douteActif = avant.actif; }
-  if (etat.selection !== null && !ed.lireJeton(avant.abc, etat.selection)) etat.selection = null;
-  $("annuler").disabled = etat.historique.length === 0;
-  graverAtelier();
-  majOutils();
-  dessinerManuscrit();
-  afficherDoutes();
-  planifierSauvegarde();
-}
-
-function planifierSauvegarde() {
-  clearTimeout(minuterieSauvegarde);
-  $("enregistre").textContent = "…";
-  minuterieSauvegarde = setTimeout(() => sauver({ abc: abcCourant(), ...(etat.courante && etat.courante.doutes ? { doutes: etat.courante.doutes } : {}) }), 800);
-}
-
-/** Les débuts de toutes les notes et silences, dans l'ordre (d'après abcjs). */
-function positionsNotes() {
-  const positions = new Set();
-  for (const ligne of (objetAtelier && objetAtelier.lines) || []) {
-    for (const portee of ligne.staff || []) {
-      for (const voix of portee.voices || []) {
-        for (const el of voix) if (el.el_type === "note" && !el.rest?.type?.startsWith("invisible")) positions.add(el.startChar - PREFIXE_GRAVURE.length);
-      }
-    }
-  }
-  return [...positions].sort((a, b) => a - b);
-}
-
-function prochaineNote(abc, depuis) {
-  const suivante = positionsNotes().find((p) => p >= depuis && ed.lireJeton(abc, p));
-  if (suivante !== undefined) return suivante;
-  let pos = depuis;
-  while (pos < abc.length && !ed.lireJeton(abc, pos)) pos++;
-  return pos < abc.length ? pos : null;
-}
-
-function choisirVoisine(sens) {
-  const liste = positionsNotes();
-  if (!liste.length) return;
-  let i = etat.selection === null ? (sens > 0 ? 0 : liste.length - 1) : liste.findIndex((p) => p === etat.selection) + sens;
-  i = Math.max(0, Math.min(liste.length - 1, i));
-  etat.selection = liste[i];
-  surligner();
-  majOutils();
-  entendre(jetonChoisi());
-}
-
-/** Un geste de la barre d'outils ou du clavier. */
-function geste(nom, valeur) {
-  const j = jetonChoisi();
-  if (!j) { toast("Touche d'abord une note de la partition."); return; }
-  const abc = abcCourant();
-  switch (nom) {
-    case "haut": return appliquer(ed.deplacer(abc, j, valeur || 1), { entendre: true });
-    case "bas": return appliquer(ed.deplacer(abc, j, -(valeur || 1)), { entendre: true });
-    case "duree": return appliquer(ed.changerDuree(abc, j, valeur));
-    case "point": return appliquer(ed.basculerPoint(abc, j));
-    case "alteration": return appliquer(ed.alterer(abc, j, valeur), { entendre: true });
-    case "silence": return appliquer(ed.basculerSilence(abc, j, derniereNote), { entendre: true });
-    case "dupliquer": return appliquer(ed.dupliquer(abc, j), { entendre: true });
-    case "supprimer": return appliquer(ed.supprimer(abc, j));
-    default: return undefined;
-  }
-}
-
-// ------------------------------------------------------------------------
-// Les doutes, un par un
-// ------------------------------------------------------------------------
-
-/** Le doute ouvert qui suit `apres` (en reprenant au début), ou -1 s'il n'en reste aucun. */
-function prochainDoute(apres) {
-  const d = doutesDe();
-  for (let k = 1; k <= d.length; k++) {
-    const j = (apres + k) % d.length;
-    if (!d[j].leve) return j;
-  }
-  return -1;
-}
-
-/** Règle (ou rouvre) un doute en mémoire et passe au suivant ; l'appelant a déjà mémorisé l'état d'avant. */
-function marquer(i, leve, reponse = "") {
-  const d = doutesDe()[i];
-  d.leve = leve;
-  if (leve) d.reponse = reponse; else delete d.reponse;
-  manuel = null;
-  etat.douteActif = leve ? prochainDoute(i) : i;
-}
-
-/** Ouvre un doute : sa carte en bas, son repère sur la page (la bonne page, s'il y en a plusieurs). */
-function ouvrirDoute(i) {
-  const d = doutesDe()[i];
-  if (!d) return;
-  manuel = null;
-  dockReplie = false;
-  etat.selection = null;
-  etat.douteActif = i;
-  etat.page =Math.max(0, Math.min((d.page || 1) - 1, Math.max(0, etat.pages.length - 1)));
-  dessinerManuscrit();
-  majOutils();
-  afficherDoutes();
-}
-
-/** Dessine le panneau du bas : une carte de doute, la consigne de « Je corrige moi-même », ou « Tout est relu ». */
-async function afficherDoutes() {
-  const p = etat.courante;
-  const doutes = doutesDe();
-  const rendu = ++renduDoutes;
-  if (etat.douteActif >= doutes.length) etat.douteActif = -1;
-  // Tant qu'il reste un doute, on n'en laisse pas un autre à l'écran qu'un doute choisi.
-  if (etat.douteActif < 0 && manuel === null) { const o = premierOuvert(); if (o >= 0) etat.douteActif = o; }
-  const actif = etat.douteActif;
-  dessinerPas(doutes, actif, ouvrirDoute, manuel !== null);
-  majStatut();
-  const cal = await calibration(p.modele);
-  if (rendu !== renduDoutes || etat.courante !== p) return;
-  const zone = $("doutes");
-  if (manuel !== null) {
-    const q = poser(doutes[manuel], abcCourant());
-    dessinerConsigne(zone, q.cible && q.cible.genre === "mesure" ? "Touche la note à corriger dans la mesure surlignée de la partition lue." : "Touche la note à corriger dans la partition lue.");
-  } else if (actif >= 0) {
-    const d = doutes[actif];
-    dessinerCarteDoute(zone, {
-      doute: d, question: poser(d, abcCourant()), cal, traits: etat.pages[(d.page || 1) - 1] || [],
-      surReponse: (r) => repondre(actif, r),
-      surRouvrir: () => leverDoute(actif, false),
-      surMoiMeme: () => commencerManuel(actif),
-      surVoulu: () => leverDoute(actif, true, "C'est voulu"),
-    });
-  } else {
-    dessinerRelu(zone, { aucun: !doutes.length, surRevoir: () => ouvrirDoute(0), surValider: validerAtelier });
-  }
-  surligner();
-}
-
-/** Une réponse : le vrai geste d'edition.js sur la bonne note, puis le doute est réglé (et « Annuler » défait les deux). */
-function repondre(i, r) {
-  const res = r.geste ? r.geste(abcCourant()) : null;
-  if (r.geste && !res) { toast("Cette réponse ne s'applique plus : corrige la note toi-même."); afficherDoutes(); return; }
-  if (res) appliquer(res, { doute: i, reponse: r.texte, selectionner: false });
-  else { memoriser(); marquer(i, true, r.texte); etat.selection = null; sauver({ doutes: etat.courante.doutes }); dessinerManuscrit(); afficherDoutes(); majOutils(); }
-  dockReplie = false;
-  toast(r.fait, 2400);
-}
-
-/** « C'est voulu » ou « Rouvrir » : règle ou rouvre un doute sans toucher à l'ABC. */
-async function leverDoute(i, leve, reponse = "") {
-  memoriser();
-  marquer(i, leve, reponse);
-  if (leve) etat.selection = null;
-  await sauver({ doutes: etat.courante.doutes });
-  dessinerManuscrit();
-  afficherDoutes();
-  majOutils();
-}
-
-/** « Je corrige moi-même » : la partition lue se montre, la note visée est choisie (ou la mesure, surlignée) et les outils apparaissent. */
-function commencerManuel(i) {
-  const d = doutesDe()[i];
-  manuel = i;
-  etat.douteActif = i;
-  if (afficherVueAtelier() === "page") afficherVueAtelier("deux");
-  const c = cibleVisible(d, abcCourant());
-  etat.selection = c && c.genre === "note" ? c.debut : null;
-  dessinerManuscrit();
-  majOutils();
-  afficherDoutes();
-  // Une fois le panneau redimensionné (sa hauteur règle la marge du bas), on amène la partition lue sous la barre.
-  setTimeout(() => $("zone-lue").scrollIntoView({ behavior: "smooth", block: "start" }), 250);
-  if (etat.selection !== null) entendre(jetonChoisi());
-}
-
-/** Fin de « Je corrige moi-même » : le doute est réglé (`regle`), ou on revient à sa question. */
-function finirManuel(regle) {
-  const i = manuel;
-  if (i === null) return;
-  if (regle) { leverDoute(i, true, "Corrigé à la main"); return; }
-  manuel = null;
-  etat.selection = null;
-  dessinerManuscrit();
-  majOutils();
-  afficherDoutes();
-}
-
-async function validerAtelier() {
-  clearTimeout(minuterieSauvegarde);
-  await sauver({ abc: $("abc").value, ...(etat.courante.doutes ? { doutes: etat.courante.doutes } : {}), statut: "prete" });
-  montrer("lecteur");
-}
-
-async function sauver(patch) {
-  if (!etat.courante) return;
-  const p = etat.courante;
-  const complet = { ...patch, modifieLe: new Date().toISOString() };
-  Object.assign(p, complet);
-  try {
-    await etat.stockage.modifier(p.id, complet);
-    $("enregistre").textContent = "Enregistré";
+    await pageOuverte.vider();
+    await etat.stockage.supprimer(p.id, p.nbPages || 0);
   } catch (e) {
     console.error(e);
-    $("enregistre").textContent = "Non enregistré : " + (e.message || e.code || "erreur");
+    toast(`« ${p.titre} » n'a pas pu être supprimée : ${explication(e)}`, 7000);
+    return;
   }
-}
-
-/** Supprime la partition ouverte (après la confirmation de l'atelier ou du lecteur). */
-async function supprimerOuverte() {
-  const p = etat.courante;
-  await etat.stockage.supprimer(p.id, p.nbPages || 0);
-  etat.courante = null;
+  if (pageOuverte.partition === p) pageOuverte.fermer();
   toast(`« ${p.titre} » est supprimée.`);
   montrer("biblio");
 }
 
-// ------------------------------------------------------------------------
-// Écoute (atelier et lecteur)
-// ------------------------------------------------------------------------
+// Les cartes de la bibliothèque ont leur écoute (ecoute.js) : la clé est le bouton touché.
+const ecouteCartes = creerEcoute(transport);
 
-let lecture = null;
-
-/** Le bouton d'écoute d'une partition : « Écouter » ou « Arrêter », avec son icône. */
-function libelleLecture(bouton, joue) {
-  bouton.innerHTML = joue ? `${ico("stop", "s")}Arrêter` : `${ico("lire", "s")}Écouter`;
-}
-
-function arreterLecture() {
-  if (!lecture) return;
-  const l = lecture;
-  lecture = null;
-  // La page joue sur le transport (M5) : l'arrêter coupe aussi ce qui était programmé.
-  transport.arreter();
-  l.surlignage.eteindre();
-  libelleLecture(l.bouton, false);
-}
-
-/**
- * Écoute une page lue (lecteur ou atelier) : ses notes passent par le
- * transport, sur l'horloge du son (ecoute-page.js, audit du 04/10, M5) ;
- * TimingCallbacks ne sert plus qu'à surligner ce qui joue.
- */
-async function ecouter({ objet, abc, bouton, qpm, transposition = 0, voixMuettes = new Set(), titre = "" }) {
-  if (lecture) { const meme = lecture.bouton === bouton; arreterLecture(); if (meme) return; }
-  if (!objet) return;
-  const { source } = notesDePage(objet, pourGravure(abc), { tempo: qpm, transposition, voixMuettes });
-  const moi = { bouton, surlignage: surlignage(ABCJS(), objet, qpm) };
-  lecture = moi;
-  bouton.textContent = "Chargement du piano…";
-  try {
-    await transport.jouer(source, {
-      titre: titre || "Partition",
-      relancer: () => { if (!lecture) bouton.click(); },
-      surPosition: (pas) => moi.surlignage.surligner(pas),
-      surFin: () => {
-        moi.surlignage.eteindre();
-        if (lecture === moi) { lecture = null; libelleLecture(bouton, false); }
-      },
-    });
-    if (lecture === moi) libelleLecture(bouton, true);
-  } catch (e) {
-    if (lecture === moi) { lecture = null; libelleLecture(bouton, false); }
-    toast(e.message || "Le piano n'a pas pu se charger.");
-  }
-}
-
-/** Tempo en noires par minute, d'après la partition gravée. */
-function tempoInitial(objet) {
-  try {
-    const f = objet.getMeterFraction();
-    const noires = (f.num / f.den) * 4;
-    const ms = objet.millisecondsPerMeasure();
-    if (noires > 0 && ms > 0) return Math.round((60000 * noires) / ms);
-  } catch { /* chiffrage libre : valeur par défaut */ }
-  return 90;
-}
-
-// ------------------------------------------------------------------------
-// Lecteur
-// ------------------------------------------------------------------------
-
-let objetLecteur = null;
-
-function afficherLecteur() {
-  const p = etat.courante;
-  placerOnglets("vue-lecteur");
-  $("titre-lecteur").textContent = p.titre;
-  majStatut();
-  const k = (p.abc.match(/^K:(.*)$/m) || [])[1] || "C";
-  const m0 = (p.abc.match(/^M:(.*)$/m) || [])[1];
-  const m = !m0 || m0 === "none" ? "libre" : m0;
-  $("meta-lecteur").textContent = `${k} · ${m === "libre" ? "mesure libre" : m} · lue ${dateRelative(p.creeLe)}`;
-  $("mains").hidden = !/^\[V:2\]/m.test(p.abc);
-  graverLecteur();
-  const q = p.tempo || tempoInitial(objetLecteur);
-  $("tempo").value = q;
-  $("tempo-val").textContent = `♩ = ${q}`;
-}
-
-function graverLecteur() {
-  const lib = ABCJS();
-  const zone = $("gravure-lecteur");
-  $("transp-val").textContent = (etat.transposition > 0 ? "+" : "") + etat.transposition;
-  if (!lib) { zone.textContent = "La gravure n'a pas pu se charger (connexion ?)."; return; }
-  [objetLecteur] = lib.renderAbc(zone, pourGravure(etat.courante.abc), { responsive: "resize", add_classes: true, visualTranspose: etat.transposition, paddingleft: 0, paddingright: 0 });
-}
-
-/** Écoute une idée depuis sa carte, sans l'ouvrir. */
+/** Écoute une idée (ou un morceau) depuis sa carte, sans l'ouvrir. Le même bouton arrête. */
 async function ecouterIdee(p, bouton) {
-  if (transport.actif && transport.carte === bouton) { transport.arreter(); return; }
-  transport.arreter();
+  if (ecouteCartes.cle === bouton) { ecouteCartes.arreter(); return; }
   let source;
   if (p.type === "morceau") source = sourceDuMorceau(assembler(p, ideesParId()));
   else {
@@ -958,17 +413,17 @@ async function ecouterIdee(p, bouton) {
     source = () => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA: (x) => parPas.get(x) || [] });
   }
   const libelle = bouton.innerHTML;
+  const lecture = ecouteCartes.jouer(bouton, source, {
+    // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
+    titre: p.titre || (p.type === "morceau" ? "Morceau" : "Idée"), relancer: () => { if (ecouteCartes.cle === null) bouton.click(); },
+    surArret: () => { bouton.innerHTML = libelle; },
+  });
   libelleLecture(bouton, true);
-  transport.carte = bouton;
   try {
-    await transport.jouer(source, {
-      // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
-      titre: p.titre || (p.type === "morceau" ? "Morceau" : "Idée"), relancer: () => { if (!transport.actif) bouton.click(); },
-      surFin: () => { bouton.innerHTML = libelle; transport.carte = null; },
-    });
+    await lecture;
   } catch (e) {
-    bouton.innerHTML = libelle;
-    toast(e.message || "Le piano n'a pas pu se charger.");
+    console.error(e);
+    toast(expliquer(e, "Le piano n'a pas pu se charger."));
   }
 }
 
@@ -999,117 +454,8 @@ function brancher() {
   $("sauvegarder").addEventListener("click", sauvegarderBibliotheque);
   $("restaurer").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) restaurerBibliotheque(f); });
 
-  // Atelier
-  $("titre").addEventListener("change", () => sauver({ titre: $("titre").value.trim() || "Sans titre" }));
-  // Saisie à la main (mode avancé) : un seul « Annuler » par salve de frappe, et les doutes suivent le texte qui bouge.
-  let avantSaisie = null;
-  $("abc").addEventListener("focus", () => { avantSaisie = $("abc").value; });
-  $("abc").addEventListener("input", () => {
-    arreterLecture();
-    if (avantSaisie !== null) { memoriser(avantSaisie); avantSaisie = null; }
-    suivre(doutesDe(), modifEntre(abcPrecedent, $("abc").value));
-    abcPrecedent = $("abc").value;
-    etat.selection = null;
-    clearTimeout(minuterieGravure);
-    minuterieGravure = setTimeout(() => { graverAtelier(); majOutils(); }, 250);
-    planifierSauvegarde();
-  });
-  $("abc").addEventListener("blur", () => { avantSaisie = null; });
-  $("relire").addEventListener("click", () => {
-    memoriser(abcCourant());
-    poserAbc(etat.courante.abcLu);
-    // L'ABC redevient celui de la lecture : chaque doute retrouve la place que la lecture lui avait donnée.
-    for (const d of doutesDe()) d.vise = d.cible ? { ...d.cible } : null;
-    etat.selection = null;
-    graverAtelier();
-    majOutils();
-    afficherDoutes();
-    sauver({ abc: etat.courante.abcLu, ...(etat.courante.doutes ? { doutes: etat.courante.doutes } : {}) });
-  });
-  $("annuler").addEventListener("click", annuler);
-  $("outils-note").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-geste], [data-duree], [data-alteration]");
-    if (!b || b.disabled) return;
-    if (b.dataset.duree) geste("duree", Number(b.dataset.duree));
-    else if (b.dataset.alteration) geste("alteration", b.dataset.alteration);
-    else geste(b.dataset.geste);
-  });
-  $("fermer-note").addEventListener("click", () => { etat.selection = null; majOutils(); });
-  $("replier-dock").addEventListener("click", () => { dockReplie = !dockReplie; majDock(); });
-  $("vues-atelier").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-vue]");
-    if (b) afficherVueAtelier(b.dataset.vue, true);
-  });
-  $("manuel-retour").addEventListener("click", () => finirManuel(false));
-  $("manuel-fini").addEventListener("click", () => finirManuel(true));
-  $("ecouter-atelier").addEventListener("click", () => ecouter({
-    objet: objetAtelier, abc: $("abc").value, bouton: $("ecouter-atelier"), qpm: tempoInitial(objetAtelier),
-    titre: (etat.courante && etat.courante.titre) || "Partition",
-  }));
-  // Le panneau du bas est fixé : chaque écran lui laisse sa hauteur.
-  suivreDock($("vue-atelier"), $("dock-atelier"));
-  suivreDock($("vue-lecteur"), $("transport-lecteur"));
-  // Les « ••• » : une feuille du bas par écran. Toucher une de ses actions la referme.
-  for (const [bouton, feuille] of [["plus-atelier", "feuille-atelier"], ["plus-lecteur", "feuille-lecteur"]]) {
-    $(bouton).addEventListener("click", () => ouvrirFeuille($(feuille)));
-    $(feuille).addEventListener("click", (e) => { if (e.target.closest(".liste-actions .btn")) fermerFeuille($(feuille)); });
-  }
-  $("valider-menu").addEventListener("click", validerAtelier);
-  $("voir-abc").addEventListener("click", () => {
-    const avance = document.querySelector("#vue-atelier .avance");
-    avance.open = true;
-    avance.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
   document.addEventListener("keydown", clavier);
   document.addEventListener("keyup", (e) => { if (etat.vue === "idee" && editeur.toucheHaut(e)) e.preventDefault(); });
-  // Supprimer : la même question que depuis le carnet (dialogue.js), plutôt qu'un bandeau sous la barre.
-  const demanderSuppression = async () => { if (etat.courante && (await veutSupprimer(etat.courante, etat.partitions))) supprimerOuverte(); };
-  $("supprimer").addEventListener("click", demanderSuppression);
-  $("supprimer-lecteur").addEventListener("click", demanderSuppression);
-
-  // Lecteur
-  const voixMuettes = () => new Set([...($("main-droite").checked ? [] : [1]), ...($("main-gauche").checked ? [] : [2])]);
-  $("ecouter").addEventListener("click", () => ecouter({
-    objet: objetLecteur, abc: etat.courante.abc, bouton: $("ecouter"),
-    qpm: Number($("tempo").value), transposition: etat.transposition, voixMuettes: voixMuettes(),
-    titre: (etat.courante && etat.courante.titre) || "Partition",
-  }));
-  let minuterieTempo = null;
-  $("tempo").addEventListener("input", () => {
-    $("tempo-val").textContent = `♩ = ${$("tempo").value}`;
-    arreterLecture();
-    clearTimeout(minuterieTempo);
-    minuterieTempo = setTimeout(() => sauver({ tempo: Number($("tempo").value) }), 600);
-  });
-  const transposer = (d) => {
-    etat.transposition = Math.max(-12, Math.min(12, etat.transposition + d));
-    arreterLecture();
-    graverLecteur();
-    sauver({ transposition: etat.transposition });
-  };
-  $("transp-moins").addEventListener("click", () => transposer(-1));
-  $("transp-plus").addEventListener("click", () => transposer(1));
-  $("main-droite").addEventListener("change", arreterLecture);
-  $("main-gauche").addEventListener("change", arreterLecture);
-  $("export-abc").addEventListener("click", () => exporterAbc(etat.courante));
-  $("export-musicxml").addEventListener("click", () => exporterMusicXml(etat.courante));
-  // Une page lue devient une idée : on la prolonge au clavier, en direct, avec des accords.
-  $("continuer-idee").addEventListener("click", () => {
-    const p = etat.courante;
-    if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
-    try {
-      const seq = sequenceDepuisAbc(p.abc, ABCJS(), { tempo: p.tempo });
-      // Ce qu'on entend (et ce que le MIDI exporte) : la page transposée.
-      transposerIdee(seq, p.transposition || 0);
-      ouvrirIdee(null, { seq, titre: `${p.titre} (idée)` });
-      toast("Une copie en idée : la page d'origine ne change pas.");
-    } catch (e) {
-      console.error(e);
-      toast("Cette partition n'a pas pu devenir une idée : " + (e.message || "erreur"));
-    }
-  });
-  $("export-midi").addEventListener("click", () => exporterMidi(etat.courante, { tempo: Number($("tempo").value), transposition: etat.transposition }));
-  $("imprimer").addEventListener("click", () => window.print());
 
   // Appli installable (hors claude.ai) : le navigateur propose, on montre le bouton.
   let invitation = null;
@@ -1123,7 +469,7 @@ function brancher() {
   });
 }
 
-/** Raccourcis : Espace pour écouter ; dans « Corriger », les gestes sur la note choisie. */
+/** Raccourcis : chaque écran a les siens (Espace pour écouter ; dans « Corriger », les gestes sur la note choisie). */
 function clavier(e) {
   const cible = e.target;
   if (cible.closest && cible.closest("input, textarea, select, [contenteditable]")) return;
@@ -1132,35 +478,8 @@ function clavier(e) {
     if (editeur.toucheBas(e)) e.preventDefault();
     return;
   }
-  if (e.key === " " && etat.vue === "lecteur" && !cible.closest("button")) {
-    e.preventDefault();
-    $("ecouter").click();
-    return;
-  }
-  if (etat.vue !== "atelier") return;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); annuler(); return; }
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-  const durees = { 1: 0.5, 2: 1, 3: 2, 4: 4, 5: 8 };
-  const actions = {
-    ArrowUp: () => geste("haut", e.shiftKey ? 7 : 1),
-    ArrowDown: () => geste("bas", e.shiftKey ? 7 : 1),
-    ArrowLeft: () => choisirVoisine(-1),
-    ArrowRight: () => choisirVoisine(1),
-    ".": () => geste("point"),
-    "#": () => geste("alteration", "^"),
-    b: () => geste("alteration", "_"),
-    n: () => geste("alteration", "="),
-    z: () => geste("silence"),
-    "+": () => geste("dupliquer"),
-    Delete: () => geste("supprimer"),
-    Backspace: () => geste("supprimer"),
-    Escape: () => { etat.selection = null; graverAtelier(); majOutils(); },
-  };
-  if (durees[e.key]) { e.preventDefault(); geste("duree", durees[e.key]); return; }
-  if (actions[e.key] && (etat.selection !== null || e.key.startsWith("Arrow"))) {
-    e.preventDefault();
-    actions[e.key]();
-  }
+  const ecran = etat.vue === "atelier" ? atelier : etat.vue === "lecteur" ? lecteur : null;
+  if (ecran && ecran.toucheBas(e)) e.preventDefault();
 }
 
 /** Ce que le menu « ••• » de l'éditeur d'idée demande. */
@@ -1210,6 +529,19 @@ async function choisirMorceau(p) {
   $("morceau-choix").hidden = true;
 }
 
+/** « Corriger » et « Écouter » : la même page lue, la même écoute. */
+function creerEcransDePage() {
+  const arreterEcoute = () => ecoutePage.arreter();
+  atelier = creerEcranAtelier({
+    page: pageOuverte, piano, abcjs: ABCJS, calibration, ecouter: ecouterPage, arreterEcoute,
+    valider: () => montrer("lecteur"), supprimer: supprimerOuverte,
+  });
+  lecteur = creerEcranLecteur({
+    page: pageOuverte, abcjs: ABCJS, ecouter: ecouterPage, arreterEcoute,
+    exports: { exporterMidi, exporterMusicXml, exporterAbc }, ouvrirIdee, supprimer: supprimerOuverte,
+  });
+}
+
 function creerVueDuMorceau() {
   vueMorceau = creerVueMorceau({
     transport, toast, nouvelId,
@@ -1228,8 +560,8 @@ function creerAccueilDeLAppli() {
   accueil = creerAccueil({
     etat, toast, ouvrir, ouvrirIdee, ouvrirMorceau, calibration, ideesParId, importer,
     ecouter: ecouterIdee,
-    enLecture: (bouton) => transport.actif && transport.carte === bouton,
-    arreter: () => transport.arreter(),
+    enLecture: (bouton) => ecouteCartes.cle === bouton,
+    arreter: () => ecouteCartes.arreter(),
     partagerMidi, exporterMidi,
     supprimer: async (p) => { if (await veutSupprimer(p, etat.partitions)) await supprimerDeLaBibliotheque(p); },
     etiquettes: toutesEtiquettes,
@@ -1327,11 +659,12 @@ async function demarrer() {
     formulaireAdresse: (apres) => tablette.formulaireAdresse(apres), majReglagesRm: () => tablette.majReglagesRm(),
     montrerSynchro: (x) => accueil.montrerSynchro(x),
     ouverte: partitionOuverte,
-    quitter: () => { if (etat.vue === "atelier" || etat.vue === "lecteur") etat.courante = null; montrer("biblio"); },
+    quitter: () => { if (etat.vue === "atelier" || etat.vue === "lecteur") pageOuverte.fermer(); montrer("biblio"); },
   });
   brancher();
   creerEditeur();
   creerVueDuMorceau();
+  creerEcransDePage();
   afficherBibliotheque();
   let bloquee = false;
   try {

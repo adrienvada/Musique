@@ -1,18 +1,22 @@
 /**
  * LES PIÈCES DE « CORRIGER » ET DE « ÉCOUTER »
  *
- * app.js tient l'état (la partition ouverte, l'ABC, l'historique) et décide ;
- * ici, on dessine : les repères numérotés sur ta page, la carte d'un doute
- * (une loupe, une question, de gros boutons), les points d'avancement, l'état
- * « Tout est relu », et deux détails d'écran (les onglets Corriger ↔ Écouter
- * rangés sous la barre de l'écran ouvert, la hauteur du panneau du bas).
+ * Les deux écrans (ecran-atelier.js, ecran-lecteur.js) tiennent l'état et
+ * décident ; ici, on dessine : les repères numérotés sur ta page, la carte
+ * d'un doute (une loupe, une question, de gros boutons), les points
+ * d'avancement, l'état « Tout est relu », la pastille de la barre, et deux
+ * détails d'écran (les onglets Corriger ↔ Écouter rangés sous la barre de
+ * l'écran ouvert, la hauteur du panneau du bas). Et ce que les deux écrans
+ * partagent pour faire entendre la page : la gravure, le tempo, l'écoute.
  *
- * Rien ici ne touche à l'ABC ni au stockage : chaque bouton rappelle app.js.
+ * Rien ici ne touche à l'ABC ni au stockage : chaque bouton rappelle l'écran.
  */
 import { ico } from "./icones.js";
 import { cadreDoute, dessinerPage, fenetreLoupe } from "./manuscrit.js";
 import { ecrirePref, lirePref } from "./preferences.js";
-import { $, el, pluriel } from "./ui.js";
+import { notesDePage, surlignage } from "./ecoute-page.js";
+import { expliquer } from "./erreurs.js";
+import { $, el, pluriel, toast } from "./ui.js";
 
 const NS = "http://www.w3.org/2000/svg";
 
@@ -40,6 +44,13 @@ export function placerOnglets(idSection) {
   const avait = onglets.contains(document.activeElement) ? document.activeElement.id : null;
   barre.appendChild(onglets);
   if (avait) $(avait).focus({ preventScroll: true });
+}
+
+/** L'état d'une partition dans sa barre : « Prête », ou le nombre de doutes qui restent. */
+export function pastilleBarre(p) {
+  const restants = (p.doutes || []).filter((d) => !d.leve).length;
+  if (p.statut === "prete") return el("span", "pastille p-ok", "Prête");
+  return el("span", "pastille p-doute", restants ? pluriel(restants, "doute") : "À relire");
 }
 
 /** Le panneau du bas est fixé : l'écran lui laisse sa hauteur, mesurée, pour que rien ne passe dessous. */
@@ -199,4 +210,60 @@ export function dessinerRelu(zone, { aucun, surRevoir, surValider }) {
   reponses.appendChild(valider);
   bloc.appendChild(reponses);
   zone.appendChild(bloc);
+}
+
+// ------------------------------------------------------------------------
+// Faire entendre la page (les deux écrans)
+// ------------------------------------------------------------------------
+
+// Pour la gravure seulement : la dernière ligne s'étire sur toute la largeur,
+// sinon une pièce d'une mesure s'affiche minuscule. abcjs compte ses
+// positions (startChar) dans ce texte-là : on retranche le préfixe.
+export const PREFIXE_GRAVURE = "%%stretchlast 1\n";
+export const pourGravure = (abc) => PREFIXE_GRAVURE + abc;
+
+/** Tempo en noires par minute, d'après la partition gravée. */
+export function tempoInitial(objet) {
+  try {
+    const f = objet.getMeterFraction();
+    const noires = (f.num / f.den) * 4;
+    const ms = objet.millisecondsPerMeasure();
+    if (noires > 0 && ms > 0) return Math.round((60000 * noires) / ms);
+  } catch { /* chiffrage libre : valeur par défaut */ }
+  return 90;
+}
+
+/** Le bouton d'écoute d'une partition : « Écouter » ou « Arrêter », avec son icône. */
+export function libelleLecture(bouton, joue) {
+  bouton.innerHTML = joue ? `${ico("stop", "s")}Arrêter` : `${ico("lire", "s")}Écouter`;
+}
+
+/**
+ * Écoute une page lue, depuis « Corriger » ou « Écouter » : ses notes passent
+ * par le transport, sur l'horloge du son (ecoute-page.js, audit du 04/10,
+ * M5) ; abcjs ne sert plus qu'à surligner ce qui joue. Une seule écoute pour
+ * les deux écrans (`ecoute`, ecoute.js) : le même bouton arrête, l'autre
+ * remplace ; arrêtée pendant que le piano se charge, elle ne part pas.
+ * @param {{ ecoute: any, abcjs: () => any }} deps
+ */
+export function creerEcoutePage({ ecoute, abcjs }) {
+  return async function ecouter({ objet, abc, bouton, qpm, transposition = 0, voixMuettes = new Set(), titre = "" }) {
+    if (ecoute.cle === bouton) { ecoute.arreter(); return; }
+    if (!objet) { ecoute.arreter(); return; }
+    const { source } = notesDePage(objet, pourGravure(abc), { tempo: qpm, transposition, voixMuettes });
+    const lumiere = surlignage(abcjs(), objet, qpm);
+    bouton.textContent = "Chargement du piano…";
+    try {
+      await ecoute.jouer(bouton, source, {
+        titre: titre || "Partition",
+        relancer: () => { if (ecoute.cle === null) bouton.click(); },
+        surPosition: (pas) => lumiere.surligner(pas),
+        surDepart: () => libelleLecture(bouton, true),
+        surArret: () => { lumiere.eteindre(); libelleLecture(bouton, false); },
+      });
+    } catch (e) {
+      console.error(e);
+      toast(expliquer(e, "Le piano n'a pas pu se charger."));
+    }
+  };
 }

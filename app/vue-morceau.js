@@ -20,7 +20,8 @@ import { ico } from "./icones.js";
 import { ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { $, pluriel } from "./ui.js";
 import { creerEnregistreur } from "./enregistreur.js";
-import { cause } from "./erreurs.js";
+import { creerEcoute } from "./ecoute.js";
+import { cause, expliquer } from "./erreurs.js";
 import { egal } from "./fiche.js";
 
 // Ce que l'écran montre d'un morceau : une version d'ailleurs qui ne change rien de cela ne se recharge pas.
@@ -34,7 +35,8 @@ export function creerVueMorceau(deps) {
   const m = { id: null, titre: "", blocs: [], tempo: null, creeLe: null, choisi: null, session: { id: null, derniere: null } };
   let tempoEnAttente = false;
   let glisse = null;
-  let lecture = null; // { cle: "tout" | id d'un bloc } tant que cet écran fait sonner le transport
+  // Ce que cet écran fait sonner (ecoute.js) : sa clé, "tout" ou l'identifiant d'un bloc.
+  const ecoute = creerEcoute(transport);
   let joue = null;    // le bloc qui sonne
 
   const idees = () => new Map(deps.partitions().filter((p) => p.type === "idee").map((p) => [p.id, p]));
@@ -64,8 +66,8 @@ export function creerVueMorceau(deps) {
   }
 
   async function fermer() {
+    ecoute.arreter();
     transport.arreter();
-    lecture = null;
     joue = null;
     fermerFeuilles();
     await ecritures.vider();
@@ -346,33 +348,27 @@ export function creerVueMorceau(deps) {
   // --- Écouter -----------------------------------------------------------------------
 
   /**
-   * Arrête ce que cet écran fait sonner. On efface `lecture` avant d'arrêter : si le
-   * piano se charge encore, il n'y a rien à arrêter, et c'est ecouter() qui, au
-   * réveil, voit que la lecture n'est plus la sienne.
+   * Arrête ce que cet écran fait sonner ; si le piano se charge encore, l'écoute
+   * ne partira pas à son arrivée (ecoute.js).
    */
-  function arreterEcoute() {
-    if (!lecture) return;
-    lecture = null;
-    transport.arreter();
-    majLecture();
-    marquerJoue(null);
-  }
+  const arreterEcoute = () => ecoute.arreter();
 
   /** Les boutons d'écoute disent où on en est : lire ou arrêter. */
   function majLecture() {
-    const tout = !!lecture && lecture.cle === "tout";
+    const cle = ecoute.cle;
+    const tout = cle === "tout";
     const grand = $("morceau-ecouter");
     grand.disabled = !m.blocs.length;
     grand.innerHTML = ico(tout ? "stop" : "lire");
     grand.setAttribute("aria-label", tout ? "Arrêter l'écoute" : "Écouter l'enchaînement");
     for (const li of lignes()) {
       const bouton = li.querySelector('[data-action="ecouter"]');
-      const ici = !!lecture && lecture.cle === li.dataset.id;
+      const ici = cle === li.dataset.id;
       bouton.innerHTML = `${ico(ici ? "stop" : "lire", "s")}${ici ? "Arrêter" : "Écouter"}`;
       bouton.setAttribute("aria-label", ici ? "Arrêter ce bloc" : "Écouter ce bloc");
     }
-    $("morceau-frise").classList.toggle("lecture", !!lecture);
-    $("morceau-frise-tete").hidden = !lecture;
+    $("morceau-frise").classList.toggle("lecture", cle !== null);
+    $("morceau-frise-tete").hidden = cle === null;
   }
 
   /** Le bloc qui sonne s'allume, sur sa carte comme sur la frise. */
@@ -388,16 +384,9 @@ export function creerVueMorceau(deps) {
    * @param cle  "tout" ou l'identifiant du bloc écouté
    */
   async function ecouter(cle, blocs) {
-    if (lecture && lecture.cle === cle) { arreterEcoute(); return; }
+    if (ecoute.cle === cle) { arreterEcoute(); return; }
     const a = assembler({ blocs, tempo: m.tempo }, idees());
     if (!a.fin) { toast("Rien à écouter : ajoute une idée."); return; }
-    const moi = { cle };
-    lecture = moi;
-    majLecture();
-    // Le piano se charge au premier toucher : si on a rappuyé entre-temps, on ne joue plus.
-    try { await transport.piano.pret(); } catch (e) { if (lecture === moi) { lecture = null; majLecture(); } toast(e.message || "Le piano n'a pas pu se charger."); return; }
-    if (lecture !== moi) return;
-
     const plages = new Map(); // bloc → où il commence et finit dans ce qu'on joue
     for (const x of a.passages) plages.set(x.bloc, { debut: plages.has(x.bloc) ? plages.get(x.bloc).debut : x.debut, fin: x.fin });
     const tete = $("morceau-frise-tete");
@@ -415,22 +404,20 @@ export function creerVueMorceau(deps) {
       const f = Math.min(1, Math.max(0, (pas - r.debut) / Math.max(1, r.fin - r.debut)));
       tete.style.transform = `translateX(${seg.offsetLeft + f * seg.offsetWidth}px)`;
     };
+    // Le piano se charge au premier toucher : si on a rappuyé entre-temps, on ne joue plus (ecoute.js).
+    const lecture = ecoute.jouer(cle, sourceDuMorceau(a), {
+      // Les commandes de l'écran verrouillé (eveil.js) : le titre du morceau.
+      titre: m.titre || "Morceau",
+      surPosition: placer,
+      surDepart: () => placer(a.passages[0].debut), // la tête part du début, avant la première image
+      surArret: () => { majLecture(); marquerJoue(null); },
+    });
+    majLecture();
     try {
-      placer(a.passages[0].debut); // la tête part du début, avant la première image
-      await transport.jouer(sourceDuMorceau(a), {
-        // Les commandes de l'écran verrouillé (eveil.js) : le titre du morceau.
-        titre: m.titre || "Morceau",
-        surPosition: placer,
-        surFin: () => {
-          if (lecture !== moi) return;
-          lecture = null;
-          majLecture();
-          marquerJoue(null);
-        },
-      });
+      await lecture;
     } catch (e) {
-      if (lecture === moi) { lecture = null; majLecture(); marquerJoue(null); }
-      toast(e.message || "Le piano n'a pas pu se charger.");
+      console.error(e);
+      toast(expliquer(e, "Le piano n'a pas pu se charger."));
     }
   }
 

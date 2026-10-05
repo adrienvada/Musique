@@ -2039,6 +2039,38 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     temps. Ni l'un ni l'autre ne demande quoi que ce soit à Adrien.
   - Essais : `tests/enregistreur.test.mjs`, et « quatre notes, puis un
     rechargement tout de suite » dans `tests/e2e/ecrans.test.mjs`.
+- **« Corriger » et « Écouter » sont des fabriques, comme l'éditeur d'idée
+  (`app/ecran-atelier.js`, `app/ecran-lecteur.js`, T3).** Leur état vivait
+  à trois endroits : `etat`, des variables de module, et la page (l'ABC en
+  cours se lisait dans le champ du mode avancé, « enregistrement en
+  attente » dans le texte « … »). Chaque écran a maintenant le sien ; la
+  page lue ouverte (sa fiche, ses traits, ses enregistrements) est
+  partagée par les deux (`app/page-ouverte.js`). Ce qu'ils ont en commun
+  pour faire entendre la page (la gravure, le tempo, l'écoute) est dans
+  `atelier.js`.
+  - **Une correction n'est plus perdue, ni écrite sur une autre partition
+    (T4).** La minuterie de « Corriger » (800 ms) lisait la partition
+    ouverte et le champ ABC au moment où elle partait : revenir à la
+    bibliothèque et ouvrir une autre page dans ce délai perdait la
+    correction et réécrivait l'autre page (reproduit par l'audit). Le tempo
+    d'« Écouter » (600 ms) faisait pareil. Un changement vaut tout de suite
+    pour la fiche en mémoire et part un instant après, avec la copie prise
+    au moment du geste ; quitter l'écran ou ouvrir une autre page fait
+    partir ce qui attendait. La relecture des cibles des doutes (une page
+    lue avant le 02/10) écrit aussi dans sa page, plus dans celle qui
+    s'est ouverte entre-temps.
+  - **Une seule écoute à la fois, avec le jeton de l'écran Morceau
+    (`app/ecoute.js`, T4).** Il sert maintenant à « Corriger », à
+    « Écouter », au morceau et aux cartes de la bibliothèque (qui notaient
+    leur bouton sur le transport, `transport.carte`). Le transport tient le
+    même jeton de son côté depuis le lot son : l'écoute lancée puis quittée
+    pendant que le piano se charge ne partait déjà plus (l'essai de l'audit
+    passe sur la base). L'essai de bout en bout le garde.
+  - Deux ouvertures rapprochées n'affichent que la dernière (elles
+    portaient chacune la fiche lue avant d'attendre ses traits).
+  - Essais : « corriger une note puis ouvrir vite une autre partition »
+    (la correction, puis le tempo) et « Écouter pendant que le piano se
+    charge » (`tests/e2e/ecrans.test.mjs`), `tests/ecoute.test.mjs`.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

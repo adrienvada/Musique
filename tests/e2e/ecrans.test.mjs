@@ -236,3 +236,113 @@ test("quatre notes, puis un rechargement tout de suite : l'idée est là (T4)", 
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });
+
+/** Les partitions de la base de la page : { id: { titre, abc, modifieLe } }. */
+const base = (page) => page.evaluate(() => new Promise((ok) => {
+  const r = indexedDB.open("portee");
+  r.onsuccess = () => {
+    const sortie = {};
+    const c = r.result.transaction("partitions").objectStore("partitions").openCursor();
+    c.onsuccess = () => {
+      const k = c.result;
+      if (!k) { r.result.close(); ok(sortie); return; }
+      sortie[k.key] = { titre: k.value.titre, abc: k.value.abc, modifieLe: k.value.modifieLe, tempo: k.value.tempo };
+      k.continue();
+    };
+  };
+}));
+
+/** Touche la `n`-ième note de la partition lue de « Corriger » (abcjs capte les clics : aux coordonnées). */
+async function toucherNote(page, n) {
+  await page.click('#vues-atelier [data-vue="lue"]');
+  const note = await page.locator("#gravure-atelier .abcjs-note").nth(n).boundingBox();
+  await page.mouse.click(note.x + note.width / 2, note.y + note.height / 2);
+  await page.waitForSelector("#outils-note:not([hidden])");
+}
+
+test("corriger une note puis ouvrir vite une autre partition : la correction reste à la sienne, l'autre ne bouge pas (T4)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    const avant = await base(page);
+    const id = (titre) => Object.keys(avant).find((k) => avant[k].titre.startsWith(titre));
+    const [a, b] = [id("Essai melodie"), id("Essai piano")];
+    await ouvrirPartition(page, "Essai melodie");
+    await toucherNote(page, 2);
+    await page.keyboard.press("ArrowUp");
+    // Moins de 0,8 s après la correction : retour, et l'autre partition.
+    await page.click("#vue-atelier [data-retour]");
+    await page.waitForSelector("#vue-biblio:not([hidden])");
+    await ouvrirPartition(page, "Essai piano");
+    await page.waitForTimeout(1500); // le temps d'une minuterie oubliée
+    const apres = await base(page);
+    assert.notEqual(apres[a].abc, avant[a].abc, "la correction de la mélodie est enregistrée");
+    assert.equal(apres[b].abc, avant[b].abc, "le piano n'a pas reçu l'ABC d'une autre");
+    assert.equal(apres[b].modifieLe, avant[b].modifieLe, "le piano n'a pas été réécrit sans geste");
+    // Le même chemin pour le tempo d'« Écouter » (sa minuterie attendait 0,6 s).
+    await page.click("#onglet-lecteur");
+    await page.waitForSelector("#vue-lecteur:not([hidden]) #gravure-lecteur svg .abcjs-note");
+    await page.locator("#tempo").fill("150");
+    await page.click("#vue-lecteur [data-retour]");
+    await page.waitForSelector("#vue-biblio:not([hidden])");
+    await ouvrirPartition(page, "Essai melodie");
+    await page.waitForTimeout(1200);
+    const ensuite = await base(page);
+    assert.equal(ensuite[b].tempo, 150, "le tempo réglé reste au piano");
+    assert.equal(ensuite[a].tempo, apres[a].tempo, "la mélodie garde le sien");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+/** Le piano se fait attendre (un réseau de téléphone) ; on compte les notes qui partent vraiment. */
+async function pianoLent(ctx, page) {
+  await page.route("**/piano/*.mp3", async (route) => { await new Promise((ok) => setTimeout(ok, 800)); await route.continue(); });
+  await page.evaluate(() => {
+    window.__departs = 0;
+    const depart = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...a) { window.__departs++; return depart.apply(this, a); };
+  });
+}
+const departs = (page) => page.evaluate(() => window.__departs);
+
+/** Une page neuve (le piano pas encore téléchargé), sur « Écouter » de la mélodie d'essai. */
+async function lecteurPianoLent() {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR, serviceWorkers: "block" });
+  const page = await ouvrirPortee(ctx, serveur.url);
+  await importerLesExemples(page);
+  await ouvrirPartition(page, "Essai melodie");
+  await page.click("#onglet-lecteur");
+  await page.waitForSelector("#vue-lecteur:not([hidden]) #gravure-lecteur svg .abcjs-note");
+  await pianoLent(ctx, page);
+  return { ctx, page };
+}
+
+test("« Écouter » pendant que le piano se charge : quitter l'écran, ou toucher deux fois, ne laisse rien jouer en douce (T4)", async () => {
+  // 1. Écouter, puis quitter l'écran aussitôt : la lecture ne part pas sur l'écran caché.
+  let { ctx, page } = await lecteurPianoLent();
+  try {
+    await page.click("#ecouter");
+    await page.click("#vue-lecteur [data-retour]");
+    await page.waitForSelector("#vue-biblio:not([hidden])");
+    await page.waitForTimeout(4000);
+    assert.equal(await departs(page), 0, "rien ne joue sur l'écran qu'on a quitté");
+  } finally { await ctx.close(); }
+  // 2. Deux touchers pendant le chargement : le second arrête le premier, rien ne joue.
+  ({ ctx, page } = await lecteurPianoLent());
+  try {
+    await page.click("#ecouter");
+    await page.click("#ecouter");
+    await page.waitForTimeout(4000);
+    assert.equal(await departs(page), 0, "deux touchers : aucune lecture");
+    assert.match(await page.textContent("#ecouter"), /Écouter/);
+    // 3. Un toucher : elle part ; « Arrêter » coupe tout.
+    await page.click("#ecouter");
+    await page.waitForFunction(() => /Arrêter/.test(document.getElementById("ecouter").textContent) && window.__departs > 0, null, { timeout: 30000 });
+    await page.click("#ecouter");
+    const n = await departs(page);
+    await page.waitForTimeout(1500);
+    assert.equal(await departs(page), n, "plus rien ne part après « Arrêter »");
+    assert.match(await page.textContent("#ecouter"), /Écouter/);
+  } finally { await ctx.close(); }
+});

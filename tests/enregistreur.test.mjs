@@ -60,17 +60,14 @@ test("les écritures se suivent, jamais deux à la fois ; occupe tant que l'une 
   assert.equal(e.occupe, false);
 });
 
-test("une écriture qui échoue n'arrête pas les suivantes", async () => {
+test("une écriture qui échoue n'arrête pas les suivantes", async (t) => {
   const ecrits = [];
-  const erreur = console.error;
-  console.error = () => {};
-  try {
-    const e = creerEnregistreur({ delai: 0, ecrire: async (c) => { if (c === "A") throw new Error("plein"); ecrits.push(c); } });
-    e.planifier("A", {});
-    e.planifier("B", {});
-    await e.vider();
-    assert.deepEqual(ecrits, ["B"]);
-  } finally { console.error = erreur; }
+  t.mock.method(console, "error", () => {}); // l'erreur est gardée dans la console : ici, on la tait
+  const e = creerEnregistreur({ delai: 0, ecrire: async (c) => { if (c === "A") throw new Error("plein"); ecrits.push(c); } });
+  e.planifier("A", {});
+  e.planifier("B", {});
+  await e.vider();
+  assert.deepEqual(ecrits, ["B"]);
 });
 
 test("viderTout vide chaque enregistreur de la page (pagehide) ; oublier abandonne", async () => {
