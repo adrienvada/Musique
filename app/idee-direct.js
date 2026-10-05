@@ -74,6 +74,7 @@ import { lirePref, ecrirePref } from "./preferences.js";
 import { ico } from "./icones.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { garderEveille, laisserDormir } from "./eveil.js";
+import { accorde, pluriel } from "./ui.js";
 
 const CLE_DECOMPTE = "portee:decompte";
 const CLE_ARRONDI = "portee:arrondi";
@@ -334,7 +335,6 @@ export function brutesDeCapture(notes, { depart, tempo, boucle = null }) {
   });
 }
 
-const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 
 // --- Le module -------------------------------------------------------------------
 
@@ -519,7 +519,7 @@ export function creerDirect(ctx) {
     if (!jouees.length) {
       finir();
       // M11 : tout a été joué pendant le décompte ; on le dit, plutôt que « rien n'a été joué ».
-      if (e.ouverte) toast(r.perdues ? `${pluriel(r.perdues, "note")} jouée${r.perdues > 1 ? "s" : ""} pendant le décompte : la prise commence au premier temps, l'idée n'a pas changé.` : "Rien n'a été joué : l'idée n'a pas changé.", 6000);
+      if (e.ouverte) toast(r.perdues ? `${pluriel(r.perdues, "note")} ${accorde(r.perdues, "jouée")} pendant le décompte : la prise commence au premier temps, l'idée n'a pas changé.` : "Rien n'a été joué : l'idée n'a pas changé.", 6000);
       return;
     }
     r.total = jouees.length;
@@ -565,7 +565,7 @@ export function creerDirect(ctx) {
     const premiere = notes[0];
     requestAnimationFrame(() => { if (e.ouverte) ctx.grille.montrer(premiere); });
     // Court : le message passager est étroit, et « Annuler » est juste en dessous, dans le pupitre.
-    if (e.ouverte) toast(`${pluriel(notes.length, "note")} ${r.capture ? "capturée" : "gardée"}${notes.length > 1 ? "s" : ""}.`);
+    if (e.ouverte) toast(`${pluriel(notes.length, "note")} ${accorde(notes.length, r.capture ? "capturée" : "gardée")}.`);
   }
 
   /** Jette la prise et relance le décompte ; une capture est seulement jetée (l'idée garde ce qui s'est écrit). */
@@ -587,14 +587,14 @@ export function creerDirect(ctx) {
     const mesure = sq.pasParMesure(e.seq), temps = sq.pasParTemps(e.seq);
     const brutes = r.notes.map((n) => ({ d: n.debut, f: n.fin, h: n.h }));
     const arrondies = arrondir(r.notes, r.grille, r.depuis, sq.pasParTemps(e.seq)).map((n) => ({ d: n.d, f: n.d + n.l, h: n.h }));
-    $("idee-arrondi-titre").textContent = `${pluriel(r.total, "note")} ${r.capture ? "capturée" : "jouée"}${r.total > 1 ? "s" : ""}`;
+    $("idee-arrondi-titre").textContent = `${pluriel(r.total, "note")} ${accorde(r.total, r.capture ? "capturée" : "jouée")}`;
     $("idee-arrondi-aide").textContent = r.capture
       ? (r.ecrites && r.ecrites.length ? "Garder remplace les notes écrites pendant que tu jouais par celles-ci, avec leur rythme." : "Garder les écrit dans l'idée, avec leur rythme.") + " Choisis comment l'arrondir."
       : "Choisis comment arrondir le rythme. Fermer la feuille garde ce que tu vois.";
     // M11 : une levée jouée pendant le décompte n'est pas gardée ; on le dit.
     const perdues = $("idee-arrondi-decompte");
     perdues.hidden = !r.perdues;
-    perdues.textContent = r.perdues ? `${pluriel(r.perdues, "note")} jouée${r.perdues > 1 ? "s" : ""} pendant le décompte : pas gardée${r.perdues > 1 ? "s" : ""}, la prise commence au premier temps.` : "";
+    perdues.textContent = r.perdues ? `${pluriel(r.perdues, "note")} ${accorde(r.perdues, "jouée")} pendant le décompte : pas ${accorde(r.perdues, "gardée")}, la prise commence au premier temps.` : "";
     $("idee-recommencer").innerHTML = r.capture ? `${ico("fermer", "s")}Jeter` : `${ico("annuler", "s")}Recommencer`;
     $("idee-recommencer").title = r.capture ? "Ne pas capturer : l'idée reste comme elle est" : "Jeter la prise et rejouer, avec le décompte";
     const fin = Math.max(...brutes.map((n) => n.f), ...arrondies.map((n) => n.f));

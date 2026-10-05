@@ -196,7 +196,7 @@ test("armure mêlée et armure reprise : des réponses qui écrivent l'armure ch
 });
 
 test("quand la page a été lue : des mots, pas une horloge", async () => {
-  const { dateRelative } = await import("../app/atelier.js");
+  const { dateRelative } = await import("../app/ui.js");
   const maintenant = Date.parse("2026-10-02T12:00:00Z");
   const il = (secondes) => new Date(maintenant - secondes * 1000).toISOString();
   assert.equal(dateRelative(il(20), maintenant), "à l'instant");

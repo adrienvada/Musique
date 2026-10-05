@@ -23,21 +23,13 @@ import { dessinerApercuMorceau } from "./vue-morceau.js";
 import { dessinerPage } from "./manuscrit.js";
 import { assembler } from "./morceau.js";
 import { ico } from "./icones.js";
-import { echapper } from "./ui.js";
+import { $, dateCourte, echapper, el, heure, pluriel } from "./ui.js";
 import { ambianceStudio, lirePref, ecrirePref } from "./preferences.js";
 import { brancherFeuille, fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 
-const $ = (id) => document.getElementById(id);
 const NS = "http://www.w3.org/2000/svg";
 export const ONGLETS = ["carnet", "partitions", "morceaux", "reglages"];
 const CLE_ONGLET = "portee:onglet";
-
-const el = (tag, classe = "", texte = null) => {
-  const e = document.createElement(tag);
-  if (classe) e.className = classe;
-  if (texte !== null) e.textContent = texte;
-  return e;
-};
 
 /** Ce que la recherche regarde : le titre, les étiquettes, la note. */
 const texteDe = (p) => [p.titre, ...(p.etiquettes || []), p.note || ""].join(" ").toLowerCase();
@@ -60,9 +52,8 @@ function periode(iso) {
 function quand(iso, groupe) {
   if (!iso) return "";
   const d = new Date(iso);
-  const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  if (groupe === "Aujourd'hui" || groupe === "Hier") return heure;
-  if (groupe === "Cette semaine") return `${d.toLocaleDateString("fr-FR", { weekday: "short" })} ${heure}`;
+  if (groupe === "Aujourd'hui" || groupe === "Hier") return heure(iso);
+  if (groupe === "Cette semaine") return `${d.toLocaleDateString("fr-FR", { weekday: "short" })} ${heure(iso)}`;
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
@@ -98,7 +89,7 @@ function dessinerApercuPage(svg, cal, traits, ratio) {
  *   ecouter(p, bouton), enLecture(bouton), arreter(), partagerMidi(p), exporterMidi(p),
  *   supprimer(p) (demande confirmation, puis supprime),
  *   calibration(modele), ideesParId(), etiquettes(), importer(fichiers),
- *   dateCourte(iso), resumeIdee(seq), nomModele(m), pastilleStatut(p), toast(texte)
+ *   resumeIdee(seq), nomModele(m), pastilleStatut(p), toast(texte)
  * }
  */
 export function creerAccueil(deps) {
@@ -274,7 +265,7 @@ export function creerAccueil(deps) {
     // « À relire » : le seul état qui demande quelque chose ; une idée n'en a pas.
     if (!p.type && p.statut !== "prete") meta.appendChild(el("span", "pastille p-doute", "À relire"));
     const [genre, resume] = genreEtResume(p);
-    const date = groupe ? quand(p.modifieLe, groupe) : deps.dateCourte(p.modifieLe);
+    const date = groupe ? quand(p.modifieLe, groupe) : dateCourte(p.modifieLe);
     // Avec « À relire » devant, le mot « Partition » n'apprend rien : la place sert à la date.
     meta.appendChild(el("span", "ligne-quand", [meta.firstChild ? "" : genre, resume, date].filter(Boolean).join(" · ")));
     texte.appendChild(meta);
@@ -335,7 +326,7 @@ export function creerAccueil(deps) {
     const pages = etat.partitions.filter((p) => !p.type);
     const aRelire = pages.filter((p) => p.statut !== "prete").length;
     $("resume-partitions").textContent = pages.length
-      ? `${pages.length} page${pages.length > 1 ? "s" : ""} écrite${pages.length > 1 ? "s" : ""} à la main${aRelire ? ` · ${aRelire} à relire` : ""}`
+      ? `${pluriel(pages.length, "page écrite", "pages écrites")} à la main${aRelire ? ` · ${aRelire} à relire` : ""}`
       : "Les pages écrites à la main sur ta tablette apparaîtront ici.";
     $("filtres-pages").hidden = pages.length === 0;
     const visibles = pages.filter((p) => (etat.filtrePages === "tout" || p.statut === etat.filtrePages) && surRecherche(p));
@@ -366,7 +357,7 @@ export function creerAccueil(deps) {
   function rendreMorceaux() {
     const morceaux = etat.partitions.filter((p) => p.type === "morceau");
     $("resume-morceaux").textContent = morceaux.length
-      ? `${morceaux.length} morceau${morceaux.length > 1 ? "x" : ""}`
+      ? pluriel(morceaux.length, "morceau", "morceaux")
       : "Des idées mises bout à bout : une intro, un couplet, un refrain…";
     const visibles = morceaux.filter(surRecherche);
     const liste = $("liste-morceaux");
@@ -401,7 +392,7 @@ export function creerAccueil(deps) {
     $("feuille-titre").textContent = p.titre;
     const [genre, resume] = genreEtResume(p);
     const duree = p.type === "morceau" ? dureeMorceau(p, deps.ideesParId()) : "";
-    $("feuille-sous").textContent = [genre, resume, duree, deps.dateCourte(p.modifieLe)].filter(Boolean).join(" · ");
+    $("feuille-sous").textContent = [genre, resume, duree, dateCourte(p.modifieLe)].filter(Boolean).join(" · ");
     const liste = $("feuille-liste");
     liste.textContent = "";
     const ajouter = (icone, texte, agir, { plein = false, danger = false } = {}) => {

@@ -18,9 +18,8 @@ import { nbMesures } from "./sequence.js";
 import { dessinerApercu } from "./idee.js";
 import { ico } from "./icones.js";
 import { ouvrirFeuille, fermerFeuille } from "./feuilles.js";
+import { $, pluriel } from "./ui.js";
 
-const $ = (id) => document.getElementById(id);
-const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 
 /**
  * La vignette d'un morceau dans la bibliothèque : sa frise en miniature, les

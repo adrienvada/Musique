@@ -34,13 +34,14 @@ import { creerHistorique } from "./historique.js";
 import { installerInfobulles } from "./infobulles.js";
 import { creerAccueil } from "./accueil.js";
 import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, suivre } from "./doutes.js";
-import { afficherVueAtelier, dateRelative, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes, placerOnglets, suivreDock } from "./atelier.js";
+import { afficherVueAtelier, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes, placerOnglets, suivreDock } from "./atelier.js";
 import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
+import { $, accorde, dateCourte, dateRelative, heure, pluriel, retirerToast, toast } from "./ui.js";
+import { dialogue, veutSupprimer } from "./dialogue.js";
 
 const VERSION_LECTEUR = 1;
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
 const CONNECTEUR = "Portée reMarkable";
-const $ = (id) => document.getElementById(id);
 const ABCJS = () => window.ABCJS;
 // Pour la gravure seulement : la dernière ligne s'étire sur toute la largeur,
 // sinon une pièce d'une mesure s'affiche minuscule. abcjs compte ses
@@ -79,11 +80,7 @@ const transport = new Transport(piano);
 // quand le geste qui jouait ne l'écoute pas (piano.js, audit du 04/10, M3).
 const EN_CHARGEMENT = "Piano en chargement… La première fois, il se télécharge avec le réseau.";
 piano.surProbleme = (texte) => toast(texte, 7000);
-piano.surAttente = (oui) => {
-  if (oui) { toast(EN_CHARGEMENT, 30000); return; }
-  const t = $("toast");
-  if (t.textContent === EN_CHARGEMENT) { t.hidden = true; try { if (t.hidePopover) t.hidePopover(); } catch { /* déjà fermé */ } }
-};
+piano.surAttente = (oui) => (oui ? toast(EN_CHARGEMENT, 30000) : retirerToast(EN_CHARGEMENT));
 const calibrations = new Map();
 let editeur = null; // l'éditeur d'idée (idee.js), créé au démarrage
 let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
@@ -102,32 +99,13 @@ async function calibration(modele) {
 // Petits outils d'interface
 // ------------------------------------------------------------------------
 
-let minuterieToast = null;
-function toast(texte, duree = 4000) {
-  const t = $("toast");
-  t.textContent = texte;
-  t.hidden = false;
-  // En « popover », le message passe au-dessus d'une feuille du bas ouverte
-  // (un <dialog> est dans la couche du dessus) au lieu d'être grisé dessous.
-  // Le rouvrir le remet au premier plan ; sans popover, il s'affiche comme avant.
-  if (t.showPopover) { try { if (t.matches(":popover-open")) t.hidePopover(); t.showPopover(); } catch { /* sans popover */ } }
-  clearTimeout(minuterieToast);
-  minuterieToast = setTimeout(() => { t.hidden = true; if (t.hidePopover) try { t.hidePopover(); } catch { /* déjà fermé */ } }, duree);
-}
-
-function dateCourte(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-}
-
 function pastilleStatut(p) {
   const restants = (p.doutes || []).filter((d) => !d.leve).length;
   const span = document.createElement("span");
   if (p.type === "idee") { span.className = "pastille p-idee"; span.textContent = "Idée"; }
   else if (p.type === "morceau") { span.className = "pastille p-morceau"; span.textContent = "Morceau"; }
   else if (p.statut === "prete") { span.className = "pastille p-ok"; span.textContent = "Prête"; }
-  else { span.className = "pastille p-doute"; span.textContent = restants ? `À relire · ${restants} doute${restants > 1 ? "s" : ""}` : "À relire"; }
+  else { span.className = "pastille p-doute"; span.textContent = restants ? `À relire · ${pluriel(restants, "doute")}` : "À relire"; }
   return span;
 }
 
@@ -388,8 +366,6 @@ async function rafraichirOuverte() {
   montrer(etat.vue);
 }
 
-const heure = (iso) => new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-
 function afficherSynchro(e) {
   if (e) dernierEtat = e;
   const actif = synchronisable();
@@ -413,7 +389,7 @@ function afficherSynchro(e) {
     return;
   }
   const d = dernierEtat || { etat: "encours" };
-  const attente = d.attente ? ` · ${d.attente} modification${d.attente > 1 ? "s" : ""} en attente` : "";
+  const attente = d.attente ? ` · ${pluriel(d.attente, "modification")} en attente` : "";
   if (d.etat === "encours") $("mode").textContent = "Synchronisation…";
   else if (d.etat === "ok") $("mode").textContent = `Synchronisé à ${heure(d.le)}` + attente;
   else $("mode").textContent = (navigator.onLine === false ? "Hors ligne" : "Synchronisation impossible") + attente;
@@ -493,7 +469,8 @@ async function sauvegarderBibliotheque() {
     const contenu = await sauvegarde(etat.stockage, etat.partitions);
     const jour = new Date().toISOString().slice(0, 10);
     await etat.stockage.enregistrerFichier(`Portée - sauvegarde ${jour}.json`, new Blob([JSON.stringify(contenu)], { type: "application/json" }));
-    toast(`${contenu.partitions.length} partition${contenu.partitions.length > 1 ? "s" : ""} sauvegardée${contenu.partitions.length > 1 ? "s" : ""}.`);
+    const n = contenu.partitions.length;
+    toast(`${pluriel(n, "partition")} ${accorde(n, "sauvegardée")}.`);
   } catch (e) {
     if (e && e.code === "declined") return;
     toast("La sauvegarde n'a pas abouti : " + (e.message || e.code || "erreur"));
@@ -516,17 +493,16 @@ async function restaurerBibliotheque(fichier) {
  * quelles), et lesquelles n'ont pas pu revenir, avec la raison.
  */
 function bilanRestauration({ revenues = 0, ignorees = 0, differentes = 0, echecs = [] }) {
-  const pluriel = (n, un, plusieurs) => (n > 1 ? plusieurs : un);
   if (!revenues && !echecs.length) return ignorees ? "Rien à restaurer : tout est déjà dans ta bibliothèque." : "Cette sauvegarde est vide.";
   const morceaux = [];
-  if (revenues) morceaux.push(`${revenues} ${pluriel(revenues, "partition revenue", "partitions revenues")}`);
+  if (revenues) morceaux.push(pluriel(revenues, "partition revenue", "partitions revenues"));
   if (ignorees) {
-    const changees = differentes ? ` (dont ${differentes} ${pluriel(differentes, "modifiée depuis, gardée telle quelle", "modifiées depuis, gardées telles quelles")})` : "";
+    const changees = differentes ? ` (dont ${pluriel(differentes, "modifiée depuis, gardée telle quelle", "modifiées depuis, gardées telles quelles")})` : "";
     morceaux.push(`${ignorees} déjà là${changees}`);
   }
   if (echecs.length) {
     const lesquelles = echecs.slice(0, 3).map((x) => `« ${x.titre} » (${x.raison})`).join(", ") + (echecs.length > 3 ? "…" : "");
-    morceaux.push(`${echecs.length} ${pluriel(echecs.length, "n'a pas pu revenir", "n'ont pas pu revenir")} : ${lesquelles}`);
+    morceaux.push(`${pluriel(echecs.length, "n'a pas pu revenir", "n'ont pas pu revenir")} : ${lesquelles}`);
   }
   return morceaux.join(" · ") + ".";
 }
@@ -594,8 +570,8 @@ async function importerMidi(f) {
     statut: "idee", nbPages: 0, modele: null, tempo: sequence.tempo, note: "", etiquettes: [], favori: false, memo: null,
     creeLe: maintenant, modifieLe: maintenant,
   }, []);
-  const laisse = [ecartees.pistes ? `${ecartees.pistes} piste${ecartees.pistes > 1 ? "s" : ""} de plus` : "", ecartees.batterie ? "la batterie" : ""].filter(Boolean).join(" et ");
-  toast(`« ${titre} » : ${nb} note${nb > 1 ? "s" : ""}, une idée de plus.${laisse ? ` Laissées de côté : ${laisse} (une idée garde quatre pistes, sans percussions).` : ""}`, laisse ? 8000 : 4000);
+  const laisse = [ecartees.pistes ? `${pluriel(ecartees.pistes, "piste")} de plus` : "", ecartees.batterie ? "la batterie" : ""].filter(Boolean).join(" et ");
+  toast(`« ${titre} » : ${pluriel(nb, "note")}, une idée de plus.${laisse ? ` Laissées de côté : ${laisse} (une idée garde quatre pistes, sans percussions).` : ""}`, laisse ? 8000 : 4000);
   return id;
 }
 
@@ -622,7 +598,7 @@ async function enregistrerLecture({ titre, modele, pages, source = null }) {
     creeLe: maintenant,
     modifieLe: maintenant,
   }, pages);
-  toast(`« ${titre} » est lue : ${res.doutes.length ? `${res.doutes.length} point${res.doutes.length > 1 ? "s" : ""} à vérifier` : "rien à signaler"}.`);
+  toast(`« ${titre} » est lue : ${res.doutes.length ? `${pluriel(res.doutes.length, "point")} à vérifier` : "rien à signaler"}.`);
   return id;
 }
 
@@ -968,7 +944,7 @@ function pastilleBarre(p) {
   const s = document.createElement("span");
   const restants = (p.doutes || []).filter((d) => !d.leve).length;
   if (p.statut === "prete") { s.className = "pastille p-ok"; s.textContent = "Prête"; }
-  else { s.className = "pastille p-doute"; s.textContent = restants ? `${restants} doute${restants > 1 ? "s" : ""}` : "À relire"; }
+  else { s.className = "pastille p-doute"; s.textContent = restants ? pluriel(restants, "doute") : "À relire"; }
   return s;
 }
 
@@ -981,7 +957,7 @@ function majStatut() {
 function infosPage() {
   const p = etat.courante;
   const n = etat.pages.length || p.nbPages || 1;
-  return `${n} page${n > 1 ? "s" : ""} · lue ${dateRelative(p.creeLe)}`;
+  return `${pluriel(n, "page")} · lue ${dateRelative(p.creeLe)}`;
 }
 
 /** Le texte ABC de l'atelier ; il en garde la valeur d'avant pour suivre les doutes. */
@@ -997,7 +973,6 @@ async function afficherAtelier() {
   if (historiqueVu !== etat.historique) { historiqueVu = etat.historique; manuel = null; }
   $("titre").value = p.titre;
   poserAbc(p.abc);
-  $("confirmer").hidden = true;
   $("infos-atelier").textContent = infosPage();
   $("enregistre").textContent = "";
   $("annuler").disabled = etat.historique.length === 0;
@@ -1502,7 +1477,6 @@ function afficherLecteur() {
   const p = etat.courante;
   placerOnglets("vue-lecteur");
   $("titre-lecteur").textContent = p.titre;
-  $("confirmer-lecteur").hidden = true;
   majStatut();
   const k = (p.abc.match(/^K:(.*)$/m) || [])[1] || "C";
   const m0 = (p.abc.match(/^M:(.*)$/m) || [])[1];
@@ -1624,7 +1598,7 @@ async function ecouterIdee(p, bouton) {
 function resumeIdee(seq) {
   if (!seq) return "";
   const notes = seq.pistes.reduce((n, p) => n + p.notes.length, 0);
-  return `${notes} note${notes > 1 ? "s" : ""} · ♩ ${seq.tempo}`;
+  return `${pluriel(notes, "note")} · ♩ ${seq.tempo}`;
 }
 
 /**
@@ -1771,13 +1745,10 @@ function brancher() {
   });
   document.addEventListener("keydown", clavier);
   document.addEventListener("keyup", (e) => { if (etat.vue === "idee" && editeur.toucheHaut(e)) e.preventDefault(); });
-  // Supprimer : la feuille « ••• » demande confirmation sous la barre, comme avant.
-  $("supprimer").addEventListener("click", () => { $("confirmer").hidden = false; window.scrollTo({ top: 0, behavior: "smooth" }); });
-  $("supprimer-lecteur").addEventListener("click", () => { $("confirmer-lecteur").hidden = false; window.scrollTo({ top: 0, behavior: "smooth" }); });
-  $("confirmer-non").addEventListener("click", () => { $("confirmer").hidden = true; });
-  $("confirmer-lecteur-non").addEventListener("click", () => { $("confirmer-lecteur").hidden = true; });
-  $("confirmer-oui").addEventListener("click", supprimerOuverte);
-  $("confirmer-lecteur-oui").addEventListener("click", supprimerOuverte);
+  // Supprimer : la même question que depuis le carnet (dialogue.js), plutôt qu'un bandeau sous la barre.
+  const demanderSuppression = async () => { if (etat.courante && (await veutSupprimer(etat.courante, etat.partitions))) supprimerOuverte(); };
+  $("supprimer").addEventListener("click", demanderSuppression);
+  $("supprimer-lecteur").addEventListener("click", demanderSuppression);
 
   // Lecteur
   const voixMuettes = () => new Set([...($("main-droite").checked ? [] : [1]), ...($("main-gauche").checked ? [] : [2])]);
@@ -1888,7 +1859,7 @@ async function actionIdee(action, p) {
       return ouvrir(id);
     }
     case "supprimer": {
-      if (!(await veutSupprimer(p))) return undefined;
+      if (!(await veutSupprimer(p, etat.partitions))) return undefined;
       await editeur.fermer();
       await supprimerDeLaBibliotheque(p);
       return montrer("biblio");
@@ -1901,52 +1872,10 @@ async function actionIdee(action, p) {
   }
 }
 
-/**
- * Faut-il supprimer `p` (partition, idée ou morceau) ? La question se pose
- * dans la fenêtre de l'appli, pas avec window.confirm : celle du navigateur
- * ne suit pas l'ambiance de l'appli, et une page intégrée (claude.ai) peut
- * ne pas avoir le droit de l'ouvrir, la réponse est alors « non » sans rien
- * montrer. Une idée qui sert dans un morceau le dit : sa partie y sera sautée.
- */
-async function veutSupprimer(p) {
-  const quoi = p.type === "morceau" ? "le morceau" : p.type === "idee" ? "l'idée" : "la partition";
-  let texte = "Ses pages partent avec elle. C'est définitif.";
-  if (p.type === "morceau") texte = "Ses idées restent dans ta bibliothèque. C'est définitif.";
-  if (p.type === "idee") {
-    const morceaux = etat.partitions.filter((m) => m.type === "morceau" && (m.blocs || []).some((b) => b.idee === p.id)).map((m) => `« ${m.titre} »`);
-    texte = morceaux.length ? `Elle sert dans ${morceaux.join(", ")} : cette partie y sera sautée. C'est définitif.` : "C'est définitif.";
-  }
-  return (await dialogue(`Supprimer ${quoi} « ${p.titre} » ?`, texte, [{ valeur: "supprimer", texte: "Supprimer", danger: true }])) === "supprimer";
-}
-
 /** Supprime `p` de la bibliothèque (et des autres appareils, par la synchro). */
 async function supprimerDeLaBibliotheque(p) {
   await etat.stockage.supprimer(p.id, p.type ? 0 : p.nbPages || 0);
   toast(`« ${p.titre} » est supprimé${p.type === "morceau" ? "" : "e"}.`);
-}
-
-/** Une petite fenêtre : un titre, des boutons ; rend la valeur du bouton choisi (ou null). */
-function dialogue(titre, texte, choix) {
-  const d = $("dialogue");
-  const f = $("dialogue-dedans");
-  f.textContent = "";
-  const h = document.createElement("h2"); h.textContent = titre;
-  const p = document.createElement("p"); p.className = "remarque"; p.textContent = texte;
-  const liste = document.createElement("div"); liste.className = "liste-choix";
-  for (const c of choix) {
-    const b = document.createElement("button");
-    b.className = "btn" + (c.plein ? " btn-plein" : "") + (c.danger ? " btn-danger" : "");
-    b.value = c.valeur; b.textContent = c.texte;
-    liste.appendChild(b);
-  }
-  const annuler = document.createElement("button");
-  annuler.className = "btn btn-petit"; annuler.value = ""; annuler.textContent = "Annuler";
-  f.append(h, p, liste, annuler);
-  return new Promise((ok) => {
-    d.addEventListener("close", () => ok(d.returnValue || null), { once: true });
-    d.returnValue = "";
-    d.showModal();
-  });
 }
 
 /** « Ajouter à un morceau » : un morceau existant, ou un nouveau. */
@@ -1954,7 +1883,7 @@ async function choisirMorceau(p) {
   const morceaux = etat.partitions.filter((x) => x.type === "morceau");
   const choix = await dialogue("Ajouter à un morceau", `« ${p.titre} » devient un bloc du morceau choisi.`, [
     { valeur: "nouveau", texte: "+ Un nouveau morceau", plein: true },
-    ...morceaux.map((x) => ({ valeur: x.id, texte: `${x.titre} (${(x.blocs || []).length} bloc${(x.blocs || []).length > 1 ? "s" : ""})` })),
+    ...morceaux.map((x) => ({ valeur: x.id, texte: `${x.titre} (${pluriel((x.blocs || []).length, "bloc")})` })),
   ]);
   if (!choix) return;
   await editeur.fermer();
@@ -1973,7 +1902,7 @@ function creerVueDuMorceau() {
     exporterMusicXml,
     ouvrirIdee: (id) => ouvrir(id),
     quitter: () => montrer("biblio"),
-    veutSupprimer,
+    veutSupprimer: (p) => veutSupprimer(p, etat.partitions),
   });
 }
 
@@ -1985,9 +1914,9 @@ function creerAccueilDeLAppli() {
     enLecture: (bouton) => transport.actif && transport.carte === bouton,
     arreter: () => transport.arreter(),
     partagerMidi, exporterMidi,
-    supprimer: async (p) => { if (await veutSupprimer(p)) await supprimerDeLaBibliotheque(p); },
+    supprimer: async (p) => { if (await veutSupprimer(p, etat.partitions)) await supprimerDeLaBibliotheque(p); },
     etiquettes: toutesEtiquettes,
-    dateCourte, resumeIdee, nomModele, pastilleStatut,
+    resumeIdee, nomModele, pastilleStatut,
   });
 }
 

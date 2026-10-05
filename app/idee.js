@@ -38,7 +38,8 @@ import { fichierMidi } from "./midi.js";
 import { voixCompletes, transposerIdee, STYLES } from "./harmonie.js";
 import { creerGrille } from "./grille.js";
 import { ico } from "./icones.js";
-import { echapper } from "./ui.js";
+import { $, dateCourte, echapper } from "./ui.js";
+import { confirmer } from "./dialogue.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { creerModeClavier } from "./idee-clavier.js";
 import { creerChant, messageMicro } from "./idee-chant.js";
@@ -48,7 +49,6 @@ import { creerDirect } from "./idee-direct.js";
 import { tempoDesTapes } from "./transport.js";
 import { sessionAudio, garderEveille, laisserDormir } from "./eveil.js";
 
-const $ = (id) => document.getElementById(id);
 const MESURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8", "2/2"];
 const CLE_DEFAUTS = "portee:idee-defauts";
 const CLE_MODE = "portee:mode-idee";
@@ -73,10 +73,7 @@ export function midiDeLIdee(p, { transposition = 0 } = {}) {
   return fichierMidi(voixCompletes(seq), { tempo: seq.tempo, mesure: seq.mesure, quintes: k.quintes, mineur: k.mineur, titre: p.titre, transposition });
 }
 
-const titreDuJour = () => {
-  const d = new Date();
-  return `Idée du ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}, ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
-};
+const titreDuJour = () => `Idée du ${dateCourte(new Date().toISOString())}`;
 
 function defauts() {
   try { return { tempo: 90, mesure: [4, 4], tonalite: "C", ...JSON.parse(lirePref(CLE_DEFAUTS) || "{}") }; } catch { return { tempo: 90, mesure: [4, 4], tonalite: "C" }; }
@@ -680,7 +677,10 @@ export function creerEditeurIdee(deps) {
   });
   $("memo-enregistrer").addEventListener("click", memoEnregistrer);
   $("memo-ecouter").addEventListener("click", memoEcouter);
-  $("memo-effacer").addEventListener("click", () => { if (window.confirm("Effacer le mémo vocal ?")) garderMemo(null); });
+  // La même question que partout ailleurs (dialogue.js), dans l'ambiance de l'appli.
+  $("memo-effacer").addEventListener("click", async () => {
+    if (await confirmer({ titre: "Effacer le mémo vocal ?", texte: "Son enregistrement part avec lui. C'est définitif.", oui: "Effacer" })) garderMemo(null);
+  });
 
   // --- Affichage ------------------------------------------------------------------
 

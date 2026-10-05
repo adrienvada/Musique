@@ -1942,7 +1942,24 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Architecture (T3 à T5)
 
-<!-- lot architecture -->
+- **Les petits outils de l'interface sont à un seul endroit (`app/ui.js`,
+  T3).** `$` était redéfini dans six fichiers, `pluriel` dans quatre, et une
+  vingtaine de pluriels étaient écrits sur place (`note${n > 1 ? "s" : ""}`).
+  `ui.js` a maintenant `$`, `el`, `pluriel` et `accorde` (« 3 notes
+  jouées »), les dates dites court (`dateCourte`, `dateRelative`, `heure`)
+  et le message passager (`toast`). Les textes n'ont pas changé.
+  - Pourquoi `ui.js` touche la page par `globalThis` : il est vérifié par
+    `npm run types` sans le DOM, et importé par les tests sous Node.
+- **Une seule façon de demander « Supprimer ? » (`app/dialogue.js`).** Il y
+  en avait trois : la fenêtre de l'appli depuis le carnet, un bandeau sous
+  la barre dans « Corriger » et « Écouter », et `window.confirm` pour effacer
+  le mémo vocal (celle du navigateur ne suit pas l'ambiance, et une page
+  intégrée à claude.ai peut ne pas avoir le droit de l'ouvrir : la réponse
+  y était « non », sans rien montrer). Toutes passent par la fenêtre de
+  l'appli ; les bandeaux `#confirmer` et `#confirmer-lecteur` sont retirés.
+  - **Le focus va sur « Annuler » (I6).** `showModal()` le donnait au
+    premier bouton, « Supprimer » : un Entrée de trop supprimait.
+  - Essai : `tests/e2e/ecrans.test.mjs` (« supprimer une page lue »).
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

@@ -41,7 +41,7 @@ import {
   lireAccord, nomRacine, joliAccord, QUALITES,
 } from "./harmonie.js";
 import { ico } from "./icones.js";
-import { echapper } from "./ui.js";
+import { accorde, echapper, pluriel } from "./ui.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 
 /** Les six accords du pupitre : ceux de la roue, sans l'accord diminué (qui sonne rarement seul). */
@@ -280,7 +280,7 @@ export function creerAccords(ctx) {
     zone.innerHTML = html + `<i class="apercu-tete" id="accords-tete" hidden></i>`;
     placerTete();
     const style = STYLES.find((s) => s.id === (e.seq.accompagnement || "aucun"));
-    zone.setAttribute("aria-label", `Mesure ${m + 1} : ${melodie.length} note${melodie.length > 1 ? "s" : ""} de mélodie, ${acc.length} d'accompagnement (${style ? style.nom.toLowerCase() : "sans"})`);
+    zone.setAttribute("aria-label", `Mesure ${m + 1} : ${pluriel(melodie.length, "note")} de mélodie, ${acc.length} d'accompagnement (${style ? style.nom.toLowerCase() : "sans"})`);
   }
 
   /** La tête de lecture de l'aperçu, pendant « Écouter la mesure ». */
@@ -504,10 +504,10 @@ export function creerAccords(ctx) {
       if (!e.seq.accompagnement || e.seq.accompagnement === "aucun") e.seq.accompagnement = "plaque";
     });
     suivreCouleur(autour(ouverte.d).actuel);
-    const n = e.seq.accords.length, s = n > 1 ? "s" : "";
+    const n = e.seq.accords.length, proposes = `${pluriel(n, "accord")} ${accorde(n, "proposé")}`;
     dire(avait
-      ? `${n} accord${s} proposé${s} d'après ta mélodie, à la place de ceux d'avant (« Annuler » les rend).`
-      : `${n} accord${s} proposé${s} d'après ta mélodie. Écoute, puis change ceux qui ne te plaisent pas.`, 9000);
+      ? `${proposes} d'après ta mélodie, à la place de ceux d'avant (« Annuler » les rend).`
+      : `${proposes} d'après ta mélodie. Écoute, puis change ceux qui ne te plaisent pas.`, 9000);
   });
 
   return {

@@ -10,9 +10,7 @@ import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { ico } from "./icones.js";
 import { SortieMidi, sortieMidiPossible } from "./sortie-midi.js";
 import { creerDossierMidi, dossierMidiPossible, baseAppareil } from "./dossier-midi.js";
-
-const $ = (id) => document.getElementById(id);
-const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
+import { $, pluriel } from "./ui.js";
 
 /**
  * @param o {

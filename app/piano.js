@@ -40,6 +40,7 @@
  * crée et se réveille dans le geste qui joue (debut(), pret()).
  */
 import { sessionAudio } from "./eveil.js";
+import { accorde, pluriel } from "./ui.js";
 
 /** Le niveau de la sortie, avant le limiteur. */
 export const GAIN_SORTIE = 0.6;
@@ -371,7 +372,7 @@ export class Piano {
     const manques = [...c.etats.values()].filter((e) => e === "echec").length;
     if (!enCours && manques && c.echantillons.length && c.nom === this.index.base && !c.signale) {
       c.signale = true;
-      this.signaler(`${manques} note${manques > 1 ? "s" : ""} du piano n'${manques > 1 ? "ont" : "a"} pas pu se télécharger : ${manques > 1 ? "leurs voisines les remplacent" : "sa voisine la remplace"}.`);
+      this.signaler(`${pluriel(manques, "note")} du piano n'${accorde(manques, "a", "ont")} pas pu se télécharger : ${accorde(manques, "sa voisine la remplace", "leurs voisines les remplacent")}.`);
     }
     if (!manques) c.signale = false;
   }
