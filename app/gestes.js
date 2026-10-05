@@ -76,7 +76,7 @@ export function creerGestes(deps) {
   async function choisirMorceau(p) {
     const morceaux = deps.partitions().filter((x) => x.type === "morceau");
     const choix = await dialogue("Ajouter à un morceau", `« ${p.titre} » devient un bloc du morceau choisi.`, [
-      { valeur: "nouveau", texte: "+ Un nouveau morceau", plein: true },
+      { valeur: "nouveau", texte: "Un nouveau morceau", icone: "plus", plein: true },
       ...morceaux.map((x) => ({ valeur: x.id, texte: `${x.titre} (${pluriel((x.blocs || []).length, "bloc")})` })),
     ]);
     if (!choix) return;

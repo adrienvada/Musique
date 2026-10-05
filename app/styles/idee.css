@@ -14,9 +14,6 @@ body.plein main { flex: 1 1 auto; min-height: 0; max-width: none; width: 100%; m
 body.plein .vue-idee { height: 100%; }
 .vue-idee {
   gap: 0; min-width: 0;
-  /* Le texte sur le jaune du surligneur reste sombre dans les trois ambiances
-     (systeme.css n'a pas de jeton pour lui : celui du piano s'y prête). */
-  --sur-surligneur: var(--touche-noire);
   /* La hauteur du contenu d'un mode du pupitre : la même pour les trois, la
      grille ne saute pas quand on passe de l'un à l'autre. */
   --pupitre-mode: clamp(176px, 25dvh, 236px);
@@ -53,19 +50,18 @@ body.plein .vue-idee { height: 100%; }
    ajoutent dès que la barre a la place. Son nom (aria-label, et la bulle de
    l'appui long) dit toujours les trois. */
 .idee-titres { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 2px; }
-.idee-titre { flex: 1 1 auto; width: 100%; min-width: 0; min-height: 44px; font-family: var(--f-titre); font-size: 1.12rem; line-height: 1.25; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 1px 6px; margin: 0; text-overflow: ellipsis; }
+.idee-titre { flex: 1 1 auto; width: 100%; min-width: 0; min-height: 44px; font-family: var(--f-titre); font-size: var(--t-18); line-height: 1.25; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: var(--r-8); padding: 1px 6px; margin: 0; text-overflow: ellipsis; }
 .idee-titre:hover, .idee-titre:focus { border-color: var(--bord-champ); background: var(--creux); }
 .idee-titre:focus { outline: none; }
-.idee-resume { flex: none; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; border: 0; border-radius: 999px; background: none; padding: 0 8px 0 6px; color: var(--gris); font-size: 0.86rem; line-height: 1.2; cursor: pointer; white-space: nowrap; }
+.idee-resume { flex: none; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; border: 0; border-radius: var(--r-plein); background: none; padding: 0 8px 0 6px; color: var(--gris); font-size: var(--t-14); line-height: 1.2; cursor: pointer; white-space: nowrap; }
 .idee-resume:hover { color: var(--encre); background: var(--creux); }
 .idee-resume .resume-suite { display: none; }
 @media (min-width: 700px) { .idee-resume .resume-suite { display: inline; } }
-.idee-piste-puce { flex: none; padding: 0 12px; font-size: 0.82rem; margin-right: 2px; }
+.idee-piste-puce { flex: none; padding: 0 12px; font-size: var(--t-13); margin-right: 2px; }
 
 /* La grille ou la partition : tout l'espace entre la barre et le pupitre */
 .idee-surface { flex: 1 1 auto; min-height: 140px; position: relative; overflow: hidden; background: var(--papier); }
 #idee-grille { position: absolute; inset: 0; }
-.idee-mode { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* La partition : la gravure remplit la place de la grille */
 .idee-partition { position: absolute; inset: 0; overflow: auto; padding: 8px 10px 28px; background: var(--papier); }
@@ -73,7 +69,7 @@ body.plein .vue-idee { height: 100%; }
 #idee-gravure svg { cursor: pointer; }
 #idee-gravure .abcjs-note.choisie, #idee-gravure .abcjs-note.choisie * { fill: var(--stylo); color: var(--stylo); }
 #idee-gravure .abcjs-note.joue, #idee-gravure .abcjs-note.joue * { fill: var(--surligneur); color: var(--surligneur); }
-.caret { position: absolute; width: 2px; background: var(--stylo); border-radius: 1px; pointer-events: none; animation: clignote 1.1s steps(2, start) infinite; }
+.caret { position: absolute; width: 2px; background: var(--stylo); border-radius: var(--r-trait); pointer-events: none; animation: clignote 1.1s steps(2, start) infinite; }
 @keyframes clignote { to { visibility: hidden; } }
 
 /* Le pupitre : le transport, les modes, le contenu du mode */
@@ -106,9 +102,9 @@ body.plein .vue-idee { height: 100%; }
 .g-regle-dedans { position: relative; height: 100%; }
 .g-mesure { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--trait-fort); }
 .g-mesure.choisie { background: var(--stylo-doux); }
-.g-numero { position: absolute; left: 5px; top: 50%; transform: translateY(-50%); font-family: var(--f-code); font-size: 0.7rem; color: var(--gris); font-variant-numeric: tabular-nums; pointer-events: none; }
-.g-accord { position: absolute; top: 50%; transform: translateY(-50%); min-height: 30px; min-width: 36px; padding: 0 4px; border: 0; background: none; font-family: var(--f-titre); font-size: 1.02rem; line-height: 1; color: var(--stylo); white-space: nowrap; cursor: pointer; }
-.g-ajouter { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); min-height: 30px; padding: 0 4px; border: 0; background: none; display: none; align-items: center; gap: 3px; color: var(--stylo); font-size: 0.82rem; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.g-numero { position: absolute; left: 5px; top: 50%; transform: translateY(-50%); font-family: var(--f-code); font-size: var(--t-11); color: var(--gris); font-variant-numeric: tabular-nums; pointer-events: none; }
+.g-accord { position: absolute; top: 50%; transform: translateY(-50%); min-height: 30px; min-width: 36px; padding: 0 4px; border: 0; background: none; font-family: var(--f-titre); font-size: var(--t-16); line-height: 1; color: var(--stylo); white-space: nowrap; cursor: pointer; }
+.g-ajouter { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); min-height: 30px; padding: 0 4px; border: 0; background: none; display: none; align-items: center; gap: 3px; color: var(--stylo); font-size: var(--t-13); font-weight: 500; white-space: nowrap; cursor: pointer; }
 .g-mesure.choisie .g-ajouter { display: inline-flex; }
 @media (hover: hover) { .g-mesure:hover .g-ajouter { display: inline-flex; } }
 .g-repere { position: absolute; bottom: 0; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 7px solid var(--stylo); transform: translateX(-6px); pointer-events: none; }
@@ -116,9 +112,9 @@ body.plein .vue-idee { height: 100%; }
 /* La bande des touches : un petit piano sombre, les noms des notes à droite. */
 .g-touches { overflow: hidden; position: relative; border-right: 1px solid var(--trait); background: var(--feuille); }
 .g-touches-dedans { position: relative; }
-.g-touche { position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; font-family: var(--f-code); font-size: 0.64rem; color: var(--gris); cursor: pointer; }
+.g-touche { position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; font-family: var(--f-code); font-size: var(--t-10); color: var(--gris); cursor: pointer; }
 .g-touche.do { color: var(--encre); font-weight: 600; box-shadow: inset 0 -1px 0 var(--trait-fort); }
-.g-touche.noire::before { content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: 56%; border-radius: 0 4px 4px 0; background: var(--touche-noire); box-shadow: inset 0 0 0 1px var(--trait); }
+.g-touche.noire::before { content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: 56%; border-radius: 0 var(--r-4) var(--r-4) 0; background: var(--touche-noire); box-shadow: inset 0 0 0 1px var(--trait); }
 .g-defil { overflow: auto; touch-action: pan-x pan-y; overscroll-behavior: contain; position: relative; }
 .g-plan { position: relative; }
 .g-fond { position: absolute; inset: 0; }
@@ -133,25 +129,25 @@ body.plein .vue-idee { height: 100%; }
 .g-fond .g-temps { stroke: var(--trait-fort); }
 .g-fond .g-pas { stroke: var(--trait); stroke-opacity: 0.8; }
 .g-notes { position: absolute; inset: 0; }
-.g-note { position: absolute; background: var(--stylo); border-radius: 5px; color: var(--sur-stylo); font-size: 0.68rem; font-weight: 600; overflow: hidden; touch-action: none; cursor: grab; display: flex; align-items: center; padding-left: 5px; white-space: nowrap; letter-spacing: 0.01em; }
+.g-note { position: absolute; background: var(--stylo); border-radius: var(--r-4); color: var(--sur-stylo); font-size: var(--t-11); font-weight: 600; overflow: hidden; touch-action: none; cursor: grab; display: flex; align-items: center; padding-left: 5px; white-space: nowrap; letter-spacing: 0.01em; }
 /* La note choisie : le surligneur, un anneau de la couleur du fond pour la
    détacher (un bord brun la salissait). */
-.g-note.choisie { background: var(--surligneur); color: var(--sur-surligneur); box-shadow: 0 0 0 2px var(--papier), 0 0 0 3.5px var(--surligneur); z-index: 1; }
+.g-note.choisie { background: var(--surligneur); color: var(--sur-surligneur); box-shadow: 0 0 0 2px var(--papier), 0 0 0 3.5px var(--surligneur); z-index: var(--z-dessus); }
 .g-note.autre { background: var(--trait-fort); opacity: 0.55; pointer-events: none; }
 .g-note .g-bord { position: absolute; right: 0; top: 0; bottom: 0; width: 7px; cursor: ew-resize; border-right: 2px solid color-mix(in srgb, currentColor 40%, transparent); }
 .g-curseur { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--stylo); pointer-events: none; transform: translateX(-1px); }
-.g-lecture { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: var(--surligneur); box-shadow: 0 0 0 0.5px var(--alerte), 0 0 10px color-mix(in srgb, var(--surligneur) 55%, transparent); pointer-events: none; z-index: 2; }
+.g-lecture { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: var(--surligneur); box-shadow: 0 0 0 0.5px var(--alerte), var(--lueur); pointer-events: none; z-index: var(--z-tete); }
 .g-invite { position: absolute; left: 60px; right: 16px; top: 45%; text-align: center; color: var(--gris); pointer-events: none; margin: 0; }
 
 /* Les feuilles de l'idée (Tempo, •••, Carnet, accords) */
 .idee-feuille[open] { display: flex; flex-direction: column; gap: 14px; }
 .idee-feuille .feuille-tete { margin-bottom: 0; }
-.idee-feuille .feuille-tete .idee-etat { font-size: 0.8rem; white-space: nowrap; }
+.idee-feuille .feuille-tete .idee-etat { font-size: var(--t-13); white-space: nowrap; }
 
 /* Tempo et mesure */
 .tempo-grand { display: flex; align-items: center; justify-content: center; gap: 22px; }
 .tempo-chiffre { display: flex; flex-direction: column; align-items: center; min-width: 128px; }
-#idee-tempo-val { font-family: var(--f-titre); font-size: 3.4rem; line-height: 1; font-variant-numeric: tabular-nums; }
+#idee-tempo-val { font-family: var(--f-titre); font-size: var(--t-56); line-height: 1; font-variant-numeric: tabular-nums; }
 .tempo-curseur { width: 100%; accent-color: var(--stylo); margin: 0; }
 .idee-taper { min-height: 56px; width: 100%; }
 .reglage-bloc { display: flex; flex-direction: column; gap: 6px; }
@@ -161,21 +157,21 @@ body.plein .vue-idee { height: 100%; }
 .reglage-bloc .seg > button { min-width: 56px; }
 .idee-raccourcis { display: none; }
 @media (pointer: fine) { .idee-raccourcis { display: block; } }
-.idee-raccourcis kbd { font-family: var(--f-code); font-size: 0.78rem; border: 1px solid var(--trait-fort); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--encre); }
+.idee-raccourcis kbd { font-family: var(--f-code); font-size: var(--t-13); border: 1px solid var(--trait-fort); border-bottom-width: 2px; border-radius: var(--r-4); padding: 0 4px; color: var(--encre); }
 .idee-zoom { gap: 10px 24px; }
 .idee-zoom-axe { display: inline-flex; align-items: center; gap: 6px; }
-.idee-zoom-axe > span { min-width: 4.4em; font-size: 0.9rem; color: var(--gris); }
+.idee-zoom-axe > span { min-width: 4.4em; font-size: var(--t-15); color: var(--gris); }
 .idee-zoom-aide { display: none; }
 @media (pointer: coarse) { .idee-zoom-aide { display: block; } }
 .idee-fini { width: 100%; min-height: 48px; }
 
 /* ••• : une liste d'actions, une icône chacune */
 .idee-actions { display: flex; flex-direction: column; gap: 6px; }
-.idee-actions .btn { justify-content: flex-start; gap: 14px; min-height: 50px; padding: 0 16px; font-size: 1rem; background: var(--creux); border-color: transparent; }
+.idee-actions .btn { justify-content: flex-start; gap: 14px; min-height: 50px; padding: 0 16px; font-size: var(--t-16); background: var(--creux); border-color: transparent; }
 .idee-actions .btn:hover { border-color: var(--trait-fort); }
 
 /* Le carnet d'une idée */
-.info-champ { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; color: var(--gris); }
+.info-champ { display: flex; flex-direction: column; gap: 6px; font-size: var(--t-14); color: var(--gris); }
 .info-champ textarea { width: 100%; flex: none; resize: vertical; color: var(--encre); }
 .info-champ .etiquettes { display: flex; flex-wrap: wrap; gap: 6px; }
 .info-champ .etiquettes:empty { display: none; }
@@ -189,5 +185,5 @@ body.plein .vue-idee { height: 100%; }
   .g-accord { min-width: 44px; }
 }
 @media (min-width: 821px) {
-  .idee-titre { font-size: 1.3rem; }
+  .idee-titre { font-size: var(--t-20); }
 }

@@ -16,13 +16,15 @@
  * les touches aux fenêtres ouvertes, app.js).
  */
 import { $, el } from "./ui.js";
+import { ico } from "./icones.js";
 
 /**
  * Une petite fenêtre : un titre, une phrase, des boutons ; rend la valeur du
  * bouton choisi, ou null (Annuler, Échap, précédent).
  * @param {string} titre
  * @param {string} texte
- * @param {{ valeur: string, texte: string, plein?: boolean, danger?: boolean }[]} choix
+ * @param {{ valeur: string, texte: string, icone?: string, plein?: boolean, danger?: boolean }[]} choix
+ *   `icone` : le nom d'une icône d'icones.js, devant le texte (« + » ne s'écrit pas en caractère).
  */
 export function dialogue(titre, texte, choix) {
   const d = $("dialogue");
@@ -31,6 +33,7 @@ export function dialogue(titre, texte, choix) {
   const liste = el("div", "liste-choix");
   for (const c of choix) {
     const b = el("button", "btn" + (c.plein ? " btn-plein" : "") + (c.danger ? " btn-danger" : ""), c.texte);
+    if (c.icone) b.insertAdjacentHTML("afterbegin", ico(c.icone, "s"));
     b.value = c.valeur;
     liste.appendChild(b);
   }

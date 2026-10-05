@@ -2828,6 +2828,44 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   trois touchers sur ↑ pouvaient agrandir la page. Ce qui suit le doigt (les
   notes de la grille, les poignées, le clavier) garde son `touch-action:
   none`.
+- **Plus de caractère en guise d'icône (I2).** Dièse, bémol et bécarre, dans
+  les outils de « Corriger », s'écrivaient ♯ ♭ ♮ dans la police des titres :
+  ce sont trois icônes d'`icones.js` (`diese`, `bemol`, `becarre`), au trait
+  comme les autres, les traits de travers plus épais comme gravés. Le tempo
+  de l'écoute et du « ••• » du morceau (« ♩ = 90 ») s'écrit comme dans le
+  résumé du morceau : l'icône de la noire, puis le nombre (`.tempo-noire`) ;
+  `ecran-lecteur.js` et `vue-morceau.js` n'écrivent plus que le nombre.
+  « + Un nouveau morceau » (Ajouter à un morceau) prend l'icône « plus » :
+  `dialogue()` accepte une icône par choix (`icone`). Restent des ♯ et ♭
+  dans les noms de notes et d'accords (« fa♯ », « Si♭ majeur ») : c'est du
+  texte, pas une icône. Le résumé d'une idée dans le carnet (« 12 notes ·
+  ♩ 90 ») est dans `accueil.js`, à l'autre moitié du lot.
+- **Les jetons qui manquaient sont dans le système (I2).** Seize tailles de
+  texte (`--t-10` à `--t-72`, nommées par leur taille à 16 px) au lieu de
+  cinquante, toutes en rem : elles suivent la taille de texte choisie dans le
+  navigateur, le corps compris (il était à 15 px fixes). Huit rayons
+  (`--r-trait`, `--r-4` … `--r-22`, `--r-plein`) au lieu de vingt-trois ;
+  chaque valeur est allée au plus proche (un écart d'un ou deux pixels). Les
+  onze couches (`--z-…`, du fond aux bulles), à un seul endroit, chacune avec
+  ce qu'elle porte. Les vraies ombres et les lueurs (`--ombre`,
+  `--ombre-douce`, `--lueur`, `--lueur-rouge`) ; les anneaux (une ombre sans
+  flou, qui dessine un bord sans prendre de place) gardent leur épaisseur sur
+  place : ce sont des bords, et ils n'emploient que des jetons de couleur.
+  - Plus de couleur brute dans les règles : le voile des fenêtres et des
+    feuilles est `--voile`, le texte sur le rouge `--sur-rouge` (le fond de
+    l'écran, que l'éditeur prenait déjà pour lui), l'impression a ses deux
+    jetons.
+  - Les jetons définis ailleurs reviennent au système : la hauteur des
+    onglets (`bibliotheque.css`), le bleu de la gamme (`idee-clavier.css`),
+    les six couleurs de section (`morceau.css`). `idee.css` redéfinissait
+    `--sur-surligneur` avec un commentaire périmé (le système l'a) : retiré.
+  - Piège : un jeton qui se calcule d'autres jetons (`--gamme-…`,
+    `--section-…`, `--lueur`) se déclare sur `:root, .studio`. Une propriété
+    se calcule là où elle est déclarée : déclaré sur `:root` seul, il
+    garderait dans l'éditeur les couleurs du Papier.
+  - Le composant « visuellement caché » était recopié quatre fois (l'annonce
+    du mode, celle du chant, celle des accords, l'état du morceau) : tous
+    prennent `.visuellement-cache`.
 
 <!-- lot interface -->
 

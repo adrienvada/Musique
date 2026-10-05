@@ -7,25 +7,8 @@
  * bibliothèque (morceau.js : couleursDesIdees).
  */
 
-/* LES SIX COULEURS DE SECTION
- *
- * Elles viennent du système (stylo, surligneur, ok, alerte, danger, gris) et
- * suivent donc le clair et le sombre avec lui. --sur-section-N est le texte
- * qui se lit dessus : en clair, des teintes soutenues sous du blanc ; en
- * sombre, des teintes claires sous du bleu nuit (c'est le rôle de --sur-stylo).
- * Seul le jaune du surligneur est clair dans les deux ambiances : il garde un
- * texte sombre. Définies sur :root parce que la vignette de la bibliothèque
- * les emploie aussi.
- */
-:root {
-  --section-1: var(--stylo);                                              --sur-section-1: var(--sur-stylo);
-  --section-2: var(--surligneur);                                         --sur-section-2: light-dark(var(--encre), var(--sur-stylo));
-  --section-3: var(--ok);                                                 --sur-section-3: var(--sur-stylo);
-  --section-4: color-mix(in oklab, var(--danger) 55%, var(--alerte));     --sur-section-4: var(--sur-stylo);
-  --section-5: color-mix(in oklab, var(--stylo) 55%, var(--danger));      --sur-section-5: var(--sur-stylo);
-  --section-6: var(--gris);                                               --sur-section-6: var(--sur-stylo);
-}
-
+/* LES SIX COULEURS DE SECTION viennent du système (--section-N et --sur-section-N,
+ * systeme.css) : la vignette de la bibliothèque les emploie aussi. */
 .section-1 { --c: var(--section-1); --t: var(--sur-section-1); }
 .section-2 { --c: var(--section-2); --t: var(--sur-section-2); }
 .section-3 { --c: var(--section-3); --t: var(--sur-section-3); }
@@ -43,24 +26,23 @@ main:has(> #vue-morceau:not([hidden])) { max-width: none; padding: 0; }
 .morceau-barre, .frise-zone, .morceau-corps, .morceau-pied { width: 100%; max-width: 760px; margin-left: auto; margin-right: auto; }
 
 /* La barre et la frise restent en haut quand la liste défile. */
-.morceau-tete { position: sticky; top: 0; z-index: 5; background: var(--papier); border-bottom: 1px solid var(--trait); padding-top: env(safe-area-inset-top, 0px); }
+.morceau-tete { position: sticky; top: 0; z-index: var(--z-barre); background: var(--papier); border-bottom: 1px solid var(--trait); padding-top: env(safe-area-inset-top, 0px); }
 /* Le bouton d'écoute est le grand (52 px) : un peu plus haut que --barre pour qu'il respire. */
 .morceau-barre { display: flex; align-items: center; gap: 4px; min-height: calc(var(--barre) + 6px); padding: 2px 8px; }
 .morceau-titrage { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.morceau-titre { font-family: var(--f-titre); font-size: 1.25rem; line-height: 1.2; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 6px; margin: 0 -6px; width: calc(100% + 12px); min-width: 0; min-height: 44px; text-overflow: ellipsis; }
+.morceau-titre { font-family: var(--f-titre); font-size: var(--t-20); line-height: 1.2; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: var(--r-8); padding: 6px; margin: 0 -6px; width: calc(100% + 12px); min-width: 0; min-height: 44px; text-overflow: ellipsis; }
 .morceau-titre:hover, .morceau-titre:focus { border-color: var(--bord-champ); background: var(--feuille); }
-.morceau-resume { display: flex; align-items: center; gap: 6px; margin: -4px 0 0; font-size: 12px; line-height: 16px; color: var(--gris); white-space: nowrap; }
+.morceau-resume { display: flex; align-items: center; gap: 6px; margin: -4px 0 0; font-size: var(--t-12); line-height: 1.34; color: var(--gris); white-space: nowrap; }
 #morceau-duree { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #morceau-duree .ico { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 1px; }
 .morceau-etat { flex: none; display: inline-flex; align-items: center; }
 .morceau-etat .ico { width: 14px; height: 14px; }
 .morceau-etat[data-genre="erreur"] { color: var(--danger); }
-.morceau-etat .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* La frise : un segment par bloc, aussi long que sa durée. */
 .frise-zone { padding: 8px 16px 8px; }
 .frise { position: relative; display: flex; gap: 3px; }
-.frise-seg { flex: 1 1 0; min-width: 14px; height: 44px; border: 0; border-radius: 8px; background: var(--c); color: var(--t); padding: 0 5px 5px; font: 600 11px/1 var(--f-texte); display: flex; align-items: flex-end; justify-content: flex-start; text-align: left; overflow: hidden; white-space: nowrap; cursor: pointer; transition: opacity 0.15s; }
+.frise-seg { flex: 1 1 0; min-width: 14px; height: 44px; border: 0; border-radius: var(--r-8); background: var(--c); color: var(--t); padding: 0 5px 5px; font: 600 var(--t-11)/1 var(--f-texte); display: flex; align-items: flex-end; justify-content: flex-start; text-align: left; overflow: hidden; white-space: nowrap; cursor: pointer; transition: opacity 0.15s; }
 /* Un filet intérieur donne un bord au jaune du surligneur, pâle sur le papier clair. */
 .frise-seg:not(.saute), .choix-vignette { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--encre) 16%, transparent); }
 .frise-seg.choisi { outline: 2px solid var(--encre); outline-offset: 2px; }
@@ -72,25 +54,25 @@ main:has(> #vue-morceau:not([hidden])) { max-width: none; padding: 0; }
 .frise-seg.saute { flex: 0 0 22px; min-width: 22px; padding: 0; background: transparent; border: 1.5px dashed var(--trait-fort); color: var(--gris); align-items: center; justify-content: center; }
 /* Pendant l'écoute, le bloc qui sonne ressort ; la tête de lecture avance. */
 .frise.lecture .frise-seg:not(.joue) { opacity: 0.5; }
-.frise-tete { position: absolute; top: -5px; bottom: -5px; left: 0; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--encre); box-shadow: 0 0 0 1.5px var(--papier); pointer-events: none; z-index: 2; will-change: transform; }
-.frise-temps { display: flex; justify-content: space-between; margin: 7px 0 0; font-size: 11px; line-height: 1; color: var(--gris); }
+.frise-tete { position: absolute; top: -5px; bottom: -5px; left: 0; width: 3px; margin-left: -1.5px; border-radius: var(--r-trait); background: var(--encre); box-shadow: 0 0 0 1.5px var(--papier); pointer-events: none; z-index: var(--z-tete); will-change: transform; }
+.frise-temps { display: flex; justify-content: space-between; margin: 7px 0 0; font-size: var(--t-11); line-height: 1; color: var(--gris); }
 
 /* Les cartes */
 .morceau-corps { flex: 1 1 auto; padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 12px; }
 .blocs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.bloc { position: relative; background: var(--feuille); border: 1px solid var(--trait); border-radius: 16px; overflow: hidden; /* de quoi ne pas se glisser sous la frise ni sous le bouton du bas */ scroll-margin: 176px 0 112px; }
+.bloc { position: relative; background: var(--feuille); border: 1px solid var(--trait); border-radius: var(--r-16); overflow: hidden; /* de quoi ne pas se glisser sous la frise ni sous le bouton du bas */ scroll-margin: 176px 0 112px; }
 .bloc.choisi { border-color: var(--encre); box-shadow: 0 0 0 1px var(--encre); }
 .bloc.joue { border-color: var(--c); box-shadow: 0 0 0 1px var(--c); background: color-mix(in srgb, var(--c) 14%, var(--feuille)); }
-.bloc.glisse { position: relative; z-index: 2; box-shadow: var(--ombre); opacity: 0.96; }
+.bloc.glisse { position: relative; z-index: var(--z-tete); box-shadow: var(--ombre); opacity: 0.96; }
 .bloc.saute { border-style: dashed; }
 
 .bloc-tete { position: relative; display: flex; align-items: center; gap: 10px; min-height: 66px; padding-right: 4px; }
 .languette { align-self: stretch; flex: none; width: 8px; background: var(--c, var(--trait-fort)); }
 /* Toute la tête de carte est un bouton (choisir) ; le nom et la poignée passent par-dessus. */
-.bloc-ouvrir { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; cursor: pointer; z-index: 0; }
+.bloc-ouvrir { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; cursor: pointer; z-index: var(--z-fond); }
 .bloc-ouvrir:focus-visible { outline-offset: -3px; }
-.bloc-infos { position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 8px 0; pointer-events: none; }
-.bloc-nom { pointer-events: none; font-family: var(--f-titre); font-size: 1.1rem; line-height: 1.25; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 2px 6px; margin: 0 -6px; width: calc(100% + 12px); min-width: 0; text-overflow: ellipsis; }
+.bloc-infos { position: relative; z-index: var(--z-dessus); flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 8px 0; pointer-events: none; }
+.bloc-nom { pointer-events: none; font-family: var(--f-titre); font-size: var(--t-18); line-height: 1.25; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: var(--r-8); padding: 2px 6px; margin: 0 -6px; width: calc(100% + 12px); min-width: 0; text-overflow: ellipsis; }
 /* Le nom ne se modifie qu'une fois la carte choisie : un premier toucher choisit, il ne fait pas surgir le clavier. */
 .bloc.choisi .bloc-nom { pointer-events: auto; min-height: 44px; border-color: var(--bord-champ); background: var(--papier); }
 .bloc-idee { display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; }
@@ -98,8 +80,8 @@ main:has(> #vue-morceau:not([hidden])) { max-width: none; padding: 0; }
 .bloc.saute .bloc-idee { color: var(--alerte); }
 .bloc.saute .bloc-idee > span { white-space: normal; }
 .bloc:not(.choisi) .bloc-ouvrir:hover { background: color-mix(in srgb, var(--encre) 5%, transparent); }
-.fois { position: relative; z-index: 1; pointer-events: none; flex: none; min-width: 36px; height: 28px; padding: 0 9px; border-radius: 14px; background: var(--creux); font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
-.poignee { position: relative; z-index: 1; flex: none; width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--gris); display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.fois { position: relative; z-index: var(--z-dessus); pointer-events: none; flex: none; min-width: 36px; height: 28px; padding: 0 9px; border-radius: var(--r-12); background: var(--creux); font-size: var(--t-13); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+.poignee { position: relative; z-index: var(--z-dessus); flex: none; width: 44px; height: 44px; border: 0; border-radius: var(--r-12); background: transparent; color: var(--gris); display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .poignee:hover { background: var(--creux); }
 .bloc.glisse .poignee { cursor: grabbing; }
 
@@ -111,15 +93,15 @@ main:has(> #vue-morceau:not([hidden])) { max-width: none; padding: 0; }
 .gestes-rang { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .gestes-rang .pousse { margin-left: auto; }
 .bloc-fois { display: inline-flex; align-items: center; gap: 2px; }
-.bloc-fois .val { min-width: 38px; text-align: center; font-family: var(--f-code); font-size: 0.95rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.bloc-fois .val { min-width: 38px; text-align: center; font-family: var(--f-code); font-size: var(--t-15); font-weight: 500; font-variant-numeric: tabular-nums; }
 .bloc-gestes .btn.rond[disabled] { opacity: 0.35; }
 
 .morceau-vide { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 16px; text-align: center; color: var(--gris); }
 .morceau-aide { padding: 0 2px; }
 
 /* « Ajouter une partie » reste sous le pouce, en bas de l'écran. */
-.morceau-pied { position: sticky; bottom: 0; z-index: 4; padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(to bottom, transparent, var(--papier) 30%); }
-.morceau-ajouter { display: flex; width: 100%; min-height: 56px; font-size: 1.02rem; border-radius: 14px; }
+.morceau-pied { position: sticky; bottom: 0; z-index: var(--z-scene); padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(to bottom, transparent, var(--papier) 30%); }
+.morceau-ajouter { display: flex; width: 100%; min-height: 56px; font-size: var(--t-16); border-radius: var(--r-12); }
 
 /* La feuille « Quelle idée ? » : la recherche, puis les idées (leur couleur, leur aperçu). */
 .morceau-cherche { width: 100%; flex: none; margin-bottom: 4px; }
@@ -127,28 +109,28 @@ main:has(> #vue-morceau:not([hidden])) { max-width: none; padding: 0; }
 .choix-idee { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 8px 4px; text-align: left; border: 0; border-bottom: 1px solid var(--trait); background: transparent; color: var(--encre); cursor: pointer; }
 .choix-idee:last-child { border-bottom: 0; }
 .choix-idee:hover { background: var(--creux); }
-.choix-vignette { flex: none; width: 64px; height: 44px; border-radius: 10px; background: var(--c); overflow: hidden; }
+.choix-vignette { flex: none; width: 64px; height: 44px; border-radius: var(--r-10); background: var(--c); overflow: hidden; }
 .choix-vignette svg { width: 100%; height: 100%; display: block; }
 .choix-vignette .apercu-note { fill: var(--t); }
 .choix-textes { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.choix-idee .titre { font-size: 0.97rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.choix-idee .detail { font-size: 0.82rem; color: var(--gris); }
+.choix-idee .titre { font-size: var(--t-16); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choix-idee .detail { font-size: var(--t-13); color: var(--gris); }
 .choix-idee > .ico { color: var(--gris); }
 .choix-idees > .remarque { padding: 12px 4px; }
 
 /* La feuille « ••• » : le tempo, le MIDI, la suppression. */
 .menu-tempo { display: flex; flex-direction: column; gap: 6px; padding: 2px 0 16px; }
 .menu-tempo-tete { display: flex; align-items: baseline; justify-content: space-between; }
-.menu-tempo-val { font-size: 1.1rem; font-weight: 500; }
+.menu-tempo-val { font-size: var(--t-18); font-weight: 500; }
 .menu-tempo-reglage { display: flex; align-items: center; gap: 8px; }
 .menu-tempo-reglage input[type="range"] { flex: 1 1 auto; min-width: 0; min-height: 44px; accent-color: var(--stylo); }
 .menu-actions { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--trait); }
-.menu-actions .btn { min-height: 52px; border-radius: 12px; }
+.menu-actions .btn { min-height: 52px; border-radius: var(--r-12); }
 
 /* Les plus petits écrans (320 px) : de quoi garder « ♩ 90 » dans la ligne du titre. */
 @media (max-width: 359px) {
   .morceau-barre { padding-left: 4px; padding-right: 4px; gap: 2px; }
-  .morceau-resume { font-size: 11px; gap: 4px; }
+  .morceau-resume { font-size: var(--t-11); gap: 4px; }
   .morceau-etat[data-genre="ok"] .ico { display: none; }
 }
 

@@ -164,8 +164,8 @@ export function creerVueMorceau(deps) {
   function afficherEtat(genre, texte = "") {
     const e = $("morceau-etat");
     e.dataset.genre = genre;
-    if (genre === "ok") e.innerHTML = `${ico("ok", "s")}<span class="sr">Enregistré</span>`;
-    else if (genre === "erreur") { e.innerHTML = `${ico("attention", "s")}<span class="sr"></span>`; e.querySelector(".sr").textContent = texte; }
+    if (genre === "ok") e.innerHTML = `${ico("ok", "s")}<span class="visuellement-cache">Enregistré</span>`;
+    else if (genre === "erreur") { e.innerHTML = `${ico("attention", "s")}<span class="visuellement-cache"></span>`; e.querySelector(".visuellement-cache").textContent = texte; }
     else e.textContent = genre === "attente" ? "…" : "";
   }
 
@@ -301,7 +301,7 @@ export function creerVueMorceau(deps) {
       ? `${pluriel(s.mesures, "mesure")} · ${dureeEnTexte(s.secondes)} · ${ico("d4", "s")}${tempo}`
       : "Morceau vide";
     $("morceau-tempo").value = tempo;
-    $("morceau-tempo-val").textContent = `♩ = ${tempo}`;
+    $("morceau-tempo-val").textContent = String(tempo); // la noire est une icône, devant (index.html)
   }
 
   /** Choisir une partie (ou aucune) : on n'y touche que par des classes. */
@@ -459,7 +459,7 @@ export function creerVueMorceau(deps) {
 
   let minuterieTempo = null;
   $("morceau-tempo").addEventListener("input", () => {
-    $("morceau-tempo-val").textContent = `♩ = ${$("morceau-tempo").value}`;
+    $("morceau-tempo-val").textContent = $("morceau-tempo").value;
     arreterEcoute();
     clearTimeout(minuterieTempo);
     tempoEnAttente = true;
