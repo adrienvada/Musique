@@ -282,9 +282,15 @@
       <section class="zone zone-lue" id="zone-lue" aria-label="Ce que Portée a lu">
         <div class="zone-tete">
           <p class="surtitre">Ce que Portée a lu</p>
+          <!-- Le zoom (I14) : au doigt, une note gravée faisait 4 à 7 px de large. On peut aussi pincer. -->
+          <span class="zoom" role="group" aria-label="Taille de la partition lue">
+            <button class="btn btn-fantome rond" id="zoom-moins" aria-label="Réduire la partition lue" title="Réduire"><svg class="ico" aria-hidden="true"><use href="#i-moins"></use></svg></button>
+            <span class="val" id="zoom-val">100 %</span>
+            <button class="btn btn-fantome rond" id="zoom-plus" aria-label="Agrandir la partition lue" title="Agrandir"><svg class="ico" aria-hidden="true"><use href="#i-plus"></use></svg></button>
+          </span>
           <button class="btn btn-petit" id="ecouter-atelier"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Écouter</button>
         </div>
-        <div class="page-cadre gravure-cadre"><div class="gravure gravure-edit" id="gravure-atelier"></div></div>
+        <div class="page-cadre gravure-cadre" id="cadre-lue"><div class="gravure-zoom" id="zoom-lue"><div class="gravure gravure-edit" id="gravure-atelier"></div></div></div>
         <p class="guide" id="guide">Touche une note pour la corriger, ou glisse-la vers le haut ou le bas.<span class="raccourcis"> Au clavier : <kbd>↑</kbd> <kbd>↓</kbd> hauteur, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>.</kbd> point, <kbd>Suppr</kbd>, <kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler.</span></p>
         <p class="etat" id="etat-abc" role="status"></p>
       </section>
@@ -307,7 +313,10 @@
           <span class="pas" id="pas-doutes"></span>
         </div>
         <div class="dock-gauche" id="tete-note" hidden>
+          <!-- Note précédente et suivante (I14), comme dans la sélection de l'éditeur : au clavier, ← et →. -->
+          <button class="btn btn-fantome rond" id="note-precedente" aria-label="Note précédente" title="Note précédente (←)"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
           <span class="note-choisie" id="note-choisie"></span>
+          <button class="btn btn-fantome rond" id="note-suivante" aria-label="Note suivante" title="Note suivante (→)"><svg class="ico" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
         </div>
         <span class="remarque pousse" id="enregistre" role="status"></span>
         <button class="btn btn-fantome rond" id="annuler" disabled aria-label="Annuler le dernier geste"><svg class="ico" aria-hidden="true"><use href="#i-annuler"></use></svg></button>

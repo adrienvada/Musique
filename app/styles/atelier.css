@@ -68,6 +68,12 @@ kbd { font-family: var(--f-code); font-size: 0.78rem; border: 1px solid var(--tr
 .raccourcis { display: none; }
 @media (pointer: fine) { .raccourcis { display: inline; } }
 .gravure-edit svg { cursor: pointer; }
+/* Le zoom de la partition lue (I14) : la gravure s'élargit dans son cadre, qui défile de côté.
+   Le pincement y est à Portée, pas au navigateur (touch-action) : il agrandit la partition, pas la page. */
+.zone-lue .gravure-cadre { overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
+.gravure-zoom { width: calc(var(--zoom, 1) * 100%); }
+.zoom { display: inline-flex; align-items: center; gap: 0; margin-left: auto; }
+.zoom .val { min-width: 5ch; text-align: center; font-size: 0.8rem; color: var(--gris); }
 .gravure-edit .abcjs-note:hover, .gravure-edit .abcjs-rest:hover { fill: var(--stylo); }
 
 /* Les repères de doute sur la page : un cadre, et un numéro. Le toucher les ouvre. */
@@ -96,7 +102,10 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 .dock.replie .doutes, .dock.replie .dock-manuel { display: none; }
 .note-choisie { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Beaucoup de doutes : les points passent à la ligne (au téléphone, dix-sept points passaient sous « Annuler »). */
-.dock-tete .dock-gauche { flex-wrap: wrap; row-gap: 0; }
+.dock-tete #tete-doutes { flex-wrap: wrap; row-gap: 0; }
+/* La note choisie entre « précédente » et « suivante » (I14) : son nom se coupe plutôt que de pousser les boutons. */
+.dock-tete #tete-note { gap: 2px; }
+.dock-tete #tete-note .note-choisie { flex: 0 1 auto; padding: 0 4px; }
 .pas { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; }
 .pas-doute { width: 24px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
 .pas-doute::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--trait-fort); }

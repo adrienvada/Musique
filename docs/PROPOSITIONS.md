@@ -2456,6 +2456,28 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   (`tests/e2e/atelier.test.mjs`), et la page d'étalonnage venue de la
   tablette dans la version claude.ai simulée
   (`tests/e2e/atelier-claude.test.mjs`).
+- **Corriger au téléphone (I14).** Une note gravée faisait 4 à 7 px de
+  large sous le doigt, et ← → n'existaient qu'au clavier.
+  - Une note choisie a maintenant ‹ et › de part et d'autre de son nom, dans
+    le panneau du bas, comme dans la sélection de l'éditeur (44 px, les
+    icônes du système).
+  - La partition lue se zoome : − et + vont de cran en cran (100 % à 300 %),
+    deux doigts s'écartent ou se rapprochent entre les deux. Elle s'élargit
+    dans son cadre, qui défile de côté, et la note choisie reste en vue : au
+    milieu du cadre, entre la barre du haut et le panneau du bas. Le zoom est
+    retenu sur cet appareil.
+  - Le pincement reste à Portée : abcjs prenait le glissé des deux doigts
+    pour celui d'une note, et en changeait la hauteur. La gravure repart
+    d'un état propre quand le dernier doigt se lève, et le navigateur
+    n'agrandit plus la page à cet endroit (`touch-action`).
+  - Trouvé en chemin : après une barre de mesure (« |: c2 »), abcjs fait
+    commencer la note à l'espace qui la précède ; elle ne se lisait pas.
+    Toucher ces notes ne les choisissait pas, et ← → s'y perdaient (le
+    panneau des outils disparaissait). L'espace est sauté.
+  - Essai : « I14 · au téléphone » (`tests/e2e/atelier.test.mjs`) : ‹ et ›,
+    trois crans jusqu'à 200 % (une note deux fois plus large), quatorze notes
+    de suite toujours en vue, un pincement envoyé à Chromium comme deux vrais
+    doigts (300 %, aucune note changée), le zoom retenu.
 
 ### Écrans des données (D6, D7, D9, H3)
 

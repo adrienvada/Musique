@@ -26,6 +26,7 @@ import {
   pastilleBarre, placerOnglets, PREFIXE_GRAVURE, pourGravure, proposerGeste, suivreDock, tempoInitial,
 } from "./atelier.js";
 import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
+import { ecrirePref, lirePref } from "./preferences.js";
 import { explication } from "./erreurs.js";
 import { $, couleurDuJeton as couleur, dateRelative, el, pluriel, toast } from "./ui.js";
 
@@ -38,6 +39,14 @@ import { $, couleurDuJeton as couleur, dateRelative, el, pluriel, toast } from "
 const DUREES_AU_CLAVIER = { Digit1: 0.5, Digit2: 1, Digit3: 2, Digit4: 4, Digit5: 8, Numpad1: 0.5, Numpad2: 1, Numpad3: 2, Numpad4: 4, Numpad5: 8 };
 const DUREES_PAR_CHIFFRE = { 1: 0.5, 2: 1, 3: 2, 4: 4, 5: 8 };
 const dureeDeLaTouche = (e) => (!e.shiftKey && DUREES_AU_CLAVIER[e.code]) || DUREES_PAR_CHIFFRE[e.key] || null;
+
+/**
+ * Le zoom de la partition lue (I14) : au doigt, une note gravée faisait 4 à
+ * 7 px de large. De la largeur de l'écran (1) au triple ; − et + vont de cran
+ * en cran, le pincement entre les deux. Retenu sur cet appareil.
+ */
+const ZOOMS = [1, 1.25, 1.5, 2, 2.5, 3];
+const bornerZoom = (z) => Math.min(ZOOMS.at(-1), Math.max(ZOOMS[0], Math.round(z * 100) / 100));
 
 /**
  * @param deps {
@@ -70,6 +79,8 @@ export function creerEcranAtelier(deps) {
   let derniereNote = { alteration: "", lettre: "C", octave: 5 };
   // Ce que tes réponses apprennent à tes gabarits (L16), en attendant qu'on quitte la page.
   let lecons = [];
+  let zoom = bornerZoom(Number(lirePref("portee:atelier-zoom")) || 1);
+  let pincement = null; // deux doigts sur la partition lue : { d0, z0, x }
 
   const p = () => page.partition;
   const doutesDe = () => (p() && p().doutes) || [];
@@ -166,6 +177,7 @@ export function creerEcranAtelier(deps) {
     }
     if (p() !== x) return; // une autre page s'est ouverte entre-temps
     graver();
+    poserZoom(zoom, { retenir: false });
     majOutils();
     afficherDoutes();
   }
@@ -267,9 +279,20 @@ export function creerEcranAtelier(deps) {
   // Corriger au toucher
   // ------------------------------------------------------------------------
 
+  /**
+   * Où commence, dans l'ABC, la note qu'abcjs situe à `startChar`. Après une
+   * barre (« |: c2 »), abcjs la fait commencer à l'espace qui la précède :
+   * la note ne se lisait pas, et la toucher ne la choisissait pas.
+   */
+  function debutDeNote(startChar) {
+    let debut = startChar - PREFIXE_GRAVURE.length;
+    while (a.abc[debut] === " " || a.abc[debut] === "\t") debut++;
+    return debut;
+  }
+
   function surClicNote(abcelem, _numero, _classes, _analyse, glisse) {
     if (!abcelem || abcelem.el_type !== "note") return;
-    const debut = abcelem.startChar - PREFIXE_GRAVURE.length;
+    const debut = debutDeNote(abcelem.startChar);
     const j = ed.lireJeton(a.abc, debut);
     if (!j) return;
     // abcjs compte les degrés vers le bas : un glissé vers le haut est négatif.
@@ -459,7 +482,7 @@ export function creerEcranAtelier(deps) {
     for (const ligne of (objet && objet.lines) || []) {
       for (const portee of ligne.staff || []) {
         for (const voix of portee.voices || []) {
-          for (const x of voix) if (x.el_type === "note" && !x.rest?.type?.startsWith("invisible")) positions.add(x.startChar - PREFIXE_GRAVURE.length);
+          for (const x of voix) if (x.el_type === "note" && !x.rest?.type?.startsWith("invisible")) positions.add(debutDeNote(x.startChar));
         }
       }
     }
@@ -482,7 +505,96 @@ export function creerEcranAtelier(deps) {
     a.selection = liste[i];
     surligner();
     majOutils();
+    garderEnVue();
     entendre(jetonChoisi());
+  }
+
+  // ------------------------------------------------------------------------
+  // Le zoom de la partition lue (I14)
+  // ------------------------------------------------------------------------
+
+  /** L'élément gravé de la note choisie (abcjs garde ce qu'il a surligné), ou null. */
+  function elementChoisi() {
+    const choisi = a.selection !== null && objet && objet.engraver && objet.engraver.selected && objet.engraver.selected[0];
+    return (choisi && choisi.elemset && choisi.elemset[0]) || null;
+  }
+
+  /**
+   * La note choisie reste en vue : au milieu du cadre, de côté (zoomée, la
+   * partition défile), et entre la barre du haut et le panneau du bas.
+   */
+  function garderEnVue({ verticale = true } = {}) {
+    const note = elementChoisi();
+    if (!note || !a.ouvert) return;
+    const cadre = $("cadre-lue");
+    const rc = cadre.getBoundingClientRect(), rn = note.getBoundingClientRect();
+    if (!rn.width && !rn.height) return; // la partition lue n'est pas montrée (« Ta page » seule)
+    cadre.scrollLeft += rn.left + rn.width / 2 - (rc.left + rc.width / 2);
+    if (!verticale) return;
+    const barre = $("vue-atelier").querySelector(".barre-ecran");
+    const haut = (barre ? barre.getBoundingClientRect().bottom : 0) + 8;
+    const bas = window.innerHeight - $("dock-atelier").offsetHeight - 8;
+    const n = note.getBoundingClientRect();
+    if (n.bottom > bas) window.scrollBy({ top: n.bottom - bas });
+    else if (n.top < haut) window.scrollBy({ top: n.top - haut });
+  }
+
+  /**
+   * Pose le zoom. Sans note choisie, ce qui était au milieu du cadre (ou sous
+   * les doigts, `centre`, en pixels depuis son bord gauche) y reste.
+   */
+  function poserZoom(z, { centre = null, retenir = true } = {}) {
+    const neuf = bornerZoom(z);
+    const cadre = $("cadre-lue");
+    const c = centre ?? cadre.clientWidth / 2;
+    const avant = { largeur: cadre.scrollWidth, gauche: cadre.scrollLeft };
+    zoom = neuf;
+    $("zoom-lue").style.setProperty("--zoom", String(zoom));
+    $("zoom-val").textContent = `${Math.round(zoom * 100)} %`;
+    $("zoom-moins").disabled = zoom <= ZOOMS[0];
+    $("zoom-plus").disabled = zoom >= ZOOMS.at(-1);
+    if (retenir) ecrirePref("portee:atelier-zoom", String(zoom));
+    if (elementChoisi()) { garderEnVue(); return; }
+    if (avant.largeur) cadre.scrollLeft = ((avant.gauche + c) * cadre.scrollWidth) / avant.largeur - c;
+  }
+
+  /** Le cran suivant (sens > 0) ou précédent du zoom. */
+  function zoomer(sens) {
+    const suivant = sens > 0 ? ZOOMS.find((z) => z > zoom + 1e-6) : ZOOMS.findLast((z) => z < zoom - 1e-6);
+    if (suivant !== undefined) poserZoom(suivant);
+  }
+
+  /**
+   * Pincer la partition lue l'agrandit. Les deux doigts restent à Portée :
+   * abcjs prendrait leur glissé pour celui d'une note (il change sa hauteur).
+   * Un pincement se suit jusqu'au dernier doigt levé ; la gravure repart
+   * ensuite d'un état propre (abcjs avait vu le premier doigt se poser).
+   */
+  function brancherPincement(cadre) {
+    const ecart = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const options = { capture: true, passive: true };
+    cadre.addEventListener("touchstart", (e) => {
+      if (e.touches.length < 2) return;
+      e.stopPropagation();
+      const rc = cadre.getBoundingClientRect();
+      pincement = { d0: ecart(e.touches) || 1, z0: zoom, x: (e.touches[0].clientX + e.touches[1].clientX) / 2 - rc.left };
+    }, options);
+    cadre.addEventListener("touchmove", (e) => {
+      if (!pincement) return;
+      e.stopPropagation();
+      if (e.touches.length >= 2) poserZoom((pincement.z0 * ecart(e.touches)) / pincement.d0, { centre: pincement.x, retenir: false });
+    }, options);
+    const lever = (e) => {
+      if (!pincement) return;
+      e.stopPropagation();
+      if (e.touches.length) return;
+      pincement = null;
+      ecrirePref("portee:atelier-zoom", String(zoom));
+      graver();
+      garderEnVue();
+    };
+    cadre.addEventListener("touchend", lever, options);
+    cadre.addEventListener("touchcancel", lever, options);
   }
 
   /** Plus de note choisie : le panneau du bas revient au doute. */
@@ -620,6 +732,8 @@ export function creerEcranAtelier(deps) {
     redessinerManuscrit();
     majOutils();
     afficherDoutes();
+    // Zoomée, la partition lue défile de côté jusqu'à la note visée.
+    garderEnVue({ verticale: false });
     // Une fois le panneau redimensionné (sa hauteur règle la marge du bas), on amène la partition lue sous la barre.
     setTimeout(() => $("zone-lue").scrollIntoView({ behavior: "smooth", block: "start" }), 250);
     if (a.selection !== null) entendre(jetonChoisi());
@@ -697,6 +811,12 @@ export function creerEcranAtelier(deps) {
     else geste(b.dataset.geste);
   });
   $("fermer-note").addEventListener("click", () => { a.selection = null; majOutils(); });
+  // Au doigt (I14) : la note d'avant, celle d'après, et la partition lue plus grande.
+  $("note-precedente").addEventListener("click", () => choisirVoisine(-1));
+  $("note-suivante").addEventListener("click", () => choisirVoisine(1));
+  $("zoom-moins").addEventListener("click", () => zoomer(-1));
+  $("zoom-plus").addEventListener("click", () => zoomer(1));
+  brancherPincement($("cadre-lue"));
   $("replier-dock").addEventListener("click", () => { dockReplie = !dockReplie; majDock(); });
   $("vues-atelier").addEventListener("click", (e) => {
     const b = e.target.closest("[data-vue]");

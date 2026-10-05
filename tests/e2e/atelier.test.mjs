@@ -203,6 +203,74 @@ test("H3 · l'avis que Claude a rangé depuis une conversation se lit dans la ca
 });
 
 // ------------------------------------------------------------------------
+// Corriger au téléphone (I14)
+// ------------------------------------------------------------------------
+
+/** La note choisie, telle qu'elle se voit : sa largeur, et si elle est dans le cadre de la partition lue et au-dessus du panneau du bas. */
+const noteChoisie = (page) => page.evaluate(() => {
+  const n = document.querySelector("#gravure-atelier .abcjs-note_selected");
+  if (!n) return null;
+  const r = n.getBoundingClientRect(), c = document.getElementById("cadre-lue").getBoundingClientRect();
+  const bas = window.innerHeight - document.getElementById("dock-atelier").offsetHeight;
+  return { largeur: r.width, dansLeCadre: r.left >= c.left - 1 && r.right <= c.right + 1, visible: r.top >= 0 && r.bottom <= bas };
+});
+
+test("I14 · au téléphone : ‹ et › vont de note en note, − et + (ou deux doigts) agrandissent la partition lue, et la note choisie reste en vue", async () => {
+  const ctx = await contexte(navigateur, { appareil: TELEPHONE });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await ouvrirPartition(page, "Essai melodie");
+    await page.click('#vues-atelier [data-vue="lue"]');
+    const abc0 = await page.inputValue("#abc");
+    assert.equal(await page.textContent("#zoom-val"), "100 %");
+    // Une note touchée : ‹ et › sont là, et vont à la voisine (comme ← et → au clavier).
+    const boite = await page.locator("#gravure-atelier .abcjs-note").nth(2).boundingBox();
+    await page.touchscreen.tap(boite.x + boite.width / 2, boite.y + boite.height / 2);
+    await page.waitForSelector("#outils-note:not([hidden])");
+    const premiere = await page.textContent("#note-choisie");
+    const largeur0 = (await noteChoisie(page)).largeur;
+    await page.tap("#note-suivante");
+    await page.waitForFunction((n) => document.getElementById("note-choisie").textContent !== n, premiere);
+    await page.tap("#note-precedente");
+    await page.waitForFunction((n) => document.getElementById("note-choisie").textContent === n, premiere);
+    // Trois crans : 200 %, les notes deux fois plus larges, la partition défile de côté.
+    for (let k = 0; k < 3; k++) await page.tap("#zoom-plus");
+    assert.equal(await page.textContent("#zoom-val"), "200 %");
+    const zoomee = await noteChoisie(page);
+    assert.ok(Math.abs(zoomee.largeur / largeur0 - 2) < 0.1, `${largeur0} → ${zoomee.largeur}`);
+    assert.ok(await page.evaluate(() => { const c = document.getElementById("cadre-lue"); return c.scrollWidth > c.clientWidth * 1.8; }));
+    // La note choisie reste en vue, note après note, jusqu'au bout de la ligne et au-delà.
+    for (let k = 0; k < 14; k++) {
+      await page.tap("#note-suivante");
+      const v = await noteChoisie(page);
+      assert.ok(v && v.dansLeCadre && v.visible, `note ${k + 1} : ${JSON.stringify(v)}`);
+    }
+    // Rien ne fait moins de 44 px au doigt ; la page ne déborde pas.
+    const tailles = await page.evaluate(() => ["note-precedente", "note-suivante", "zoom-moins", "zoom-plus"].map((id) => { const r = document.getElementById(id).getBoundingClientRect(); return Math.min(r.width, r.height); }));
+    assert.ok(tailles.every((t) => t >= 44), String(tailles));
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    // Deux doigts qui s'écartent : la partition grandit (au plus 300 %), et aucune note ne bouge sous eux.
+    const choisie = await page.textContent("#note-choisie");
+    const cdp = await ctx.newCDPSession(page);
+    const c = await page.locator("#cadre-lue").boundingBox();
+    const y = c.y + Math.min(60, c.height / 2), x = c.x + c.width / 2;
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x - 40, y, id: 1 }, { x: x + 40, y, id: 2 }] });
+    for (let k = 1; k <= 6; k++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x - 40 - 12 * k, y, id: 1 }, { x: x + 40 + 12 * k, y, id: 2 }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForFunction(() => document.getElementById("zoom-val").textContent === "300 %");
+    assert.equal(await page.inputValue("#abc"), abc0);
+    assert.equal(await page.textContent("#note-choisie"), choisie);
+    assert.equal(await page.isDisabled("#zoom-plus"), true);
+    // Retenu sur cet appareil : la page rouverte garde son zoom.
+    await page.click("#vue-atelier [data-retour]");
+    await ouvrirPartition(page, "Essai melodie");
+    assert.equal(await page.textContent("#zoom-val"), "300 %");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+// ------------------------------------------------------------------------
 // Tes gabarits (L16) : apprendre d'une réponse
 // ------------------------------------------------------------------------
 
