@@ -91,6 +91,23 @@ export function expliquer(err, secours = "") {
 export const echec = (quoi, err) => `${quoi} n'a pas abouti : ${explication(err)}`;
 
 /**
+ * Le filet : une erreur qu'aucun geste n'a attrapée (une promesse rejetée
+ * sans `catch`) se dit dans un message passager, en français, et son détail
+ * reste dans la console. Avant, elle passait sans un mot (audit du 04/10,
+ * T4) : supprimer, dupliquer ou ouvrir un morceau pouvait échouer en
+ * silence.
+ * @param {(texte: string) => void} montrer
+ */
+export function installerFilet(montrer) {
+  globalThis.addEventListener("unhandledrejection", (ev) => {
+    // On la dit nous-mêmes, une fois (sans quoi le navigateur la répète en anglais).
+    ev.preventDefault();
+    console.error("Erreur que rien n'a attrapée :", ev.reason);
+    montrer(expliquer(ev.reason));
+  });
+}
+
+/**
  * Une erreur de Portée, avec un code que l'appli lit (`adresse_invalide`…)
  * et sa cause d'origine (sa pile, pour la console). Remplace les objets
  * bruts qu'on lançait (`throw { code, message }`), sans pile (T4).

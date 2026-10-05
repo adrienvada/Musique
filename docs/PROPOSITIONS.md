@@ -2131,6 +2131,18 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   d'un QWERTY.
   - Essais : « une feuille ou une fenêtre ouverte garde les touches » et
     « AZERTY » (`tests/e2e/ecrans.test.mjs`).
+- **Les erreurs asynchrones ont un filet (T4).** Rien n'écoutait
+  `unhandledrejection`, et plusieurs gestes attendaient le stockage sans
+  `try` : supprimer (depuis le carnet, l'éditeur, « Corriger » ou le
+  morceau), dupliquer, ajouter à un morceau, et l'affichage de « Corriger »
+  (sa page, ses doutes). Un échec y passait sans un mot. Chacun dit
+  maintenant ce qui s'est passé (erreurs.js) ; ce qu'aucun geste n'attrape
+  se dit dans un message passager (`installerFilet`), et son détail reste
+  dans la console. Les erreurs qu'on lance sont de vraies `Error`, avec
+  leur cause (`erreur(code, message, { cause })`).
+  - Essai : « une erreur que rien n'attrapait se dit, en français »
+    (`tests/e2e/ecrans.test.mjs`) : supprimer quand la mémoire est pleine,
+    puis une promesse rejetée.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

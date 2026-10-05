@@ -36,7 +36,7 @@ import { ambianceStudio } from "./preferences.js";
 import { creerNavigation } from "./navigation.js";
 import { creerHistorique } from "./historique.js";
 import { installerInfobulles } from "./infobulles.js";
-import { cause, explication } from "./erreurs.js";
+import { cause, explication, installerFilet } from "./erreurs.js";
 import { $, pluriel, retirerToast, toast } from "./ui.js";
 import { dialogue, veutSupprimer } from "./dialogue.js";
 
@@ -277,14 +277,7 @@ function clavier(e) {
 async function actionIdee(action, p) {
   switch (action) {
     case "telecharger-midi": return exporterMidi(p);
-    case "dupliquer": {
-      const id = nouvelId();
-      const maintenant = new Date().toISOString();
-      const { id: _ancien, ...donnees } = p;
-      await etat.stockage.creer(id, { ...donnees, titre: `${p.titre} (copie)`, creeLe: maintenant, modifieLe: maintenant }, []);
-      toast("Copie faite : tu y es.");
-      return ouvrir(id);
-    }
+    case "dupliquer": return dupliquer(p);
     case "supprimer": {
       if (!(await veutSupprimer(p, etat.partitions))) return undefined;
       await editeur.fermer();
@@ -299,10 +292,34 @@ async function actionIdee(action, p) {
   }
 }
 
-/** Supprime `p` de la bibliothèque (et des autres appareils, par la synchro). */
+/** Une copie de l'idée, qu'on ouvre aussitôt. Un échec se dit (T4 : il passait sans un mot). */
+async function dupliquer(p) {
+  const id = nouvelId();
+  const maintenant = new Date().toISOString();
+  const { id: _ancien, ...donnees } = p;
+  try {
+    await etat.stockage.creer(id, { ...donnees, titre: `${p.titre} (copie)`, creeLe: maintenant, modifieLe: maintenant }, []);
+  } catch (e) {
+    console.error(e);
+    toast(`La copie n'a pas pu se faire : ${explication(e)}`, 7000);
+    return;
+  }
+  toast("Copie faite : tu y es.");
+  await ouvrir(id);
+}
+
+/** Supprime `p` de la bibliothèque (et des autres appareils, par la synchro). Rend true si c'est fait. */
 async function supprimerDeLaBibliotheque(p) {
-  await etat.stockage.supprimer(p.id, p.type ? 0 : p.nbPages || 0);
-  toast(`« ${p.titre} » est supprimé${p.type === "morceau" ? "" : "e"}.`);
+  const e = p.type === "morceau" ? "" : "e";
+  try {
+    await etat.stockage.supprimer(p.id, p.type ? 0 : p.nbPages || 0);
+  } catch (err) {
+    console.error(err);
+    toast(`« ${p.titre} » n'a pas pu être supprimé${e} : ${explication(err)}`, 7000);
+    return false;
+  }
+  toast(`« ${p.titre} » est supprimé${e}.`);
+  return true;
 }
 
 /** « Ajouter à un morceau » : un morceau existant, ou un nouveau. */
@@ -313,9 +330,16 @@ async function choisirMorceau(p) {
     ...morceaux.map((x) => ({ valeur: x.id, texte: `${x.titre} (${pluriel((x.blocs || []).length, "bloc")})` })),
   ]);
   if (!choix) return;
+  let morceau = null;
+  try {
+    if (choix !== "nouveau") morceau = await etat.stockage.lire(choix);
+  } catch (e) {
+    console.error(e);
+    toast(`Ce morceau ne s'ouvre pas : ${explication(e)}`, 7000);
+    return;
+  }
   await editeur.fermer();
-  if (choix === "nouveau") ouvrirMorceau(null);
-  else ouvrirMorceau(await etat.stockage.lire(choix));
+  ouvrirMorceau(morceau);
   vueMorceau.ajouter(p.id);
   $("morceau-choix").hidden = true;
 }
@@ -371,6 +395,8 @@ function creerEditeur() {
 }
 
 async function demarrer() {
+  // Une erreur que rien n'a attrapée se dit, en français (erreurs.js, T4).
+  installerFilet((texte) => toast(texte, 8000));
   injecterIcones();
   // Un appui long sur une icône dit ce qu'elle fait.
   installerInfobulles();

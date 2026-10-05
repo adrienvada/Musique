@@ -434,6 +434,29 @@ test("une feuille ou une fenêtre ouverte garde les touches : rien ne traverse, 
   } finally { await ctx.close(); }
 });
 
+test("une erreur que rien n'attrapait se dit, en français : supprimer quand la mémoire est pleine, une promesse rejetée (T4)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await noterLesMessages(page);
+    // Le stockage refuse d'effacer (la mémoire du navigateur est pleine).
+    await page.evaluate(() => { IDBObjectStore.prototype.delete = function () { throw new DOMException("Plus de place", "QuotaExceededError"); }; });
+    await page.click("#liste .ligne-carnet .plus");
+    await page.waitForSelector("#feuille-actions[open]");
+    await page.click("#feuille-liste .btn-danger");
+    await page.click('#dialogue button[value="oui"]');
+    await page.waitForFunction(() => window.__messages.some((m) => /n'a pas pu être supprimée/.test(m)));
+    const dit = (await messages(page)).find((m) => /n'a pas pu être supprimée/.test(m));
+    assert.match(dit, /la mémoire de ce navigateur est pleine/, dit);
+    assert.equal(await page.locator("#liste .ligne-carnet").count(), 2, "rien n'a disparu");
+    // Une promesse rejetée que personne n'attrape : le filet la dit, sans jargon.
+    await page.evaluate(() => { Promise.reject(new TypeError("Failed to fetch")); });
+    await page.waitForFunction(() => window.__messages.some((m) => /^Pas de connexion/.test(m)));
+    assert.deepEqual(exceptions(page), []);
+  } finally { await ctx.close(); }
+});
+
 test("AZERTY : « & » (la touche 1 sans Maj) donne la double croche dans « Corriger », comme dans l'éditeur (I12)", async () => {
   const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
   try {
