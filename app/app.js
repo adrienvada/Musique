@@ -19,6 +19,9 @@ import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE
 import { creerSynchro } from "./synchro.js";
 import { creerEditeurIdee, midiDeLIdee } from "./idee.js";
 import { Transport } from "./transport.js";
+import { notesDePage, surlignage } from "./ecoute-page.js";
+import { installerEveil } from "./eveil.js";
+import { brancherLive } from "./reglages-live.js";
 import { sequenceDepuisAbc, pasParMesure, pasParTemps, ecrireAbc } from "./sequence.js";
 import { voixCompletes, transposerIdee } from "./harmonie.js";
 import { creerVueMorceau } from "./vue-morceau.js";
@@ -72,6 +75,15 @@ const etat = {
 
 const piano = new Piano(new URL("./piano/", import.meta.url).href);
 const transport = new Transport(piano);
+// Le piano dit ce qui ne va pas (le réseau, un son bloqué) et quand il se télécharge, même
+// quand le geste qui jouait ne l'écoute pas (piano.js, audit du 04/10, M3).
+const EN_CHARGEMENT = "Piano en chargement… La première fois, il se télécharge avec le réseau.";
+piano.surProbleme = (texte) => toast(texte, 7000);
+piano.surAttente = (oui) => {
+  if (oui) { toast(EN_CHARGEMENT, 30000); return; }
+  const t = $("toast");
+  if (t.textContent === EN_CHARGEMENT) { t.hidden = true; try { if (t.hidePopover) t.hidePopover(); } catch { /* déjà fermé */ } }
+};
 const calibrations = new Map();
 let editeur = null; // l'éditeur d'idée (idee.js), créé au démarrage
 let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
@@ -1432,50 +1444,41 @@ function libelleLecture(bouton, joue) {
 
 function arreterLecture() {
   if (!lecture) return;
-  lecture.tc.stop();
-  piano.silence();
-  lecture.zone.querySelectorAll(".joue").forEach((n) => n.classList.remove("joue"));
-  libelleLecture(lecture.bouton, false);
+  const l = lecture;
   lecture = null;
+  // La page joue sur le transport (M5) : l'arrêter coupe aussi ce qui était programmé.
+  transport.arreter();
+  l.surlignage.eteindre();
+  libelleLecture(l.bouton, false);
 }
 
-/** Rangées de caractères de chaque voix dans l'ABC (pour couper une main). */
-function plagesVoix(abc) {
-  const plages = [];
-  let pos = 0;
-  for (const ligne of abc.split("\n")) {
-    const m = ligne.match(/^\[V:(\d+)\]/);
-    if (m) plages.push({ voix: Number(m[1]), de: pos, a: pos + ligne.length });
-    pos += ligne.length + 1;
-  }
-  return plages;
-}
-
-async function ecouter({ objet, abc, zone, bouton, qpm, transposition = 0, voixMuettes = new Set() }) {
+/**
+ * Écoute une page lue (lecteur ou atelier) : ses notes passent par le
+ * transport, sur l'horloge du son (ecoute-page.js, audit du 04/10, M5) ;
+ * TimingCallbacks ne sert plus qu'à surligner ce qui joue.
+ */
+async function ecouter({ objet, abc, bouton, qpm, transposition = 0, voixMuettes = new Set(), titre = "" }) {
   if (lecture) { const meme = lecture.bouton === bouton; arreterLecture(); if (meme) return; }
   if (!objet) return;
+  const { source } = notesDePage(objet, pourGravure(abc), { tempo: qpm, transposition, voixMuettes });
+  const moi = { bouton, surlignage: surlignage(ABCJS(), objet, qpm) };
+  lecture = moi;
   bouton.textContent = "Chargement du piano…";
-  try { await piano.pret(); }
-  catch (e) { libelleLecture(bouton, false); toast(e.message || "Le piano n'a pas pu se charger."); return; }
-  objet.setUpAudio();
-  const ronde = (4 * 60) / qpm;
-  const plages = plagesVoix(pourGravure(abc));
-  const voixDe = (c) => (plages.find((p) => c >= p.de && c <= p.a) || { voix: 1 }).voix;
-  const tc = new (ABCJS().TimingCallbacks)(objet, {
-    qpm,
-    eventCallback: (ev) => {
-      if (!ev) { arreterLecture(); return; }
-      zone.querySelectorAll(".joue").forEach((n) => n.classList.remove("joue"));
-      (ev.elements || []).flat().forEach((n) => n && n.classList && n.classList.add("joue"));
-      for (const p of ev.midiPitches || []) {
-        if (voixMuettes.has(voixDe(p.startChar))) continue;
-        piano.note(p.pitch + transposition, p.duration * ronde, p.volume || 90);
-      }
-    },
-  });
-  lecture = { tc, zone, bouton };
-  libelleLecture(bouton, true);
-  tc.start();
+  try {
+    await transport.jouer(source, {
+      titre: titre || "Partition",
+      relancer: () => { if (!lecture) bouton.click(); },
+      surPosition: (pas) => moi.surlignage.surligner(pas),
+      surFin: () => {
+        moi.surlignage.eteindre();
+        if (lecture === moi) { lecture = null; libelleLecture(bouton, false); }
+      },
+    });
+    if (lecture === moi) libelleLecture(bouton, true);
+  } catch (e) {
+    if (lecture === moi) { lecture = null; libelleLecture(bouton, false); }
+    toast(e.message || "Le piano n'a pas pu se charger.");
+  }
 }
 
 /** Tempo en noires par minute, d'après la partition gravée. */
@@ -1607,6 +1610,8 @@ async function ecouterIdee(p, bouton) {
   transport.carte = bouton;
   try {
     await transport.jouer(source, {
+      // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
+      titre: p.titre || (p.type === "morceau" ? "Morceau" : "Idée"), relancer: () => { if (!transport.actif) bouton.click(); },
       surFin: () => { bouton.innerHTML = libelle; transport.carte = null; },
     });
   } catch (e) {
@@ -1747,7 +1752,8 @@ function brancher() {
   $("manuel-retour").addEventListener("click", () => finirManuel(false));
   $("manuel-fini").addEventListener("click", () => finirManuel(true));
   $("ecouter-atelier").addEventListener("click", () => ecouter({
-    objet: objetAtelier, abc: $("abc").value, zone: $("gravure-atelier"), bouton: $("ecouter-atelier"), qpm: tempoInitial(objetAtelier),
+    objet: objetAtelier, abc: $("abc").value, bouton: $("ecouter-atelier"), qpm: tempoInitial(objetAtelier),
+    titre: (etat.courante && etat.courante.titre) || "Partition",
   }));
   // Le panneau du bas est fixé : chaque écran lui laisse sa hauteur.
   suivreDock($("vue-atelier"), $("dock-atelier"));
@@ -1776,8 +1782,9 @@ function brancher() {
   // Lecteur
   const voixMuettes = () => new Set([...($("main-droite").checked ? [] : [1]), ...($("main-gauche").checked ? [] : [2])]);
   $("ecouter").addEventListener("click", () => ecouter({
-    objet: objetLecteur, abc: etat.courante.abc, zone: $("gravure-lecteur"), bouton: $("ecouter"),
+    objet: objetLecteur, abc: etat.courante.abc, bouton: $("ecouter"),
     qpm: Number($("tempo").value), transposition: etat.transposition, voixMuettes: voixMuettes(),
+    titre: (etat.courante && etat.courante.titre) || "Partition",
   }));
   let minuterieTempo = null;
   $("tempo").addEventListener("input", () => {
@@ -2060,6 +2067,8 @@ async function demarrer() {
   injecterIcones();
   // Un appui long sur une icône dit ce qu'elle fait.
   installerInfobulles();
+  // Au retour d'arrière-plan ou d'un appel : le son reprend, l'écran se rallume (eveil.js, M8).
+  installerEveil({ piano });
   creerAccueilDeLAppli();
   brancher();
   creerEditeur();
@@ -2105,6 +2114,12 @@ async function demarrer() {
     },
     (e) => toast("La bibliothèque ne répond plus : recharge la page. (" + (e.code || e.message) + ")", 9000),
   );
+  // Avec Live (audit du 04/10, M10) : la sortie MIDI et le dossier des .mid, sur ordinateur seulement.
+  const live = brancherLive({
+    transport, toast, dansClaude: dansClaude(),
+    fabriquer: (p, idees) => (p.type === "idee" ? midiDeLIdee(p) : midiDuMorceau(p, idees)),
+  });
+  if (live.dossier) etat.stockage.ecouter((liste) => live.surListe(liste), () => { /* le premier abonné le dit déjà */ });
 }
 
 demarrer();

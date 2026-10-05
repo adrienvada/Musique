@@ -429,6 +429,8 @@ export function creerVueMorceau(deps) {
     try {
       placer(a.passages[0].debut); // la tête part du début, avant la première image
       await transport.jouer(sourceDuMorceau(a), {
+        // Les commandes de l'écran verrouillé (eveil.js) : le titre du morceau.
+        titre: m.titre || "Morceau",
         surPosition: placer,
         surFin: () => {
           if (lecture !== moi) return;

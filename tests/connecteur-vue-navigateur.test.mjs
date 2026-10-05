@@ -96,7 +96,7 @@ test("la partition dans un faux hôte MCP Apps : gravée, jouée, à l'écoute d
       return route.fulfill({ contentType: "text/javascript", headers: { "access-control-allow-origin": "*" }, body: fs.readFileSync("node_modules/abcjs/dist/abcjs-basic-min.js") });
     }
     if (url.startsWith("https://paulrosen.github.io/midi-js-soundfonts/")) {
-      return route.fulfill({ contentType: "audio/mpeg", headers: { "access-control-allow-origin": "*" }, body: fs.readFileSync("app/piano/mf-065.mp3") });
+      return route.fulfill({ contentType: "audio/mpeg", headers: { "access-control-allow-origin": "*" }, body: fs.readFileSync("app/piano/065-mf.mp3") });
     }
     return route.abort();
   });

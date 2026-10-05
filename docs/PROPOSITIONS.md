@@ -1209,6 +1209,289 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Son, temps, notation et exports (M1 à M12, N1 à N7)
 
+**Son, temps et micro**
+
+Mesures avant et après dans Chromium, avec les bancs d'essai de l'audit
+(contexte audio hors ligne, l'appli assemblée, téléphone simulé), et en Node
+avec un faux contexte audio (`tests/faux-audio.mjs`).
+
+- **« Arrêter » coupe vraiment (M1).** Le transport programme les notes un
+  peu d'avance ; à l'arrêt, le piano baissait seulement le gain de ce qui
+  sonnait, et le gain programmé d'une note à venir la faisait repartir après
+  coup. Chaque voix, programmée ou qui sonne, est maintenant tenue dans une
+  liste (`piano.js`) : celles qui n'ont pas commencé ne partent pas, les
+  autres s'éteignent en 100 ms ; les clics du métronome aussi, et couper le
+  métronome pendant la lecture retire ceux qui étaient déjà programmés.
+  Mesuré dans l'appli (arpège, six pauses) : 0 note et 0 clic après la
+  pause, contre 2 notes et un clic sur 6 avant ; 150 ms après, le niveau
+  passe de −12 à −40 dB à moins de −100 dB.
+  - La fin naturelle d'une écoute, elle, ne coupe rien : la dernière note
+    finit de sonner.
+  - Une écoute arrêtée pendant que le piano se télécharge ne part plus quand
+    il arrive (avant, elle partait seule) ; touchée deux fois, seule la
+    dernière demande part.
+- **La boucle ne bégaie plus au téléphone (M2).** 350 ms d'avance de
+  planification au lieu de 150, et la partition se regrave moins souvent :
+  pendant la lecture, une fois toutes les 300 ms au plus, d'un seul passage
+  (avec la mise en page de la gravure d'avant) ; en écrivant, 150 ms après la
+  dernière note (une idée de 64 mesures coûtait 424 ms par note au
+  téléphone, relevé par l'audit de l'interface) ; et choisir une note ne
+  regrave plus rien, seules ses couleurs changent. Mesuré (téléphone
+  simulé, processeur ralenti 4 puis 6 fois, vue Partition, dix notes
+  ajoutées pendant la boucle) : 0 note en retard, contre 2 sur 56 et 14 sur
+  58 avant.
+  - Pourquoi pas plus d'avance : ce qu'on change pendant la boucle s'entend
+    après elle ; 350 ms reste sous la demi-seconde, et la plus longue tâche
+    mesurée à 6 fois plus lent (300 ms) y tient.
+- **Le premier son vient vite (audit de l'interface), et le piano se
+  recharge après un échec (M3).** Les 29 échantillons partaient ensemble :
+  en 4G lente, rien ne sonnait avant dix secondes, et un toucher bref avant
+  ce moment était perdu (même sur un bon réseau, le premier l'était). Ils se
+  téléchargent maintenant quatre à la fois : celui de la note touchée
+  d'abord, puis ceux de l'octave montrée par le clavier, puis le reste. Une
+  note touchée trop tôt attend son échantillon et part à son arrivée (relevée
+  entre-temps, elle s'entend brièvement) ; « Piano en chargement… La
+  première fois, il se télécharge avec le réseau » s'affiche si l'attente
+  dure. À l'ouverture d'une idée, l'octave montrée se télécharge d'avance,
+  sans être décodée (il faudrait un contexte audio, qui attend un geste), et
+  pas du tout si le navigateur demande d'économiser les données. Mesuré au
+  téléphone (processeur 4 fois plus lent, 4G lente : 1,6 Mbit/s, 150 ms),
+  dix touchers à une demi-seconde d'écart : avant, aucun son ; après, le
+  premier son 0,6 s après le premier toucher (1,3 s si l'on touche 0,3 s
+  après l'ouverture), et chaque toucher sonne.
+  - Un échec ne se garde plus : la liste des échantillons se redemande au
+    toucher suivant, un échantillon manquant est remplacé par son voisin et
+    redemandé cinq secondes plus tard. Le problème est dit, en français
+    (`surProbleme`, branché sur les messages de l'appli), même quand le
+    geste qui jouait l'ignorait : avant, « Failed to fetch », ou rien.
+- **Un son plus propre (M4).** Un limiteur (seuil −6 dB, sans genou, ratio
+  20, attaque d'1 ms) et une sortie à 0,6 au lieu d'un compresseur à
+  −14 dB et 0,9 : un accord de six notes à 127 culminait à +4,1 dBFS (531
+  échantillons écrêtés), il reste à −0,8 dBFS ; une note seule sonne comme
+  avant (−7,3 dBFS de crête contre −8,5).
+  - Les échantillons sont repris des enregistrements d'origine
+    (`outils/echantillons-piano.mjs`, voir `app/piano/LISEZMOI.md`) : −1 dB
+    de marge (9 fichiers sur 29 s'écrêtaient au décodage, aucun sur 82
+    maintenant), et un gain par échantillon qui ramène chaque note sur une
+    courbe lisse du clavier : chaque enregistrement est normalisé à sa
+    crête, et deux voisins pouvaient sonner à 10 dB l'un de l'autre ; ils
+    restent à ±3 dB.
+  - Le la5 (81) s'éteignait très vite (−55 dB à une seconde, −35 à −42 pour
+    ses voisins) : le la♯5 (82) le remplace. À égale distance de deux
+    échantillons, celui du dessus est pris (descendre un son s'entend moins
+    que le monter).
+  - Les nuances : un passe-bas d'autant plus bas que la note est douce, et
+    deux couches de plus, PP et FF (0,9 et 0,8 Mo), téléchargées seulement
+    quand une note jouée doucement (jusqu'à 64) ou fort (dès 101) les
+    demande ; en attendant, la couche MF les remplace. Pourquoi les trois
+    couches à la même hauteur sonore : les enregistrements sont normalisés
+    chacun à sa crête, la force fait déjà le volume ; les couches donnent le
+    timbre, sans saut de volume quand on passe de l'une à l'autre.
+  - Les fichiers changent de nom (`060-mf.mp3`, `echantillons.json`) : le
+    service worker d'alors gardait le piano sans jamais le redemander, et
+    les anciens noms auraient gardé les anciens sons. Depuis le lot
+    outillage, son cache suit l'empreinte des fichiers du piano et les
+    garde tous, PP et FF compris (1,7 Mo de plus, en tâche de fond, à la
+    première visite) : sur le site, « à la demande » ne vaut plus que pour
+    le décodage, et pour claude.ai, qui n'a pas de service worker.
+- **Les pages lues jouent sur l'horloge du son (M5).** abcjs les jouait au
+  fil de ses minuteries, au rythme des images de l'écran : des croches de
+  250 ms en faisaient de 238 à 270 ms au repos, de 119 à 392 ms quand le fil
+  principal était occupé (150 ms toutes les 700 ms). Leurs notes passent
+  maintenant par le transport (`ecoute-page.js`), comme une idée, avec leur
+  force (accents et temps forts), la transposition et les mains coupées ;
+  TimingCallbacks ne sert plus qu'à surligner, à la position du transport.
+  Mesuré : chaque croche à 250 ms exactement, au repos comme sous charge.
+  - Au passage : abcjs compte son tempo en temps de la mesure (la noire
+    pointée en 6/8 ou 12/8). L'écoute d'avant lui donnait des noires : une
+    page en 12/8 allait une fois et demie trop vite, notes chevauchées. Le
+    transport compte en noires, comme le curseur de l'écran.
+- **Le son, l'écran et l'écran verrouillé, sur l'iPhone surtout (M8).**
+  Un seul petit module, `eveil.js`, que le piano, le transport, le micro et
+  le mémo vocal appellent ; tout y est facultatif (un navigateur qui ne sait
+  pas, ou claude.ai, ne voit rien).
+  - La session audio (Safari, iOS 16.4 et plus) : « playback » avant de
+    créer le contexte du piano, qui sonne alors même quand l'iPhone est en
+    silencieux (avant, il obéissait au bouton, comme une sonnerie) ;
+    « play-and-record » le temps que le micro écoute (Chanter, le mémo
+    vocal), puis « playback » de nouveau.
+  - Au retour d'arrière-plan, d'un appel ou de l'écran verrouillé, le son
+    reprend (`piano.reveiller()`) ; si Safari garde le contexte endormi, un
+    autre le remplace, avec les sons déjà décodés, et le prochain toucher le
+    réveille. Une écoute en cours s'arrête alors proprement (son bouton
+    revient).
+  - L'écran reste allumé (Screen Wake Lock) pendant l'écoute, le jeu en
+    direct, Chanter et le mémo vocal : sinon il s'éteint au bout de trente
+    secondes sans toucher, en plein enregistrement. Le navigateur le rend
+    quand la page se cache ; il est redemandé au retour. Refusé (cadre
+    isolé, économie d'énergie), rien ne casse.
+  - L'écran verrouillé montre ce qui joue (le titre de l'idée, du morceau
+    ou de la page), avec lecture, pause et arrêt (Media Session). Le
+    navigateur ne montre ces commandes que pour un élément `<audio>` qui
+    joue : une seconde de silence en boucle tient ce rôle pendant l'écoute,
+    le piano passant par Web Audio. Pourquoi ce son muet plutôt que de faire
+    passer le piano par un `<audio>` : il faudrait un flux de sortie, et la
+    latence du jeu en direct y passerait.
+  - Essayé dans Chromium (l'appli assemblée) : pendant l'écoute d'une idée,
+    son titre et « playing », pause, arrêt et lecture ; « arrêt » depuis
+    l'écran verrouillé arrête l'idée, remet le bouton et rend le verrou ;
+    « lecture » la relance ; page cachée puis revenue : le verrou est
+    redemandé ; verrou refusé : tout joue pareil, sans erreur.
+- **Jeu en direct : chaque note à l'instant de son geste (M6).** L'instant
+  était pris quand le code s'exécutait ; au téléphone, le fil principal
+  occupé le retardait, et des doubles croches tombaient un cran trop tard.
+  Chaque touche apporte maintenant l'instant de son geste
+  (`event.timeStamp`, l'horodatage du message MIDI, ramené à maintenant
+  s'il vient d'une autre horloge), que le transport rapporte à ce qu'on
+  entendait (`getOutputTimestamp`, avec repli sur l'horloge du contexte
+  moins ses latences). Mesuré dans l'appli : des doubles croches à 120
+  horodatées juste, traitées jusqu'à 58 ms en retard (le fil principal
+  occupé 60 ms toutes les 100 ms) : 24 sur 24 au bon pas, contre 6 sur 24
+  avant.
+  - **La latence de l'appareil se règle d'un geste** (« Régler en tapant
+    avec le clic », feuille Tempo) : douze clics à 100, on tape huit fois
+    avec eux (sur un grand pavé, ou au clavier MIDI : c'est ce dont on joue
+    qui compte), et la médiane de l'écart au clic devient la latence de
+    l'appareil (`portee:latence-jeu`, bornée de −150 à 400 ms), retranchée
+    de chaque note jouée en direct. Pourquoi la médiane : une tape oubliée
+    ou doublée ne déplace pas le réglage. Essayé avec des tapes horodatées
+    40 ms après chaque clic : « Réglée : 40 ms ».
+- **Le micro entend le vibrato, le sifflement et les cartes son rapides
+  (M7).** Mesuré sur les 29 sons de synthèse de l'audit (voix d'homme, de
+  femme, de soprano, sifflements, vibratos, bruit de fond, fondamentale
+  absente…) et sur des vibratos de ±30 à ±100 centièmes, à 5 et 6,5 Hz.
+  - Le vibrato : une mesure (toutes les 40 ms) compte pour la note tenue
+    tant qu'elle en reste à 0,8 demi-ton, la note suit la médiane des six
+    dernières mesures, et il faut deux mesures de suite au-delà pour faire
+    une autre note : une seule, c'est la crête d'un vibrato. Avant, une
+    seule mesure à plus de 0,6 demi-ton de la moyenne remettait la tenue à
+    zéro : dès ±45 centièmes à 5 Hz, un vibrato ordinaire, la note ne
+    s'écrivait jamais. Maintenant, jusqu'à ±60 centièmes, elle s'écrit en
+    240 ms comme une note droite ; à ±80 et ±100, en 400 à 640 ms. Le
+    legato glissé (la → do en 150 ms, la → mi en 300 ms) s'écrit au même
+    moment qu'avant.
+  - Ce que ça coûte : une autre note, attaquée sans glisser, s'affiche une
+    mesure plus tard (40 ms), et s'écrit toujours au bout de six ; une
+    attaque glissée de −150 centièmes s'écrit en 360 ms au lieu de 320.
+  - Le sifflement : on cherche jusqu'à 2 500 Hz au lieu de 1 200 ; un mi5
+    ou un la5 sifflés s'écrivaient une octave trop bas (76 et 81 au lieu de
+    88 et 93). Aucune nouvelle erreur d'octave sur les sons d'essai, pour le
+    même calcul (0,3 ms par mesure).
+  - Les cartes son à 88,2 et 96 kHz : le son est ramené vers 24 kHz (un
+    échantillon sur quatre, moyenné) et la fenêtre double ; avant, rien
+    sous 94 Hz, le mi1 d'une basse n'était pas entendu.
+  - Le micro s'ouvre sans gain automatique (il l'était déjà sans
+    annulation d'écho ni réduction de bruit) : le gain remontait le bruit de
+    fond entre deux notes. Sur l'iPhone, la session audio passe en
+    « play-and-record » le temps que le micro écoute, et l'écran reste
+    allumé (M8).
+- **La pédale de maintien du clavier MIDI (M9).** Elle était ignorée.
+  Enfoncée (CC64, à partir de 64), le piano tient les touches relâchées
+  jusqu'à ce qu'elle se relève ; la même note rejouée efface vite la
+  précédente au lieu de s'y ajouter. En direct, une note tenue par la
+  pédale dure jusqu'à son lever, ou jusqu'à la même note rejouée. Essayé
+  avec un faux clavier MIDI dans la page : une note relâchée sous la
+  pédale ne s'arrête qu'au lever ; enregistrée, elle dure une mesure au lieu
+  de la croche jouée. Ce que le transport programme ne dépend pas de la
+  pédale : la durée des notes est déjà écrite.
+- **La levée jouée pendant le décompte se dit (M11).** Elle disparaissait
+  sans un mot. Le comportement ne change pas : la prise commence au premier
+  temps (garder la levée, ou non, reste à décider par Adrien) ; la feuille
+  de l'arrondi le dit (« 2 notes jouées pendant le décompte : pas gardées,
+  la prise commence au premier temps »), et si tout a été joué pendant le
+  décompte, le message le dit au lieu de « rien n'a été joué ».
+- **Le tempo tapé compte les temps de la mesure (M12).** On tape ce que
+  bat le métronome : la noire pointée en 6/8, 9/8 et 12/8, la blanche en
+  2/2, la croche en 3/8 ; l'idée garde ses noires par minute. Avant, taper
+  la noire pointée d'un 12/8 réglait le métronome aux deux tiers.
+- **Vers Live : la sortie MIDI et le dossier des .mid (M10).** Chrome et
+  Edge sur ordinateur ; ailleurs (téléphone, Safari, Firefox, claude.ai), la
+  section « Avec Live » des réglages reste cachée et rien n'est demandé au
+  navigateur (`reglages-live.js`).
+  - La sortie MIDI (`sortie-midi.js`) : le port choisi dans les réglages
+    (le Gestionnaire IAC sur Mac, un port loopMIDI sur Windows) reçoit ce
+    que joue le transport (idée, morceau, page lue), note à note, horodaté
+    à l'instant où le piano de Portée la joue (`send(octets, instant)`) ;
+    une piste MIDI de Live qui écoute ce port la joue avec son propre son.
+    Un interrupteur rend le piano de Portée muet pendant ce temps. À
+    l'arrêt, ce qui n'est pas parti ne part pas, ce qui sonne s'éteint
+    (note par note, puis All Notes Off) ; une écoute qui finit d'elle-même
+    laisse la dernière note finir. Une même hauteur tenue par deux voix
+    (les accords et la mélodie) est relancée, et ne s'éteint qu'avec la
+    dernière. Le port revient à la visite suivante (retrouvé par son nom
+    s'il a changé d'identifiant) ; débranché, le piano de Portée reprend.
+  - Pourquoi 100 ms d'avance seulement (le piano en prend 350) : un message
+    parti ne se rattrape pas, Chrome n'a pas `MIDIOutput.clear()`. Au pire,
+    une note qui devait partir dans les 100 ms suivant l'arrêt s'entend,
+    brève ; les extinctions partent après le dernier message envoyé, sans
+    quoi cette note tiendrait.
+  - Un piège évité : IAC et loopMIDI sont aussi une entrée du même nom, qui
+    renvoie à Portée ce qu'elle y joue. Le clavier MIDI de l'idée l'aurait
+    écrit, note à note, à chaque écoute : `idee-clavier.js` ignore l'entrée
+    qui porte le nom de la sortie choisie.
+  - Le dossier (`dossier-midi.js`) : choisi dans les réglages
+    (`showDirectoryPicker`), Portée y écrit le .mid de chaque idée et de
+    chaque morceau (`midiDeLIdee`, `midiDuMorceau`, tels quels), dans deux
+    sous-dossiers, Idées et Morceaux, une seconde après le dernier
+    changement, et seulement ce qui a changé (une empreinte par fichier).
+    Un titre changé renomme le fichier, une idée effacée efface le sien,
+    aucun autre fichier du dossier n'est touché. « Tout réécrire » remet un
+    fichier effacé à la main ; « Ne plus écrire dans ce dossier » l'oublie,
+    les fichiers restent. Le navigateur redemande la permission d'écrire à
+    chaque visite (sauf « Autoriser à chaque visite ») : « Autoriser Portée
+    à y écrire » la rend d'un toucher, et un message le dit, une fois par
+    visite, quand des changements attendent.
+  - Où le dossier se garde : dans une petite base à part, `portee-appareil`
+    (version 1, un magasin `reglages`), pas dans `meta` de la bibliothèque :
+    elle se synchronise, et un dossier de cet ordinateur n'aurait pas de
+    sens sur le téléphone. La base `portee` et ses magasins ne changent pas.
+  - Ce que ça coûte : une grosse bibliothèque (300 idées de 16 mesures, 30
+    morceaux) se refait en 230 ms. Seule la première passe d'une visite
+    refait tout, par tranches (la page ne s'arrête jamais plus de 18 ms) ;
+    ensuite, seules les partitions changées (leur date de modification, et
+    celles des idées d'un morceau) : 10 ms après une note changée.
+  - Essayé dans Chromium, avec un faux bus IAC qui renvoie ce qu'il reçoit
+    et un dossier de l'OPFS derrière un faux sélecteur : les quatre noires
+    d'une idée à 120 partent à 500 ms d'écart exactement, envoyées 115 à
+    140 ms d'avance ; leur retour par l'entrée du bus n'écrit rien, un vrai
+    clavier MIDI écrit toujours ; piano muet, aucune note du piano et toutes
+    au bus ; arrêt, All Notes Off ; le .mid s'écrit dans Idées et se renomme
+    avec le titre ; à la visite suivante, le port, l'interrupteur et le
+    dossier reviennent. Avec le vrai Live, reste à essayer (IAC ou loopMIDI,
+    le dossier dans les Emplacements).
+- **Proposé, à valider par Adrien : la capture après coup (M13).** Comme
+  « Capture MIDI » dans Live et dans Ableton Note : sans avoir touché le
+  bouton rouge, ce qu'on joue au clavier (à l'écran, de l'ordinateur ou
+  MIDI) s'écrit note à note, de la durée choisie, comme avant ; Portée garde
+  aussi en mémoire la dernière phrase jouée, avec son rythme (seize mesures
+  au plus ; quatre secondes de silence, ou deux mesures, en commencent une
+  autre ; oubliée après une minute sans jouer). Une pastille « Capturer »
+  apparaît sur la grille dès deux notes (ou C au clavier) et ouvre la
+  feuille de l'arrondi, « Tel que joué | Arrondi » : « Garder » remplace les
+  notes écrites pendant qu'on jouait par celles-ci, avec leur rythme ;
+  « Jeter » laisse l'idée comme elle est. La phrase se cale sur la musique
+  si l'idée tournait (dans la boucle, si elle bouclait), sinon sur le tempo
+  de l'idée, à partir de la première note. Essayé dans l'appli : croche,
+  croche, noire, croche, croche jouées à 120 sans le bouton rouge s'écrivent
+  en cinq noires, puis « Capturer », « Garder » : 2, 2, 4, 2, 2 pas.
+  - Pourquoi une pastille sur la grille plutôt qu'un bouton du transport :
+    la rangée du transport est pleine au téléphone (320 px sur 366), et la
+    pastille ne se montre que quand il y a quelque chose à capturer.
+  - Pourquoi remplacer plutôt qu'ajouter : la même phrase, écrite deux fois,
+    se chevaucherait. Seules les notes que la capture a vues s'écrire (et
+    qui sont encore là) partent ; une note choisie qui change de hauteur au
+    clavier n'est pas une phrase jouée, et n'y entre pas.
+- **Après la fusion des autres lots (lint, essais dans Chromium).**
+  `npm run lint` ne trouve aucune erreur dans les fichiers du lot ; le
+  démarrage du micro (`idee-chant.js`) relit la promesse en cours avant de
+  l'effacer, et l'accès MIDI du clavier (`idee-clavier.js`) est une
+  promesse demandée une fois (redemandable si elle est refusée) : leurs
+  avertissements `require-atomic-updates` sont réglés sans rien changer
+  d'autre. `npm run e2e` : les 21 essais restent verts, dont
+  l'écoute, le chant au faux micro, le mémo et « hors ligne dès la première
+  visite », qui garde les 82 fichiers du piano par la liste de
+  l'assembleur.
+
 <!-- lot musique -->
 
 ### Outillage, hors ligne et dépendances (S2, I5, T1, T2, T6)
@@ -1823,9 +2106,12 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
   MuseScore sert pour les gros chantiers.
 - **Afficher** : [abcjs](https://www.abcjs.net/) 6.7.1 (MIT), qui gère
   gravure, curseur et transposition. Verovio reste en réserve.
-- **Piano** : [smplr](https://github.com/danigb/smplr) `SplendidGrandPiano`,
-  un Steinway sur 4 nuances en domaine public. Le Salamander (CC-BY) reste en
-  réserve.
+- **Piano** : un lecteur maison (`app/piano.js`) sur les échantillons du
+  Steinway de SplendidGrandPiano (AKAI, domaine public), tels que
+  [smplr](https://github.com/danigb/smplr) les sert ; smplr lui-même n'est
+  pas utilisé. Trois couches de nuances (MF au premier son, PP et FF à la
+  demande), reprises des enregistrements par `outils/echantillons-piano.mjs`
+  (voir `app/piano/LISEZMOI.md`). Le Salamander (CC-BY) reste en réserve.
 - **Ableton Live 12 (licence d'Adrien) et ses VST**, en plus du navigateur.
   - L'appli exporte un MIDI avec une piste par main et le tempo (vérifié :
     `ABCJS.synth.getMidiFile` sort un format 1 avec une piste par voix).
@@ -2094,7 +2380,13 @@ ou supprimer la fonction dans Supabase.
 - **Micro et clavier MIDI** : ni l'un ni l'autre dans la page claude.ai
   (cadre sans ces permissions) ; Safari (iPhone, iPad) ne lit pas les
   claviers MIDI. Le micro et le son ne marchent pas en même temps : on coupe
-  l'un pour l'autre (sinon le piano repasse dans le micro).
+  l'un pour l'autre (sinon le piano repasse dans le micro). Sur l'iPhone,
+  tout ce qui ouvre le micro passe la session audio en « play-and-record »
+  et la rend à « playback » après, refus compris (`sessionAudio`,
+  `eveil.js`) : l'oublier, c'est un piano qui obéit de nouveau au bouton
+  silencieux. La sortie MIDI vers IAC ou loopMIDI revient par l'entrée du
+  même nom : tout ce qui écoute les entrées MIDI doit l'ignorer
+  (`enBoucle`, `sortie-midi.js`), sinon chaque écoute réécrit l'idée.
 
 ## Questions ouvertes
 

@@ -81,8 +81,10 @@ export function fenetreOctaves(octave, debut = 2, nb = OCTAVES_CARTE) {
 
 /**
  * @param conteneur l'élément qui reçoit la barre et le clavier
- * @param options { surNote(h, bas, vitesse), surOctave(bas) (l'octave a changé
- *   par un geste sur les chevrons ou la carte), surFacon("piano" | "gamme") }
+ * @param options { surNote(h, bas, vitesse, quand), surOctave(bas) (l'octave a
+ *   changé par un geste sur les chevrons ou la carte), surFacon("piano" | "gamme") }.
+ *   `quand` : l'instant du geste (event.timeStamp, l'horloge de la page) ; le
+ *   jeu en direct place la note à cet instant-là, pas à celui où le code tourne.
  */
 export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFacon = () => {} }) {
   let bas = null; // la touche la plus à gauche : toujours un do
@@ -293,12 +295,12 @@ export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFaco
   const toucheDe = (cible) => cible.closest(".touche, .pad");
   const allumer = (h, oui) => conteneur.querySelectorAll(`.touche[data-h="${h}"], .pad[data-h="${h}"]`).forEach((t) => t.classList.toggle("enfoncee", oui));
 
-  function relacher(id) {
+  function relacher(id, quand) {
     const h = enfoncees.get(id);
     if (h === undefined) return;
     enfoncees.delete(id);
     if (![...enfoncees.values()].includes(h)) allumer(h, false);
-    surNote(h, false);
+    surNote(h, false, undefined, quand);
   }
 
   for (const surface of [zone, pads]) {
@@ -309,20 +311,20 @@ export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFaco
       const h = Number(t.dataset.h);
       enfoncees.set(e.pointerId, h);
       t.classList.add("enfoncee");
-      surNote(h, true, Math.round(70 + 40 * Math.min(1, e.pressure || 0.5)));
+      surNote(h, true, Math.round(70 + 40 * Math.min(1, e.pressure || 0.5)), e.timeStamp);
     });
     // Pas de menu ni de loupe quand on laisse le doigt sur une touche.
     surface.addEventListener("contextmenu", (e) => e.preventDefault());
   }
-  for (const type of ["pointerup", "pointercancel"]) window.addEventListener(type, (e) => relacher(e.pointerId));
+  for (const type of ["pointerup", "pointercancel"]) window.addEventListener(type, (e) => relacher(e.pointerId, e.timeStamp));
   // Au clavier de l'ordinateur, une grosse touche (Tab, puis Entrée) joue une note courte.
   pads.addEventListener("click", (e) => {
     const t = e.target.closest(".pad");
     if (!t || e.detail !== 0) return;
     const h = Number(t.dataset.h);
-    surNote(h, true, 90);
+    surNote(h, true, 90, e.timeStamp);
     allumer(h, true);
-    setTimeout(() => { allumer(h, false); surNote(h, false); }, 300);
+    setTimeout(() => { allumer(h, false); surNote(h, false, undefined, performance.now()); }, 300);
   });
 
   function decaler(sens) {

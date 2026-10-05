@@ -11,7 +11,11 @@
  *     A S D F… pour les touches blanches, W E T Y U pour les noires, Z X
  *     pour l'octave), qui joue dans tous les modes ;
  *   - un clavier MIDI (Chrome et Edge ; bouton #idee-midi dans la feuille
- *     Tempo), rebranché tout seul à l'ouverture s'il l'a déjà été.
+ *     Tempo), rebranché tout seul à l'ouverture s'il l'a déjà été, et sa
+ *     pédale de maintien (CC64) : le piano tient les notes, le jeu en direct
+ *     les enregistre tenues (audit du 04/10, M9).
+ * Chaque touche donne l'instant de son geste (event.timeStamp, ou celui du
+ * message MIDI) : le jeu en direct la place à cet instant-là (M6).
  * Sans note choisie, une touche écrit à la suite, de la durée choisie ;
  * avec une note choisie, elle lui donne sa hauteur (c'est le cœur qui en
  * décide, dans enfoncer).
@@ -21,14 +25,16 @@
  * « portee:clavier-facon » (Piano ou Gamme, retenu d'une fois sur l'autre).
  *
  * Reçoit du cœur (ctx) : e (l'état : duree, pointee, seq, ouverte), $,
- *   toast, enfoncer(h, v), relever(h), choisirDuree(pas), basculerPointee(),
- *   silence(), effacer(), choisies().
+ *   toast, piano, enfoncer(h, v, { quand }), relever(h, quand),
+ *   pedale(bas, quand), choisirDuree(pas), basculerPointee(), silence(),
+ *   effacer(), choisies().
  * Rend : { entrer(), sortir(), maj(), ouvrir(notes), toucheBas(ev),
  *   toucheHaut(ev), montrer(h, enfoncee), marquer(hauteurs), amener(h) }.
  */
 import { creerClavier } from "./clavier.js";
 import { nomNote } from "./sequence.js";
 import { lirePref, ecrirePref } from "./preferences.js";
+import { enBoucle } from "./sortie-midi.js";
 
 // Le clavier de l'ordinateur, comme dans Ableton : la rangée du milieu pour
 // les touches blanches, celle du dessus pour les noires (positions physiques :
@@ -37,6 +43,30 @@ export const TOUCHES_ORDI = {
   KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 6, KeyG: 7, KeyY: 8, KeyH: 9,
   KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13, KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17,
 };
+
+/**
+ * Ce que dit un message MIDI : { type: "debut", note, force }, { type: "fin",
+ * note }, { type: "pedale", bas } (la pédale de maintien, CC64 : enfoncée à
+ * partir de 64), ou null (le reste ne nous concerne pas). Tous canaux.
+ */
+export function lireMessageMidi(data) {
+  const [statut, a, b] = data || [];
+  const type = statut & 0xf0;
+  if (type === 0x90 && b > 0) return { type: "debut", note: a, force: b };
+  if (type === 0x80 || (type === 0x90 && b === 0)) return { type: "fin", note: a };
+  if (type === 0xb0 && a === 64) return { type: "pedale", bas: b >= 64 };
+  return null;
+}
+
+/**
+ * L'instant d'un message MIDI, sur l'horloge de la page : son horodatage s'il
+ * est plausible (à moins de cinq secondes de maintenant), sinon maintenant.
+ * Un message traité en retard (le fil principal occupé) garde ainsi l'instant
+ * où la touche a été jouée.
+ */
+export function instantMidi(timeStamp, maintenant = performance.now()) {
+  return timeStamp > 0 && Math.abs(maintenant - timeStamp) < 5000 ? timeStamp : maintenant;
+}
 
 const CLE_GAMME = "portee:clavier-gamme";
 const CLE_FACON = "portee:clavier-facon";
@@ -47,11 +77,22 @@ export function creerModeClavier(ctx) {
   // Les touches de gamme écrivent par le même chemin que celles du piano
   // (enfoncer, relever) : le jeu en direct, la note choisie qui prend la hauteur… marchent pareil.
   const clavier = creerClavier($("idee-clavier"), {
-    surNote: (h, bas, v) => (bas ? ctx.enfoncer(h, v) : ctx.relever(h)),
+    surNote: (h, bas, v, quand) => (bas ? ctx.enfoncer(h, v, { quand }) : ctx.relever(h, quand)),
     // Un geste sur les chevrons ou la carte : les touches de l'ordinateur suivent l'octave montrée.
-    surOctave: (bas) => { octaveOrdi = bas; },
+    surOctave: (bas) => { octaveOrdi = bas; preferer(); },
     surFacon: (f) => ecrirePref(CLE_FACON, f),
   });
+
+  /**
+   * Le piano télécharge d'abord les sons de l'octave montrée (piano.js) : le
+   * premier toucher n'attend pas le reste du clavier. À l'ouverture d'une
+   * idée, ils se téléchargent même avant le premier toucher.
+   */
+  function preferer({ prechauffer = false, vers = null } = {}) {
+    // Le clavier pas encore dessiné (caché) : l'octave de la note qu'il va montrer.
+    const bas = clavier.bas ?? (vers !== null ? 12 * Math.floor(vers / 12) : octaveOrdi);
+    if (ctx.piano && ctx.piano.preferer) ctx.piano.preferer(bas, bas + 12, { prechauffer });
+  }
 
   /** Les préférences, lues à l'ouverture d'une idée et quand le mode reparaît : l'accueil les change entre-temps. */
   function lirePrefs() {
@@ -98,12 +139,13 @@ export function creerModeClavier(ctx) {
   /** Les touches qui jouent, et Z X pour l'octave. Rend true si la touche a servi. */
   function toucheBas(ev) {
     if (TOUCHES_ORDI[ev.code] !== undefined) {
-      if (!ev.repeat) ctx.enfoncer(octaveOrdi + TOUCHES_ORDI[ev.code]); // touche tenue : rien de plus
+      if (!ev.repeat) ctx.enfoncer(octaveOrdi + TOUCHES_ORDI[ev.code], undefined, { quand: ev.timeStamp }); // touche tenue : rien de plus
       return true;
     }
     if (ev.code === "KeyZ" || ev.code === "KeyX") {
       octaveOrdi = ev.code === "KeyZ" ? Math.max(24, octaveOrdi - 12) : Math.min(96, octaveOrdi + 12);
       clavier.aller(octaveOrdi);
+      preferer();
       toast(`Clavier de l'ordinateur : à partir de ${nomNote(octaveOrdi)}`, 1500);
       return true;
     }
@@ -112,26 +154,31 @@ export function creerModeClavier(ctx) {
 
   function toucheHaut(ev) {
     if (TOUCHES_ORDI[ev.code] === undefined) return false;
-    ctx.relever(octaveOrdi + TOUCHES_ORDI[ev.code]);
+    ctx.relever(octaveOrdi + TOUCHES_ORDI[ev.code], ev.timeStamp);
     return true;
   }
 
   // --- Le clavier MIDI -------------------------------------------------------
 
+  // L'accès MIDI, demandé une seule fois (la promesse) : deux touchers rapides sur « Brancher » ne le
+  // demandent pas deux fois. Refusé, il pourra être redemandé.
   let accesMidi = null;
   async function brancherMidi(demande) {
     if (!navigator.requestMIDIAccess) {
       if (demande) toast("Ce navigateur ne lit pas les claviers MIDI (Safari, iPhone, iPad). Sur ordinateur ou Android, Chrome et Edge le font.", 8000);
       return;
     }
+    if (!accesMidi) accesMidi = navigator.requestMIDIAccess().catch((err) => { accesMidi = null; throw err; });
     try {
-      accesMidi = accesMidi || await navigator.requestMIDIAccess();
+      const acces = await accesMidi;
       const brancher = () => {
-        const entrees = [...accesMidi.inputs.values()];
-        for (const x of entrees) x.onmidimessage = surMessageMidi;
+        // L'entrée qui porte le nom de la sortie MIDI choisie (IAC, loopMIDI) renvoie les notes que
+        // Portée y joue : on ne l'écoute pas, sinon chaque écoute réécrirait l'idée (sortie-midi.js).
+        const entrees = [...acces.inputs.values()].filter((x) => !enBoucle(x));
+        for (const x of acces.inputs.values()) x.onmidimessage = enBoucle(x) ? null : surMessageMidi;
         $("idee-midi-etat").textContent = entrees.length ? `Branché : ${entrees.map((x) => x.name).join(", ")}` : "Aucun clavier MIDI branché pour l'instant.";
       };
-      accesMidi.onstatechange = brancher;
+      acces.onstatechange = brancher;
       brancher();
       ecrirePref("portee:midi", "1");
     } catch {
@@ -140,10 +187,14 @@ export function creerModeClavier(ctx) {
   }
 
   function surMessageMidi(m) {
-    const [statut, note, force] = m.data;
-    const type = statut & 0xf0;
-    if (type === 0x90 && force > 0) ctx.enfoncer(note, force);
-    else if (type === 0x80 || (type === 0x90 && force === 0)) ctx.relever(note);
+    // La sortie MIDI choisie après le branchement du clavier : son retour se tait aussi.
+    if (enBoucle(m.currentTarget || m.target)) return;
+    const x = lireMessageMidi(m.data);
+    if (!x) return;
+    const quand = instantMidi(m.timeStamp);
+    if (x.type === "debut") ctx.enfoncer(x.note, x.force, { quand });
+    else if (x.type === "fin") ctx.relever(x.note, quand);
+    else ctx.pedale(x.bas, quand);
   }
   $("idee-midi").addEventListener("click", () => brancherMidi(true));
 
@@ -155,7 +206,9 @@ export function creerModeClavier(ctx) {
     ouvrir(notes) {
       lirePrefs();
       choixVu = "";
-      clavier.amener(notes.length ? notes[notes.length - 1].h : 60);
+      const derniere = notes.length ? notes[notes.length - 1].h : 60;
+      clavier.amener(derniere);
+      preferer({ prechauffer: true, vers: derniere });
       if (lirePref("portee:midi") === "1") brancherMidi(false);
     },
     toucheBas, toucheHaut,
