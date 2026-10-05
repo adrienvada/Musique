@@ -18,10 +18,24 @@
  * synchronisation s'en sert au lieu de garder la fiche entière la plus
  * récente, qui effaçait une note ajoutée ailleurs (audit, D4).
  *
+ * Les traits d'une page voyagent compactés (`compacter`, `decompacter`).
+ *
  * Sans dépendance au navigateur : le même module sert à l'appli et aux tests.
  */
 import { BORNES, ecrireAbc, nouvelleSequence } from "./sequence.js";
 import { STYLES, voixCompletes } from "./harmonie.js";
+
+/** Traits → entiers au demi-pixel près : deux fois plus léger, aucune perte utile. */
+export function compacter(traits) {
+  return traits.map((t) => t.flatMap(([x, y]) => [Math.round(x * 2), Math.round(y * 2)]));
+}
+export function decompacter(compacts) {
+  return compacts.map((t) => {
+    const pts = [];
+    for (let i = 0; i < t.length; i += 2) pts.push([t[i] / 2, t[i + 1] / 2]);
+    return pts;
+  });
+}
 
 /** La date d'une fiche qui n'en a pas : la plus ancienne, pour qu'elle ne gagne aucune comparaison. */
 export const EPOQUE = "1970-01-01T00:00:00.000Z";
@@ -126,6 +140,7 @@ function normaliserNote(n) {
   }
   const d = entier(n.d, 0, MAX_PAS, null), l = entier(n.l, 1, MAX_PAS, null), h = entier(n.h, BORNES.bas, BORNES.haut, null);
   if (d === null || l === null || h === null) return null;
+  /** @type {{ id: number, d: number, l: number, h: number, v?: number }} */
   const note = { ...extrasSimples(n, CHAMPS_NOTE), id: entier(n.id, 1, Number.MAX_SAFE_INTEGER, 0), d, l, h };
   const v = entier(n.v, 1, 127, null);
   if (v !== null) note.v = v;
@@ -266,6 +281,7 @@ export function abcDeLIdee(f) {
  */
 export function normaliserFiche(brute) {
   if (!estObjet(brute)) return null;
+  /** @type {Record<string, any>} */
   const f = {};
   for (const [cle, valeur] of Object.entries(brute)) {
     if (valeur === undefined || INTERNES.has(cle)) continue;
@@ -465,7 +481,8 @@ function fusionnerSequences(b, l, d, departager) {
  * se mélange pas : la fiche garde celui d'ici, et `copie` rend la version
  * de l'autre appareil, à garder à part (une copie de conflit).
  *
- * @returns { donnees, copie: null | fiche, memo: "locale" | "distante" (d'où vient le mémo, donc le son) }
+ * @returns {{ donnees: any, copie: any, memo: "locale" | "distante" }}  copie : null, ou la
+ *   fiche de l'autre appareil ; memo : d'où vient le mémo (donc le son)
  */
 export function fusionnerFiches({ base, locale, distante }) {
   const plusRecente = (locale.modifieLe || "") >= (distante.modifieLe || "") ? "locale" : "distante";
@@ -485,6 +502,7 @@ export function fusionnerFiches({ base, locale, distante }) {
     else v = troisVoies(b, l, d, departager);
     if (v !== undefined) donnees[k] = v;
   }
+  /** @type {"locale" | "distante"} */
   let memo = plusRecente;
   if (egal(locale.memo, distante.memo) || egal(distante.memo, base.memo)) memo = "locale";
   else if (egal(locale.memo, base.memo)) memo = "distante";

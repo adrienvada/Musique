@@ -102,7 +102,7 @@ function sansChevauchement(notes) {
 
 /**
  * @param voix  [{ nom, notes: [{ d, l, h, v }] }] (d, l en pas, fractionnaires permis)
- * @param options { tempo, mesure: [n, d] (null : mesure libre), quintes, mineur, titre,
+ * @param {Object} options  { tempo, mesure: [n, d] (null : mesure libre), quintes, mineur, titre,
  *                  transposition, changements: [{ d, mesure?, quintes?, mineur? }] (en cours
  *                  de route, en pas), fin (pas ; par défaut, la barre après la dernière note) }
  * @returns Uint8Array

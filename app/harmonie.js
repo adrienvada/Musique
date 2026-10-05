@@ -89,6 +89,8 @@ function dominantesSecondaires(tonalite) {
  */
 function noter(seq, debut, fin) {
   const notes = seq.pistes[0].notes.filter((n) => n.d < fin && n.d + n.l > debut);
+  // Une dominante secondaire dit aussi l'accord qu'elle appelle (`cible`).
+  /** @type {{ nom: string, degre: string, cible?: string }[]} */
   const candidats = accordsDeLaTonalite(seq.tonalite);
   if (!notes.length) return candidats.map((c) => ({ ...c, score: 0 }));
   const jouees = new Set(notes.map((n) => mod12(n.h)));

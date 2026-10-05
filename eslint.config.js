@@ -36,9 +36,6 @@ export default [
       "no-throw-literal": "warn",
     },
   },
-  // Le connecteur refuse exprès les caractères de contrôle dans ce qu'il
-  // reçoit (CONTROLE, conversation.js) : l'expression les nomme, c'est voulu.
-  { files: ["supabase/functions/portee-remarkable/conversation.js"], rules: { "no-control-regex": "off" } },
   { files: ["app/**/*.js"], languageOptions: { globals: globals.browser } },
   { files: ["app/sw.js"], languageOptions: { sourceType: "script", globals: globals.serviceworker } },
   { files: ["lecteur/**/*.js", "supabase/functions/**/*.js"], languageOptions: { globals: globals["shared-node-browser"] } },

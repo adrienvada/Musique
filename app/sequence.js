@@ -517,7 +517,7 @@ const dureeEcrite = (e, triolet) => (e.el_type === "note" && e.duration ? e.dura
  * dans une idée : tout est décalé pour que la première barre de la page
  * tombe sur une barre.
  *
- * @returns { voix: [{ notes: [{ d, l, h, v }] }] (les voix qui jouent),
+ * @returns {Object}  { voix: [{ notes: [{ d, l, h, v }] }] (les voix qui jouent),
  *   tempo, sections: [{ d, barre, mesure (null : mesure libre, « M:none »),
  *   tonalite }] } : une section par changement de tonalité ou de mesure en
  *   cours de page (« [K:Eb][M:12/8] »), qui commence en `d` et a sa première
@@ -681,7 +681,12 @@ export function inserer(seq, p, pos, hauteurs, l) {
   return ids;
 }
 
-/** Ajoute une note posée librement (grille, enregistrement) : rien ne bouge. */
+/**
+ * Ajoute une note posée librement (grille, enregistrement) : rien ne bouge.
+ * @param {any} seq
+ * @param {number} p  la piste
+ * @param {{ d: number, l: number, h: number, v?: number }} note  `v` : la vélocité (le jeu en direct)
+ */
 export function poser(seq, p, { d, l, h, v }) {
   const piste = seq.pistes[p];
   h = borner(h);

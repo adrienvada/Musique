@@ -25,7 +25,7 @@ export const SECTIONS = ["Intro", "Couplet", "Pré-refrain", "Refrain", "Pont", 
  * un bloc peut être en 3/4 et en sol dans un morceau qui commence en 4/4 et
  * en do. Chaque section dit où elle commence, sa mesure et sa tonalité ; le
  * MIDI et le MusicXML les reprennent.
- * @param morceau { blocs: [{ id, idee, nom, fois }], tempo }
+ * @param {Object} morceau  { blocs: [{ id, idee, nom, fois }], tempo }
  * @param idees   Map id → partition (type idee) ; un bloc dont l'idée a disparu est sauté
  */
 export function assembler(morceau, idees) {
@@ -150,7 +150,7 @@ export function dureeEnTexte(secondes) {
  * (mesures × fois), pour la frise de l'écran Morceau et la vignette de la
  * bibliothèque. Un bloc dont l'idée a disparu y figure, muet (manque : true) :
  * l'assemblage le saute, et la frise le dit.
- * @returns { segments: [{ bloc, nom, idee, couleur, fois, mesures, pas, debut, fin, manque }],
+ * @returns {Object}  { segments: [{ bloc, nom, idee, couleur, fois, mesures, pas, debut, fin, manque }],
  *            mesures, pas, secondes, tempo }
  */
 export function structure(morceau, idees) {

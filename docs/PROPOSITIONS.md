@@ -2180,6 +2180,28 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - `idee.js` : 1 094 lignes avant, ≈700 après. Le reste est le cœur :
     l'état, annuler et refaire, jouer une note, écouter, la barre du haut,
     le choix du mode, et le contexte des modules.
+- **Les types couvrent la musique, la fiche, la synchro et tout le
+  connecteur (T2).** `sequence`, `accords`, `harmonie`, `midi`,
+  `musicxml`, `morceau`, `fiche`, `synchro`, `idee-enregistrement`,
+  `conversation`, `mcp` et `http` sont vérifiés par `npm run types`. Ils
+  attendaient des JSDoc écrites en prose (`@param options { tempo, … }`,
+  que TypeScript lit comme un type : le type s'écrit d'abord, `{Object}`,
+  la prose ensuite), une note dont la vélocité est facultative (`poser`),
+  un `surEtat` sans argument, une union de fiches que la vérification ne
+  savait pas trier (`in` le lui dit).
+  - `compacter` et `decompacter` (les traits d'une page) vivent dans
+    `fiche.js`, sans DOM : la synchro les prenait dans `stockage.js`, qui
+    touche à la page, et ne pouvait pas être vérifiée. `stockage.js` les
+    donne encore, pour ceux qui les y prennent.
+  - `stockage.js` reste hors des types, comme les écrans : il touche à
+    `localStorage` et à `matchMedia`.
+- **Lint** : plus d'avertissement dans `app.js`, `connecteur.js` et
+  `idee.js` (les écritures après un `await` venaient des bogues T4-a et
+  T4-b ; les objets lancés sont devenus des `Error` avec leur cause).
+  L'exception `no-control-regex` de `eslint.config.js` pour
+  `conversation.js` devient une directive sur la seule ligne qui en a
+  besoin, avec son pourquoi. Restent cinq avertissements hors du lot :
+  `objets.js` (connecteur) et quatre dans les essais de la synchro.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 
