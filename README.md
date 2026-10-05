@@ -66,7 +66,10 @@ dossier aux Emplacements du navigateur de Live.
 
 **Sur l'iPhone**, installe Portée sur l'écran d'accueil (Partager › Sur
 l'écran d'accueil) : sinon Safari efface la bibliothèque au bout de 7 jours
-sans visite. Le piano sonne même en mode silencieux, l'écran reste allumé
+sans visite. Réglages › L'appli te dit si ta bibliothèque est protégée sur
+cet appareil, et la place qu'elle prend ; dans Safari, il te guide pas à
+pas. L'appli installée repart de la synchro (recolle l'adresse du
+connecteur) ou d'une sauvegarde. Le piano sonne même en mode silencieux, l'écran reste allumé
 pendant l'écoute, le direct, le chant et le mémo, et l'écran verrouillé
 montre ce qui joue.
 
@@ -99,23 +102,47 @@ Réglages → « Synchroniser mes appareils », puis colle l'adresse de ton
 connecteur (une fois par appareil). Elle marche aussi hors ligne : les
 changements partent au retour du réseau. Elle se synchronise champ par
 champ : une étoile posée sur le téléphone n'efface plus les notes ajoutées
-sur l'ordinateur. Si deux corrections de la même page s'opposent, Portée
-garde les deux (une copie « (version de l'autre appareil) » apparaît). Une
-partition supprimée reste 30 jours dans la corbeille de la bibliothèque
-commune, et chaque partition garde ses 20 dernières versions. Réglages › Sauvegarde en fait en
-plus un fichier, et exporte tout en MIDI d'un coup. Le connecteur
+sur l'ordinateur.
+
+- Si deux corrections de la même page s'opposent, Portée garde les deux :
+  la version de l'autre appareil porte « À choisir », et son « ••• » te
+  propose de garder celle-ci, les deux, ou l'autre.
+- « ••• » › **Versions précédentes** : les 20 dernières versions de chaque
+  partition, ce que chacune a changé, et « Récupérer cette version » (celle
+  d'aujourd'hui reste dans les versions).
+- Réglages › Synchronisation › **Corbeille (30 jours)** : ce que tu as
+  supprimé, à récupérer. Au même endroit, ce que la synchro a dû mettre de
+  côté, pourquoi, et « Réessayer ».
+
+Réglages › Sauvegarde en fait en plus un fichier, et exporte tout en MIDI
+d'un coup ; il dit la date de la dernière sauvegarde et, sans synchro, te
+le rappelle au bout de 30 jours (le nuage du haut passe à l'ambre). Le connecteur
 (reMarkable et synchronisation) se branche une fois : voir
 [docs/PROPOSITIONS.md](docs/PROPOSITIONS.md), « Brancher la reMarkable ».
 Chaque lundi, une sentinelle (GitHub Actions) vérifie que le connecteur
 répond ; GitHub t'écrit sinon.
 
-## Claude dans tes conversations
+## Claude
 
-Dans une conversation claude.ai où le connecteur « Portée reMarkable » est
+**Dans Portée** (la version claude.ai seulement ; sur le site, ces
+fonctions n'existent pas) : dans une idée, « ••• » › **Demander à Claude**
+(ou, avec des notes choisies, le « ••• » de la pilule). Tu peux demander
+des accords, une suite de deux mesures, une variation (plus calme, plus
+sautillante, en mineur, plus ornée), un titre et des étiquettes, ou ce que
+tu veux en une phrase (« transpose en ré et double les durées de la
+deuxième mesure »). Claude met souvent 10 à 60 secondes (un titre, quelques
+secondes) ; « Arrêter » coupe. Portée vérifie sa réponse avant de te la
+montrer : tu la vois, tu l'écoutes, et « Garder » l'écrit d'un coup ;
+« Annuler » la retire, « Une autre » en redemande une. La première fois,
+claude.ai te demande d'autoriser Claude pour la page. Les demandes comptent
+sur ton abonnement : rien de plus à payer.
+
+**Dans tes conversations** : dans une conversation claude.ai où le connecteur « Portée reMarkable » est
 activé, Claude lit ta bibliothèque. Demande par exemple « Montre-moi Pluie »
 (la partition s'affiche et s'écoute dans la conversation), « Propose des
-accords pour Pluie » (la proposition t'attend dans Portée : tu l'appliques
-ou non), « Note cette mélodie comme une nouvelle idée » (elle arrive sur tes
+accords pour Pluie » (dans Portée, la ligne dit « Claude propose », et
+l'idée montre un bandeau : Écouter, Appliquer, puis Annuler si tu changes
+d'avis, ou Ignorer), « Note cette mélodie comme une nouvelle idée » (elle arrive sur tes
 appareils à la synchro suivante ; rien n'est jamais écrit par-dessus une
 partition). Pour une page manuscrite, le prompt « Relire une page » fait
 passer Claude sur ses doutes, un par un.
