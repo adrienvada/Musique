@@ -103,6 +103,18 @@ async function modeleDuPdf(lu) {
   return { modele, version: cal.version || 1, cal, pages, avertissement };
 }
 
+/** Un fichier que l'import sait lire : un PDF (de la tablette) ou un .mid (de Live, par exemple). */
+export const estImportable = (f) => /\.(pdf|midi?)$/i.test(f.name) || f.type === "application/pdf" || /midi/i.test(f.type);
+
+/** Une sauvegarde de Portée (un .json), qui se restaure au lieu de s'importer. */
+const estSauvegarde = (f) => /\.json$/i.test(f.name) || f.type === "application/json";
+
+/**
+ * Le cache où le service worker garde un fichier partagé vers Portée, le
+ * temps que la page le prenne (sw.js, share_target du manifeste).
+ */
+export const CACHE_PARTAGE = "portee-partage";
+
 /** « Essai melodie standard » d'après « Essai_melodie standard copy.pdf ». */
 export function titreDepuisFichier(nom) {
   return nom.replace(/\.pdf$/i, "").replace(/[_]+/g, " ").replace(/\s+copy$/i, "").trim() || "Sans titre";
@@ -345,5 +357,67 @@ export function creerImport({ stockage, ouvrir, partitions = () => [] }) {
     await importer(fichiers);
   }
 
-  return { importer, importerExemples, enregistrerLecture, importerEtalonnage, gabarits, apprendre, proposerRelecture, aRelire, relireEtDire };
+  // -------------------------------------------------------------------------
+  // Un fichier qu'on ouvre avec Portée, ou qu'on lui partage (l'appli installée, I4)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Des fichiers reçus d'ailleurs que du bouton « Importer » : un PDF ou un
+   * .mid passent par l'import, une sauvegarde par la restauration
+   * (`restaurer`, sauvegarde-ui.js). Aucun autre chemin d'écriture.
+   */
+  async function recevoir(fichiers, { restaurer }) {
+    const sauvegardes = fichiers.filter(estSauvegarde);
+    const lisibles = fichiers.filter((f) => !estSauvegarde(f) && estImportable(f));
+    if (lisibles.length + sauvegardes.length < fichiers.length) toast("Portée ouvre les PDF de la tablette, les fichiers MIDI et ses sauvegardes : le reste est laissé de côté.", 7000);
+    if (lisibles.length) await importer(lisibles);
+    for (const f of sauvegardes) await restaurer(f);
+  }
+
+  /**
+   * Un fichier partagé vers Portée (Android : l'appli reMarkable ou Fichiers
+   * → Partager → Portée). Le système l'a envoyé au service worker, qui l'a
+   * gardé et a rouvert la page sur `?partage` (sw.js) : on le reprend, une
+   * fois, et il quitte le cache.
+   */
+  async function recevoirPartage({ restaurer }) {
+    let cache;
+    try { cache = await caches.open(CACHE_PARTAGE); } catch { return; }
+    const fichiers = [];
+    for (const requete of await cache.keys()) {
+      const r = await cache.match(requete);
+      if (r) fichiers.push(new File([await r.blob()], decodeURIComponent(r.headers.get("x-portee-nom") || "partage.pdf"), { type: r.headers.get("content-type") || "" }));
+      await cache.delete(requete);
+    }
+    if (fichiers.length) await recevoir(fichiers, { restaurer });
+    else toast("Le partage n'a apporté aucun fichier : partage un PDF exporté de la tablette, ou un fichier MIDI.", 7000);
+  }
+
+  /**
+   * Ce que l'appli installée reçoit en se lançant. Sur l'ordinateur (Chrome,
+   * Edge), un fichier ouvert d'un double clic (file_handlers), ou un
+   * raccourci touché alors que Portée est déjà ouverte : le manifeste dit
+   * « focus-existing », la fenêtre ouverte reçoit le lancement au lieu
+   * d'une deuxième fenêtre ; `raccourci(adresse)` ouvre ce qu'il dit
+   * (accueil.js). Le premier lancement est celui de cette page : son
+   * adresse est déjà lue au démarrage. Sur Android, un partage (voir
+   * recevoirPartage).
+   */
+  function recevoirLancements({ raccourci, restaurer }) {
+    if (new URLSearchParams(location.search).has("partage")) recevoirPartage({ restaurer }).catch((e) => { console.error(e); toast(`Le fichier partagé n'a pas pu s'ouvrir : ${explication(e)}`, 9000); });
+    if (!("launchQueue" in window)) return;
+    let premier = true;
+    window.launchQueue.setConsumer(async (lancement) => {
+      const deCettePage = premier && lancement.targetURL === location.href;
+      premier = false;
+      const fichiers = [];
+      for (const poignee of lancement.files || []) {
+        try { fichiers.push(await poignee.getFile()); } catch (e) { console.error(e); toast(`Ce fichier n'a pas pu s'ouvrir : ${explication(e)}`, 9000); }
+      }
+      if (fichiers.length) await recevoir(fichiers, { restaurer });
+      else if (lancement.targetURL && !deCettePage) raccourci(lancement.targetURL);
+    });
+  }
+
+  return { importer, importerExemples, enregistrerLecture, importerEtalonnage, gabarits, apprendre, proposerRelecture, aRelire, relireEtDire, recevoirLancements };
 }

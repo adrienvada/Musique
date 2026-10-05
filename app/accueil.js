@@ -848,9 +848,24 @@ export function creerAccueil(deps) {
     ($(ev.currentTarget.dataset.vers || "rg-synchro") || $("rg-synchro")).scrollIntoView({ block: "start" });
   });
 
+  /**
+   * Un raccourci de l'appli installée (« Nouvelle idée », « Chanter »,
+   * « Mémo », manifeste) : l'adresse dit quoi ouvrir (./?idee, ./?chanter,
+   * ./?memo), comme les trois tuiles (I4). Rend true s'il a ouvert quelque chose.
+   */
+  function raccourci(adresse) {
+    let q;
+    try { q = new URL(adresse, location.href).searchParams; } catch { return false; }
+    if (q.has("chanter")) deps.ouvrirIdee(null, { mode: "chanter" });
+    else if (q.has("memo")) deps.ouvrirIdee(null, { memo: true });
+    else if (q.has("idee")) deps.ouvrirIdee(null);
+    else return false;
+    return true;
+  }
+
   choisirOnglet(etat.onglet);
   return {
-    afficher, choisirOnglet, montrerSynchro,
+    afficher, choisirOnglet, montrerSynchro, raccourci,
     /** L'onglet ouvert : carnet, partitions, morceaux ou reglages. */
     get onglet() { return etat.onglet; },
     /**

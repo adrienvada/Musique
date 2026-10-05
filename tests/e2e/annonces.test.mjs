@@ -14,8 +14,11 @@
  */
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { chromium } from "playwright";
 import { servir } from "./serveur.mjs";
-import { ORDINATEUR, TELEPHONE, contexte, importerLesExemples, lancer, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { DIST, ORDINATEUR, RACINE, TELEPHONE, contexte, dossierTemporaire, importerLesExemples, lancer, listesDu, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
 
 let serveur, navigateur;
 before(async () => {
@@ -197,6 +200,127 @@ test("les onglets suivent les flèches au clavier ; touchés à la souris, ← �
     await page.keyboard.press("ArrowLeft");
     await page.waitForSelector("#vue-atelier:not([hidden])");
     assert.equal(await page.evaluate(() => document.activeElement.id), "onglet-atelier");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+// ---------------------------------------------------------------------------
+// L'appli installée (I4)
+// ---------------------------------------------------------------------------
+
+const MELODIE = path.join(RACINE, "tests/pages/2026-09-30-melodie-standard.pdf");
+
+test("le manifeste : installable, une identité fixe, des icônes « any » et « maskable », des captures, des raccourcis (I4)", async () => {
+  // Un profil normal : un contexte de navigation privée n'est jamais installable. Et le vrai
+  // Chromium (« channel ») : le Chromium allégé des essais ne sait pas ce qu'est une appli installée.
+  const profil = dossierTemporaire("installable");
+  const ctx = await chromium.launchPersistentContext(profil, {
+    channel: "chromium", env: { ...process.env, LANG: "C.UTF-8", LC_ALL: "C.UTF-8" }, locale: "fr-FR",
+    args: ["--no-proxy-server", "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"],
+  });
+  try {
+    const page = ctx.pages()[0] || await ctx.newPage();
+    await page.goto(serveur.url);
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 20000 });
+    const cdp = await ctx.newCDPSession(page);
+    assert.deepEqual((await cdp.send("Page.getInstallabilityErrors")).installabilityErrors, []);
+    // L'identité est celle qu'avait Portée sans « id » (son adresse, /Musique/) : une appli déjà installée le reste.
+    assert.equal((await cdp.send("Page.getAppId")).appId, `${serveur.origine}/Musique/`);
+    const { errors, data } = await cdp.send("Page.getAppManifest");
+    assert.deepEqual(errors, []);
+    const m = JSON.parse(data);
+    assert.deepEqual(m.categories, ["music"]);
+    assert.deepEqual(m.launch_handler, { client_mode: "focus-existing" });
+    assert.deepEqual(m.shortcuts.map((s) => s.url), ["./?idee", "./?chanter", "./?memo"]);
+    assert.deepEqual(m.icons.map((i) => `${i.sizes} ${i.purpose}`), ["192x192 any", "512x512 any", "192x192 maskable", "512x512 maskable"]);
+    assert.deepEqual(m.screenshots.map((c) => c.form_factor), ["narrow", "narrow", "wide"]);
+    assert.deepEqual(Object.keys(m.file_handlers[0].accept), ["application/pdf", "audio/midi", "application/json"]);
+    assert.equal(m.share_target.method, "POST");
+    // Chaque image a la taille que le manifeste annonce.
+    const images = [...m.icons, ...m.shortcuts.flatMap((s) => s.icons), ...m.screenshots];
+    const tailles = await page.evaluate((liste) => Promise.all(liste.map(async ({ src }) => {
+      const img = new Image();
+      img.src = new URL(src, location.href).href;
+      await img.decode();
+      return `${img.naturalWidth}x${img.naturalHeight}`;
+    })), images);
+    assert.deepEqual(tailles, images.map((i) => i.sizes));
+    // Le service worker ne garde pas les captures : seul le système les demande, avant d'installer.
+    const { COQUILLE } = listesDu(DIST);
+    assert.equal(COQUILLE.some((a) => a.startsWith("icones/captures/")), false);
+    assert.ok(COQUILLE.includes("icones/icone-maskable-512.png"));
+  } finally {
+    await ctx.close();
+    fs.rmSync(profil, { recursive: true, force: true });
+  }
+});
+
+test("les raccourcis s'ouvrent : Nouvelle idée, Chanter, Mémo (I4)", async () => {
+  const ctx = await contexte(navigateur, { appareil: TELEPHONE });
+  try {
+    const page = await ouvrirPortee(ctx, `${serveur.url}?chanter`);
+    await page.waitForSelector("#vue-idee:not([hidden])");
+    assert.equal(await page.getAttribute('#idee-modes [data-mode="chanter"]', "aria-selected"), "true");
+    await page.goto(`${serveur.url}?memo`);
+    // Le mémo enregistre déjà, dans la feuille Carnet de l'idée.
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-infos[open]");
+    await page.goto(`${serveur.url}?idee`);
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    assert.equal(await page.locator("#idee-infos[open]").count(), 0);
+    assert.deepEqual(page.erreurs.filter((e) => e.startsWith("[exception]")), []);
+  } finally { await ctx.close(); }
+});
+
+test("un fichier ouvert d'un double clic, un raccourci touché Portée ouverte : la fenêtre ouverte les reçoit (launchQueue, I4)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    // Chrome sur l'ordinateur, appli installée : le système passe les lancements à la page par launchQueue.
+    // (Chromium a déjà la sienne, qu'une simple affectation ne remplace pas.)
+    await ctx.addInitScript(() => { Object.defineProperty(window, "launchQueue", { configurable: true, value: { setConsumer: (f) => { window.__lancer = f; } } }); });
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.waitForFunction(() => typeof window.__lancer === "function");
+    const pdf = fs.readFileSync(MELODIE).toString("base64");
+    await page.evaluate((b64) => {
+      const f = new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], "Ouvert d'un double clic.pdf", { type: "application/pdf" });
+      return window.__lancer({ targetURL: new URL("./?ouvrir", location.href).href, files: [{ getFile: async () => f }] });
+    }, pdf);
+    await page.waitForSelector("#vue-atelier:not([hidden]) #gravure-atelier svg .abcjs-note", { state: "attached", timeout: 30000 });
+    assert.equal(await page.inputValue("#titre"), "Ouvert d'un double clic");
+    // Un raccourci, Portée déjà ouverte (focus-existing) : la même fenêtre va à l'éditeur, en mode Chanter.
+    await page.evaluate(() => window.__lancer({ targetURL: new URL("./?chanter", location.href).href, files: [] }));
+    await page.waitForSelector("#vue-idee:not([hidden])");
+    assert.equal(await page.getAttribute('#idee-modes [data-mode="chanter"]', "aria-selected"), "true");
+    await page.click("#vue-idee [data-retour]");
+    // Une sauvegarde ouverte d'un double clic : la restauration, comme depuis les Réglages.
+    const sauvegarde = JSON.stringify({ format: "portee-sauvegarde", version: 1, partitions: [] });
+    await page.evaluate((texte) => window.__lancer({ targetURL: location.href, files: [{ getFile: async () => new File([texte], "Portée - sauvegarde.json", { type: "application/json" }) }] }), sauvegarde);
+    await page.waitForFunction(() => /sauvegarde|déjà|vide/i.test(document.getElementById("toast").textContent));
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("un PDF partagé vers Portée (Android) : le service worker le garde, la page l'importe, une fois (I4)", async () => {
+  const ctx = await contexte(navigateur, { appareil: TELEPHONE });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 20000 });
+    // Ce qu'envoie Android : un POST multipart à ./?partage (share_target du manifeste).
+    const pdf = fs.readFileSync(MELODIE).toString("base64");
+    const reponse = await page.evaluate(async (b64) => {
+      const corps = new FormData();
+      corps.append("fichiers", new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], "Partagé de la tablette.pdf", { type: "application/pdf" }));
+      // Le service worker répond 303 vers la même adresse : la page qui s'y rouvre prendra le fichier.
+      const r = await fetch("./?partage", { method: "POST", body: corps });
+      return { statut: r.status, adresse: new URL(r.url).search, garde: (await (await caches.open("portee-partage")).keys()).length };
+    }, pdf);
+    assert.deepEqual(reponse, { statut: 200, adresse: "?partage", garde: 1 });
+    // Le serveur (un site statique, comme GitHub Pages) n'a jamais vu le POST.
+    assert.equal(serveur.etat.demandes.filter((d) => d === "/Musique/?partage").length, 1);
+    await page.goto(`${serveur.url}?partage`);
+    await page.waitForSelector("#vue-atelier:not([hidden]) #gravure-atelier svg .abcjs-note", { state: "attached", timeout: 30000 });
+    assert.equal(await page.inputValue("#titre"), "Partagé de la tablette");
+    // Pris une fois : il quitte le cache, un rechargement ne l'importe pas deux fois.
+    assert.equal(await page.evaluate(async () => (await (await caches.open("portee-partage")).keys()).length), 0);
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });

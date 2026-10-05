@@ -2895,6 +2895,55 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - Pourquoi pas une idée rangée d'office dans un carnet vide : un nouvel
     appareil (ou la version claude.ai) l'ajouterait à chaque premier
     lancement, et la synchronisation l'enverrait à tous tes appareils.
+- **L'appli installée : une identité, ses icônes, ses raccourcis, et des
+  fichiers qu'elle reçoit (I4, site seulement).** Le manifeste dit
+  maintenant :
+  - **`"id": "/Musique/"`**, son identité, celle qu'elle avait sans « id »
+    (son adresse) : une Portée déjà installée le reste. Pas `"./"`, que
+    proposait l'audit : un « id » se lit depuis la racine du domaine (la
+    spécification le dit, et Chromium aussi), et `"./"` aurait donné
+    `adrienvada.fr/`, la racine que tes autres sites partagent : une autre
+    appli, à réinstaller.
+  - **des icônes « any » (arrondies) et « maskable » (à fond perdu)
+    séparées** : Chrome déconseille « any maskable », qui servait aux deux.
+    La clé de sol reste dans la zone sûre d'Android (elle prend 32 % du
+    côté autour du centre, pour 40 % permis). Les captures que Chrome
+    montre avant d'installer (deux au téléphone, une à l'ordinateur, en
+    WebP : 143 Ko en tout) ; `categories: ["music"]`.
+  - **trois raccourcis** (appui long sur l'icône) : Nouvelle idée,
+    Chanter, Mémo, comme les trois tuiles (`./?idee`, `./?chanter`,
+    `./?memo`, lus par `accueil.raccourci`) ;
+  - **une seule fenêtre** (`launch_handler`, « focus-existing », à
+    l'ordinateur) : un raccourci ou un fichier ouvert alors que Portée l'est
+    déjà va dans la fenêtre ouverte (`launchQueue`, `import-pdf.js`), au lieu
+    d'en ouvrir une seconde sur la même bibliothèque ;
+  - **ouvrir d'un double clic** (Chrome et Edge sur l'ordinateur,
+    `file_handlers`) un PDF de la tablette, un .mid ou une sauvegarde
+    `.json` : le PDF et le .mid par l'import, la sauvegarde par la
+    restauration des Réglages (`sauvegardes.restaurer`). Aucun autre chemin
+    d'écriture.
+  - **partager un PDF vers Portée** (Android, `share_target`) depuis
+    l'appli reMarkable ou Fichiers, le plus court trajet de la tablette à
+    Portée. Le système l'envoie en POST : un site statique ne sait pas le
+    recevoir, le service worker le garde dans un cache à part
+    (`portee-partage`, qu'une mise à jour n'efface pas), rouvre la page sur
+    `?partage`, et la page l'importe une fois, comme un PDF choisi.
+  - Piège : Chrome ignore `launch_handler` pour un partage (il navigue
+    toujours, et le POST passe par le service worker), et ne l'applique
+    qu'à l'ordinateur ; sur Android, un raccourci ouvre son adresse.
+  - Les icônes et les captures se refont par `outils/images-appli.mjs`
+    (Chromium), jamais à la main ; l'assembleur copie le dossier des
+    captures, que le service worker ne garde pas (seul le système les
+    demande, avant d'installer). Le manifeste, les icônes et le service
+    worker restent propres au site : la version claude.ai n'en a pas.
+  - Hors de mes fichiers, deux lignes : `app.js` appelle
+    `accueil.raccourci` et `recevoirLancements` (à la place de la ligne
+    qui lisait `?idee`), et `sauvegarde-ui.js` donne sa restauration.
+  - Essais : « le manifeste : installable… », « les raccourcis
+    s'ouvrent », « un fichier ouvert d'un double clic… » et « un PDF
+    partagé vers Portée » (`tests/e2e/annonces.test.mjs`). Pas essayé sur
+    un vrai Android ni un vrai Windows ou macOS : les menus du système
+    (Partager, Ouvrir avec) ne s'atteignent pas d'ici.
 - Essais : `tests/e2e/annonces.test.mjs`.
 
 ### Claude dans l'éditeur d'idée (H2)
