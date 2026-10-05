@@ -9,7 +9,9 @@
  *   - la boîte à outils (#idee-boite), une feuille du bas rangée par
  *     familles : Durée, Rythme, Motif, Ailleurs. Un geste s'applique, la
  *     feuille reste ouverte (on en enchaîne souvent plusieurs) et dit ce
- *     qui vient de se passer ; la grille, derrière, bouge ;
+ *     qui vient de se passer ; la grille, derrière, bouge. Dans la version
+ *     claude.ai, « Demander à Claude » y ouvre sa feuille (idee-claude.js),
+ *     sur les notes choisies ;
  *   - le menu en cercle (menu-radial.js), le raccourci de l'appui long sur
  *     une note : les gestes de hauteur, de rythme, de motif et « ailleurs »,
  *     chaque famille côte à côte ;
@@ -26,7 +28,7 @@
  *   recalage, duree, pointee), $, sq, toast(texte), modifier(f, { entendre }),
  *   rafraichir(), choisir(ids, ajouter), notesPiste(), choisies(), effacer(),
  *   choisirDuree(pas), annuler(), boiteSelection() → { boite, zone } à
- *   l'écran ou null, deps.nouvelleDepuis(seq).
+ *   l'écran ou null, deps.nouvelleDepuis(seq), demanderAClaude(options).
  * Rend : { transformer(nom), durer(pas), pointer(), voisine(sens), etendre(),
  *   tout(), aucune(), ouvrirMenu(x, y, options), ouvrirBoite(), maj(),
  *   placer(), fermer(), fermerMenu(), menuOuvert, boiteOuverte }.
@@ -346,6 +348,10 @@ export function creerSelection(ctx) {
       faits = Math.max(0, faits - 1);
       ctx.annuler();
       dire("Annulé");
+    } else if (b.dataset.action === "claude") {
+      // « Demander à Claude » (la version claude.ai) : la boîte laisse la place à sa feuille, la sélection reste.
+      fermerFeuille(boite);
+      ctx.demanderAClaude({ selection: true });
     } else if (b.dataset.action) geste(b.dataset.action);
   });
 

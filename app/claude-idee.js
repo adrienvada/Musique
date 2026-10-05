@@ -15,8 +15,9 @@
  *     autre chose que ce qu'on croit, et Adrien ne lit pas le JSON ;
  *   - appliquer(genre, idee, proposition, options) : une NOUVELLE idée, que
  *     l'écran écrit d'un coup (un seul « Annuler ») ;
- *   - outilsSurCopie(idee, gestes) : pour une demande libre, des outils que
- *     Claude appelle, et qui ne touchent qu'une copie.
+ *   - lireEchec(err) : ce que l'écran dit et fait quand `sample` échoue.
+ * Pour une demande libre, les outils que Claude appelle sur une copie de
+ * l'idée sont à part, dans claude-outils.js.
  * Il n'appelle jamais `sample` (l'écran le fait, avec `signal`, `onText` et
  * les codes d'erreur), n'écrit rien et ne touche pas la page.
  *
@@ -24,20 +25,15 @@
  * pistes: [{ nom, notes: [{ id, d, l, h, v? }] }], accords: [{ d, nom }],
  * accompagnement, suivant }, le temps en pas de double croche.
  *
- * POURQUOI PAS D'IMPORT DE sequence.js. Ce module est vérifié par
- * `npm run types` ; sequence.js ne le passe pas encore (deux JSDoc écrites
- * en prose), et un module vérifié qui l'importerait l'y entraînerait, ses
- * erreurs avec. Les outils de « libre » sont pourtant ses gestes
- * (transposer, étirer…) : Claude fait ce que ferait le doigt d'Adrien.
- * L'écran, qui importe déjà sequence.js, les passe donc en paramètre
- * (`gestes`). Le reste est recopié ici, en petit : la mesure en pas et le
- * nom d'une note dans la tonalité ; un test vérifie qu'ils ne s'écartent
- * pas de sequence.js. Le jour où sequence.js passera, l'import direct
- * remplacera paramètre et copies.
+ * La mesure en pas et le nom des notes viennent de sequence.js. Ce module en
+ * gardait une copie, et recevait les gestes des outils en paramètre, tant que
+ * sequence.js ne passait pas `npm run types` (un module vérifié fait vérifier
+ * ce qu'il importe) : il passe depuis le lot architecture.
  *
- * Sans dépendance hors accords.js : appli et tests.
+ * Sans DOM : appli et tests.
  */
 import { FORME, QUALITES, lireAccord } from "./accords.js";
+import { BORNES, TONALITES, cloner, nbMesures, nomNote, nomTonalite, pasParMesure, pasParTemps } from "./sequence.js";
 
 /**
  * @typedef {{ id: number, d: number, l: number, h: number, v?: number }} Note
@@ -47,17 +43,6 @@ import { FORME, QUALITES, lireAccord } from "./accords.js";
  * @typedef {{ piste?: number, ids: Iterable<number> }} Selection
  * @typedef {{ d: number, l: number, h: number, v?: number }} NoteNeuve
  *
- * Les gestes de sequence.js dont les outils se servent (l'écran passe
- * `import * as sq from "./sequence.js"`).
- * @typedef {object} Gestes
- * @property {(seq: Sequence, p: number, ids: number[], demiTons: number) => void} transposer
- * @property {(seq: Sequence, p: number, ids: number[], facteur: number) => void} etirer
- * @property {(seq: Sequence, p: number, ids: number[]) => void} retrograder
- * @property {(seq: Sequence, p: number, ids: number[]) => void} renverser
- * @property {(seq: Sequence, p: number, ids: number[], grille: number) => void} recaler
- * @property {(seq: Sequence, p: number, note: { d: number, l: number, h: number }) => number} poser
- * @property {(seq: Sequence, p: number, ids: number[], options?: { decaler?: boolean }) => void} effacer
- *
  * @typedef {object} Options
  * @property {Selection} [selection]  les notes choisies (idee.js : { piste: e.piste, ids: e.selection }) ; vide : toute l'idée
  * @property {number} [piste]  la piste visée sans sélection (0 par défaut)
@@ -66,7 +51,7 @@ import { FORME, QUALITES, lireAccord } from "./accords.js";
  * @property {string} [titre]  pour « titre » : le titre actuel
  * @property {string[]} [etiquettes]  pour « titre » : les étiquettes actuelles
  * @property {string[]} [etiquettesConnues]  pour « titre » : celles de la bibliothèque, à reprendre si elles conviennent
- * @property {object[]} [outils]  pour « libre » : les outils d'outilsSurCopie, quand sample.limits() annonce `tools`
+ * @property {object[]} [outils]  pour « libre » : les outils d'outilsSurCopie (claude-outils.js), quand sample.limits() annonce `tools`
  * @property {Sequence} [copie]  pour valider « libre » avec outils : l'état final de la copie (copie())
  */
 
@@ -86,7 +71,6 @@ export const INTENTIONS = {
 /** Ce que l'écran dit quand une réponse est refusée : `raison`, elle, sert aux tests et à la console. */
 export const MESSAGE_REFUS = "Claude n'a pas proposé quelque chose de jouable : réessaie.";
 
-const BORNES = { bas: 21, haut: 108 }; // le clavier du piano, comme sequence.js
 // Une idée de prise de notes dépasse rarement quelques centaines de notes ;
 // au-delà de 2 000, la demande pèserait plus de 30 Ko : mieux vaut choisir
 // un passage que d'envoyer tout.
@@ -109,91 +93,6 @@ const MAX_ETIQUETTES = 5;
 const MAX_ETIQUETTE = 30;
 const MAX_POURQUOI = 400; // une ou deux phrases ; au-delà, coupé (ce n'est que du texte à montrer)
 const MAX_PHRASE = 500;
-
-// ------------------------------------------------------------------------
-// Recopié de sequence.js (voir plus haut) : la mesure en pas, le nom des notes
-// ------------------------------------------------------------------------
-
-const LETTRES = "CDEFGAB";
-/** @type {Record<string, number>} */
-const NATUREL = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-/** @type {Record<string, string>} */
-const NOMS = { C: "do", D: "ré", E: "mi", F: "fa", G: "sol", A: "la", B: "si" };
-/** @type {Record<string, string>} */
-const SIGNES = { "-2": "𝄫", "-1": "♭", 0: "", 1: "♯", 2: "𝄪" };
-/** @type {Record<string, number>} */
-const QUINTES = { C: 0, G: 1, D: 2, A: 3, E: 4, B: 5, "F#": 6, "C#": 7, "G#": 8, "D#": 9, "A#": 10, F: -1, Bb: -2, Eb: -3, Ab: -4, Db: -5, Gb: -6, Cb: -7 };
-/** @type {Record<number, number>} */
-const PREFERENCE_DO = { 1: 1, 3: -1, 6: 1, 8: -1, 10: -1 };
-const mod12 = (/** @type {number} */ x) => ((x % 12) + 12) % 12;
-
-const pasParMesure = (/** @type {Sequence} */ seq) => (seq.mesure[0] * 16) / seq.mesure[1];
-/** @param {Sequence} seq */
-function pasParTemps(seq) {
-  const [n, d] = seq.mesure;
-  if (d === 8 && n % 3 === 0 && n > 3) return 6;
-  return 16 / d;
-}
-/** @param {Sequence} seq */
-function finSequence(seq) {
-  let f = 0;
-  for (const p of seq.pistes) for (const n of p.notes) f = Math.max(f, n.d + n.l);
-  for (const a of seq.accords || []) f = Math.max(f, a.d + 1);
-  return f;
-}
-const nbMesures = (/** @type {Sequence} */ seq) => Math.max(1, Math.ceil(finSequence(seq) / pasParMesure(seq)));
-
-/** @param {string} t */
-function lireTonalite(t) {
-  const m = /^([A-G][#b]?)(m?)$/.exec(t || "") || [null, "C", ""];
-  const tonique = m[1], mineur = m[2] === "m";
-  const quintes = (QUINTES[tonique] ?? 0) - (mineur ? 3 : 0);
-  /** @type {Record<string, number>} */
-  const armure = {};
-  for (let i = 0; i < Math.min(7, Math.abs(quintes)); i++) armure[(quintes > 0 ? "FCGDAEB" : "BEADGCF")[i]] = quintes > 0 ? 1 : -1;
-  const pc = mod12(NATUREL[tonique[0]] + (tonique[1] === "#" ? 1 : tonique[1] === "b" ? -1 : 0));
-  return { tonique, mineur, quintes, armure, pc };
-}
-
-/** « la mineur », « si♭ majeur » (sequence.js, nomTonalite, sans la majuscule). */
-function nomTonalite(/** @type {string} */ t) {
-  const k = lireTonalite(t);
-  const alt = k.tonique[1] === "#" ? "♯" : k.tonique[1] === "b" ? "♭" : "";
-  return `${NOMS[k.tonique[0]]}${alt} ${k.mineur ? "mineur" : "majeur"}`;
-}
-
-/**
- * « sol4 », « si♭3 » : la hauteur `h` écrite dans la tonalité, comme
- * sequence.js (nomNote) l'écrit : la note de la gamme, puis en mineur la
- * sixte et la sensible haussées, puis le bécarre, puis le sens de l'armure.
- */
-function nomNote(/** @type {number} */ h, /** @type {string} */ tonalite) {
-  const k = lireTonalite(tonalite);
-  const pc = mod12(h);
-  let choix = null;
-  for (const l of LETTRES) {
-    const alt = k.armure[l] || 0;
-    if (mod12(NATUREL[l] + alt) === pc) { choix = { lettre: l, alt }; break; }
-  }
-  if (!choix && k.mineur) {
-    const iTonique = LETTRES.indexOf(k.tonique[0]);
-    for (const [degre, ecart] of [[6, 11], [5, 9]]) {
-      if (mod12(k.pc + ecart) !== pc) continue;
-      const l = LETTRES[(iTonique + degre) % 7];
-      choix = { lettre: l, alt: (k.armure[l] || 0) + 1 };
-    }
-  }
-  if (!choix) {
-    const s = k.quintes > 0 ? 1 : k.quintes < 0 ? -1 : (k.mineur && pc === 8 ? 1 : PREFERENCE_DO[pc] ?? 1);
-    choisir: for (const alt of [0, s, -s]) {
-      for (const l of LETTRES) if (mod12(NATUREL[l] + alt) === pc) { choix = { lettre: l, alt }; break choisir; }
-    }
-  }
-  return NOMS[choix.lettre] + SIGNES[choix.alt] + (Math.round((h - NATUREL[choix.lettre] - choix.alt) / 12) - 1);
-}
-
-/** @param {Sequence} seq @returns {Sequence} */
-const cloner = (seq) => JSON.parse(JSON.stringify(seq));
 
 /**
  * L'idée comptée en pas : { ppm (pas par mesure), ppt (par temps), nb
@@ -376,8 +275,11 @@ export function chevauchement(neuves, restantes = []) {
   return null;
 }
 
-/** Combien de paires de notes de même hauteur se chevauchent, piste par piste. */
-function chevauchements(/** @type {Sequence} */ seq) {
+/**
+ * Combien de paires de notes de même hauteur se chevauchent, piste par piste
+ * (les outils de claude-outils.js défont un geste qui en ajouterait).
+ */
+export function chevauchements(/** @type {Sequence} */ seq) {
   let total = 0;
   for (const p of seq.pistes) {
     const notes = [...p.notes].sort((x, y) => x.h - y.h || x.d - y.d);
@@ -525,13 +427,14 @@ function position(/** @type {number} */ d, /** @type {Cadre} */ c) {
   return `${m}.${t}${reste ? `+${reste}` : ""}`;
 }
 
-const lesMesures = (/** @type {number} */ m1, /** @type {number} */ m2) => (m1 === m2 ? `la mesure ${m1}` : `les mesures ${m1} à ${m2}`);
+/** « la mesure 3 », « les mesures 4 et 5 », « les mesures 1 à 4 ». */
+const lesMesures = (/** @type {number} */ m1, /** @type {number} */ m2) => (m1 === m2 ? `la mesure ${m1}` : `les mesures ${m1} ${m2 === m1 + 1 ? "et" : "à"} ${m2}`);
 
 /** Les lignes qui décrivent l'idée : tempo, mesure, tonalité, accords, notes (mesure par mesure). */
 function decrireIdee(/** @type {Sequence} */ seq, /** @type {Cadre} */ c) {
   const temps = c.ppm / c.ppt;
   const lignes = [
-    `Tempo : ${seq.tempo} à la noire. Mesure : ${seq.mesure[0]}/${seq.mesure[1]} (${c.ppm} pas par mesure : ${temps} temps de ${c.ppt} pas). Tonalité : ${nomTonalite(seq.tonalite)} (${seq.tonalite}). ${c.nb} mesure${c.nb > 1 ? "s" : ""}.`,
+    `Tempo : ${seq.tempo} à la noire. Mesure : ${seq.mesure[0]}/${seq.mesure[1]} (${c.ppm} pas par mesure : ${temps} temps de ${c.ppt} pas). Tonalité : ${nomTonalite(seq.tonalite).toLowerCase()} (${seq.tonalite}). ${c.nb} mesure${c.nb > 1 ? "s" : ""}.`,
     "Le temps se compte en pas de double croche : 4 pas = une noire. Mesures et temps se comptent à partir de 1, les pas à partir de 0.",
   ];
   const accords = [...(seq.accords || [])].filter((a) => nomDAccord(a.nom)).sort((a, b) => a.d - b.d);
@@ -781,8 +684,11 @@ function validerCopie(rep, seq, c, copie) {
   const f = formeSure(copie);
   if (f) return refus(`copie : ${f}`);
   if (!estObjet(copie) || !Array.isArray(copie.pistes) || copie.pistes.length !== seq.pistes.length) return refus("copie : ce n'est pas l'idée");
-  // Aucun outil ne change tempo, mesure ni tonalité : une copie qui les change ne vient pas d'eux.
-  if (copie.tempo !== seq.tempo || copie.tonalite !== seq.tonalite || JSON.stringify(copie.mesure) !== JSON.stringify(seq.mesure)) return refus("copie : tempo, mesure ou tonalité changés");
+  // Aucun outil ne change le tempo ni la mesure : une copie qui les change ne vient pas d'eux.
+  // La tonalité, si : « transposer_idee » (« transpose en ré ») la change avec les notes et
+  // les accords, et toujours pour une tonalité du menu (harmonie.js, tonaliteTransposee).
+  if (copie.tempo !== seq.tempo || JSON.stringify(copie.mesure) !== JSON.stringify(seq.mesure)) return refus("copie : tempo ou mesure changés");
+  if (copie.tonalite !== seq.tonalite && !TONALITES.includes(copie.tonalite)) return refus("copie : tonalité inconnue");
   const [, w] = c.fenetre;
   const ids = new Set();
   for (const [i, piste] of copie.pistes.entries()) {
@@ -897,214 +803,138 @@ export function appliquer(genre, idee, proposition, options = {}) {
 }
 
 // ------------------------------------------------------------------------
-// « libre », quand la page peut offrir des outils à Claude
+// Montrer et écouter la proposition (idee-claude.js)
 // ------------------------------------------------------------------------
 
-const PORTEE = {
-  piste: { type: "integer", minimum: 1, description: "La piste, comptée de 1 (1 par défaut)." },
-  debut: { type: "integer", minimum: 0, description: "Seulement les notes qui commencent à partir de ce pas (0 par défaut)." },
-  fin: { type: "integer", minimum: 1, description: "… et avant ce pas (la fin de l'idée par défaut)." },
-};
-// Sans « required » quand rien n'est requis : une liste vide n'est pas permise partout (JSON Schema draft 4).
-const schema = (/** @type {Record<string, unknown>} */ proprietes, /** @type {string[]} */ requis = []) => ({
-  type: /** @type {"object"} */ ("object"), properties: proprietes, ...(requis.length ? { required: requis } : {}), additionalProperties: false,
-});
+/**
+ * Où écouter une proposition : [debut, fin[ en pas, de barre en barre. Ce
+ * qu'elle change, avec ce qu'il faut autour pour l'entendre à sa place : une
+ * suite part de la dernière mesure de l'idée (on l'entend arriver), une
+ * variation joue les mesures qu'elle touche. `nouvelle` : ce qu'a rendu
+ * appliquer(). Rien pour un titre.
+ * @param {string} genre @param {any} proposition @param {Sequence} idee @param {Sequence} nouvelle
+ * @returns {number[] | null}
+ */
+export function etendueEcoute(genre, proposition, idee, nouvelle) {
+  const ppm = pasParMesure(idee);
+  const finIdee = nbMesures(idee) * ppm;
+  if (genre === "accords") return [proposition.debut, proposition.fin];
+  if (genre === "suite") return [Math.max(0, finIdee - ppm), finIdee + 2 * ppm];
+  if (genre === "variation") {
+    const remplacees = new Set(proposition.ids);
+    const touchees = [...idee.pistes[proposition.piste].notes.filter((n) => remplacees.has(n.id)), ...proposition.notes];
+    const debut = Math.min(...touchees.map((n) => n.d)), fin = Math.max(...touchees.map((n) => n.d + n.l));
+    return [Math.floor(debut / ppm) * ppm, Math.max(ppm, Math.ceil(fin / ppm) * ppm)];
+  }
+  if (genre === "libre") return [0, Math.max(finIdee, nbMesures(nouvelle) * ppm)];
+  return null;
+}
+
+/** Les notes d'une idée en valeurs (piste, début, durée, hauteur), pour compter ce qui a changé. */
+const valeurs = (/** @type {Sequence} */ seq) => seq.pistes.flatMap((p, i) => p.notes.map((n) => `${i}:${n.d},${n.l},${n.h}`));
+
+/** Combien de valeurs de `a` manquent dans `b` (les doublons comptent). */
+function manquantes(/** @type {string[]} */ a, /** @type {string[]} */ b) {
+  /** @type {Map<string, number>} */
+  const reste = new Map();
+  for (const x of b) reste.set(x, (reste.get(x) || 0) + 1);
+  let n = 0;
+  for (const x of a) {
+    if (reste.get(x)) reste.set(x, reste.get(x) - 1);
+    else n++;
+  }
+  return n;
+}
+
+const combien = (/** @type {number} */ n, /** @type {string} */ mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 
 /**
- * Des outils pour Claude, au format de sample.d.ts ({ name, description,
- * inputSchema, execute }), qui travaillent sur une COPIE de l'idée :
- * transposer, étirer, à l'envers, miroir, recaler, poser des accords,
- * ajouter ou effacer des notes. Les gestes sont ceux de sequence.js
- * (`gestes`, voir l'en-tête) : Claude fait ce que ferait Adrien. Chaque
- * `execute` rend peu de chose (ce qui est fait et la taille de la copie) et
- * lève une Error en français sur une entrée invalide : Claude la lit et
- * corrige. Un geste qui ferait se chevaucher deux notes de même hauteur, ou
- * déborder l'idée, est défait avant l'erreur : la copie reste jouable.
- * `copie()` rend l'état final, à passer à valider (options.copie).
- * `max` : combien d'outils au plus (sample.limits().tools.maxCount) ; les
- * premiers sont les plus utiles.
- * @param {Sequence} idee @param {Gestes} gestes @param {{ max?: number }} [options]
+ * Ce que dit la proposition, en une ligne au-dessus de son aperçu : « 4
+ * accords sur les mesures 1 à 4 », « 8 notes sur les mesures 5 et 6 »,
+ * « 6 notes à la place de 4 », « 8 notes changées, en ré majeur ».
+ * @param {string} genre @param {any} proposition @param {Sequence} idee @param {Sequence} nouvelle
  */
-export function outilsSurCopie(idee, gestes, { max = Infinity } = {}) {
-  for (const g of ["transposer", "etirer", "retrograder", "renverser", "recaler", "poser", "effacer"]) {
-    if (!gestes || typeof gestes[g] !== "function") throw new Error(`outilsSurCopie : le geste « ${g} » de sequence.js manque.`);
+export function resume(genre, proposition, idee, nouvelle) {
+  const ppm = pasParMesure(idee);
+  if (genre === "accords") return `${combien(proposition.accords.length, "accord")} sur ${lesMesures(proposition.debut / ppm + 1, proposition.fin / ppm)}`;
+  if (genre === "suite") {
+    const m = nbMesures(idee);
+    return `${combien(proposition.notes.length, "note")} sur ${lesMesures(m + 1, m + 2)}`;
   }
-  let etat = cloner(idee);
-  const ppm = pasParMesure(idee), ppt = pasParTemps(idee);
-  const w = finLibre(idee);
-  const verifier = (/** @type {unknown} */ entree, /** @type {string[]} */ permis, /** @type {string[]} */ requis = []) => {
-    const e = champs(entree ?? {}, permis, requis, "entrée") || formeSure(entree ?? {});
-    if (e) throw new Error(`${e} (permis : ${permis.join(", ")}).`);
-    return /** @type {Record<string, any>} */ (entree ?? {});
-  };
-  const pisteDe = (/** @type {unknown} */ v) => {
-    if (v === undefined) return 0;
-    if (!entierDans(v, 1, etat.pistes.length)) throw new Error(`piste : de 1 à ${etat.pistes.length}.`);
-    return /** @type {number} */ (v) - 1;
-  };
-  /** Les notes d'une piste qui commencent dans [debut, fin[. */
-  const choisir = (/** @type {Record<string, any>} */ e) => {
-    const p = pisteDe(e.piste);
-    if (e.debut !== undefined && !entierDans(e.debut, 0, w)) throw new Error(`debut : un pas de 0 à ${w}.`);
-    if (e.fin !== undefined && !entierDans(e.fin, 1, w)) throw new Error(`fin : un pas de 1 à ${w}.`);
-    const debut = e.debut ?? 0, fin = e.fin ?? w;
-    const ids = etat.pistes[p].notes.filter((n) => n.d >= debut && n.d < fin).map((n) => n.id);
-    if (!ids.length) throw new Error(`Aucune note de la piste ${p + 1} ne commence entre les pas ${debut} et ${fin}.`);
-    return { p, ids };
-  };
-  const resume = (/** @type {string} */ fait) => {
-    const notes = etat.pistes.reduce((t, x) => t + x.notes.length, 0);
-    return { fait, notes, mesures: Math.max(1, Math.ceil(finSequence(etat) / ppm)) };
-  };
-  /** Fait un geste ; s'il abîme la copie, le défait et le dit à Claude. */
-  const geste = (/** @type {() => string} */ f) => {
-    const sauve = cloner(etat), avant = chevauchements(etat);
-    let fait;
-    try {
-      fait = f();
-    } catch (erreur) {
-      etat = sauve;
-      throw new Error(`Rien n'est fait : ${erreur && erreur.message ? erreur.message : "le geste a échoué"}.`, { cause: erreur });
-    }
-    let raison = null;
-    if (chevauchements(etat) > avant) raison = "deux notes de même hauteur se chevaucheraient";
-    else if (finSequence(etat) > w) raison = `l'idée dépasserait le pas ${w}`;
-    if (raison) { etat = sauve; throw new Error(`Rien n'est fait : ${raison}. Choisis d'autres notes ou un autre réglage.`); }
-    return resume(fait);
-  };
-  const nb = (/** @type {number} */ n, /** @type {string} */ mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
+  if (genre === "titre") return "";
+  if (proposition.notes) return `${combien(proposition.notes.length, "note")} à la place de ${proposition.ids.length}`;
+  // « libre » avec outils : la copie entière, comparée à l'idée.
+  const avant = valeurs(idee), apres = valeurs(nouvelle);
+  const ajoutees = manquantes(apres, avant), retirees = manquantes(avant, apres);
+  const parts = [];
+  if (ajoutees && ajoutees === retirees) parts.push(`${combien(ajoutees, "note")} ${ajoutees > 1 ? "changées" : "changée"}`);
+  else {
+    if (ajoutees) parts.push(`${combien(ajoutees, "note")} de plus`);
+    if (retirees) parts.push(`${combien(retirees, "note")} de moins`);
+  }
+  if (nouvelle.tonalite !== idee.tonalite) parts.push(`en ${nomTonalite(nouvelle.tonalite).toLowerCase()}`);
+  const accords = (/** @type {Sequence} */ s) => JSON.stringify((s.accords || []).map((a) => [a.d, a.nom]).sort());
+  if (accords(nouvelle) !== accords(idee)) parts.push("d'autres accords");
+  return parts.join(", ") || "quelques changements";
+}
 
-  /** @type {{ name: string, description: string, inputSchema: object, execute: (entree: Record<string, unknown>) => unknown }[]} */
-  const outils = [
-    {
-      name: "transposer",
-      description: "Monte ou descend des notes de la copie de « demiTons » demi-tons (12 = une octave). Sans debut ni fin : toute la piste. Rend ce qui est fait et la taille de la copie.",
-      inputSchema: schema({ demiTons: { type: "integer", minimum: -24, maximum: 24, description: "De -24 à 24, sauf 0." }, ...PORTEE }, ["demiTons"]),
-      execute: (x) => {
-        const e = verifier(x, ["demiTons", "piste", "debut", "fin"], ["demiTons"]);
-        if (!entierDans(e.demiTons, -24, 24) || e.demiTons === 0) throw new Error("demiTons : un entier de -24 à 24, sauf 0.");
-        const { p, ids } = choisir(e);
-        return geste(() => { gestes.transposer(etat, p, ids, e.demiTons); return `${nb(ids.length, "note")} ${e.demiTons > 0 ? "montée" : "descendue"}${ids.length > 1 ? "s" : ""} de ${Math.abs(e.demiTons)} demi-ton${Math.abs(e.demiTons) > 1 ? "s" : ""}`; });
-      },
-    },
-    {
-      name: "etirer",
-      description: "Double les durées (facteur 2 : plus lent) ou les divise par deux (0.5 : plus vite), à partir de la première note choisie ; ce qui suit sur la piste se décale d'autant. Rend ce qui est fait et la taille de la copie.",
-      inputSchema: schema({ facteur: { type: "number", enum: [2, 0.5], description: "2 ou 0.5." }, ...PORTEE }, ["facteur"]),
-      execute: (x) => {
-        const e = verifier(x, ["facteur", "piste", "debut", "fin"], ["facteur"]);
-        if (e.facteur !== 2 && e.facteur !== 0.5) throw new Error("facteur : 2 ou 0.5.");
-        const { p, ids } = choisir(e);
-        return geste(() => { gestes.etirer(etat, p, ids, e.facteur); return `${nb(ids.length, "note")} ${e.facteur === 2 ? "deux fois plus lentes" : "deux fois plus rapides"}`; });
-      },
-    },
-    {
-      name: "a_l_envers",
-      description: "Joue des notes à l'envers (rétrograde) : la dernière devient la première, au même endroit. Rend ce qui est fait et la taille de la copie.",
-      inputSchema: schema({ ...PORTEE }),
-      execute: (x) => {
-        const e = verifier(x, ["piste", "debut", "fin"]);
-        const { p, ids } = choisir(e);
-        return geste(() => { gestes.retrograder(etat, p, ids); return `${nb(ids.length, "note")} à l'envers`; });
-      },
-    },
-    {
-      name: "miroir",
-      description: "Renverse des notes en miroir autour de la première : ce qui montait descend, du même intervalle. Rend ce qui est fait et la taille de la copie.",
-      inputSchema: schema({ ...PORTEE }),
-      execute: (x) => {
-        const e = verifier(x, ["piste", "debut", "fin"]);
-        const { p, ids } = choisir(e);
-        return geste(() => { gestes.renverser(etat, p, ids); return `${nb(ids.length, "note")} en miroir`; });
-      },
-    },
-    {
-      name: "recaler",
-      description: "Recale débuts et durées de notes sur une grille, en pas (1 = double croche, 2 = croche, 4 = noire, 8 = blanche). Rend ce qui est fait et la taille de la copie.",
-      inputSchema: schema({ grille: { type: "integer", enum: [1, 2, 4, 8], description: "La grille, en pas." }, ...PORTEE }, ["grille"]),
-      execute: (x) => {
-        const e = verifier(x, ["grille", "piste", "debut", "fin"], ["grille"]);
-        if (![1, 2, 4, 8].includes(e.grille)) throw new Error("grille : 1, 2, 4 ou 8 pas.");
-        const { p, ids } = choisir(e);
-        return geste(() => { gestes.recaler(etat, p, ids, e.grille); return `${nb(ids.length, "note")} recalée${ids.length > 1 ? "s" : ""} sur ${e.grille} pas`; });
-      },
-    },
-    {
-      name: "poser_accords",
-      description: `Pose des accords (mesure et temps comptés de 1, ${ppm / ppt} temps par mesure ; noms à l'anglaise : C, Am, F#m7, Bb, G7, Dsus4, Cmaj7, Em/B). Dans chaque mesure citée, ils remplacent ceux qui y étaient ; un accord sonne jusqu'au suivant. Rend ce qui est fait et la taille de la copie.`,
-      inputSchema: schema({
-        accords: {
-          type: "array", minItems: 1, maxItems: 64,
-          items: schema({ mesure: { type: "integer", minimum: 1 }, temps: { type: "integer", minimum: 1, maximum: ppm / ppt }, nom: { type: "string" } }, ["mesure", "temps", "nom"]),
-        },
-      }, ["accords"]),
-      execute: (x) => {
-        const e = verifier(x, ["accords"], ["accords"]);
-        const derniere = w / ppm;
-        if (!Array.isArray(e.accords) || !e.accords.length || e.accords.length > 64) throw new Error("accords : de 1 à 64 accords.");
-        /** @type {Accord[]} */
-        const lus = [];
-        for (const [i, a] of e.accords.entries()) {
-          const ea = champs(a, ["mesure", "temps", "nom"], ["mesure", "temps", "nom"], `accords[${i}]`);
-          if (ea) throw new Error(`${ea}.`);
-          if (!entierDans(a.mesure, 1, derniere)) throw new Error(`accords[${i}].mesure : de 1 à ${derniere}.`);
-          if (!entierDans(a.temps, 1, ppm / ppt)) throw new Error(`accords[${i}].temps : de 1 à ${ppm / ppt}.`);
-          const nom = nomDAccord(a.nom);
-          if (!nom) throw new Error(`accords[${i}].nom : « ${String(a.nom).slice(0, 24)} » ne se lit pas ; par exemple C, Am, F#m7, Bb, G7, Dsus4, Cmaj7, Em/B.`);
-          const d = (a.mesure - 1) * ppm + (a.temps - 1) * ppt;
-          if (lus.some((y) => y.d === d)) throw new Error(`accords[${i}] : deux accords au même temps.`);
-          lus.push({ d, nom });
-        }
-        return geste(() => {
-          // Mesure après mesure, dans l'ordre : un accord posé au 3ᵉ temps laisse sonner avant lui celui
-          // que Claude vient de poser à la mesure d'avant, pas l'ancien.
-          const mesures = [...new Set(lus.map((a) => Math.floor(a.d / ppm)))].sort((a, b) => a - b);
-          for (const m of mesures) poserAccords(etat, lus.filter((a) => Math.floor(a.d / ppm) === m), m * ppm, (m + 1) * ppm);
-          return `${nb(lus.length, "accord")} posé${lus.length > 1 ? "s" : ""}`;
-        });
-      },
-    },
-    {
-      name: "ajouter_notes",
-      description: "Ajoute des notes à une piste de la copie (debut et duree en pas depuis le début de l'idée, hauteur MIDI de 21 à 108, 60 = do central) ; rien d'autre ne bouge. Deux notes de même hauteur ne se chevauchent pas. Rend ce qui est fait et la taille de la copie.",
-      inputSchema: schema({
-        notes: {
-          type: "array", minItems: 1, maxItems: 256,
-          items: schema({ debut: { type: "integer", minimum: 0 }, duree: { type: "integer", minimum: 1 }, hauteur: { type: "integer", minimum: BORNES.bas, maximum: BORNES.haut } }, ["debut", "duree", "hauteur"]),
-        },
-        piste: PORTEE.piste,
-      }, ["notes"]),
-      execute: (x) => {
-        const e = verifier(x, ["notes", "piste"], ["notes"]);
-        const p = pisteDe(e.piste);
-        const lues = lireNotes(e.notes, { fenetre: [0, w], tessiture: BORNES, max: 256 });
-        if (lues.raison) throw new Error(`${lues.raison}.`);
-        const ch = chevauchement(lues.notes, etat.pistes[p].notes);
-        if (ch) throw new Error(`${ch}.`);
-        return geste(() => {
-          for (const n of lues.notes) gestes.poser(etat, p, { d: n.d, l: n.l, h: n.h });
-          return `${nb(lues.notes.length, "note")} ajoutée${lues.notes.length > 1 ? "s" : ""}`;
-        });
-      },
-    },
-    {
-      name: "effacer_notes",
-      description: "Efface des notes d'une piste de la copie : celles qui commencent entre debut et fin, et seulement de ces hauteurs MIDI si « hauteurs » est donné ; le reste ne bouge pas. Rend ce qui est fait et la taille de la copie.",
-      inputSchema: schema({ ...PORTEE, hauteurs: { type: "array", minItems: 1, maxItems: 88, items: { type: "integer", minimum: BORNES.bas, maximum: BORNES.haut } } }),
-      execute: (x) => {
-        const e = verifier(x, ["piste", "debut", "fin", "hauteurs"]);
-        const choix = choisir(e);
-        const p = choix.p;
-        let ids = choix.ids;
-        if (e.hauteurs !== undefined) {
-          if (!Array.isArray(e.hauteurs) || !e.hauteurs.length || e.hauteurs.length > 88 || !e.hauteurs.every((h) => entierDans(h, BORNES.bas, BORNES.haut))) throw new Error("hauteurs : des hauteurs MIDI de 21 à 108.");
-          const voulues = new Set(e.hauteurs), gardes = new Set(ids);
-          ids = etat.pistes[p].notes.filter((n) => gardes.has(n.id) && voulues.has(n.h)).map((n) => n.id);
-          if (!ids.length) throw new Error("Aucune note de ces hauteurs à cet endroit.");
-        }
-        return geste(() => { gestes.effacer(etat, p, ids, { decaler: false }); return `${nb(ids.length, "note")} effacée${ids.length > 1 ? "s" : ""}`; });
-      },
-    },
-  ];
-  return { outils: outils.slice(0, Math.max(0, max)), copie: () => cloner(etat) };
+// ------------------------------------------------------------------------
+// Quand `sample` échoue (sample.d.ts : une SampleError { code, message, text? })
+// ------------------------------------------------------------------------
+//
+// Ce que l'écran dit et fait pour chaque code. Commun à ceux qui appellent
+// `sample` (le second avis sur un doute, H1, peut s'en servir aussi). Jamais
+// de nouvel essai tout seul : chaque appel coûte à Adrien, et claude.ai
+// limite le débit. Le texte partiel (`text`) ne se montre jamais : c'est du
+// JSON.
+
+const PAS_DISPONIBLE = "Claude n'est pas disponible dans cette page pour l'instant.";
+
+/** @type {Record<string, { texte?: string, cacher?: boolean, autoriser?: boolean, sansOutils?: boolean, sansImages?: boolean }>} */
+const ECHECS = {
+  // « Arrêter », ou la feuille fermée : Adrien le sait déjà.
+  cancelled: {},
+  // Ce que claude.ai refuse pour cette visite : la fonction disparaît (rien ne reste grisé).
+  not_granted: { texte: "Claude n'est pas autorisé pour cette page : autorise-le, puis redemande.", cacher: true, autoriser: true },
+  sampling_disabled: { texte: "Claude n'est pas disponible pour ton compte ici.", cacher: true },
+  not_declared: { texte: PAS_DISPONIBLE, cacher: true },
+  capability_disabled: { texte: PAS_DISPONIBLE, cacher: true },
+  capability_removed: { texte: PAS_DISPONIBLE, cacher: true },
+  // Ce qui se refait autrement, au prochain geste d'Adrien.
+  tools_unavailable: { texte: "Claude ne peut pas se servir de ses outils ici : redemande, il répondra en notes.", sansOutils: true },
+  images_unavailable: { texte: "Claude ne peut pas voir d'image ici : redemande, il répondra sans elle.", sansImages: true },
+  image_rejected: { texte: "Cette image n'a pas pu partir : redemande, Claude répondra sans elle.", sansImages: true },
+  // Ce qui se dit, et qu'Adrien réessaie quand il veut.
+  rate_limited: { texte: "Claude est très demandé : réessaie dans un moment." },
+  session_expired: { texte: "Ta session claude.ai a expiré : reconnecte-toi, puis réessaie." },
+  refused: { texte: "Claude a refusé cette demande : formule-la autrement." },
+  prompt_too_large: { texte: "C'est trop long pour Claude : choisis un passage plus court." },
+  // Une réponse illisible ou vide, un service qui flanche : comme une réponse que Portée refuse.
+  invalid_json: { texte: MESSAGE_REFUS },
+  empty_completion: { texte: MESSAGE_REFUS },
+  upstream_error: { texte: MESSAGE_REFUS },
+  // Une demande mal formée : un défaut de Portée (le détail va à la console).
+  invalid_request: { texte: MESSAGE_REFUS },
+  transform_error: { texte: MESSAGE_REFUS },
+  queue_overflow: { texte: MESSAGE_REFUS },
+};
+
+/**
+ * Ce que l'écran fait d'un échec de `sample` : { code, texte (à montrer ;
+ * "" : rien à dire), cacher (la fonction disparaît pour cette visite),
+ * autoriser (offrir d'ouvrir les autorisations de la page), sansOutils (la
+ * prochaine demande libre part sans outils), sansImages }. Un code inconnu
+ * se lit comme `upstream_error` (sample.d.ts). Rend null pour une erreur qui
+ * n'est pas de `sample` (une Error de Portée ou du navigateur) : l'écran la
+ * dit par erreurs.js.
+ * @param {unknown} err
+ */
+export function lireEchec(err) {
+  if (!estObjet(err) || typeof err.code !== "string") return null;
+  const recu = /** @type {string} */ (err.code);
+  const connu = Object.hasOwn(ECHECS, recu);
+  // Une Error de Portée porte aussi un code (erreurs.js, erreur()) : elle n'est pas de `sample`.
+  if (err instanceof Error && !connu) return null;
+  const code = connu ? recu : "upstream_error";
+  return { code, texte: "", cacher: false, autoriser: false, sansOutils: false, sansImages: false, ...ECHECS[code] };
 }

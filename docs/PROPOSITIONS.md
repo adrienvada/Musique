@@ -2521,7 +2521,108 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Claude dans l'éditeur d'idée (H2)
 
-<!-- lot claude -->
+- **`claude-idee.js` lit sequence.js, et les outils sont à part
+  (`app/claude-outils.js`).** Le module gardait une copie de la mesure en
+  pas et du nom des notes, et recevait les gestes des outils en paramètre :
+  sequence.js ne passait pas `npm run types`, et un module vérifié fait
+  vérifier ce qu'il importe. Il passe depuis le lot architecture : l'import
+  est direct, et les outils de « Ce que tu veux » vivent dans leur module
+  (claude-idee.js faisait 1 110 lignes). Ce que suggestions.js et
+  claude-doute.js y prennent n'a pas bougé.
+- **« Transpose en ré » transpose aussi les accords et la tonalité**
+  (l'outil `transposer_idee`). L'outil `transposer` ne montait que les notes
+  d'une piste : les accords restaient en do. Le nouvel outil fait ce que fait
+  la feuille Tempo (`transposerIdee`) ; la copie peut donc changer de
+  tonalité, mais seulement pour une tonalité du menu (c'est vérifié). Les
+  outils sont rangés du plus utile au moins utile : si claude.ai en permet
+  moins, ce sont les derniers (à l'envers, miroir) qui restent dehors.
+- **Ce que l'écran dit quand `sample` échoue est écrit une fois
+  (`lireEchec`),** code par code (sample.d.ts) : rien après « Arrêter » ; la
+  fonction cachée pour la visite quand claude.ai la refuse (`not_granted`
+  propose en plus d'autoriser Claude) ; « Claude est très demandé :
+  réessaie dans un moment » ; une phrase pour une session expirée et pour un
+  refus ; le message de refus de Portée pour le reste. Un code inconnu vaut
+  `upstream_error`, comme le dit sample.d.ts. Jamais de nouvel essai tout
+  seul : chaque appel coûte sur ton compte. Le second avis sur un doute (H1)
+  peut s'en servir.
+  - Piège : une erreur de `sample` ne passe pas par `expliquer` (erreurs.js) :
+    il lit `upstream_error` comme le code du connecteur, et dirait « le
+    connecteur ne répond pas… Supabase ». Seules les erreurs de Portée et du
+    navigateur y vont.
+- Deux fonctions sans DOM pour l'écran, essayées sous Node : ce qu'on écoute
+  d'une proposition (`etendueEcoute` : une suite part de la dernière mesure,
+  pour l'entendre arriver) et ce qu'elle dit en une ligne (`resume` :
+  « 8 notes sur les mesures 5 et 6 », « 7 notes changées, en si mineur »).
+- **« Demander à Claude », une feuille de l'éditeur d'idée (`app/idee-claude.js`,
+  `styles/idee-claude.css`), dans la version claude.ai.** Elle s'ouvre depuis
+  le « ••• » de l'idée (sur toute l'idée) ou depuis la boîte à outils de la
+  sélection (sur les notes choisies). Cinq demandes : des accords, une suite
+  de deux mesures, une variation (plus calme, plus sautillante, en mineur,
+  plus ornée), un titre et des étiquettes, ou ce que tu veux, en une phrase.
+  Claude propose, Portée vérifie (claude-idee.js), tu écoutes, puis tu
+  gardes ; ce que tu gardes s'écrit d'un coup, et un seul « Annuler » le
+  défait.
+  - Sur le site, la fonction n'existe pas : ni la feuille ni ses entrées ne
+    se montrent (`claude.use("sample")` n'y rend rien). Un bouton grisé
+    promettrait ce que le site ne sait pas faire.
+  - Une demande sans objet ne part pas : sa ligne dit pourquoi (« Écris
+    d'abord quelques notes… ») au lieu d'envoyer une idée vide à Claude.
+  - « Claude réfléchit… » tant qu'il n'a rien dit, puis « Claude écrit sa
+    proposition… » : ce qu'il écrit est du JSON, il ne se montre jamais.
+    Dessous, ce qu'on peut attendre : quelques secondes pour un titre (le
+    modèle rapide), souvent 10 à 60 s, 30 à 90 s avec les outils (plusieurs
+    tours). « Arrêter » coupe la demande (un AbortController par appel) et
+    ne dit rien.
+  - Des accords : la bande des mesures, comme dans la feuille des accords,
+    avec « avant : … » quand Claude remplace un accord, et teinté quand
+    Portée trouve aussi qu'il va avec ta mélodie (harmonie.js : la racine et
+    la triade que la mélodie appelle). C'est une comparaison, pas un
+    verdict. Tu choisis l'accompagnement pour écouter, et il se garde avec
+    les accords.
+  - Des notes (suite, variation, ce que tu veux) : un petit rouleau des
+    mesures qui changent ; ce qui reste en gris, ce que Claude propose en
+    bleu, ce qu'il remplace en pointillé. « Écouter » joue ces mesures,
+    accompagnement compris, sans rien écrire.
+  - Un titre et des étiquettes : deux champs, que tu retouches avant de
+    garder. Ils s'écrivent comme si tu les avais tapés, hors d'« Annuler »,
+    comme le titre et le carnet.
+  - « Ce que tu veux » : si claude.ai permet les outils de page, Claude fait
+    ses gestes sur une copie, et la feuille dit où il en est (« Sur la
+    copie : toute l'idée montée de 2 demi-tons, en ré majeur ») ; sinon il
+    rend toute la piste en notes. Après `tools_unavailable`, la demande
+    suivante part sans outils.
+  - Ce que tu gardes passe par le cœur de l'éditeur, par deux méthodes
+    explicites : `remplacerIdee` (par son `modifier`, d'où le seul
+    « Annuler ») et `changerTitre`. Le lot architecture a fermé l'état
+    exprès : il reste fermé, la feuille le lit en lecture seule.
+  - Rien ne s'applique si l'idée a changé pendant que Claude réfléchissait
+    (la synchro, un autre onglet) : la feuille le dit, tu redemandes. On
+    compare l'ouverture de l'idée et sa version, pas son identifiant : une
+    idée neuve reçoit le sien à son premier enregistrement, peut-être
+    pendant que Claude réfléchit.
+  - Une variation des notes choisies laisse les nouvelles notes choisies :
+    tu vois ce qui a changé. Après une suite, le curseur va au bout.
+  - `not_granted` : la feuille dit d'autoriser Claude, et « Autoriser
+    Claude » ouvre le panneau de claude.ai (`permissions.manage()`, intégré
+    à la page, jamais déclaré) puis relit l'état ; sans panneau, la phrase
+    dit où le trouver (le menu Autorisations de la page). D'ici là, la
+    fonction se cache pour la visite. `rate_limited` : « Claude est très
+    demandé : réessaie dans un moment ». Jamais de nouvel essai tout seul.
+  - L'entrée du « ••• » passe par idee.js, comme le Carnet et le Tempo, pas
+    par gestes.js : elle a besoin de l'idée telle qu'elle est à l'écran (sa
+    sélection), et « Ce que tu veux » sert aussi sur une idée vide, alors
+    que les actions de gestes.js reçoivent l'idée enregistrée (le « ••• »
+    dit « L'idée est vide » avant de leur passer la main).
+  - Essais : `tests/e2e/claude-idee.test.mjs`, au téléphone, avec un faux
+    `sample` (`tests/e2e/faux-sample.mjs`, posé par-dessus le faux
+    claude.ai) qui répond ce que l'essai prévoit ; « précédent » ferme la
+    feuille comme les autres ; et rien n'apparaît sur le site ni dans une
+    version claude.ai sans `sample`.
+  - Piège : `.gardee` et `.neuve` servent déjà au mode Chanter
+    (idee-chant.css), sans qualificatif : le rouleau prend des noms à lui
+    (`claude-reste`, `claude-propose`, `claude-remplace`).
+  - À la republication de la version claude.ai, déclarer `sample`
+    (`{ sample: {} }`, avec db, downloads et mcp redonnés en entier).
 
 ### Claude dans Portée : ce qui part, ce qui est vérifié (H1, H2, H3)
 
@@ -2565,11 +2666,11 @@ garde.
     gestes de `sequence.js` (Claude fait ce que ferait le doigt d'Adrien).
     Un geste qui ferait se chevaucher deux notes, ou déborderait, est
     défait, et Claude lit pourquoi. La copie est revérifiée à la fin.
-  - Pourquoi les gestes passent en paramètre : `sequence.js` ne passe pas
-    encore `npm run types` (deux JSDoc), et un module vérifié qui
-    l'importerait l'y entraînerait. La mesure en pas et le nom des notes
-    sont recopiés ; un test les compare à `sequence.js` sur les 24
-    tonalités et les 88 touches.
+  - D'abord, les gestes passaient en paramètre et la mesure en pas comme le
+    nom des notes étaient recopiés : `sequence.js` ne passait pas encore
+    `npm run types`. Depuis que le lot architecture l'a corrigé, le lot H2
+    importe `sequence.js` directement, et les outils vivent dans
+    `claude-outils.js` (voir « Claude dans l'éditeur d'idée (H2) »).
 - **Sur un doute (H1, `app/claude-doute.js`).** `messageDoute`,
   `validerAvis`, `avisPossible`, `OPTIONS_AVIS`.
   - Ce qui part : la mesure en ABC (avec son chiffrage et son armure), ce

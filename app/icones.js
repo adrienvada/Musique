@@ -94,6 +94,11 @@ export const ICONES = {
   silence: '<path d="M10 3.5l4 4.5-3.2 3.6 4.2 4.6c-2.4-1-4.8-.2-3.8 3.3"/>',
   // Choisir aussi la note suivante (la sélection s'étend vers la droite)
   etendre: '<path d="M3.5 12h7M7 8.5v7"/><path d="M14 6l6 6-6 6"/>',
+  // Demander à Claude (idee-claude.js) : une étincelle, le signe d'une proposition
+  // qu'on n'a pas écrite soi-même (pas le logo de Claude) ; et une bulle pour
+  // « Ce que tu veux », la demande dite en une phrase.
+  etincelle: '<path d="M10.5 3c.6 4.2 3.3 6.9 7.5 7.5-4.2.6-6.9 3.3-7.5 7.5-.6-4.2-3.3-6.9-7.5-7.5 4.2-.6 6.9-3.3 7.5-7.5z"/><path d="M18.5 15.5c.25 1.6 1.4 2.75 3 3-1.6.25-2.75 1.4-3 3-.25-1.6-1.4-2.75-3-3 1.6-.25 2.75-1.4 3-3z"/>',
+  bulle: '<path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 16h-8.5L6 19.5V16H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 5z"/><path d="M7.5 9h9M7.5 12h6"/>',
 };
 
 /** Une icône en SVG, prête pour innerHTML. taille : "" (22 px), "s" (18) ou "l" (28). */

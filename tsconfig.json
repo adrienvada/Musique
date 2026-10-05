@@ -16,10 +16,11 @@
   // aucun bogue trouvé : pas tout de suite. Le mode strict n'en vaut pas la
   // peine.
   //
-  // Les modules de Claude dans Portée (H1 à H3 : claude-idee, claude-doute,
-  // suggestions) y sont dès leur création. Un module vérifié fait vérifier
-  // tout ce qu'il importe : c'est pourquoi claude-idee.js recevait les
-  // gestes de sequence.js en paramètre, tant que sequence.js ne passait pas.
+  // Les modules de Claude dans Portée (H1 à H3 : claude-idee, claude-outils,
+  // claude-doute, suggestions) y sont dès leur création. Un module vérifié
+  // fait vérifier tout ce qu'il importe : c'est pourquoi claude-idee.js
+  // recevait les gestes de sequence.js en paramètre, tant que sequence.js ne
+  // passait pas ; il passe, et claude-outils.js les importe.
   //
   // La bibliothèque « WebWorker » plutôt que « DOM » : fetch, crypto,
   // TextEncoder, mais ni document ni window. Un module vérifié ici qui se
@@ -47,6 +48,7 @@
     "app/edition.js",
     "app/doutes.js",
     "app/claude-idee.js",
+    "app/claude-outils.js",
     "app/claude-doute.js",
     "app/suggestions.js",
     "app/garde.js",
