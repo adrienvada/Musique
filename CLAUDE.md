@@ -83,8 +83,18 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   `normaliserFiche` : un nouveau champ s'y déclare, avec son type et ses
   bornes. La synchro reçoit avant d'envoyer, et envoie sous condition
   (`base`, `baseRev`) ; un écran qui enregistre la fiche entière passe
-  `{ depuis }` à `stockage.modifier`. `tests/synchro-scenarios.test.mjs` doit
-  rester vert.
+  `{ depuis }` à `stockage.modifier`. Dans un patch, un champ à `undefined`
+  est retiré, dans les trois stockages. `synchro.reessayer()` ne lève que
+  les envois : une réception mise de côté se réessaie à chaque passage, avec
+  sa fiche gardée. `tests/synchro-scenarios.test.mjs` doit rester vert.
+  - Ce qui ne sert qu'avec la bibliothèque commune porte
+    `data-avec-synchro` (montré ou caché par `synchronisation-ui.js`, comme
+    `data-avec-claude`) : caché, jamais grisé.
+  - Un compte d'éléments mêlés se dit par sorte (`compteParSorte`,
+    `garde.js`) : jamais « partitions » pour des idées.
+  - Les suggestions de Claude : du texte seulement, `validerSuggestion`
+    juste avant d'appliquer ; l'éditeur se change par `editeur.changer(f)`,
+    une page par `pageOuverte.changer(patch)`.
 - **Son et temps (`app/piano.js`, `app/transport.js`, `app/eveil.js`)** :
   - tout ce qui joue passe par le transport (idées, morceaux, pages par
     `ecoute-page.js`), sur l'horloge du contexte audio, jamais par une
@@ -124,7 +134,10 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   (`<dialog class="feuille-bas">`, `feuilles.js`) : le bouton « précédent »
   la ferme tout seul (`historique.js`). Un calque qui ne serait pas un
   `<dialog>` doit être déclaré dans le `reculer()` et l'`aLaRacine()` de son
-  écran, dans le registre des écrans (`app.js`, `navigation.js`).
+  écran, dans le registre des écrans (`app.js`, `navigation.js`). Une
+  feuille ouverte depuis plusieurs écrans se pose à la racine de la page
+  (comme `versions-ui.js`) : un `<dialog>` dans une vue cachée ne s'affiche
+  pas.
   Tout bouton à icône a un `aria-label` ou un `title` : un appui long
   l'affiche en infobulle (`infobulles.js`). Un élément qui a son propre
   appui long porte `data-sans-infobulle`. Tout texte inséré en HTML passe
@@ -199,7 +212,10 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
 - **Enregistrer et synchroniser** : `enregistreur.js`, `ecoute.js`,
   `stockage.js` (IndexedDB ou la base claude.ai), `fiche.js` (vérifier,
   remettre en forme, fusionner une fiche), `synchro.js`,
-  `synchronisation-ui.js`, `sauvegarde-ui.js`, `mises-a-jour.js` et `sw.js`.
+  `synchronisation-ui.js`, `sauvegarde-ui.js`, `garde.js` (ce qui protège
+  la bibliothèque, le compte par sorte), `conflits.js` (la version de
+  l'autre appareil), `versions.js` et `versions-ui.js` (versions
+  précédentes, corbeille), `mises-a-jour.js` et `sw.js`.
 - **Tablette et import** : `tablette.js` (le panneau « Ma reMarkable »),
   `connecteur.js`, `import-pdf.js` (PDF et .mid), `apercus.js`,
   `manuscrit.js`, `doutes.js`, `edition.js`.
@@ -209,7 +225,9 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   `sortie-midi.js`, `dossier-midi.js`, `reglages-live.js`.
 - **Claude dans Portée** (sans DOM : ce qui part vers Claude et ce qui est
   vérifié au retour) : `claude-idee.js`, `claude-outils.js` (les outils
-  d'une demande libre, sur une copie), `claude-doute.js`, `suggestions.js`.
+  d'une demande libre, sur une copie), `claude-doute.js`, `suggestions.js` ;
+  et leur écran, `suggestions-ui.js` (le bandeau des suggestions rangées
+  depuis une conversation).
 
 ## Vérifier
 
