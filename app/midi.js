@@ -26,7 +26,7 @@
  * en paramètre.
  */
 import { lirePage, lireTonalite, nouvelleSequence, pasParTemps, quantifier } from "./sequence.js";
-import { tonaliteTransposee } from "./harmonie.js";
+import { tonaliteTransposee, voixCompletes } from "./harmonie.js";
 
 const PPQ = 480; // tics par noire ; un pas (double croche) = 120 tics
 const TICS_PAR_PAS = PPQ / 4;
@@ -154,6 +154,17 @@ function chiffrageDeLevee(pas, mesure) {
     if (Math.abs(num - Math.round(num)) < 1e-9 && num >= 1) return [Math.round(num), den];
   }
   return null;
+}
+
+/**
+ * Le MIDI d'une idée : ses pistes et son accompagnement, à son tempo, dans
+ * sa mesure et sa tonalité. (Il était dans l'éditeur d'idée, que les
+ * exports et le dossier des .mid importaient tout entier pour lui.)
+ */
+export function midiDeLIdee(p, { transposition = 0 } = {}) {
+  const seq = p.sequence;
+  const k = lireTonalite(seq.tonalite);
+  return fichierMidi(voixCompletes(seq), { tempo: seq.tempo, mesure: seq.mesure, quintes: k.quintes, mineur: k.mineur, titre: p.titre, transposition });
 }
 
 /**

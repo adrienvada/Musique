@@ -39,6 +39,7 @@
     "app/doutes.js",
     "app/zip.js",
     "app/ui.js",
+    "app/erreurs.js",
     "supabase/functions/portee-remarkable/abc.js",
     "supabase/functions/portee-remarkable/bibliotheque.js",
     "supabase/functions/portee-remarkable/coffre.js",

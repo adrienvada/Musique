@@ -34,7 +34,6 @@
  */
 import { lirePref, ecrirePref } from "./preferences.js";
 import * as sq from "./sequence.js";
-import { fichierMidi } from "./midi.js";
 import { voixCompletes, transposerIdee, STYLES } from "./harmonie.js";
 import { creerGrille } from "./grille.js";
 import { ico } from "./icones.js";
@@ -64,13 +63,6 @@ export function dessinerApercu(svg, seq) {
   const bas = Math.min(...notes.map((n) => n.h)) - 2, haut = Math.max(...notes.map((n) => n.h)) + 2;
   const ex = 228 / fin, ey = 104 / Math.max(12, haut - bas);
   svg.innerHTML = notes.map((n) => `<rect class="apercu-note" x="${6 + n.d * ex}" y="${8 + (haut - n.h) * ey - 2}" width="${Math.max(2, n.l * ex - 1)}" height="4" rx="2"/>`).join("");
-}
-
-/** Le MIDI d'une idée (pistes, accompagnement compris). */
-export function midiDeLIdee(p, { transposition = 0 } = {}) {
-  const seq = p.sequence;
-  const k = sq.lireTonalite(seq.tonalite);
-  return fichierMidi(voixCompletes(seq), { tempo: seq.tempo, mesure: seq.mesure, quintes: k.quintes, mineur: k.mineur, titre: p.titre, transposition });
 }
 
 const titreDuJour = () => `Idée du ${dateCourte(new Date().toISOString())}`;

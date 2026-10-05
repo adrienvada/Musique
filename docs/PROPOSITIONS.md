@@ -1960,6 +1960,21 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - **Le focus va sur « Annuler » (I6).** `showModal()` le donnait au
     premier bouton, « Supprimer » : un Entrée de trop supprimait.
   - Essai : `tests/e2e/ecrans.test.mjs` (« supprimer une page lue »).
+- **Les exports vivent dans `app/exports.js` (T3).** MIDI, MusicXML, ABC,
+  « Tout en MIDI » et le partage du téléphone, avec une seule gestion des
+  erreurs : chaque export avait la sienne, et « Tout en MIDI » fabriquait
+  ses fichiers hors de la sienne (une partition illisible y devenait une
+  erreur sans message). Le MIDI d'une idée (`midiDeLIdee`) passe de
+  l'éditeur d'idée à `midi.js`, à côté de celui d'une page lue : les
+  exports et le dossier des .mid n'importent plus tout l'éditeur pour lui.
+- **Les erreurs se disent en français, avec quoi faire (`app/erreurs.js`,
+  I13).** « Failed to fetch », « Invalid PDF structure », « Failed to fetch
+  dynamically imported module… » ou « QuotaExceededError » s'affichaient
+  tels quels. `expliquer(err)` reconnaît le réseau coupé, le PDF illisible
+  (ou protégé), le module qui ne se charge pas, la mémoire pleine et le
+  connecteur qui se tait, et dit en une phrase ce qui s'est passé puis quoi
+  faire ; le détail reste dans la console. Un message que Portée écrit
+  déjà en français passe tel quel. Essais : `tests/erreurs.test.mjs`.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

@@ -11,7 +11,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { servir } from "./serveur.mjs";
-import { ORDINATEUR, contexte, importerLesExemples, lancer, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { ORDINATEUR, contexte, importerLesExemples, lancer, octetsDu, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
 
 let serveur, navigateur;
 before(async () => {
@@ -56,6 +56,34 @@ test("supprimer une page lue : la même question que depuis le carnet, « Annule
     await page.click('#dialogue button[value="oui"]');
     await page.waitForSelector("#vue-biblio:not([hidden])");
     await page.waitForFunction(() => document.querySelectorAll("#liste .ligne-carnet").length === 1);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("les exports passent tous par exports.js : MusicXML et ABC d'une page, tout en MIDI", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await ouvrirPartition(page, "Essai melodie");
+    await page.click("#onglet-lecteur");
+    await page.waitForSelector("#vue-lecteur:not([hidden]) #gravure-lecteur svg .abcjs-note");
+    const telecharger = async (ouvrir, bouton) => {
+      if (ouvrir) await page.click(ouvrir);
+      const [t] = await Promise.all([page.waitForEvent("download"), page.click(bouton)]);
+      return { nom: t.suggestedFilename(), octets: await octetsDu(t) };
+    };
+    const xml = await telecharger("#plus-lecteur", "#export-musicxml");
+    assert.equal(xml.nom, "Essai melodie-standard.musicxml");
+    assert.match(xml.octets.toString("utf8"), /<score-partwise/);
+    const abc = await telecharger("#plus-lecteur", "#export-abc");
+    assert.equal(abc.nom, "Essai melodie-standard.txt");
+    assert.match(abc.octets.toString("utf8"), /^X:/m);
+    await page.click("#vue-lecteur [data-retour]");
+    await page.click("#tab-reglages");
+    const tout = await telecharger(null, "#tout-midi");
+    assert.equal(tout.nom, "Portée - MIDI.zip");
+    assert.equal(tout.octets.subarray(0, 2).toString("latin1"), "PK");
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });

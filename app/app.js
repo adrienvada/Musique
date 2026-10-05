@@ -13,11 +13,10 @@ import { lirePartition } from "./lecteur/partition.js";
 import { dessinerPage } from "./manuscrit.js";
 import { Piano } from "./piano.js";
 import { decompacter, nouvelId, ouvrirStockage, restaurer, sauvegarde } from "./stockage.js";
-import { zipper } from "./zip.js";
 import * as ed from "./edition.js";
 import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE } from "./connecteur.js";
 import { creerSynchro } from "./synchro.js";
-import { creerEditeurIdee, midiDeLIdee } from "./idee.js";
+import { creerEditeurIdee } from "./idee.js";
 import { Transport } from "./transport.js";
 import { notesDePage, surlignage } from "./ecoute-page.js";
 import { installerEveil } from "./eveil.js";
@@ -25,9 +24,9 @@ import { brancherLive } from "./reglages-live.js";
 import { sequenceDepuisAbc, pasParMesure, pasParTemps, ecrireAbc } from "./sequence.js";
 import { voixCompletes, transposerIdee } from "./harmonie.js";
 import { creerVueMorceau } from "./vue-morceau.js";
-import { midiDuMorceau, musicXmlDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
-import { ecrireMusicXml, musicXmlDeLaPage } from "./musicxml.js";
-import { midiDeLaPage, ideeDepuisMidi } from "./midi.js";
+import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
+import { ideeDepuisMidi, midiDeLIdee } from "./midi.js";
+import { creerExports } from "./exports.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerHistorique } from "./historique.js";
@@ -245,6 +244,11 @@ function reculer() {
 }
 
 const ideesParId = () => new Map(etat.partitions.filter((x) => x.type === "idee").map((x) => [x.id, x]));
+
+// Les exports (MIDI, MusicXML, ABC, partage) : exports.js.
+const { exporterMidi, toutEnMidi, partagerMidi, exporterMusicXml, exporterAbc } = creerExports({
+  stockage: () => etat.stockage, partitions: () => etat.partitions, idees: ideesParId, abcjs: ABCJS, dansClaude,
+});
 
 /** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */
 function ouvrirIdee(p = null, options = {}) {
@@ -1497,75 +1501,6 @@ function graverLecteur() {
   [objetLecteur] = lib.renderAbc(zone, pourGravure(etat.courante.abc), { responsive: "resize", add_classes: true, visualTranspose: etat.transposition, paddingleft: 0, paddingright: 0 });
 }
 
-const nomDeFichier = (p) => (p.titre || "").replace(/[\\/:*?"<>|]+/g, " ").trim() || "partition";
-
-/**
- * Le MIDI d'une page lue : une piste par main, tempo, transposition et
- * changements de la page compris. Par le même écrivain que les idées
- * (midi.js) : abcjs écrivait des pistes sans nom et perdait les changements.
- */
-function midiDe(abc, { tempo, transposition = 0, titre = "" } = {}) {
-  return midiDeLaPage(abc, ABCJS(), { tempo, transposition, titre });
-}
-
-/** Le MIDI de n'importe quelle partition : une idée part de ses notes, une page lue, de son ABC. */
-function midiDePartition(p, reglages = {}) {
-  if (p.type === "idee") return midiDeLIdee(p);
-  if (p.type === "morceau") return midiDuMorceau(p, ideesParId());
-  return midiDe(p.abc, { tempo: reglages.tempo ?? p.tempo, transposition: reglages.transposition ?? p.transposition ?? 0, titre: p.titre });
-}
-
-/** Télécharge le .mid (dans un .zip sur claude.ai, dont la liste des formats ignore .mid). */
-async function exporterMidi(p, reglages = {}) {
-  if (!p.type && !ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
-  const base = nomDeFichier(p);
-  try {
-    const octets = midiDePartition(p, reglages);
-    if (etat.stockage.midiDirect) await etat.stockage.enregistrerFichier(`${base}.mid`, new Blob([octets], { type: "audio/midi" }));
-    else await etat.stockage.enregistrerFichier(`${base} (MIDI).zip`, zipper([{ nom: `${base}.mid`, donnees: octets }]));
-  } catch (e) {
-    if (e && e.code === "declined") return;
-    console.error(e);
-    toast("L'export MIDI n'a pas abouti : " + (e.message || e.code || "erreur"));
-  }
-}
-
-/** Toutes les partitions en MIDI, dans un seul .zip. */
-async function toutEnMidi() {
-  if (!ABCJS() && etat.partitions.some((p) => !p.type)) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
-  const pris = new Set();
-  const fichiers = etat.partitions.map((p) => {
-    let nom = nomDeFichier(p), n = 2;
-    while (pris.has(nom)) nom = `${nomDeFichier(p)} (${n++})`;
-    pris.add(nom);
-    return { nom: `${nom}.mid`, donnees: midiDePartition(p) };
-  });
-  try {
-    await etat.stockage.enregistrerFichier("Portée - MIDI.zip", zipper(fichiers));
-  } catch (e) {
-    if (e && e.code === "declined") return;
-    toast("L'export n'a pas abouti : " + (e.message || e.code || "erreur"));
-  }
-}
-
-/**
- * Envoie le MIDI là où on veut (AirDrop, Fichiers, mail…) avec le partage
- * du téléphone ; sinon (ordinateur, claude.ai), le télécharge.
- */
-async function partagerMidi(p) {
-  try {
-    const fichier = new File([midiDePartition(p)], `${nomDeFichier(p)}.mid`, { type: "audio/midi" });
-    if (!dansClaude() && navigator.canShare && navigator.canShare({ files: [fichier] })) {
-      await navigator.share({ files: [fichier], title: p.titre });
-      return;
-    }
-  } catch (e) {
-    if (e && e.name === "AbortError") return;
-    console.warn("Partage impossible, téléchargement à la place", e);
-  }
-  await exporterMidi(p);
-}
-
 /** Écoute une idée depuis sa carte, sans l'ouvrir. */
 async function ecouterIdee(p, bouton) {
   if (transport.actif && transport.carte === bouton) { transport.arreter(); return; }
@@ -1599,42 +1534,6 @@ function resumeIdee(seq) {
   if (!seq) return "";
   const notes = seq.pistes.reduce((n, p) => n + p.notes.length, 0);
   return `${pluriel(notes, "note")} · ♩ ${seq.tempo}`;
-}
-
-/**
- * Le MusicXML (MuseScore) : une idée part de ses notes, un morceau de ses
- * blocs assemblés (comme pour le MIDI), une page lue de son ABC joué en
- * notes, avec la transposition choisie à l'écoute (le MIDI la prenait, le
- * MusicXML l'oubliait). Sur claude.ai, dans un .zip (liste fermée des formats).
- */
-async function exporterMusicXml(p) {
-  try {
-    let texte;
-    if (p.type === "idee") texte = ecrireMusicXml(p.sequence, { voix: voixCompletes(p.sequence), titre: p.titre });
-    else if (p.type === "morceau") texte = musicXmlDuMorceau(p, ideesParId());
-    else {
-      if (!ABCJS()) { toast("abcjs n'a pas pu se charger (connexion ?)."); return; }
-      texte = musicXmlDeLaPage(p.abc, ABCJS(), { tempo: p.tempo, transposition: p.transposition || 0, titre: p.titre });
-    }
-    const nom = `${nomDeFichier(p)}.musicxml`;
-    const octets = new TextEncoder().encode(texte);
-    if (etat.stockage.midiDirect) await etat.stockage.enregistrerFichier(nom, new Blob([octets], { type: "application/vnd.recordare.musicxml+xml" }));
-    else await etat.stockage.enregistrerFichier(`${nomDeFichier(p)} (MusicXML).zip`, zipper([{ nom, donnees: octets }]));
-  } catch (e) {
-    if (e && e.code === "declined") return;
-    console.error(e);
-    toast("L'export MusicXML n'a pas abouti : " + (e.message || e.code || "erreur"));
-  }
-}
-
-async function exporterAbc() {
-  const p = etat.courante;
-  try {
-    await etat.stockage.enregistrerFichier(`${nomDeFichier(p)}.txt`, p.abc);
-  } catch (e) {
-    if (e && e.code === "declined") return;
-    toast("L'export n'a pas abouti : " + (e.message || e.code || "erreur"));
-  }
 }
 
 // ------------------------------------------------------------------------
@@ -1774,7 +1673,7 @@ function brancher() {
   $("transp-plus").addEventListener("click", () => transposer(1));
   $("main-droite").addEventListener("change", arreterLecture);
   $("main-gauche").addEventListener("change", arreterLecture);
-  $("export-abc").addEventListener("click", exporterAbc);
+  $("export-abc").addEventListener("click", () => exporterAbc(etat.courante));
   $("export-musicxml").addEventListener("click", () => exporterMusicXml(etat.courante));
   // Une page lue devient une idée : on la prolonge au clavier, en direct, avec des accords.
   $("continuer-idee").addEventListener("click", () => {
