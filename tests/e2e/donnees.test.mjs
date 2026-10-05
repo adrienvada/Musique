@@ -363,8 +363,10 @@ test("une idée notée par Claude, et ses suggestions : marquées dans le carnet
     await page.click('#idee-suggestions button[aria-label="Ignorer"]');
     await page.waitForFunction(() => /2 accords/.test(document.querySelector("#idee-suggestions .bandeau-texte")?.textContent || ""));
     assert.deepEqual((await commun.suggestions.lister(idee.id)).map((s) => s.genre), ["accords"]);
-    // Pourquoi : il se déplie ; le texte de Claude n'est jamais du HTML.
+    // Pourquoi : il se déplie d'un toucher.
+    assert.equal(await page.isVisible("#idee-suggestions .bandeau-pourquoi"), false);
     await page.click("#idee-suggestions .bandeau-quoi");
+    assert.equal(await page.getAttribute("#idee-suggestions .bandeau-quoi", "aria-expanded"), "true");
     assert.equal(await page.textContent("#idee-suggestions .bandeau-pourquoi"), "Pourquoi : La mélodie descend vers le fa.");
     // Écouter : l'idée avec les accords, sans rien écrire.
     await page.click('#idee-suggestions button[aria-label="Écouter"]');

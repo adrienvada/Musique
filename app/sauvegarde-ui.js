@@ -121,8 +121,10 @@ export function brancherSauvegarde({ stockage, partitions, dansClaude = () => fa
     const derniere = lirePref(CLE_DERNIERE_SAUVEGARDE);
     const date = derniere && Number.isFinite(Date.parse(derniere)) ? derniere : null;
     $("derniere-sauvegarde").textContent = date ? jour(date) : "Jamais";
-    $("derniere-sauvegarde-ligne").hidden = !date && partitions().length === 0;
-    const rappel = rappelSauvegarde({ derniere: date, plusAncienne: plusAncienne(), synchronisee: synchronisee(), surClaude: dansClaude() || (stockage() && stockage().mode === "claude") });
+    const surClaude = dansClaude() || (!!stockage() && stockage().mode === "claude");
+    // « Jamais » ne se dit que si on sait le retenir : la page claude.ai peut refuser le stockage local.
+    $("derniere-sauvegarde-ligne").hidden = !date && (partitions().length === 0 || surClaude);
+    const rappel = rappelSauvegarde({ derniere: date, plusAncienne: plusAncienne(), synchronisee: synchronisee(), surClaude });
     const r = $("rappel-sauvegarde");
     r.hidden = !rappel;
     if (rappel) { r.innerHTML = ico("attention", "s"); r.appendChild(el("span", "", rappel)); }

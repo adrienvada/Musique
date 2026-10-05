@@ -509,7 +509,7 @@ export function creerAccueil(deps) {
         : "La version de l'autre appareil : l'autre version n'est plus dans ta bibliothèque.";
       ajouter("ok", "Garder celle-ci", puis(() => deps.versions.trancherConflit("celle-ci", p)), { plein: true });
       ajouter("copier", "Garder les deux", puis(() => deps.versions.trancherConflit("les-deux", p)));
-      if (autre) ajouter("corbeille", "Garder l'autre", puis(() => deps.versions.trancherConflit("l-autre", p)));
+      if (autre) ajouter("annuler", "Garder l'autre", puis(() => deps.versions.trancherConflit("l-autre", p)));
     }
     if (p.type === "idee" || p.type === "morceau") {
       ajouter("carnet", "Ouvrir", puis(() => deps.ouvrir(p.id)), { plein: true });

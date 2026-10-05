@@ -166,7 +166,15 @@ export function creerSuggestions(deps) {
       quoi.innerHTML = ico("etincelle", "s");
       quoi.appendChild(el("span", "bandeau-texte", resumeSuggestion(fiche)));
       if (liste.length > 1) quoi.appendChild(el("span", "bandeau-compte", `1 sur ${liste.length}`));
-      quoi.addEventListener("click", () => { deplie = !deplie; rendre(); });
+      const pourquoi = el("p", "bandeau-pourquoi", proposition.pourquoi ? `Pourquoi : ${proposition.pourquoi}` : "Claude n'a pas dit pourquoi.");
+      pourquoi.hidden = !deplie;
+      // Le pourquoi se déplie sans redessiner le bandeau : une écoute en cours garde son bouton.
+      quoi.addEventListener("click", () => {
+        deplie = !deplie;
+        pourquoi.hidden = !deplie;
+        quoi.setAttribute("aria-expanded", String(deplie));
+        quoi.title = deplie ? "Cacher pourquoi" : "Pourquoi ?";
+      });
       rang.appendChild(quoi);
       const geste = (icone, texte, agir, { plein = false } = {}) => {
         const b = el("button", `btn btn-petit${plein ? " btn-plein" : ""}`);
@@ -182,8 +190,7 @@ export function creerSuggestions(deps) {
       if (MUSIQUE.has(proposition.genre)) geste("lire", "Écouter", (b) => ecouter(liste[0], b));
       geste("ok", "Appliquer", () => appliquer(liste[0]), { plein: true });
       geste("fermer", "Ignorer", () => ignorer(liste[0]));
-      conteneur.appendChild(rang);
-      if (deplie) conteneur.appendChild(el("p", "bandeau-pourquoi", proposition.pourquoi ? `Pourquoi : ${proposition.pourquoi}` : "Claude n'a pas dit pourquoi."));
+      conteneur.append(rang, pourquoi);
     }
 
     /** Ce que l'écran montre maintenant ; null si ce n'est plus la partition des suggestions. */
@@ -257,7 +264,7 @@ export function creerSuggestions(deps) {
       if (!v.ok) { ecarter(item, v); return; }
       const nouvelle = appliquerSuggestion(avant, v.proposition);
       ecoute.arreter();
-      if (!ctx.changer(nouvelle)) { toast("La partition s'enregistre encore : réessaie dans un instant."); return; }
+      if (!ctx.changer(nouvelle)) { toast("Cette partition n'est plus ouverte : rien n'a changé."); return; }
       liste = liste.filter((x) => x !== item);
       rendre();
       retirer(item.fiche);
