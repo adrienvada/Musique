@@ -14,6 +14,9 @@ hauteur de tes notes des coordonnées de tes traits, sans rien deviner.
 Chaque PDF a 12 pages identiques, au format exact de l'écran (157,2 ×
 209,6 mm) : la tablette l'affiche sans marge ni mise à l'échelle.
 
+Et une page à remplir une fois, `etalonnage.pdf` (4 pages identiques) : voir
+plus bas.
+
 ## Installer les modèles sur la tablette
 
 1. Glisse les quatre PDF dans l'appli reMarkable de l'ordinateur ou sur
@@ -51,6 +54,20 @@ Ces conseils seront affinés quand le lecteur aura vu tes premières pages.
 - Un outil fin (Fineliner ou Ballpoint) plutôt que le Marker, et pas de
   surligneur sur les notes.
 
+## La page d'étalonnage
+
+Elle apprend au lecteur ta façon d'écrire les signes qu'il reconnaît mal
+tout seul : silences (dont le quart de soupir), dièse, bémol, bécarre,
+chiffres du chiffrage (1 à 9, « C », « C » barré) et « 3 » de triolet.
+Chaque case montre le signe en gris, à sa place sur la portée : écris-le
+trois fois à côté, un par case pointillée, comme tu l'écris d'habitude
+(pas plus soigné). Une page suffit ; une deuxième affine.
+
+Le lecteur en tire tes gabarits (`lecteur/gabarits.js`). Avec eux, il lit
+le chiffrage écrit au lieu de le deviner, et reconnaît ces signes chez toi ;
+sans eux, il lit comme avant. Chaque signe que tu corriges peut aussi
+devenir un exemple.
+
 ## Pour le développement
 
 - `outils/generer_modeles.py` refait les PDF, les JSON et les aperçus
@@ -78,4 +95,10 @@ Ces conseils seront affinés quand le lecteur aura vu tes premières pages.
   les pages d'essai (`supabase/functions/portee-remarkable/rm.js`).
 - Clés et accolade viennent de la police Bravura (SIL OFL 1.1, voir
   `outils/LICENCE-Bravura-OFL.txt`), extraites une fois pour toutes par
-  `outils/extraire_glyphes.py`.
+  `outils/extraire_glyphes.py` ; les signes de la page d'étalonnage, de
+  Bravura 1.392. Le script n'ajoute que les signes qui manquent : réextraire
+  la clé de sol d'une autre version de la police changerait tes modèles.
+- La calibration de la page d'étalonnage (`etalonnage.json`, `genre:
+  "etalonnage"`) a ses portées, comme les autres (ses lignes grises la
+  reconnaissent), et ses `cases` : l'étiquette de chaque signe et la zone où
+  tu l'écris.

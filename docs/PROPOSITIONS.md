@@ -744,6 +744,62 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   disent vrai (`lireDocument` rend une promesse, la page de `preparerTraits`
   est facultative), et `extraction.js`, `modeles.js` et `traits.js`
   rejoignent les fichiers vérifiés, sans erreur.
+- **Un reconnaisseur de signes appris sur ton écriture (L16).**
+  `lecteur/gabarits.js` compare un signe à des exemples de ta main : c'est
+  $Q (Vatavu, Anthony et Wobbrock, MobileHCI 2018), écrit d'après l'article
+  en JavaScript pur. Un signe devient 32 points ; deux signes se comparent
+  comme deux nuages, quels que soient l'ordre et le sens des traits ; des
+  bornes inférieures évitent les comparaisons inutiles (une milliseconde par
+  signe pour 18 exemples).
+  - Mesuré en interlignes, pas ramené à sa propre taille comme dans
+    l'article : la taille compte (un soupir est deux fois plus haut qu'un
+    demi-soupir), et l'interligne la rend comparable d'un modèle à l'autre.
+    Sur tes signes déformés, 288 reconnus sur 288, contre 276 à la taille du
+    signe. Les soupirs du piano (interligne 28) sont reconnus d'après celui
+    de la mélodie (32).
+  - Les seuils, rapportés au rayon du signe : reconnu nettement en deçà de
+    0,3, rejeté au-delà de 0,45, de justesse entre les deux ou quand une
+    autre étiquette est presque aussi proche. Réglés sur tes six bémols, tes
+    trois soupirs, tes deux demi-soupirs, les chiffres du « 12/8 » et vingt
+    variantes déformées de chacun : un bémol est à 0,14 à 0,17 de tes autres
+    bémols, à plus de 0,29 de tout autre signe ; une tête ou un accent, à
+    plus de 0,7 de tout exemple.
+  - HOMUS (le jeu de signes manuscrits de la recherche) n'est pas embarqué :
+    sa licence n'est pas indiquée. Les essais utilisent tes signes, ou des
+    signes tracés comme à la main (`tests/fabrique.mjs`).
+- **La page d'étalonnage** (`modeles/etalonnage.pdf`, sujet
+  `portee:etalonnage:v1`) : six portées de trois cases, une par signe
+  (silences, altérations, chiffres 1 à 9, « C », « C » barré, « 3 » de
+  triolet), le signe imprimé en gris à gauche, trois places pour l'écrire.
+  `lireEtalonnage` en tire tes gabarits ; ses lignes grises la reconnaissent
+  comme les autres modèles ; `npm run lire` dit ce qu'elle a appris, et
+  `--gabarits-sortie` l'écrit (à repasser avec `--gabarits`). Les signes
+  gris viennent de Bravura 1.392 ; ceux déjà imprimés sur tes modèles
+  restent ceux d'avant (`extraire_glyphes.py` n'ajoute que ce qui manque) :
+  tes modèles sont identiques à l'octet près.
+- **Lire avec tes gabarits** (`lirePartition(pages, cal, { gabarits })`).
+  Sans eux, rien ne change (vérifié sur tes deux pages). Avec eux, un signe
+  reconnu nettement prend leur lecture : silences (le quart de soupir, que
+  les règles ne connaissent pas), altérations, chiffres, « 3 » d'un triolet
+  (écrit « (3 », sans question). Reconnu de justesse, la lecture des règles
+  reste, et un signe qu'elles ne lisent pas devient « Est-ce un bécarre ? ».
+  - Le chiffrage écrit est lu au lieu d'être deviné : 3/4 et 6/8 ont la
+    même durée, seul l'écrit les distingue. Il faut que tous ses signes
+    soient reconnus nettement (lire « 2/8 » pour « 12/8 » serait pire que
+    deviner) ; deux chiffres qui se touchent se séparent à la ligne du
+    milieu. Lu mais contredit par la plupart des mesures, c'est une question.
+  - Sur ta mélodie, le « 12/8 » est lu, les six bémols et les trois silences
+    reconnus : même ABC, mêmes doutes.
+- **Apprendre d'une correction.** `ajouterExemple` rend de nouveaux
+  gabarits (au plus 24 exemples par signe, les plus anciens partent ; le même
+  exemple ne compte qu'une fois), `fusionnerGabarits` réunit ceux de deux
+  appareils sans rien perdre. Les doutes de signe, de triolet et de
+  chiffrage disent leurs traits, et leurs réponses ce qu'elles apprennent
+  (`apprendre`, `doutes.js`). « Un signe que je ne reconnais pas » propose
+  maintenant des réponses : une altération de la note qui suit, un silence
+  après celle qui précède. Brancher tout cela dans l'appli (importer la page
+  d'étalonnage, ranger les gabarits avec la bibliothèque, apprendre des
+  réponses) revient au lot atelier.
 
 ### Connecteur (S3 à S5, C1 à C6)
 
@@ -1794,11 +1850,16 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
    échantillonné, curseur, tempo, transposition, mains séparables, raccourci
    Espace. MIDI en un clic (tempo et transposition compris), impression ou
    PDF, texte ABC.
-4. **Autres signes** : *en partie*.
-   - Reconnus : soupirs et demi-soupirs, bémols (un ou deux traits), dièses
-     (au moins trois traits), accents.
-   - Pas encore : pauses et demi-pauses, silences courts, liaisons de durée,
-     triolets, lecture des chiffres du chiffrage. Le classifieur HOMUS reste à faire.
+4. **Autres signes** : *fait dans le lecteur (04/10), à brancher dans l'appli*.
+   - Reconnus par les règles : soupirs et demi-soupirs, pauses et
+     demi-pauses (par leur place), bémols, dièses (même collés), bécarres,
+     accents, liaisons de durée ; un triolet est un doute.
+   - Avec tes gabarits (page d'étalonnage, puis tes corrections) : silences
+     courts (dont le quart de soupir), altérations, chiffres du chiffrage
+     (lu au lieu d'être deviné), « 3 » des triolets.
+   - Pas encore : importer la page d'étalonnage et apprendre des réponses
+     dans l'appli (lot atelier) ; nuances, ornements et paroles restent
+     ignorés. HOMUS écarté (licence non indiquée) : les gabarits viennent de toi.
 5. **Corriger** : *fait*. Correction au toucher (voir la décision du 30/09),
    ta page redessinée à côté, les doutes surlignés, « Annuler », enregistrement
    automatique. L'ABC reste accessible en mode avancé.

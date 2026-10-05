@@ -29,6 +29,7 @@
   },
   "files": [
     "lecteur/extraction.js",
+    "lecteur/gabarits.js",
     "lecteur/geometrie.js",
     "lecteur/lecteur.js",
     "lecteur/modeles.js",

@@ -1,9 +1,10 @@
 /**
  * DE LA PAGE LUE À LA PARTITION ABC
  *
- * lirePartition(pages, cal, {titre}) enchaîne la lecture de chaque page
- * (lecteur.js), range les événements par système et par main, trouve le
- * chiffrage d'après la durée des mesures, et écrit l'ABC.
+ * lirePartition(pages, cal, {titre, gabarits}) enchaîne la lecture de chaque
+ * page (lecteur.js), range les événements par système et par main, trouve le
+ * chiffrage d'après la durée des mesures (ou le lit, avec tes gabarits :
+ * gabarits.js, L16), et écrit l'ABC.
  *
  * Les durées sont comptées en croches : c'est l'unité de l'ABC produit
  * (L:1/8). Une noire vaut 2, une blanche 4, une croche pointée 1,5.
@@ -120,8 +121,14 @@ function mesuresDe(evs) {
   return mesures;
 }
 
-function dureeEv(e) {
+/** La durée écrite d'une note (pointée ou non), telle que l'ABC l'écrit. */
+function dureeEcrite(e) {
   return e.duree * (e.points ? 1.5 : 1);
+}
+
+/** Ce qu'elle compte dans la mesure : deux tiers de sa durée dans un triolet lu (L16). */
+function dureeEv(e) {
+  return dureeEcrite(e) * (e.facteur || 1);
 }
 
 function barreABC(b, derniere) {
@@ -145,7 +152,7 @@ function mesureABC(m, portee) {
   let texte = "";
   let groupe = null;
   for (const e of m.evs) {
-    const d = dureeABC(dureeEv(e));
+    const d = dureeABC(dureeEcrite(e));
     let j;
     if (e.type === "silence") j = "z" + d;
     else {
@@ -155,6 +162,8 @@ function mesureABC(m, portee) {
     // Les notes d'une même ligature s'écrivent collées : l'ABC les relie.
     const lie = e.type === "note" && e.ligature !== null && e.ligature === groupe;
     if (!lie && texte) texte += " ";
+    // Un triolet que tes gabarits ont lu (L16) : « (3 » juste devant sa première note, comme le geste faireTriolet.
+    if (e.trioletLu) texte += "(3";
     e.pos = [texte.length, texte.length + j.length];
     texte += j + (e.liee ? "-" : "");
     groupe = e.type === "note" ? e.ligature : null;
@@ -166,14 +175,14 @@ function mesureABC(m, portee) {
 // Lecture complète
 // ------------------------------------------------------------------------
 
-export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
+export function lirePartition(pages, cal, { titre = "Sans titre", gabarits = null } = {}) {
   verifierCalibration(cal);
   if (!Array.isArray(pages)) throw new Error("Pas de page à lire.");
   const lues = [];
   const doutes = [];
   const systemes = []; // { page, index, voix: [{portee, evs}], entetes }
   pages.forEach((traits, i) => {
-    const lue = lirePage(traits, cal, i + 1);
+    const lue = lirePage(traits, cal, i + 1, { gabarits });
     const asm = assembler(lue);
     // Nom de chaque tête, pour les images de contrôle et l'atelier.
     for (const t of lue.tetes) {
@@ -218,7 +227,15 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
     const groupes = s.systemes.flatMap((sys) => sys.voix.flatMap((v) => groupesLigatures(v.evs)));
     const par3 = groupes.length > 0 && groupes.filter((g) => g % 3 === 0).length / groupes.length >= 0.5;
     s.devine = devinerChiffrage(durees, par3, premieres);
-    s.m = s.devine ? { m: s.devine.m, croches: s.devine.croches } : precedent;
+    // Le chiffrage écrit, quand tes gabarits l'ont lu (L16) : il l'emporte sur
+    // celui qu'on devine (3/4 et 6/8 ont la même durée, seul l'écrit les
+    // distingue). Combien de mesures le confirment, pour le dire s'il est contredit.
+    const lu = s.systemes[0].entetes.map((e) => e.metre).find(Boolean);
+    if (lu) {
+      const justes = (d) => Math.abs(d - lu.croches) < 1e-6;
+      s.lu = { ...lu, appuis: durees.filter(justes).length + premieres.filter(justes).length, total: durees.length + premieres.filter(justes).length };
+    }
+    s.m = s.lu ? { m: s.lu.m, croches: s.lu.croches } : s.devine ? { m: s.devine.m, croches: s.devine.croches } : precedent;
     precedent = s.m;
   }
   // En mesure composée, trois croches liées sont la règle, pas un triolet.
@@ -274,13 +291,29 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
       mes.duree = mes.evs.reduce((a, e) => a + dureeEv(e), 0);
     }
     if (debutSection) {
-      if (sys.ecrit && !section.devine) {
-        doutes.push({ type: "chiffrage", page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), message: "Chiffrage écrit mais pas de mesure complète pour le vérifier." });
+      // Les signes du chiffrage écrit (en haut ou en bas de la portée) : ce
+      // qu'apprendre quand tu dis quel chiffrage c'est (gabarits.js, L16).
+      const iv = sys.entetes.findIndex((e) => e.chiffres.length);
+      const chiffres = iv < 0 ? [] : sys.entetes[iv].chiffres.map((g) => ({ g, haut: g.cy < sys.voix[iv].portee.lignes[2] }))
+        .sort((a, b) => Number(b.haut) - Number(a.haut) || a.g.x0 - b.g.x0).map(({ g, haut }) => ({ traits: [...g.traits], haut }));
+      const apprendre = chiffres.length ? { chiffres } : {};
+      if (section.lu) {
+        // Lu par tes gabarits, mais contredit par la plupart des mesures : on le demande.
+        if (section.lu.total && section.lu.appuis < section.lu.total / 2) {
+          const autres = [section.devine && section.devine.m, ...((section.devine && section.devine.autres) || [])].filter((x, i, t) => x && x !== section.lu.m && t.indexOf(x) === i);
+          doutes.push({
+            type: "chiffrage", variante: "contredit", lu: true, m: section.lu.m, autres, appuis: section.lu.appuis, total: section.lu.total,
+            page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), _section: section, ...apprendre,
+            message: `Chiffrage lu : ${section.lu.m}, mais ${section.lu.appuis ? `seules ${section.lu.appuis} mesures sur ${section.lu.total} le confirment` : `aucune des ${section.lu.total} mesures ne le confirme`}.`,
+          });
+        }
+      } else if (sys.ecrit && !section.devine) {
+        doutes.push({ type: "chiffrage", page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), ...apprendre, message: "Chiffrage écrit mais pas de mesure complète pour le vérifier." });
       } else if (section.devine && section.devine.appuis < section.devine.total / 2) {
         // Moins de la moitié des mesures tombent juste : le chiffrage lui-même est douteux.
         doutes.push({
           type: "chiffrage", variante: "contredit", m: section.devine.m, autres: section.devine.autres, appuis: section.devine.appuis, total: section.devine.total,
-          page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), _section: section,
+          page: sys.page, portee: sys.voix[0].portee.index, boite: bandeau(sys, cal), _section: section, ...apprendre,
           message: `Chiffrage deviné : ${section.devine.m}, mais seules ${section.devine.appuis} mesures sur ${section.devine.total} le confirment.`,
         });
       }
@@ -405,6 +438,9 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
     if (d._evFin && d.cible && d._evFin.place) d.cible = { debut: d.cible.debut, fin: absolu(d._evFin.place).fin };
     // La note à hampe dont une tête sans hampe ferait partie (accord à hampe courte, L10).
     if (d._accord && d._accord.place) d.cibleAccord = absolu(d._accord.place);
+    // Autour d'un signe inconnu : la note qui le suit (s'il est une altération) et celle qui le précède (s'il est un silence).
+    if (d._suivante && d._suivante.place) d.cibleSuivante = absolu(d._suivante.place);
+    if (d._precedente && d._precedente.place) d.ciblePrecedente = absolu(d._precedente.place);
     // Les lignes d'un système (ses deux voix au piano) : ce que réécrit un changement d'armure.
     if (d._sys && d._sys.premiereLigne !== undefined) d.cibleLigne = lignesDe(d._sys.premiereLigne, d._sys.derniereLigne);
     // Les lignes d'une section : ce que réécrit un changement de chiffrage.
@@ -422,7 +458,7 @@ export function lirePartition(pages, cal, { titre = "Sans titre" } = {}) {
       }
       p.regle = p.changements.map((c) => c.doute).filter(Boolean);
     }
-    for (const k of ["_ev", "_evFin", "_mes", "_sys", "_section", "_hesitation", "_accord"]) delete d[k];
+    for (const k of ["_ev", "_evFin", "_mes", "_sys", "_section", "_hesitation", "_accord", "_suivante", "_precedente"]) delete d[k];
   }
 
   return { abc, doutes, lues, piano, nbSystemes: systemes.length };
@@ -446,8 +482,9 @@ function trancher(mes, m, doutes) {
   const candidats = [];
   for (const d of doutes) {
     if (!d._ev || !d.alternative || !mes.evs.includes(d._ev)) continue;
-    const e = d._ev, avant = dureeEv(e), alt = d.alternative;
-    if (alt.croches !== undefined) candidats.push({ delta: alt.croches - avant, e, changement: { _ev: e, croches: alt.croches, _doute: d }, texte: `${rang(e)} note en ${NOMS_DUREES[alt.croches] || temps(alt.croches)}` });
+    // Dans un triolet lu, une note compte les deux tiers de sa durée écrite.
+    const e = d._ev, avant = dureeEv(e), alt = d.alternative, facteur = e.facteur || 1;
+    if (alt.croches !== undefined) candidats.push({ delta: (alt.croches - dureeEcrite(e)) * facteur, e, changement: { _ev: e, croches: alt.croches, _doute: d }, texte: `${rang(e)} note en ${NOMS_DUREES[alt.croches] || temps(alt.croches)}` });
     else if (alt.supprimer) candidats.push({ delta: -avant, e, changement: { _ev: e, supprimer: true, _doute: d }, texte: `sans la ${rang(e)} note` });
   }
   if (!/\/8$/.test(m.m)) {

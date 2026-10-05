@@ -1,11 +1,16 @@
 /**
  * LIRE UNE PAGE EN LIGNE DE COMMANDE
  *
- *   npm run lire -- tests/pages/2026-09-30-piano-standard.pdf [--svg]
+ *   npm run lire -- tests/pages/2026-09-30-piano-standard.pdf [--svg] [--gabarits g.json]
  *
  * Affiche l'ABC et les doutes. Avec --svg, écrit à côté du PDF une image
  * de contrôle où chaque trait est coloré selon ce que le lecteur en a
- * compris (têtes, hampes, ligatures, barres, signes…).
+ * compris (têtes, hampes, ligatures, barres, signes…). Avec --gabarits, lit
+ * avec tes gabarits (L16).
+ *
+ * Une page d'étalonnage (modeles/etalonnage.pdf, remplie) affiche ce
+ * qu'elle a appris, case par case ; --gabarits-sortie g.json l'écrit, pour
+ * le repasser ensuite avec --gabarits (ajouté aux gabarits déjà donnés).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -13,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { lireDocument } from "../lecteur/extraction.js";
 import { lirePartition } from "../lecteur/partition.js";
+import { gabaritsVides, lireEtalonnage } from "../lecteur/gabarits.js";
 import { ajuster, fichierCalibration, identifierModele, recaler, verifierVersion } from "../lecteur/modeles.js";
 
 const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -46,6 +52,10 @@ export function chargerCalibration(modele, version) {
  * lignes grises le confirment, le trouvent quand le sujet manque, et
  * l'emportent quand il se trompe (`avertissement` le dit). Chaque page est
  * recalée sur ses lignes grises quand elles ont bougé.
+ *
+ * Une page d'étalonnage ne se lit pas comme une partition : elle rend
+ * { etalonnage: true, gabarits, cases } (les gabarits donnés, plus ce que
+ * chaque page a appris, gabarits.js).
  */
 export async function lireFichier(chemin, { gabarits = null } = {}) {
   const data = new Uint8Array(fs.readFileSync(chemin));
@@ -66,6 +76,15 @@ export async function lireFichier(chemin, { gabarits = null } = {}) {
   try { cal = chargerCalibration(modele, version); } catch (e) { throw new Error(`${chemin} : ${e.message}`, { cause: e }); }
   const titre = path.basename(chemin, ".pdf");
   const traits = lu.pages.map((p) => { const t = ajuster(p, cal); return t && t.ecart < 1.5 ? recaler(p.traits, t) : p.traits; });
+  if (cal.genre === "etalonnage") {
+    let appris = gabarits || gabaritsVides();
+    const cases = traits.map((t, i) => {
+      const { gabarits: suite, ...page } = lireEtalonnage(t, cal, appris);
+      appris = suite;
+      return { page: i + 1, ...page };
+    });
+    return { etalonnage: true, gabarits: appris, cases, cal, pages: lu.pages, modele, version, avertissement };
+  }
   return { ...lirePartition(traits, cal, { titre, gabarits }), cal, pages: lu.pages, modele, version, avertissement };
 }
 
@@ -76,7 +95,7 @@ const COULEURS = {
   bemol: "#8a6d00", diese: "#8a6d00", becarre: "#8a6d00", entete: "#999", articulation: "#bbb",
   liaison: "#bbb", "hors-portee": "#bbb", inconnu: "#e00000",
   "ligne-sup": "#7a7a7a", "liaison-duree": "#0a8a3a", "hampe-seule": "#e00000", "triolet?": "#d1006f",
-  "quart-soupir": "#00838f", chiffre: "#999",
+  "quart-soupir": "#00838f", chiffre: "#8a6d00", triolet: "#0a8a3a",
 };
 
 export function svgControle(res, numeroPage = 0) {
@@ -113,11 +132,22 @@ async function main() {
   const args = process.argv.slice(2);
   const svg = args.includes("--svg");
   // --gabarits fichier.json : tes gabarits (page d'étalonnage, corrections), pour lire avec eux (L16).
-  const g = args.indexOf("--gabarits");
+  const g = args.indexOf("--gabarits"), s = args.indexOf("--gabarits-sortie");
   const gabarits = g >= 0 ? JSON.parse(fs.readFileSync(args[g + 1], "utf8")) : null;
-  for (const f of args.filter((a, i) => !a.startsWith("--") && (g < 0 || i !== g + 1))) {
+  for (const f of args.filter((a, i) => !a.startsWith("--") && (g < 0 || i !== g + 1) && (s < 0 || i !== s + 1))) {
     let res;
     try { res = await lireFichier(f, { gabarits }); } catch (e) { console.error(`\n=== ${f}\n  ${e.message}`); process.exitCode = 1; continue; }
+    if (res.etalonnage) {
+      console.log(`\n=== ${f} : page d'étalonnage`);
+      for (const p of res.cases) {
+        console.log(`  page ${p.page} : ` + p.cases.map((c) => `${c.nom} ${c.exemples}`).join(" · "));
+        if (p.ignores.length) console.log(`    ${p.ignores.length} trait(s) hors des cases, ignorés`);
+        if (p.ecartes.length) console.log(`    ${p.ecartes.length} exemple(s) démesuré(s), écartés`);
+      }
+      console.log(`  ${res.gabarits.exemples.length} exemples en tout`);
+      if (s >= 0) { fs.writeFileSync(args[s + 1], JSON.stringify(res.gabarits) + "\n"); console.log(`  gabarits : ${args[s + 1]}`); }
+      continue;
+    }
     console.log(`\n=== ${f}\n${res.abc}`);
     if (res.avertissement) console.log(`  attention : ${res.avertissement}`);
     for (const d of res.doutes) console.log(`  doute ${d.id} p${d.page} portée ${d.portee + 1}${d.mesure ? ` mesure ${d.mesure}` : ""} : ${d.message}`);

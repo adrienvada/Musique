@@ -22,7 +22,15 @@
  * 30/09 (tests/pages/) ; une valeur changée doit garder ces tests au vert.
  */
 import { angle, boite, dist, distSegment, longueur, retournements, simplifier, xA } from "./geometrie.js";
+import { ETIQUETTES, etiquettesDe, reconnaitre } from "./gabarits.js";
 import { preparerTraits } from "./traits.js";
+
+// Ce que tes gabarits (L16) peuvent dire à chaque endroit : en tête de ligne,
+// une armure ou un chiffrage ; dans la portée, une altération ou un silence ;
+// au-dessus ou au-dessous d'une ligature, le « 3 » d'un triolet.
+const SIGNES_ENTETE = etiquettesDe("alteration", "chiffre", "metre");
+const SIGNES_PORTEE = etiquettesDe("alteration", "silence");
+const SIGNES_TRIOLET = etiquettesDe("triolet");
 
 const NOMS = ["C", "D", "E", "F", "G", "A", "B"];
 const NOMS_FR = ["do", "ré", "mi", "fa", "sol", "la", "si"];
@@ -73,7 +81,8 @@ export function degreOctave(nom) {
 /**
  * Une calibration se lit-elle comme une partition ? Elle doit avoir un
  * interligne et au moins une portée de cinq lignes. Une page d'étalonnage
- * (L16) n'a que des cases : elle se lit avec lireEtalonnage (gabarits.js).
+ * (L16) a des portées, mais ce sont des cases à signes : elle se lit avec
+ * lireEtalonnage (gabarits.js).
  * Sans cette vérification, une calibration incomplète donnait une lecture
  * vide sans rien dire, ou un plantage incompréhensible.
  */
@@ -223,13 +232,28 @@ function fusionnerTetes(tetes, il) {
 // Lecture d'une page
 // ------------------------------------------------------------------------
 
-export function lirePage(traitsBruts, cal, numeroPage = 1) {
+/**
+ * Lit une page. `gabarits` (facultatif) : tes gabarits (gabarits.js), tirés de
+ * la page d'étalonnage et de tes corrections. Sans eux, la lecture est celle
+ * des règles seules, inchangée. Avec eux, un signe qu'ils reconnaissent
+ * nettement prend leur lecture : silences (dont le quart de soupir),
+ * altérations, chiffres du chiffrage, « 3 » des triolets ; un signe qu'ils
+ * reconnaissent de justesse garde celle des règles.
+ */
+export function lirePage(traitsBruts, cal, numeroPage = 1, { gabarits = null } = {}) {
   const portees = listerPortees(cal);
   const il = cal.interligne;
   // Au demi-pixel, sans point invalide (traits.js) : la même page se lit
   // toujours de la même façon, qu'elle vienne du PDF, du connecteur ou de la bibliothèque.
   const traits = preparerTraits(traitsBruts, cal.page).map((pts, i) => mesurer(pts, i));
   const classe = traits.map((t) => (t.vide ? "vide" : null)); // ce qu'est devenu chaque trait
+  // Tes gabarits, consultés signe par signe (L16) : null sans gabarit, ou si rien ne ressemble.
+  const avecGabarits = !!(gabarits && Array.isArray(gabarits.exemples) && gabarits.exemples.length);
+  const consulter = (g, parmi) => {
+    if (!avecGabarits || g.partiel || !g.traits || !g.traits.length) return null;
+    const r = reconnaitre(gabarits, g.traits.map((id) => traits[id].points), il, { parmi });
+    return r && r.etiquette ? r : null;
+  };
 
   // 0. Les formes de tête, et les traits repassés. Un trait repassé à
   //    l'identique (ou presque) sur un autre n'est pas un nouveau signe : une
@@ -652,11 +676,38 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
     const p = porteeDe(portees, g.cy);
     g.portee = p.index;
     if (g.partiel) { g.nature = "reste"; continue; }
-    const forme = formeAlteration(g, il);
+    const formeRegles = formeAlteration(g, il);
     // Une hampe sans tête n'est pas un signe d'en-tête : plus longue que les
     // barres d'un dièse ou d'un bémol (2,7 interlignes au plus).
     const longueHampe = hampeSeule(g, il) && g.h >= 2.8 * il;
     if (g.x1 < debutMusique[p.index] && g.x0 > cal.x_debut && !longueHampe) {
+      // Tes gabarits (L16) lisent l'armure et les chiffres du chiffrage :
+      // reconnus nettement, ils l'emportent sur les règles (qui ne savent
+      // pas lire un chiffre : « entete », sans plus).
+      const r = consulter(g, SIGNES_ENTETE);
+      const lu = r && r.verdict === "sur" ? r.etiquette : null;
+      if (lu) g.reconnu = r;
+      if (lu && ETIQUETTES[lu].famille !== "alteration") { g.nature = "chiffre"; g.chiffre = lu; continue; }
+      // Le chiffre du haut et celui du bas qui se touchent ne font qu'un signe,
+      // que rien ne reconnaît : on les sépare à la ligne du milieu, et chaque
+      // moitié doit être un chiffre que tes gabarits reconnaissent nettement.
+      if (!lu && avecGabarits && g.membres && g.membres.length >= 2) {
+        const milieu = p.lignes[2];
+        const moities = [g.membres.filter((m) => m.cy < milieu), g.membres.filter((m) => m.cy >= milieu)];
+        if (moities.every((ms) => ms.length)) {
+          const parties = moities.map((ms) => {
+            const pts = ms.flatMap((m) => m.points);
+            return { traits: ms.flatMap((m) => m.traits), membres: ms, partiel: false, points: pts, ...boite(pts), longueur: ms.reduce((a, m) => a + m.longueur, 0) };
+          });
+          const lus = parties.map((q) => consulter(q, etiquettesDe("chiffre")));
+          if (lus.every((x) => x && x.verdict === "sur")) {
+            g.nature = "separe";
+            parties.forEach((q, i) => remplaces.push({ ...q, portee: p.index, nature: "chiffre", chiffre: lus[i].etiquette, reconnu: lus[i] }));
+            continue;
+          }
+        }
+      }
+      const forme = lu || formeRegles;
       // Deux dièses d'armure qui se touchent ne font qu'un signe de huit
       // traits, qui n'était ni un dièse ni rien : la ligne passait en do (L10).
       const dieses = !forme ? separerDieses(g, il) : null;
@@ -670,6 +721,16 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
       continue;
     }
     const dansPortee = g.cy > p.haut - 0.6 * il && g.cy < p.bas + 0.6 * il;
+    // Dans la portée, tes gabarits (L16) reconnaissent altérations et silences
+    // (le quart de soupir, que les règles ne connaissent pas). Reconnus de
+    // justesse, la lecture des règles reste, et un signe qu'elles ne savent
+    // pas lire devient une question qui propose ce que les gabarits y voient.
+    const r = dansPortee ? consulter(g, SIGNES_PORTEE) : null;
+    const lu = r && r.verdict === "sur" ? r.etiquette : null;
+    if (lu) g.reconnu = r;
+    else if (r) g.propose = r.etiquette;
+    if (lu && ETIQUETTES[lu].famille === "silence") { g.nature = lu; continue; }
+    const forme = lu || formeRegles;
     // L'altération va à la tête qui la suit, à sa hauteur : pour un bémol, celle de sa boucle.
     const pasG = forme ? hauteurAlteration(g, forme, p, il) : null;
     const voisines = forme ? tetes.filter((t) => t.portee === p.index && g.x1 < t.x0 + 0.3 * il && t.x0 - g.x1 < 1.6 * il && Math.abs(t.pas - pasG) <= 1.5) : [];
@@ -697,6 +758,14 @@ export function lirePage(traitsBruts, cal, numeroPage = 1) {
   }
   for (let i = signes.length - 1; i >= 0; i--) if (signes[i].nature === "separe") signes.splice(i, 1);
   signes.push(...remplaces);
+  // Le « 3 » d'un triolet s'écrit hors de la portée, ou dedans quand la
+  // ligature y passe : tes gabarits le cherchent parmi les signes restés sans
+  // lecture. C'est assembler qui décide, une fois les ligatures connues.
+  for (const g of signes) {
+    if (!["hors-portee", "articulation", "inconnu"].includes(g.nature)) continue;
+    const r = consulter(g, SIGNES_TRIOLET);
+    if (r) g.triolet = r;
+  }
 
   // Armure, ou altération de la première note (L5) ? Un dièse juste devant la
   // première note d'une ligne, à sa hauteur, passait pour l'armure : toute la
@@ -1040,9 +1109,10 @@ export function assembler(lue) {
     g.tete.alteration = { bemol: "_", diese: "^", becarre: "=" }[g.nature];
   }
 
-  // Silences.
-  for (const g of signes.filter((g) => g.nature === "soupir" || g.nature === "demi-soupir")) {
-    parPortee[g.portee].push({ type: "silence", x: g.cx, duree: g.nature === "soupir" ? 2 : 1, signe: g });
+  // Silences (le quart de soupir ne se lit qu'avec tes gabarits).
+  const DUREES_SILENCES = { soupir: 2, "demi-soupir": 1, "quart-soupir": 0.5 };
+  for (const g of signes.filter((g) => DUREES_SILENCES[g.nature])) {
+    parPortee[g.portee].push({ type: "silence", x: g.cx, duree: DUREES_SILENCES[g.nature], signe: g });
   }
 
   // Barres (fusion des traits doublés, double barre, reprises). Deux traits à
@@ -1113,23 +1183,36 @@ export function assembler(lue) {
       const cote = (g) => montantes
         ? (g.cy < Math.max(...bouts) + 0.3 * il && g.cy > Math.min(...bouts) - 2.5 * il) || (g.cy > Math.max(...cys) + 0.5 * il && g.cy < Math.max(...cys) + 2.5 * il)
         : (g.cy > Math.min(...bouts) - 0.3 * il && g.cy < Math.max(...bouts) + 2.5 * il) || (g.cy < Math.min(...cys) - 0.5 * il && g.cy > Math.min(...cys) - 2.5 * il);
-      const trois = signes.find((g) => ["hors-portee", "articulation", "inconnu"].includes(g.nature) && !g.partiel
-        && g.h >= 0.3 * il && g.h <= 1.6 * il && g.h >= 1.1 * g.l && retournements(g.points, 0.08 * il) >= 2
-        && g.cx > x0 - 0.5 * il && g.cx < x1 + 0.5 * il && cote(g));
+      const place = (g) => ["hors-portee", "articulation", "inconnu"].includes(g.nature) && !g.partiel && g.cx > x0 - 0.5 * il && g.cx < x1 + 0.5 * il && cote(g);
+      // Tes gabarits (L16) le lisent : reconnu nettement, le triolet s'écrit
+      // (« (3 ») et la mesure se compte juste, sans question.
+      const lu = signes.find((g) => place(g) && g.triolet && g.triolet.verdict === "sur");
+      if (lu) {
+        lu.nature = "triolet";
+        groupe[0].trioletLu = true;
+        for (const e of groupe) e.facteur = 2 / 3;
+        continue;
+      }
+      const trois = signes.find((g) => place(g) && ((g.triolet && g.triolet.verdict === "juste")
+        || (g.h >= 0.3 * il && g.h <= 1.6 * il && g.h >= 1.1 * g.l && retournements(g.points, 0.08 * il) >= 2)));
       if (!trois) continue;
       trois.nature = "triolet?";
       groupe[0].triolet = true; // la mesure compte une croche de moins pour deviner le chiffrage
-      doutes.push(doute(lue, pi, trois, "Un petit signe au-dessus de trois notes liées : un triolet ?", { type: "triolet", _ev: groupe[0], _evFin: groupe[2] }));
+      // `traits` : ce qu'apprendre si tu réponds « Oui, un triolet » (gabarits.js).
+      doutes.push(doute(lue, pi, trois, "Un petit signe au-dessus de trois notes liées : un triolet ?", { type: "triolet", traits: [...trois.traits], _ev: groupe[0], _evFin: groupe[2] }));
     }
   }
 
-  // En-tête de chaque portée : armure et chiffrage.
+  // En-tête de chaque portée : armure et chiffrage. Le chiffrage est lu
+  // (`metre`) quand tes gabarits en ont reconnu tous les signes (L16) ;
+  // sinon partition.js le devine d'après la durée des mesures.
   const entetes = portees.map((p) => {
     const gs = signes.filter((g) => g.portee === p.index);
     const bemols = gs.filter((g) => g.nature === "bemol-armure").length;
     const dieses = gs.filter((g) => g.nature === "diese-armure").length;
-    const chiffres = gs.filter((g) => g.nature === "entete");
-    return { bemols, dieses, chiffrage: chiffres.length > 0, chiffres };
+    const chiffres = gs.filter((g) => g.nature === "entete" || g.nature === "chiffre");
+    const metre = lireMetre(chiffres, p);
+    return { bemols, dieses, chiffrage: chiffres.length > 0, chiffres, ...(metre ? { metre } : {}) };
   });
 
   // Plus de quatre signes inconnus en tête de ligne : ce n'est plus un
@@ -1158,11 +1241,20 @@ export function assembler(lue) {
     { type: "armure", variante: "premiere-note", lue: h.lue, alteration: h.alteration, _ev: ev, _hesitation: h }));
   }
 
-  // Signes inconnus dans les portées : doutes.
+  // Signes inconnus dans les portées : doutes. Chacun dit ses traits (ce
+  // qu'apprendre quand tu dis ce que c'est, gabarits.js), la note qui le suit
+  // (pour une altération) et celle qui le précède (pour un silence), et ce
+  // que tes gabarits y voient de justesse (`propose`).
   for (const g of signes.filter((g) => g.nature === "inconnu")) {
     const pres = hampes.find((h) => Math.abs(xA(h.seg.a, h.seg.b, g.cy) - g.cx) < 0.8 * il && g.cy > Math.min(h.pied[1], h.bout[1]) - il && g.cy < Math.max(h.pied[1], h.bout[1]) + il);
     if (pres && signes.some((x) => x.nature === "crochet-douteux" && x.hampeDouteuse === pres)) continue;
-    doutes.push(doute(lue, g.portee, g, "Signe non reconnu : ignoré.", { type: "signe" }));
+    const notes = parPortee[g.portee].filter((e) => e.type === "note");
+    const suivante = notes.find((e) => e.x > g.cx && e.tetes.some((t) => t.x0 - g.x1 < 2.5 * il));
+    const precedente = [...notes].reverse().find((e) => e.x < g.cx);
+    doutes.push(doute(lue, g.portee, g, "Signe non reconnu : ignoré.", {
+      type: "signe", traits: [...g.traits], ...(g.propose ? { propose: g.propose } : {}),
+      ...(suivante ? { _suivante: suivante } : {}), ...(precedente ? { _precedente: precedente } : {}),
+    }));
   }
   const vuesDouteuses = new Set();
   for (const g of signes.filter((g) => g.nature === "crochet-douteux")) {
@@ -1200,6 +1292,30 @@ export function tonalite(bemols, dieses) {
   if (bemols && !dieses) return TONALITES_BEMOLS[Math.min(bemols, 7)];
   if (dieses && !bemols) return TONALITES_DIESES[Math.min(dieses, 7)];
   return "C";
+}
+
+/**
+ * Le chiffrage écrit en tête d'une portée, d'après les signes que tes
+ * gabarits y ont reconnus (L16) : les chiffres du haut et ceux du bas
+ * (« 12 » sur « 8 »), ou un « C », barré ou non. Null si un signe n'est pas
+ * reconnu (lire « 2/8 » pour « 12/8 » serait pire que deviner), ou si ce
+ * n'est pas un chiffrage (pas de chiffre en bas, un dénominateur impossible).
+ */
+function lireMetre(signes, p) {
+  if (!signes.length || signes.some((g) => g.nature !== "chiffre")) return null;
+  const metres = signes.filter((g) => ETIQUETTES[g.chiffre].famille === "metre");
+  if (metres.length) {
+    if (signes.length !== 1) return null;
+    const e = ETIQUETTES[metres[0].chiffre];
+    return { m: e.m, croches: e.croches };
+  }
+  // Le chiffre du haut s'écrit au-dessus de la ligne du milieu, celui du bas en dessous.
+  const milieu = p.lignes[2];
+  const ligne = (gs) => gs.sort((a, b) => a.x0 - b.x0).map((g) => g.chiffre).join("");
+  const haut = ligne(signes.filter((g) => g.cy < milieu)), bas = ligne(signes.filter((g) => g.cy >= milieu));
+  const num = Number(haut), den = Number(bas);
+  if (!haut || !bas || !(num >= 1 && num <= 32) || ![1, 2, 4, 8, 16, 32].includes(den)) return null;
+  return { m: `${num}/${den}`, croches: (num * 8) / den };
 }
 
 export { nomDePas, porteeDe, listerPortees };

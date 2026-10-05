@@ -75,12 +75,13 @@ export function estIdentite(t) {
  * Quel modèle a servi, d'après les lignes grises de la page ? `calibrations` :
  * celles que l'appli connaît. Rend { cal, transformation } pour la meilleure,
  * si ses lignes tombent à 1,5 px près (une fois recalées) et que l'échelle est
- * presque la même (3 % au plus), sinon null.
+ * presque la même (3 % au plus), sinon null. La page d'étalonnage (L16) a
+ * ses portées, elle aussi : elle se reconnaît de la même façon.
  */
 export function identifierModele(page, calibrations) {
   let meilleur = null;
   for (const cal of calibrations) {
-    if (cal.genre === "etalonnage") continue;
+    if (!Array.isArray(cal.systemes)) continue;
     const t = ajuster(page, cal);
     if (!t || t.ecart > 1.5 || Math.abs(t.ay - 1) > 0.03) continue;
     if (!meilleur || t.ecart < meilleur.transformation.ecart) meilleur = { cal, transformation: t };

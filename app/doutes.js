@@ -25,10 +25,13 @@ import * as ed from "./edition.js";
 /**
  * Les autres places qu'un doute peut viser, en plus de sa note ou de sa
  * mesure : la ligne (ou les lignes) que réécrit une réponse d'armure ou de
- * chiffrage, et la note à hampe d'un accord à refaire. [cible, visée, contenant].
+ * chiffrage, la note à hampe d'un accord à refaire, et, autour d'un signe
+ * inconnu, la note qui le suit (s'il est une altération) et celle qui le
+ * précède (s'il est un silence). [cible, visée, contenant].
  */
 /** @type {[string, string, boolean][]} */
-const SECONDAIRES = [["cibleLigne", "viseLigne", true], ["cibleAccord", "viseAccord", false]];
+const SECONDAIRES = [["cibleLigne", "viseLigne", true], ["cibleAccord", "viseAccord", false],
+  ["cibleSuivante", "viseSuivante", false], ["ciblePrecedente", "visePrecedente", false]];
 
 /** Les doutes d'une lecture neuve : aucun n'est levé, et chacun vise sa cible. */
 export function preparerDoutes(doutes) {
@@ -576,6 +579,34 @@ function endroit(d) {
 const reponse = (id, texte, icone, geste, fait) => ({ id, texte, icone, geste, fait: fait || texte });
 
 /**
+ * Une réponse qui t'apprend (L16) : elle dit aussi ce que le signe était.
+ * `apprendre` : [{ traits, etiquette }], les numéros des traits sur la page
+ * du doute et l'étiquette de gabarits.js ; l'atelier en fait des exemples
+ * (ajouterExemple), pour que le lecteur reconnaisse ce signe la prochaine fois.
+ */
+const qui = (r, apprendre) => (apprendre && apprendre.length ? { ...r, apprendre } : r);
+
+// Ce qu'un signe inconnu peut être, avec son nom dans la question et son geste.
+const ALTERATIONS = [["diese", "Un dièse", "^"], ["bemol", "Un bémol", "_"], ["becarre", "Un bécarre", "="]];
+const SILENCES = [["soupir", "Un soupir", 2], ["demi-soupir", "Un demi-soupir", 1], ["quart-soupir", "Un quart de soupir", 0.5]];
+
+/**
+ * Les exemples qu'apprend une réponse de chiffrage : un chiffre par signe
+ * écrit, ceux du haut puis ceux du bas, de gauche à droite (« 12/8 » : 1, 2
+ * en haut, 8 en bas ; « C » : un signe). Rien si le compte ne tombe pas juste.
+ */
+export function exemplesDuChiffrage(d, m) {
+  const signes = d.chiffres || [];
+  if (!signes.length) return [];
+  if (m === "C" || m === "C|") return signes.length === 1 ? [{ traits: signes[0].traits, etiquette: m }] : [];
+  const x = /^(\d+)\/(\d+)$/.exec(m || "");
+  if (!x) return [];
+  const haut = signes.filter((s) => s.haut), bas = signes.filter((s) => !s.haut);
+  if (haut.length !== x[1].length || bas.length !== x[2].length || /0/.test(x[1] + x[2])) return [];
+  return [...haut.map((s, i) => ({ traits: s.traits, etiquette: x[1][i] })), ...bas.map((s, i) => ({ traits: s.traits, etiquette: x[2][i] }))];
+}
+
+/**
  * La question d'un doute, d'après l'ABC d'aujourd'hui :
  * { type, titre, detail, reponses: [{ id, texte, icone, geste(abc) → résultat d'edition.js ou null, fait }],
  *   voulu (« c'est voulu, laisser »), manuel (« je corrige moi-même »), cible }
@@ -659,7 +690,7 @@ export function poser(d, abc) {
       ...base, manuel: true, titre: "Un triolet ?",
       detail: "Je vois un petit signe sur trois notes liées, peut-être un « 3 » : trois notes dans le temps de deux.",
       reponses: [
-        ...(jetons && jetons.length === 3 && !deja ? [reponse("triolet", "Oui, un triolet", "d2", (a) => ed.faireTriolet(a, d.vise), "Les trois notes forment un triolet.")] : []),
+        ...(jetons && jetons.length === 3 && !deja ? [qui(reponse("triolet", "Oui, un triolet", "d2", (a) => ed.faireTriolet(a, d.vise), "Les trois notes forment un triolet."), d.traits && [{ traits: d.traits, etiquette: "triolet" }])] : []),
         reponse("non", "Non, trois notes", "ok", null, "Les trois notes restent telles quelles."),
       ],
     };
@@ -690,11 +721,23 @@ export function poser(d, abc) {
   }
 
   if (type === "signe") {
+    // Ce que le signe peut être (L16) : une altération de la note qui le suit,
+    // un silence après celle qui le précède. Chaque réponse l'apprend à tes
+    // gabarits ; celle que tes gabarits y voient de justesse (`propose`) vient
+    // en premier, et la question la nomme.
+    const apprend = (etiquette) => d.traits && [{ traits: d.traits, etiquette }];
+    const suivante = jetonVise(d.viseSuivante, abc), precedente = jetonVise(d.visePrecedente, abc);
+    const choix = [
+      ...(suivante && suivante.type !== "silence" ? ALTERATIONS.map(([e, texte, alt]) => qui(reponse(e, texte, "crayon", (a) => ed.alterer(a, jetonVise(d.viseSuivante, a), alt), `${texte} sur la note qui suit.`), apprend(e))) : []),
+      ...(precedente ? SILENCES.map(([e, texte, croches]) => qui(reponse(e, texte, "silence", (a) => ed.ajouterSilence(a, jetonVise(d.visePrecedente, a), croches), `${texte} est ajouté.`), apprend(e))) : []),
+    ];
+    const propose = choix.find((r) => r.id === d.propose);
+    const nom = propose && propose.texte.replace(/^Un /, "un ");
     return {
       ...base, manuel: true,
-      titre: "Un signe que je ne reconnais pas",
-      detail: "Je l'ai laissé de côté. Si c'est une note ou un silence, corrige la partition lue.",
-      reponses: [reponse("ignorer", "L'ignorer", "ok", null, "Le signe est ignoré.")],
+      titre: propose ? `Est-ce ${nom} ?` : "Un signe que je ne reconnais pas",
+      detail: propose ? `Il ressemble à ${nom}, de loin. Je l'ai laissé de côté.` : "Je l'ai laissé de côté. Dis-moi ce que c'est : je le reconnaîtrai la prochaine fois.",
+      reponses: [...(propose ? [propose] : []), ...choix.filter((r) => r !== propose), reponse("ignorer", "L'ignorer", "ok", null, "Le signe est ignoré.")],
     };
   }
 
@@ -702,14 +745,17 @@ export function poser(d, abc) {
 
   if (type === "chiffrage") {
     if (d.variante === "contredit") {
-      // Le chiffrage deviné n'explique pas la moitié des mesures (L1) : les autres en réponses.
+      // Le chiffrage deviné (ou lu par tes gabarits, L16) n'explique pas la
+      // moitié des mesures (L1) : les autres en réponses. Chaque réponse dit
+      // aussi quels chiffres sont écrits : tes gabarits les apprennent.
       const autres = (d.autres || []).slice(0, 3);
+      const justes = d.appuis === 0 ? `aucune des ${d.total} mesures ne tombe juste` : d.appuis === 1 ? `une seule mesure sur ${d.total} tombe juste` : `seules ${d.appuis} mesures sur ${d.total} tombent juste`;
       return {
         ...base, manuel: true, titre: "Le chiffrage est-il bon ?",
-        detail: `J'ai deviné ${d.m}, mais seules ${d.appuis} mesures sur ${d.total} tombent juste.`,
+        detail: `J'ai ${d.lu ? "lu" : "deviné"} ${d.m}, mais ${justes}.`,
         reponses: [
-          reponse("ok", `Oui, ${d.m}`, "ok", null, "Le chiffrage est gardé."),
-          ...(d.viseLigne ? autres.map((m) => reponse(`m-${m}`, m, "metronome", (a) => ed.changerChiffrage(a, d.viseLigne, m), `Le chiffrage devient ${m}.`)) : []),
+          qui(reponse("ok", `Oui, ${d.m}`, "ok", null, "Le chiffrage est gardé."), exemplesDuChiffrage(d, d.m)),
+          ...(d.viseLigne ? autres.map((m) => qui(reponse(`m-${m}`, m, "metronome", (a) => ed.changerChiffrage(a, d.viseLigne, m), `Le chiffrage devient ${m}.`), exemplesDuChiffrage(d, m))) : []),
         ],
       };
     }

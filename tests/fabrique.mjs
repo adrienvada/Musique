@@ -117,10 +117,71 @@ export class Page {
   texte(x, y, k = 1) { const IL = this.f.IL, o = []; for (let i = 0; i <= 30; i++) { const a = (i / 30) * 2.1 * Math.PI; o.push([x + 0.35 * IL * k * Math.cos(a), y + 0.4 * IL * k * Math.sin(a)]); } this.traits.push(o); }
   /** Une ligne supplémentaire à la position `pas` (paire, hors de la portée), autour de x. */
   ligneSup(x, pas) { const IL = this.f.IL, y = this.p.y(pas); this.traits.push(this.ligne([x - 0.7 * IL, y], [x + 0.7 * IL, y + 0.3], 6, 0.2)); }
+  /** Des traits tels quels (un signe de FORMES, par exemple) ; rend leurs numéros. */
+  ajouter(traits) { const debut = this.traits.length; this.traits.push(...traits); return traits.map((_, i) => debut + i); }
   /** Note à hampe montante ou descendante, selon sa place. */
   haut(x, pas, k) { return this.hampe(this.tete(x, pas, k), "haut"); }
   bas(x, pas, k) { return this.hampe(this.tete(x, pas, k), "bas"); }
   note(x, pas, k) { return pas >= 4 ? this.bas(x, pas, k) : this.haut(x, pas, k); }
+}
+
+// ------------------------------------------------------------------------
+// Des signes que tes pages n'ont pas (L16) : tracés comme à la main, en
+// interlignes autour de (0, 0), y vers le bas. Chaque signe est une liste de
+// traits ; un trait, une liste de points rapprochés (comme la tablette).
+// ------------------------------------------------------------------------
+
+/** Un trait par ses sommets, densifié tous les vingtièmes d'interligne. */
+function trace(...sommets) {
+  const pts = [sommets[0]];
+  for (let i = 1; i < sommets.length; i++) {
+    const [a, b] = [sommets[i - 1], sommets[i]];
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.05));
+    for (let k = 1; k <= n; k++) pts.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
+  }
+  return pts;
+}
+/** Un arc d'ellipse, de l'angle a0 à a1 (en degrés ; -90 = en haut, l'axe des y descend). */
+function arc(cx, cy, rx, ry, a0, a1) {
+  const n = Math.max(8, Math.ceil(Math.abs(a1 - a0) / 6));
+  return Array.from({ length: n + 1 }, (_, k) => { const a = ((a0 + ((a1 - a0) * k) / n) * Math.PI) / 180; return [cx + rx * Math.cos(a), cy + ry * Math.sin(a)]; });
+}
+
+export const FORMES = {
+  // Les chiffres d'un chiffrage : deux interlignes de haut.
+  3: [[...arc(0, -0.5, 0.48, 0.5, -160, 90), ...arc(0, 0.5, 0.52, 0.5, -90, 160)]],
+  4: [trace([0.3, -1], [-0.6, 0.35], [0.65, 0.35]), trace([0.25, -0.3], [0.25, 1])],
+  6: [trace([0.4, -1], [-0.2, -0.6], [-0.5, 0.1], [-0.45, 0.6], [0, 1], [0.45, 0.65], [0.4, 0.15], [0, 0], [-0.45, 0.35])],
+  8: [[...arc(0, -0.5, 0.4, 0.5, 90, 450), ...arc(0, 0.5, 0.5, 0.5, -90, -450)]],
+  C: [arc(0, 0, 0.85, 1, -40, -320)],
+  // Un quart de soupir en deux traits : le « 7 » et son second crochet.
+  "quart-soupir": [trace([-0.45, -0.85], [-0.1, -0.7], [0.35, -0.9], [-0.25, 1.3]), trace([-0.55, -0.05], [-0.2, 0.05], [0.12, -0.05])],
+  // Une croix que les règles ne savent pas lire.
+  croix: [trace([-0.4, -0.4], [0.4, 0.4]), trace([0.4, -0.4], [-0.4, 0.4])],
+  // Le petit « 3 » d'un triolet.
+  triolet: [[...arc(0, -0.3, 0.3, 0.3, -160, 90), ...arc(0, 0.3, 0.33, 0.3, -90, 160)]],
+};
+
+/**
+ * Un signe placé en (cx, cy), à la taille de l'interligne, comme une autre
+ * fois de ta main : un peu tourné, agrandi ou rétréci, tremblé (graine
+ * reproductible). `ampleur` 0 : le signe tel quel.
+ */
+export function deformer(traits, il, graine, ampleur = 1) {
+  const { normale } = alea(graine);
+  const pts = traits.flat();
+  const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length, cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  const r = (6 * ampleur * normale() * Math.PI) / 180, k = 1 + 0.1 * ampleur * normale(), kx = k * (1 + 0.04 * ampleur * normale());
+  return traits.map((t) => t.map(([x, y]) => {
+    const dx = (x - cx) * kx, dy = (y - cy) * k;
+    return [cx + dx * Math.cos(r) - dy * Math.sin(r) + 0.02 * ampleur * il * normale(), cy + dx * Math.sin(r) + dy * Math.cos(r) + 0.02 * ampleur * il * normale()];
+  }));
+}
+
+/** Une forme (FORMES, en interlignes) en pixels, centrée en (cx, cy), déformée par sa graine. */
+export function forme(nom, cx, cy, il, graine = 0) {
+  const traits = FORMES[nom].map((t) => t.map(([x, y]) => [cx + x * il, cy + y * il]));
+  return graine ? deformer(traits, il, graine) : traits;
 }
 
 export const corps = (abc) => abc.split("\n").filter((l) => !/^[A-Za-z]:|^%%/.test(l)).join("\n");
