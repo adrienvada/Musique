@@ -621,5 +621,33 @@ export function creerEditeurIdee(deps) {
     ouvrir, fermer, recharger, occupe, reculer, toucheBas, toucheHaut,
     /** L'idée ouverte (null : une nouvelle, pas encore enregistrée). */
     get id() { return e.id; },
+    // Les suggestions de Claude (H3, suggestions-ui.js) : lire l'idée telle qu'elle est, puis la
+    // changer d'un geste. Ce n'est pas un rechargement : un seul pas d'« Annuler » (T3 : l'API
+    // ne s'élargit qu'au besoin).
+    /** L'idée telle qu'elle est maintenant, avec ce qui n'est pas encore enregistré (null : pas encore enregistrée). */
+    fiche: () => ecritures.fiche(),
+    /**
+     * Pose la fiche `f` de l'idée ouverte comme un seul geste : ses notes et
+     * ses accords en un pas d'« Annuler » ; son titre, ses étiquettes et sa
+     * note suivent, comme dans le carnet. Rend false si ce n'est plus elle.
+     */
+    changer(f) {
+      if (!e.ouverte || !f || f.id !== e.id) return false;
+      e.titre = f.titre;
+      e.etiquettes = Array.isArray(f.etiquettes) ? [...f.etiquettes] : [];
+      e.note = typeof f.note === "string" ? f.note : "";
+      $("idee-titre").value = e.titre;
+      if (deps.titreChange) deps.titreChange(e.titre);
+      carnet.afficher();
+      // Les mêmes notes (un titre, une étiquette) : rien à annuler dans la grille, l'idée s'enregistre.
+      if (egal(f.sequence, e.seq)) { rafraichir(); planifierSauvegarde(0); return true; }
+      modifier(() => {
+        e.seq = sq.cloner(f.sequence);
+        if (!e.seq.pistes[e.piste]) e.piste = 0;
+        e.selection = new Set();
+        e.curseur = Math.min(e.curseur, sq.finSequence(e.seq));
+      });
+      return true;
+    },
   };
 }

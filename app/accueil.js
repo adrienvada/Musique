@@ -127,7 +127,8 @@ export function toutesEtiquettes(partitions) {
  *   supprimer(p) (demande confirmation, puis supprime),
  *   calibration(modele), ideesParId(), importer(fichiers), toast(texte),
  *   afficherReglages() (les Réglages relisent ce qui garde la bibliothèque, sauvegarde-ui.js),
- *   versions (versions-ui.js : la copie de conflit, les versions précédentes)
+ *   versions (versions-ui.js : la copie de conflit, les versions précédentes),
+ *   suggestionsPour(id) → combien de suggestions de Claude attendent (suggestions-ui.js)
  * }
  */
 export function creerAccueil(deps) {
@@ -286,10 +287,20 @@ export function creerAccueil(deps) {
     return [p.statut === "prete" ? "Partition prête" : "Partition", nomModele(p.modele)];
   }
 
-  /** Mémo, étiquettes, note en abrégé : une seule ligne, discrète. */
+  /** « Claude propose » : des suggestions de Claude attendent dans la partition (H3). */
+  function marqueClaude(n) {
+    const c = el("span", "aide-claude");
+    c.innerHTML = ico("suggestion", "s");
+    c.appendChild(el("span", "", n > 1 ? `Claude propose ${n} choses` : "Claude propose"));
+    return c;
+  }
+
+  /** Mémo, étiquettes, note en abrégé : une seule ligne, discrète. Ce que Claude propose vient en tête (H3). */
   function ligneAide(p) {
-    if (!((p.etiquettes || []).length || p.memo || p.note)) return null;
+    const propositions = deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0;
+    if (!((p.etiquettes || []).length || p.memo || p.note || propositions)) return null;
     const l = el("span", "ligne-aide");
+    if (propositions) l.appendChild(marqueClaude(propositions));
     if (p.memo) { const m = el("span", "aide-memo"); m.innerHTML = `${ico("micro", "s")}${echapper(p.memo.duree)} s`; l.appendChild(m); }
     for (const t of p.etiquettes || []) l.appendChild(el("span", "aide-etiquette", "# " + t));
     if (p.note) l.appendChild(el("span", "aide-note", p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note));
@@ -311,6 +322,12 @@ export function creerAccueil(deps) {
     // l'autre appareil (D4) demande plus : « À choisir » prend sa place.
     if (estCopieDeConflit(p)) meta.appendChild(pastilleConflit());
     else if (!p.type && p.statut !== "prete") meta.appendChild(el("span", "pastille p-doute", "À relire"));
+    // Une idée que Claude a notée dans une conversation (idee_ecrire) : elle le dit (H3, C5).
+    else if (p.source && p.source.claude === true) {
+      const c = el("span", "pastille p-claude", "Claude");
+      c.title = "Notée par Claude dans une conversation";
+      meta.appendChild(c);
+    }
     const [genre, resume] = genreEtResume(p);
     const date = groupe ? quand(p.modifieLe, groupe) : dateCourte(p.modifieLe);
     // Avec « À relire » devant, le mot « Partition » n'apprend rien : la place sert à la date.
@@ -391,6 +408,8 @@ export function creerAccueil(deps) {
       ouvrir.addEventListener("click", () => ouvrirPartition(p));
       const corps = el("span", "carte-corps");
       corps.append(el("span", "titre", p.titre), pastilleStatut(p), el("span", "meta", [nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ")));
+      const propositions = deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0;
+      if (propositions) corps.appendChild(marqueClaude(propositions));
       ouvrir.append(apercuDe(p, "apercu-grand", 2), corps);
       carte.append(ouvrir, boutonPlus(p));
       liste.appendChild(carte);

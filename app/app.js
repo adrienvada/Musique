@@ -37,6 +37,7 @@ import { creerTablette } from "./tablette.js";
 import { creerSynchronisation } from "./synchronisation-ui.js";
 import { brancherSauvegarde } from "./sauvegarde-ui.js";
 import { creerVersions } from "./versions-ui.js";
+import { creerSuggestions } from "./suggestions-ui.js";
 import { brancherHorsLigne, brancherInstallation } from "./mises-a-jour.js";
 import { installerEveil } from "./eveil.js";
 import { brancherLive } from "./reglages-live.js";
@@ -129,6 +130,7 @@ function ouvrirPage(p, pages, vue) {
   lecteur.ouvrir(p);
   $("fil-titre").textContent = p.titre;
   montrer(vue);
+  suggestions.montrer("page", p);
 }
 
 /** Ouvre un morceau ; sans partition, un nouveau, qui ne s'enregistre qu'au premier bloc. */
@@ -215,6 +217,36 @@ function ouvrirIdee(p = null, options = {}) {
   if (navigation.vue === "idee") editeur.fermer();
   montrer("idee");
   editeur.ouvrir(p, options);
+  suggestions.montrer("idee", p);
+}
+
+// Les suggestions rangées par Claude depuis une conversation (H3) : un bandeau dans l'idée et
+// dans « Corriger », des marques dans le carnet (suggestions-ui.js).
+const suggestions = creerSuggestions({
+  appeler: (outil, args) => tablette.appelerOutil(outil, args),
+  actif: () => dansClaude() || (!!synchronisation && synchronisation.active()),
+  dansClaude, transport,
+  surChange: () => { if (accueil && navigation.vue === "biblio") accueil.afficher(); },
+});
+
+/** Les bandeaux : chacun lit la partition de son écran, et la change d'un seul geste. */
+function creerBandeaux() {
+  suggestions.bandeau("idee", $("idee-suggestions"), { fiche: () => editeur.fiche(), changer: (f) => editeur.changer(f) });
+  suggestions.bandeau("page", $("atelier-suggestions"), {
+    fiche: () => pageOuverte.partition,
+    // Ce qu'une suggestion change d'une page (le titre, les étiquettes, la note, l'avis sur un
+    // doute) passe par page-ouverte, comme une correction ; « Corriger » se redessine.
+    changer: (f) => {
+      const p = pageOuverte.partition;
+      if (!p || p.id !== f.id) return false;
+      const patch = {};
+      for (const c of ["titre", "etiquettes", "note", "doutes"]) if (!egal(p[c], f[c])) patch[c] = structuredClone(f[c]);
+      if (Object.keys(patch).length) pageOuverte.changer(patch);
+      $("fil-titre").textContent = p.titre;
+      montrer(navigation.vue);
+      return true;
+    },
+  });
 }
 
 // ------------------------------------------------------------------------
@@ -308,7 +340,7 @@ function creerAccueilDeLAppli() {
     partagerMidi, exporterMidi,
     supprimer: async (p) => { if (await veutSupprimer(p, etat.partitions)) await gestes.supprimerDeLaBibliotheque(p); },
     afficherReglages: () => sauvegardes && sauvegardes.afficher(),
-    versions,
+    versions, suggestionsPour: (id) => suggestions.pour(id),
   });
 }
 
@@ -347,11 +379,13 @@ async function demarrer() {
     ouverte: () => navigation.partitionOuverte(),
     quitter: () => { if (navigation.vue === "atelier" || navigation.vue === "lecteur") pageOuverte.fermer(); montrer("biblio"); },
     rappel: () => (sauvegardes ? sauvegardes.rappel() : null), partitions: () => etat.partitions,
+    apresSynchro: () => suggestions.rafraichir(),
   });
   brancher();
   creerEditeur();
   creerVueDuMorceau();
   creerEcransDePage();
+  creerBandeaux();
   creerRegistre();
   accueil.afficher();
   let bloquee = false;

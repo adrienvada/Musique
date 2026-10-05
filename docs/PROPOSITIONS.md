@@ -2345,6 +2345,58 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     (`tests/e2e/donnees.test.mjs`) : une fiche abîmée dans la
     bibliothèque commune et une partition datée de 2031, refusées avec
     leur raison ; réparée là-bas, la première arrive à « Réessayer ».
+- **Ce que Claude range depuis une conversation arrive dans l'appli (H3,
+  C5, `app/suggestions-ui.js`).** Tu demandes à Claude « propose des
+  accords pour Pluie » ; il range sa proposition à côté de la partition
+  (`suggestion_ecrire`, lot connecteur) sans la toucher. Dans Portée :
+  - le carnet le marque (« Claude propose », sous la ligne ; les cartes
+    de Partitions aussi), et une idée que Claude a notée lui-même
+    (`idee_ecrire`) porte la pastille « Claude » ;
+  - l'idée, ou la page dans « Corriger », montre un bandeau discret en
+    haut : « Claude propose 2 accords » (le pourquoi se déplie d'un
+    toucher), et trois gestes : « Écouter » (l'idée avec la proposition,
+    jouée sans rien écrire ; une suite s'écoute depuis la mesure d'avant),
+    « Appliquer », « Ignorer ». Plusieurs suggestions : « 1 sur 3 », la
+    plus récente d'abord.
+  - « Appliquer » revérifie la suggestion sur la partition telle qu'elle
+    est à ce moment-là (avec ce qui n'est pas encore enregistré), puis la
+    pose en un seul geste : dans l'éditeur, les notes et les accords
+    prennent un seul pas d'« Annuler » ; un message propose aussi
+    « Annuler » (dix secondes), qui ne défait rien si la partition a
+    changé entre-temps. Une réponse à un doute devient l'avis de Claude
+    sur ce doute (`doutes[i].avis`, que l'atelier montre) ; le doute reste
+    à régler d'un toucher.
+  - Appliquée ou ignorée, la suggestion part du connecteur
+    (`suggestion_retirer`). Une qui ne s'applique plus (l'idée a changé)
+    le dit, « Cette suggestion ne peut pas s'appliquer (…) : elle est
+    retirée », et part ; une qui ne changerait rien (déjà faite sur un
+    autre appareil) part sans un mot.
+  - Tout ce qui vient de Claude s'écrit en texte, jamais en HTML (S1) :
+    l'essai y glisse une balise et un gestionnaire, qui restent du texte.
+  - **Sur le site**, par le connecteur. Le carnet relit toutes les
+    suggestions après une synchronisation, au plus toutes les cinq
+    minutes ; l'idée ou la page relit les siennes à chaque ouverture.
+    **Sur claude.ai**, par la capacité `mcp`, seulement quand tu ouvres une
+    idée ou une page (rien ne part sans un geste) ; le carnet n'a pas de
+    marque. Les partitions de la base de la page n'ont les mêmes
+    identifiants que celles de la bibliothèque commune que si elles en
+    viennent (une sauvegarde du site restaurée) : sinon, il n'y a rien à
+    montrer.
+  - Un refus durable (outil pas déclaré sur claude.ai, connecteur absent
+    ou d'avant les suggestions) cache la fonction pour la visite ; une
+    panne passagère attend la prochaine ouverture. Rien ne réessaie tout
+    seul.
+  - L'éditeur d'idée s'ouvre d'une entrée, à un seul endroit (`idee.js`,
+    son API) : `fiche()` (l'idée telle qu'elle est) et `changer(f)` (la
+    poser en un geste, par son `modifier` interne). « Corriger » ne
+    change pas : la page passe par `page-ouverte.js`, comme une correction,
+    et l'écran se redessine.
+  - Essais : « une idée notée par Claude, et ses suggestions… », « Corriger :
+    Claude répond à un doute… » et « claude.ai : les suggestions passent
+    par la capacité mcp… » (`tests/e2e/donnees.test.mjs`). L'essai
+    claude.ai existant (`claude.test.mjs`) refuse maintenant, comme
+    claude.ai, un outil que le manifeste d'aujourd'hui ne déclare pas : la
+    page ouverte y demande ses suggestions, qui se cachent.
 - **Les versions précédentes et la corbeille (D6, `app/versions.js`,
   `app/versions-ui.js`).** Le connecteur garde depuis le lot données la
   version d'avant à chaque écriture (20 au plus, 30 jours) et 30 jours ce

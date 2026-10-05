@@ -86,6 +86,9 @@
 .aide-memo { display: inline-flex; align-items: center; gap: 3px; }
 .aide-memo .ico { width: 14px; height: 14px; }
 .aide-etiquette { color: var(--encre); }
+/* Des suggestions de Claude attendent dans la partition (suggestions-ui.js). */
+.aide-claude { display: inline-flex; align-items: center; gap: 3px; color: var(--stylo); font-weight: 600; font-size: 0.78rem; }
+.aide-claude .ico { width: 14px; height: 14px; }
 /* L'étoile et « ••• » : 44 px au doigt, discrets au repos. */
 .favori, .plus { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; border-radius: 50%; color: var(--gris); cursor: pointer; }
 .favori:hover, .plus:hover { background: var(--creux); }

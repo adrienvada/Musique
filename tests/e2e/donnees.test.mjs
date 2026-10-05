@@ -10,11 +10,14 @@
  */
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { servir } from "./serveur.mjs";
-import { ORDINATEUR, TELEPHONE, contexte, dossierTemporaire, importerLesExemples, lancer, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { ORDINATEUR, RACINE, TELEPHONE, attendrePortee, contexte, dossierTemporaire, importerLesExemples, lancer, nouvellePage, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { installerFauxClaude } from "./faux-claude.mjs";
 import { demarrerFauxStockage } from "../faux-cloud.mjs";
+import { traiter } from "../../supabase/functions/portee-remarkable/mcp.js";
 import { Bibliotheque } from "../../supabase/functions/portee-remarkable/bibliotheque.js";
 import { coffreMemoire } from "../../supabase/functions/portee-remarkable/coffre.js";
 import { repondreHttp } from "../../supabase/functions/portee-remarkable/http.js";
@@ -308,6 +311,187 @@ test("sans connecteur, ni corbeille ni versions précédentes : caché, pas gris
     assert.equal(await page.isVisible("#ouvrir-corbeille"), false);
     await verifierPropre(page);
   } finally { await ctx.close(); }
+});
+
+// ---------------------------------------------------------------------------
+// H3 et C5 : les suggestions que Claude range depuis une conversation
+// ---------------------------------------------------------------------------
+
+/** Une fiche de la base de la page (IndexedDB « portee »), telle qu'elle est rangée. */
+const ficheIci = (page, id) => page.evaluate((i) => new Promise((ok) => {
+  const r = indexedDB.open("portee");
+  r.onsuccess = () => {
+    const q = r.result.transaction("partitions").objectStore("partitions").get(i);
+    q.onsuccess = () => { ok(q.result || null); r.result.close(); };
+  };
+}), id);
+
+/** Attend que la fiche `id` de la page réponde à `critere` (une fonction, en texte). */
+async function attendreIci(page, id, critere, { timeout = 15000 } = {}) {
+  const fin = Date.now() + timeout;
+  for (;;) {
+    const f = await ficheIci(page, id);
+    if (f && critere(f)) return f;
+    if (Date.now() > fin) throw new Error(`la fiche ${id} n'a jamais pris l'état attendu : ${JSON.stringify(f && f.sequence ? f.sequence.accords : f)}`);
+    await new Promise((ok) => setTimeout(ok, 150));
+  }
+}
+
+test("une idée notée par Claude, et ses suggestions : marquées dans le carnet, montrées dans l'idée ; écouter, appliquer (puis annuler), ignorer ; une suggestion qui ne va plus se dit et part (H3, C5)", async () => {
+  const commun = await bibliothequeCommune();
+  try {
+    const outils = { bibliotheque: commun.bibliotheque, suggestions: commun.suggestions };
+    // Dans une conversation, Claude note une idée, puis range deux propositions pour elle.
+    const { appelerConversation } = await import("../../supabase/functions/portee-remarkable/conversation.js");
+    const idee = await appelerConversation("idee_ecrire", { titre: "Pluie", tonalite: "Am", notes: [{ debut: 0, duree: 4, hauteur: 69 }, { debut: 4, duree: 4, hauteur: 72 }, { debut: 8, duree: 8, hauteur: 76 }, { debut: 16, duree: 16, hauteur: 74 }] }, outils);
+    await appelerConversation("suggestion_ecrire", { cible: idee.id, genre: "accords", contenu: { accords: [{ debut: 0, nom: "Am" }, { debut: 16, nom: "F" }] }, pourquoi: "La mélodie descend vers le fa." }, outils);
+    await new Promise((ok) => setTimeout(ok, 5)); // les suggestions se trient à la milliseconde
+    await appelerConversation("suggestion_ecrire", { cible: idee.id, genre: "texte", contenu: { titre: "Pluie d'automne" }, pourquoi: "Elle descend comme la pluie." }, outils);
+    const ctx = await commun.appareil(TELEPHONE);
+    const page = await ouvrirPortee(ctx, serveur.url);
+    // Le carnet : « Claude » (elle l'a notée), et ce qu'il propose.
+    const ligne = page.locator(".ligne-carnet", { has: page.locator('.ligne-titre:text-is("Pluie")') });
+    await ligne.waitFor({ timeout: 20000 });
+    assert.equal(await ligne.locator(".pastille.p-claude").textContent(), "Claude");
+    await page.waitForFunction(() => /Claude propose 2 choses/.test(document.querySelector("#liste .ligne-carnet .ligne-aide")?.textContent || ""), null, { timeout: 20000 });
+    // L'idée : le bandeau, la plus récente d'abord.
+    await ligne.locator(".ligne-ouvrir").click();
+    await page.waitForSelector("#idee-suggestions:not([hidden])");
+    assert.match(await page.textContent("#idee-suggestions .bandeau-texte"), /^Claude propose un titre : « Pluie d'automne »$/);
+    assert.equal(await page.textContent("#idee-suggestions .bandeau-compte"), "1 sur 2");
+    // Ignorer : elle part du connecteur, la suivante vient.
+    await page.click('#idee-suggestions button[aria-label="Ignorer"]');
+    await page.waitForFunction(() => /2 accords/.test(document.querySelector("#idee-suggestions .bandeau-texte")?.textContent || ""));
+    assert.deepEqual((await commun.suggestions.lister(idee.id)).map((s) => s.genre), ["accords"]);
+    // Pourquoi : il se déplie ; le texte de Claude n'est jamais du HTML.
+    await page.click("#idee-suggestions .bandeau-quoi");
+    assert.equal(await page.textContent("#idee-suggestions .bandeau-pourquoi"), "Pourquoi : La mélodie descend vers le fa.");
+    // Écouter : l'idée avec les accords, sans rien écrire.
+    await page.click('#idee-suggestions button[aria-label="Écouter"]');
+    await page.waitForSelector('#idee-suggestions button[aria-label="Arrêter"]');
+    await page.click('#idee-suggestions button[aria-label="Arrêter"]');
+    await page.waitForSelector('#idee-suggestions button[aria-label="Écouter"]');
+    assert.deepEqual((await ficheIci(page, idee.id)).sequence.accords, []);
+    // Appliquer : un seul geste ; la suggestion part ; « Annuler » le défait.
+    await page.click('#idee-suggestions button[aria-label="Appliquer"]');
+    await page.waitForSelector("#idee-suggestions", { state: "hidden" });
+    const avecAccords = await attendreIci(page, idee.id, (f) => f.sequence.accords.length === 2);
+    assert.deepEqual(avecAccords.sequence.accords.map((a) => [a.d, a.nom]), [[0, "Am"], [16, "F"]]);
+    assert.deepEqual(await commun.suggestions.lister(idee.id), []);
+    await page.click("#toast-annuler-suggestion button");
+    await attendreIci(page, idee.id, (f) => f.sequence.accords.length === 0);
+    // L'« Annuler » de l'éditeur, lui, défait le geste qui a défait : les accords reviennent, en un pas.
+    await page.click("#idee-annuler");
+    await attendreIci(page, idee.id, (f) => f.sequence.accords.length === 2);
+    await page.click("#vue-idee [data-retour]");
+    await page.waitForFunction(() => !/Claude propose/.test(document.querySelector("#liste .ligne-carnet .ligne-aide")?.textContent || ""));
+
+    // Une suggestion qui ne va plus (des accords bien après la fin) : elle se dit, et part sans rien changer.
+    await commun.suggestions.ecrire({ cible: idee.id, genre: "accords", contenu: { accords: [{ debut: 9000, nom: "C" }] }, pourquoi: "Trop loin." });
+    await ligne.locator(".ligne-ouvrir").click();
+    assert.match(await messageQui(page, /ne peut pas s'appliquer/), /^Cette suggestion ne peut pas s'appliquer \(accords\[0\] : hors de la partition\) : elle est retirée\.$/);
+    assert.equal(await page.isVisible("#idee-suggestions"), false);
+    assert.deepEqual(await commun.suggestions.lister(idee.id), []);
+    // Ce qui vient de Claude s'écrit en texte, jamais en HTML (S1).
+    await page.click("#vue-idee [data-retour]");
+    await commun.suggestions.ecrire({ cible: idee.id, genre: "texte", contenu: { titre: '<img src=x onerror="window.__pirate=1">' }, pourquoi: '<b onmouseover="window.__pirate=2">gras</b>' });
+    await ligne.locator(".ligne-ouvrir").click();
+    await page.waitForSelector("#idee-suggestions:not([hidden])");
+    await page.click("#idee-suggestions .bandeau-quoi");
+    assert.equal(await page.textContent("#idee-suggestions .bandeau-texte"), 'Claude propose un titre : « <img src=x onerror="window.__pirate=1"> »');
+    assert.equal(await page.textContent("#idee-suggestions .bandeau-pourquoi"), 'Pourquoi : <b onmouseover="window.__pirate=2">gras</b>');
+    assert.equal(await page.locator("#idee-suggestions img, #idee-suggestions b").count(), 0);
+    await page.hover("#idee-suggestions .bandeau-pourquoi");
+    assert.equal(await page.evaluate(() => window.__pirate), undefined);
+    await page.click('#idee-suggestions button[aria-label="Ignorer"]');
+    await page.waitForSelector("#idee-suggestions", { state: "hidden" });
+    await verifierPropre(page);
+  } finally { await commun.fermer(); }
+});
+
+test("« Corriger » : Claude répond à un doute ; appliquée, sa réponse devient son avis sur le doute, qui reste ouvert (H3)", async () => {
+  const commun = await bibliothequeCommune();
+  try {
+    const ctx = await commun.appareil(ORDINATEUR);
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    const fiche = await ficheCommune(commun, (f) => f.donnees && f.donnees.titre === "Essai melodie-standard");
+    const rang = fiche.donnees.doutes.findIndex((d) => !d.leve);
+    const { appelerConversation } = await import("../../supabase/functions/portee-remarkable/conversation.js");
+    await appelerConversation("suggestion_ecrire", { cible: fiche.id, genre: "texte", contenu: { doute: rang, note: "C'est sans doute une croche : la mesure tombe juste." }, pourquoi: "Avec une croche, la mesure fait ses huit croches." }, { bibliotheque: commun.bibliotheque, suggestions: commun.suggestions });
+    await ouvrirPartition(page, "Essai melodie");
+    await page.waitForSelector("#atelier-suggestions:not([hidden])");
+    assert.equal(await page.textContent("#atelier-suggestions .bandeau-texte"), `Claude répond au doute n° ${rang + 1}`);
+    // Pas de musique à écouter : seulement Appliquer et Ignorer.
+    assert.equal(await page.locator('#atelier-suggestions button[aria-label="Écouter"]').count(), 0);
+    await page.click('#atelier-suggestions button[aria-label="Appliquer"]');
+    await page.waitForSelector("#atelier-suggestions", { state: "hidden" });
+    const relue = await attendreIci(page, fiche.id, (f) => !!(f.doutes[rang] && f.doutes[rang].avis));
+    assert.deepEqual(relue.doutes[rang].avis, { auteur: "claude", texte: "C'est sans doute une croche : la mesure tombe juste." });
+    assert.equal(relue.doutes[rang].leve, false, "le doute reste à régler d'un toucher");
+    assert.equal(relue.abc, fiche.donnees.abc, "l'ABC n'a pas bougé");
+    assert.deepEqual(await commun.suggestions.lister(fiche.id), []);
+    await verifierPropre(page);
+  } finally { await commun.fermer(); }
+});
+
+test("claude.ai : les suggestions passent par la capacité mcp ; l'idée de la base de la page les montre et les applique (H3)", async () => {
+  const dossier = dossierTemporaire("claude-donnees");
+  const sortie = path.join(dossier, "claude");
+  execFileSync(process.execPath, [path.join(RACINE, "outils/assembler-appli.mjs"), "--sortie", sortie], { stdio: "pipe" });
+  // claude.ai met la page dans un document à lui.
+  const habiller = (fragment) => `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${fragment}</body></html>`;
+  const site = await servir({ dossier: sortie, habiller });
+  const stockage = await demarrerFauxStockage();
+  const ctx = await contexte(navigateur, { appareil: TELEPHONE });
+  try {
+    const objets = objetsSupabase(stockage.url, stockage.cle);
+    const bibliotheque = new Bibliotheque(objets), suggestions = new Suggestions(objets);
+    const { appelerConversation } = await import("../../supabase/functions/portee-remarkable/conversation.js");
+    const idee = await appelerConversation("idee_ecrire", { titre: "Pluie", notes: [{ debut: 0, duree: 4, hauteur: 69 }, { debut: 4, duree: 12, hauteur: 72 }] }, { bibliotheque });
+    await appelerConversation("suggestion_ecrire", { cible: idee.id, genre: "accords", contenu: { accords: [{ debut: 0, nom: "Am" }] }, pourquoi: "En la mineur." }, { bibliotheque, suggestions });
+    // Le manifeste après la republication : les outils de la tablette, et ceux des suggestions.
+    const manifeste = ["arborescence", "document", "relier", "suggestions_lister", "suggestion_retirer"];
+    const appels = [];
+    const claude = await installerFauxClaude(ctx, {
+      async appelerOutil(serveurMcp, outil, args) {
+        if (serveurMcp !== "Portée reMarkable" || !manifeste.includes(outil)) return { erreur: { code: "not_in_manifest", message: outil } };
+        appels.push(outil);
+        const r = await traiter({ jsonrpc: "2.0", id: appels.length, method: "tools/call", params: { name: outil, arguments: args } }, null, bibliotheque, { suggestions });
+        if (r.error) return { erreur: { code: "tool_error", message: r.error.message } };
+        if (r.result.isError) return { erreur: { code: "tool_error", message: "tool_error", result: r.result } };
+        return { payload: r.result.structuredContent };
+      },
+    });
+    // La même idée dans la base de la page (une sauvegarde du site restaurée ici : les identifiants suivent).
+    const fiche = (await bibliotheque.changements()).partitions.find((f) => f.id === idee.id).donnees;
+    claude.base.set(`partitions/${idee.id}`, fiche);
+    const page = await nouvellePage(ctx);
+    await page.goto(site.url);
+    await attendrePortee(page);
+    // Sur claude.ai, rien ne part sans un geste : le carnet ne demande rien au connecteur.
+    await page.waitForSelector("#liste .ligne-carnet");
+    assert.deepEqual(appels, []);
+    await page.click("#liste .ligne-carnet .ligne-ouvrir");
+    await page.waitForSelector("#idee-suggestions:not([hidden])");
+    assert.equal(await page.textContent("#idee-suggestions .bandeau-texte"), "Claude propose 1 accord");
+    await page.click('#idee-suggestions button[aria-label="Appliquer"]');
+    await page.waitForSelector("#idee-suggestions", { state: "hidden" });
+    const fin = Date.now() + 10000;
+    while (!((claude.base.get(`partitions/${idee.id}`).sequence.accords || []).length)) {
+      assert.ok(Date.now() < fin, "les accords sont dans la base de la page");
+      await new Promise((ok) => setTimeout(ok, 100));
+    }
+    assert.deepEqual(claude.base.get(`partitions/${idee.id}`).sequence.accords.map((a) => a.nom), ["Am"]);
+    assert.deepEqual(appels, ["suggestions_lister", "suggestion_retirer"]);
+    assert.deepEqual(await suggestions.lister(idee.id), []);
+    await verifierPropre(page);
+  } finally {
+    await ctx.close();
+    await site.fermer();
+    await stockage.fermer();
+    fs.rmSync(dossier, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------

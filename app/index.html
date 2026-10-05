@@ -280,6 +280,8 @@
         <button role="tab" id="onglet-lecteur" aria-selected="false">Écouter et exporter</button>
       </div>
     </header>
+    <!-- Les suggestions rangées par Claude depuis une conversation (H3, suggestions-ui.js). -->
+    <div class="bandeau-claude" id="atelier-suggestions" role="region" aria-label="Suggestions de Claude" hidden></div>
     <div class="regle-vues">
       <div class="seg" id="vues-atelier" role="group" aria-label="Ce que tu vois">
         <button data-vue="page" aria-pressed="false">Ta page</button>
@@ -504,6 +506,8 @@
       <button class="btn btn-fantome rond" id="idee-partager" aria-label="Envoyer le MIDI" title="Envoyer le MIDI (AirDrop, Fichiers, mail…) ou le télécharger"><svg class="ico" aria-hidden="true"><use href="#i-partager"></use></svg></button>
       <button class="btn btn-fantome rond" id="idee-plus" aria-haspopup="dialog" aria-controls="idee-menu" aria-label="Plus d'actions"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
     </header>
+    <!-- Les suggestions rangées par Claude depuis une conversation (H3, suggestions-ui.js). -->
+    <div class="bandeau-claude bandeau-plein" id="idee-suggestions" role="region" aria-label="Suggestions de Claude" hidden></div>
 
     <!-- La grille ou la partition (idee.js, grille.js) -->
     <div class="idee-surface" id="idee-surface">

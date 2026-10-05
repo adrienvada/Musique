@@ -30,7 +30,8 @@ import { $, el, heure, pluriel, toast } from "./ui.js";
  *     supprimee(ou) → ce qu'on dit si elle a disparu ailleurs (`ou` : « sur un autre appareil »…) },
  *   quitter() (revenir à la bibliothèque),
  *   rappel() → le rappel de sauvegarde, ou null (sauvegarde-ui.js),
- *   partitions() → la bibliothèque (les titres de ce qui est mis de côté)
+ *   partitions() → la bibliothèque (les titres de ce qui est mis de côté),
+ *   apresSynchro() (une passe a réussi : les suggestions de Claude se relisent)
  * }
  */
 export function creerSynchronisation(deps) {
@@ -71,6 +72,8 @@ export function creerSynchronisation(deps) {
     try {
       const { recues } = await synchro.synchroniser();
       if (recues) await rafraichirOuverte("sur un autre appareil");
+      // Ce que Claude a rangé depuis une conversation peut être arrivé aussi (suggestions-ui.js, H3).
+      if (deps.apresSynchro) deps.apresSynchro();
     } catch (e) {
       console.warn("Synchronisation", e);
     }
