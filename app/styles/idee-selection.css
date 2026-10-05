@@ -24,6 +24,10 @@
 .idee-selection .nom .sep { display: none; }
 .idee-selection .btn { color: var(--encre); }
 .idee-selection .btn:hover { background: color-mix(in srgb, var(--encre) 10%, transparent); }
+/* 320 px : six boutons de 44 px ne laissent que 20 px au nom de la note. Il cède
+   sa place (la note choisie porte déjà son nom sur la grille) mais reste lu au
+   lecteur d'écran, qui l'annonce à chaque choix (aria-live). */
+@media (max-width: 359px) { .idee-selection .nom { font-size: 0; padding: 0; } }
 
 /* La boîte à outils : « ••• » de la pilule. Le voile est léger, pour qu'on voie
    la grille bouger derrière à chaque geste. */
@@ -42,6 +46,8 @@ dialog.idee-boite .feuille-tete h2 { font-size: 1.2rem; line-height: 1.2; min-wi
 .boite-famille .surtitre { margin: 0; padding: 0 2px; }
 .boite-rangee { display: grid; gap: 6px; }
 .boite-durees { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+/* 320 px : six durées de 44 px, si l'écart se resserre. */
+@media (max-width: 359px) { .boite-rangee { gap: 4px; } }
 .boite-quatre { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .boite-deux { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* Motif et Ailleurs côte à côte : à quatre boutons chacun, la boîte reste basse et ne cache pas la grille. */

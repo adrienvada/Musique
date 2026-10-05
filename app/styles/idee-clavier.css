@@ -17,6 +17,11 @@
 .duree[aria-pressed="true"] { background: var(--stylo-doux); color: var(--stylo); }
 .duree[disabled] { opacity: 0.35; cursor: not-allowed; }
 .duree span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* Moins de 390 px : les durées se touchent (sans écart) et prennent la marge du
+   pupitre, pour garder 44 px chacune jusqu'à 360 px. Plus étroit encore (320),
+   huit fois 44 px ne tiennent plus sur une ligne : deux rangées de quatre. */
+@media (max-width: 389px) { .idee-durees { gap: 0; margin-inline: -4px; } }
+@media (max-width: 359px) { .idee-durees { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-inline: 0; } }
 
 /* Le clavier à l'écran : un piano reste un piano, sans éblouir en sombre. */
 #idee-clavier { flex: 1 1 auto; min-height: 0; }
@@ -31,8 +36,10 @@
 
 /* La barre : Piano / Gamme, puis ‹ la carte des octaves › */
 .clavier-barre { flex: none; display: flex; align-items: center; gap: 4px; height: 44px; }
-.clavier-barre .clavier-facon { flex: none; }
-.clavier-barre .clavier-facon > button { min-height: 38px; padding: 0 9px; font-size: 0.86rem; }
+/* Piano | Gamme sans la marge intérieure du commutateur : ses deux boutons font
+   les 44 px de la barre (38 avant), et le clavier garde sa hauteur. */
+.clavier-barre .clavier-facon { flex: none; padding: 0; }
+.clavier-barre .clavier-facon > button { min-height: 44px; padding: 0 9px; font-size: 0.86rem; }
 .clavier-octave { flex: 0 0 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; border-radius: 10px; color: var(--encre); cursor: pointer; }
 .clavier-octave:hover { background: var(--creux); }
 .clavier-carte { flex: 1 1 auto; min-width: 0; height: 44px; display: flex; gap: 3px; touch-action: none; user-select: none; -webkit-user-select: none; }

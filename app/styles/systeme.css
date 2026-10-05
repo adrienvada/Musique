@@ -25,9 +25,15 @@
   --papier: light-dark(#EDEEEA, #17181B); --feuille: light-dark(#F8F8F5, #202226); --creux: light-dark(#E3E5DF, #2A2D32);
   --encre: light-dark(#1C1E21, #E6E6E1); --gris: light-dark(#565A61, #A3A7AE);
   --trait: light-dark(#D3D5CF, #34373C); --trait-fort: light-dark(#A9ACA5, #50545A);
+  /* Le bord de ce qu'on remplit ou qu'on bascule (champs, interrupteurs) : 3:1 au
+     moins sur la feuille, le papier et le creux (WCAG 1.4.11). --trait-fort, qui
+     dessine les lignes, n'en faisait que 2:1 (audit du 04/10, I1). */
+  --bord-champ: light-dark(#80827D, #74777C);
   --stylo: light-dark(#2F4BC2, #93A8FF); --stylo-doux: light-dark(#DDE3F6, #242C4A); --sur-stylo: light-dark(#FFFFFF, #10162E);
-  --surligneur: light-dark(#F2D04B, #E6CB3A); --surligneur-doux: light-dark(#FBF1B0, #4A4214);
-  --rouge: light-dark(#D93A3F, #FF6B6F); --ok: light-dark(#2F7A4D, #74C995); --ok-doux: light-dark(#DCEFE2, #1D3527);
+  /* Le surligneur doux du sombre, un peu plus sombre : le gris s'y lit à 4,6:1 (4,18 avant, I1). */
+  --surligneur: light-dark(#F2D04B, #E6CB3A); --surligneur-doux: light-dark(#FBF1B0, #433C12);
+  /* Le vert du clair, un peu plus sombre : « Prête » se lit à 4,6:1 sur son vert doux (4,36 avant, I1). */
+  --rouge: light-dark(#D93A3F, #FF6B6F); --ok: light-dark(#2D764A, #74C995); --ok-doux: light-dark(#DCEFE2, #1D3527);
   --alerte: light-dark(#9A5B00, #E8B35A); --danger: light-dark(#A5281B, #F0877A);
   /* Le surligneur reste clair dans toutes les ambiances : on y écrit toujours en sombre. */
   --sur-surligneur: #1C1E21;
@@ -47,8 +53,8 @@
 :root[data-theme="dark"] { color-scheme: dark; }
 .studio {
   --papier: #121315; --feuille: #1B1D21; --creux: #26292E; --encre: #ECECE7; --gris: #A3A7AE;
-  --trait: #2B2E33; --trait-fort: #464A51; --stylo: #8EA2FF; --stylo-doux: #262E52; --sur-stylo: #0E1330;
-  --surligneur: #F2D04B; --surligneur-doux: #4A4214; --rouge: #FF5A5F; --ok: #74C995; --ok-doux: #1D3527;
+  --trait: #2B2E33; --trait-fort: #464A51; --bord-champ: #707378; --stylo: #8EA2FF; --stylo-doux: #262E52; --sur-stylo: #0E1330;
+  --surligneur: #F2D04B; --surligneur-doux: #433C12; --rouge: #FF5A5F; --ok: #74C995; --ok-doux: #1D3527;
   --alerte: #E8B35A; --danger: #F0877A;
   --touche-blanche: #D9DAD4; --touche-noire: #050506; --touche-texte: #3B3E44; --touche-bord: #0B0C0E;
   --voile: rgba(0, 0, 0, 0.58); --ombre: 0 12px 32px rgba(0, 0, 0, 0.6);
@@ -65,6 +71,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
 /* Un appui long sur un bouton montre sa bulle (infobulles.js) : ni sélection de
    texte, ni menu du navigateur, ni loupe par-dessus. */
 button { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* Deux touchers rapides sur un bouton (↑ trois fois de suite) sont deux gestes,
+   pas un double toucher qui agrandit la page (iPhone). Ce qui suit le doigt
+   (notes de la grille, poignées, clavier) garde son touch-action: none. */
+button, a[href], label, summary, select, input { touch-action: manipulation; }
 :focus-visible { outline: 2px solid var(--stylo); outline-offset: 2px; }
 code, .mono { font-family: var(--f-code); font-size: 0.9em; }
 .mono { font-variant-numeric: tabular-nums; }
@@ -102,8 +112,10 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 .btn-fantome:hover { background: var(--creux); border-color: transparent; }
 .btn-danger { color: var(--danger); }
 .btn-petit { min-height: 32px; padding: 0 10px; font-size: 0.86rem; border-radius: 8px; }
-.btn.rond { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; }
-.btn.rond.grand { width: 52px; height: 52px; }
+/* Un bouton rond ne rétrécit jamais : dans une rangée trop étroite, c'est le
+   texte d'à côté qui cède (il se coupait à 33 px, audit du 04/10, I1). */
+.btn.rond { flex: none; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; }
+.btn.rond.grand { width: 52px; min-width: 52px; height: 52px; min-height: 52px; }
 /* Allumé (boucle, métronome, durée choisie…) : le bleu du stylo. */
 .btn[aria-pressed="true"] { background: var(--stylo-doux); border-color: var(--stylo); color: var(--stylo); }
 .btn-plein[aria-pressed="true"] { background: var(--stylo); color: var(--sur-stylo); }
@@ -122,7 +134,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 
 /* Interrupteur : un <button role="switch" aria-checked> qui contient
    <span class="interrupteur"></span> (réglages oui / non). */
-.interrupteur { flex: none; position: relative; width: 46px; height: 28px; border-radius: 999px; background: var(--trait-fort); transition: background 0.15s; }
+.interrupteur { flex: none; position: relative; width: 46px; height: 28px; border-radius: 999px; background: var(--bord-champ); transition: background 0.15s; }
 .interrupteur::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--feuille); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 0.15s; }
 [aria-checked="true"] > .interrupteur { background: var(--stylo); }
 [aria-checked="true"] > .interrupteur::after { transform: translateX(18px); background: var(--sur-stylo); }
@@ -160,10 +172,12 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
   .bandeau-libelle { display: none; }
 }
 .etiquette { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--stylo-doux); color: var(--encre); }
-.etiquette button { border: 0; background: none; cursor: pointer; padding: 0 4px; color: var(--gris); display: inline-flex; }
+.etiquette button { border: 0; background: none; cursor: pointer; padding: 0 4px; color: var(--gris); display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; }
 
 /* Champs */
-.champ { min-height: 40px; border: 1px solid var(--trait-fort); background: var(--feuille); border-radius: 10px; padding: 7px 12px; min-width: 0; flex: 1 1 220px; }
+.champ { min-height: 40px; border: 1px solid var(--bord-champ); background: var(--feuille); border-radius: 10px; padding: 7px 12px; min-width: 0; flex: 1 1 220px; }
+/* Un curseur (tempo) : la boîte fait 44 px de haut au doigt, le rail reste fin au milieu. */
+input[type="range"] { accent-color: var(--stylo); }
 select.champ { padding-right: 8px; }
 
 .panneau { background: var(--feuille); border: 1px solid var(--trait); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -203,9 +217,15 @@ dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: 1.35rem; }
 .infobulle.dessous::after { bottom: auto; top: -5px; }
 @keyframes infobulle-vient { from { opacity: 0; transform: translateY(4px); } }
 
+/* Au doigt, rien sous 44 px (audit du 04/10, I1) : les segments faisaient 40 px
+   (atelier.css et bibliotheque.css le corrigeaient chacun pour soi, pas
+   l'éditeur), la croix d'une étiquette 28, un curseur 16. */
 @media (pointer: coarse) {
   .btn, .btn-petit, .puce, .champ { min-height: 44px; }
-  .seg > button { min-height: 40px; }
+  .seg > button { min-height: 44px; min-width: 44px; }
+  .etiquette { min-height: 44px; padding-block: 0; }
+  .etiquette button { min-width: 44px; min-height: 44px; margin-right: -4px; }
+  input[type="range"] { min-height: 44px; }
 }
 @media print {
   .barre-haut, #toast, .infobulle { display: none !important; }

@@ -2764,6 +2764,71 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Interface (I1 à I4, I6 à I15)
 
+**Voir et toucher (I1, I2, I3, I10)**
+
+- **Rien sous 44 px au doigt, et l'essai le garde (I1).** L'essai des 44 px
+  (`tests/e2e/interface.test.mjs`) était « à faire » ; il passe, à 390 et à
+  320 px, et à 360 et 375 à la main (`PORTEE_E2E_LARGEURS=360,375`). Son
+  tour passe maintenant aussi par ce que la troisième vague a ajouté : une
+  note choisie dans « Corriger » (‹ ›, les outils, le zoom), la version
+  claude.ai (« Demander à Claude » étape par étape, le second avis sur un
+  doute, l'entrée de la boîte à outils) et la bibliothèque commune (le
+  bandeau des suggestions dans l'idée et dans « Corriger », les versions
+  précédentes, la corbeille). Il relevait 104 cibles trop petites sur ce
+  tour (114 en comptant la carte des octaves) ; il n'en relève plus.
+  - Trois causes dans `systeme.css` : un bouton rond rétrécissait dans une
+    rangée trop étroite (il ne rétrécit plus, c'est le texte d'à côté qui
+    cède) ; les segments faisaient 40 px au doigt (44 maintenant, et
+    `atelier.css` et `bibliotheque.css` n'ont plus à le corriger chacun pour
+    soi) ; la croix d'une étiquette faisait 28 px. Un curseur (le tempo)
+    fait 44 px de haut au doigt, le rail reste fin.
+  - **La barre de l'idée** : le titre fait 44 px, et le résumé « 90 · 4/4 ·
+    Do majeur » (une ligne de 17 px sous le titre) devient un bouton de
+    44 px à côté de lui : la noire et le tempo au téléphone, la mesure et la
+    tonalité en plus dès que la barre a la place (700 px). Son nom et sa
+    bulle disent toujours les trois. Pour cela, `idee.js` range le tempo
+    dans son propre `<span>` (deux lignes). Au téléphone, Grille | Partition
+    devient un seul bouton, celui de l'autre affichage : les deux côte à
+    côte faisaient 40 px et prenaient la place du titre.
+  - **Sous 390 px**, le pupitre serre ses marges : les huit durées gardent
+    44 px jusqu'à 360 ; plus étroit (320), elles passent sur deux rangées de
+    quatre, et le pupitre grandit d'autant (le piano garde sa hauteur). Le
+    transport serre ses écarts ; dans la rangée de la sélection, le nom de
+    la note cède sa place (elle le porte déjà sur la grille, et le lecteur
+    d'écran le dit toujours) ; « Tous les accords » se réduit à son icône.
+    Piano | Gamme perd la marge intérieure de son commutateur : 44 px dans
+    la même barre.
+  - **« Corriger »** : les points des doutes ont leur rangée sous le titre,
+    44 px chacun ; beaucoup de doutes passent à la ligne sans rien cacher
+    (avec dix-sept doutes, la tête du panneau s'écrasait sur ses rangées :
+    elle ne rétrécit plus). Les outils de la note gardent 44 px jusqu'à
+    360 px, puis passent à cinq colonnes.
+  - **Le morceau** : son titre et le nom d'une section font 44 px ; à
+    320 px, retour, écoute et « ••• » ne rétrécissent plus.
+  - **Les exceptions actées**, écrites dans l'essai avec leur pourquoi : la
+    carte des octaves (la bande entière est la cible : on y vise une région,
+    pas une case), un libellé posé sur un champ de 44 px (c'est le champ la
+    cible ; toucher le libellé ne fait que lui donner le focus) et les
+    touches du piano (un vrai clavier : noires étroites, et au moins une
+    octave, donc des blanches de 42 px à 320 px ; elles deviennent des
+    boutons pour le lecteur d'écran avec l'autre moitié du lot). Les rangées
+    de la grille (zoomables) et les notes gravées (le zoom de « Corriger »)
+    restent actées, sans entrer dans le compte.
+- **Trois contrastes sous le seuil, corrigés dans les jetons (I1).** Le vert
+  du clair est un peu plus sombre (`--ok`, « Prête » se lit à 4,6:1 sur son
+  vert doux, 4,36 avant) ; le surligneur doux du sombre et du Studio aussi
+  (le gris s'y lit à 4,6:1, 4,18 avant). Les bords de ce qu'on remplit ou
+  qu'on bascule (champs, titres qu'on renomme, interrupteurs) ont leur jeton,
+  `--bord-champ`, à 3:1 au moins sur la feuille, le papier et le creux, dans
+  les trois ambiances (WCAG 1.4.11) : `--trait-fort`, qui dessine les lignes
+  de la grille et de la page, n'en faisait que 2:1, et le foncer aurait
+  alourdi tout le reste.
+- **Deux touchers rapides ne zooment plus la page (I2).** `touch-action:
+  manipulation` sur les boutons, liens, libellés et champs : sur iPhone,
+  trois touchers sur ↑ pouvaient agrandir la page. Ce qui suit le doigt (les
+  notes de la grille, les poignées, le clavier) garde son `touch-action:
+  none`.
+
 <!-- lot interface -->
 
 ### Claude dans l'éditeur d'idée (H2)

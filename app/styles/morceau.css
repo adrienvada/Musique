@@ -47,8 +47,8 @@ main:has(> #vue-morceau:not([hidden])) { max-width: none; padding: 0; }
 /* Le bouton d'écoute est le grand (52 px) : un peu plus haut que --barre pour qu'il respire. */
 .morceau-barre { display: flex; align-items: center; gap: 4px; min-height: calc(var(--barre) + 6px); padding: 2px 8px; }
 .morceau-titrage { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.morceau-titre { font-family: var(--f-titre); font-size: 1.25rem; line-height: 1.2; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 6px; margin: 0 -6px; width: calc(100% + 12px); min-width: 0; text-overflow: ellipsis; }
-.morceau-titre:hover, .morceau-titre:focus { border-color: var(--trait-fort); background: var(--feuille); }
+.morceau-titre { font-family: var(--f-titre); font-size: 1.25rem; line-height: 1.2; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 6px; margin: 0 -6px; width: calc(100% + 12px); min-width: 0; min-height: 44px; text-overflow: ellipsis; }
+.morceau-titre:hover, .morceau-titre:focus { border-color: var(--bord-champ); background: var(--feuille); }
 .morceau-resume { display: flex; align-items: center; gap: 6px; margin: -4px 0 0; font-size: 12px; line-height: 16px; color: var(--gris); white-space: nowrap; }
 #morceau-duree { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #morceau-duree .ico { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 1px; }
@@ -92,7 +92,7 @@ main:has(> #vue-morceau:not([hidden])) { max-width: none; padding: 0; }
 .bloc-infos { position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 8px 0; pointer-events: none; }
 .bloc-nom { pointer-events: none; font-family: var(--f-titre); font-size: 1.1rem; line-height: 1.25; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 2px 6px; margin: 0 -6px; width: calc(100% + 12px); min-width: 0; text-overflow: ellipsis; }
 /* Le nom ne se modifie qu'une fois la carte choisie : un premier toucher choisit, il ne fait pas surgir le clavier. */
-.bloc.choisi .bloc-nom { pointer-events: auto; min-height: 40px; border-color: var(--trait-fort); background: var(--papier); }
+.bloc.choisi .bloc-nom { pointer-events: auto; min-height: 44px; border-color: var(--bord-champ); background: var(--papier); }
 .bloc-idee { display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; }
 .bloc-idee > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .bloc.saute .bloc-idee { color: var(--alerte); }

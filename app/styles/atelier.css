@@ -18,7 +18,7 @@ svg .surlignage rect.leve { fill: none; stroke: var(--ok); stroke-dasharray: 6 4
 /* Pièces que les écrans Idée et Morceau partagent                        */
 /* ---------------------------------------------------------------------- */
 .titre-edit { font-family: var(--f-titre); font-size: clamp(1.4rem, 3vw, 1.9rem); border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 2px 6px; margin-left: -6px; min-width: 0; flex: 1 1 260px; }
-.titre-edit:hover, .titre-edit:focus { border-color: var(--trait-fort); background: var(--feuille); }
+.titre-edit:hover, .titre-edit:focus { border-color: var(--bord-champ); background: var(--feuille); }
 .gravure { color: var(--encre); min-height: 120px; }
 .gravure .abcjs-note.joue, .gravure .abcjs-note.joue * { fill: var(--stylo); color: var(--stylo); }
 .etat { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -44,8 +44,6 @@ kbd { font-family: var(--f-code); font-size: 0.78rem; border: 1px solid var(--tr
 .barre-ecran .onglets { flex: 1 0 calc(100% - 4px); margin: 4px 0 0 4px; display: flex; }
 .regle-vues { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .regle-vues .seg { flex: 1 1 280px; max-width: 420px; display: flex; }
-/* Au doigt, les segments font 44 px (le système les laisse à 40). */
-@media (pointer: coarse) { .vue-partition .seg > button { min-height: 44px; } }
 .pages-nav { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
 /* ---------------------------------------------------------------------- */
@@ -87,7 +85,7 @@ kbd { font-family: var(--f-code); font-size: 0.78rem; border: 1px solid var(--tr
 .avance { border-top: 1px solid var(--trait); padding-top: 4px; display: flex; flex-direction: column; gap: 10px; }
 .avance summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: var(--gris); }
 .avance[open] > summary { margin-bottom: 4px; }
-textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55; min-height: 180px; resize: vertical; border: 1px solid var(--trait-fort); background: var(--feuille); border-radius: 8px; padding: 10px 12px; width: 100%; }
+textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55; min-height: 180px; resize: vertical; border: 1px solid var(--bord-champ); background: var(--feuille); border-radius: 8px; padding: 10px 12px; width: 100%; }
 
 /* ---------------------------------------------------------------------- */
 /* Le panneau du bas (dock)                                               */
@@ -101,13 +99,22 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 /* Replié : seule la tête reste, et la page se voit en entier. */
 .dock.replie .doutes, .dock.replie .dock-manuel { display: none; }
 .note-choisie { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Beaucoup de doutes : les points passent à la ligne (au téléphone, dix-sept points passaient sous « Annuler »). */
-.dock-tete #tete-doutes { flex-wrap: wrap; row-gap: 0; }
+/* Les points des doutes ont leur rangée, sous le titre et ses boutons : chacun
+   fait 44 px au doigt (24 de large avant, audit du 04/10, I1), et beaucoup de
+   doutes passent à la ligne sans glisser sous « Annuler ». Le titre et les
+   points sortent de leur boîte (display: contents) pour se ranger dans celle
+   de la tête. */
+/* flex: none : dans le panneau (sa hauteur est bornée), la tête ne s'écrase pas sur
+   ses rangées de points, qui déborderaient sur le doute (dix-sept doutes : trois rangées). */
+.dock-tete { flex: none; flex-wrap: wrap; row-gap: 0; }
+.dock-tete #tete-doutes { display: contents; }
+.dock-tete #pas-doutes { order: 1; flex: 1 1 100%; }
+.dock-tete #pas-doutes:empty { display: none; }
 /* La note choisie entre « précédente » et « suivante » (I14) : son nom se coupe plutôt que de pousser les boutons. */
 .dock-tete #tete-note { gap: 2px; }
 .dock-tete #tete-note .note-choisie { flex: 0 1 auto; padding: 0 4px; }
 .pas { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; }
-.pas-doute { width: 24px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
+.pas-doute { width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
 .pas-doute::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--trait-fort); }
 .pas-doute.fait::before { background: var(--ok); }
 .pas-doute[aria-current="step"]::before { width: 22px; border-radius: 4px; background: var(--stylo); }
@@ -159,6 +166,13 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 .outils-note { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .outils-note .separe { display: none; }
 .outil { min-width: 0; min-height: 48px; padding: 0; }
+/* Moins de 390 px : le panneau serre ses marges et ses écarts, sept outils de
+   44 px tiennent encore sur une rangée jusqu'à 360 px ; plus étroit, cinq. */
+@media (max-width: 389px) {
+  .dock { padding-left: 12px; padding-right: 12px; }
+  .outils-note { gap: 4px; }
+}
+@media (max-width: 359px) { .outils-note { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 .outil.signe { font-family: var(--f-titre); font-size: 1.5rem; line-height: 1; padding-top: 3px; }
 
 /* La feuille « ••• » */

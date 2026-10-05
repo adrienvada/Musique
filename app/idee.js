@@ -43,7 +43,7 @@
 import { lirePref, ecrirePref } from "./preferences.js";
 import * as sq from "./sequence.js";
 import { creerGrille } from "./grille.js";
-import { $, dateCourte } from "./ui.js";
+import { $, dateCourte, el } from "./ui.js";
 import { egal } from "./fiche.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { creerModeClavier } from "./idee-clavier.js";
@@ -532,7 +532,8 @@ export function creerEditeurIdee(deps) {
 
   function majCommandes() {
     const k = e.seq;
-    $("idee-resume").textContent = `${k.tempo} · ${k.mesure.join("/")} · ${sq.nomTonalite(k.tonalite)}`;
+    // Le tempo à part : au téléphone, la barre n'a la place que de lui (idee.css).
+    $("idee-resume").replaceChildren(el("span", "resume-tempo", String(k.tempo)), el("span", "resume-suite", ` · ${k.mesure.join("/")} · ${sq.nomTonalite(k.tonalite)}`));
     const dit = `Tempo ${k.tempo}, mesure ${k.mesure.join("/")}, ${sq.nomTonalite(k.tonalite)} : changer`;
     $("idee-reglages-bouton").title = dit;
     $("idee-reglages-bouton").setAttribute("aria-label", dit);

@@ -32,21 +32,34 @@ body.plein .vue-idee { height: 100%; }
 /* Grille | Partition : au téléphone, les deux icônes (la barre n'a pas la
    place des mots sans couper le titre) ; les mots aussi quand elle l'a. */
 .idee-affichage { flex: none; margin: 0 2px 0 4px; }
-.idee-affichage > button { padding: 0 9px; }
+.idee-affichage > button { padding: 0 11px; }
 .idee-affichage > button > span { display: none; }
+/* Au téléphone, un seul bouton de 44 px : celui de l'autre affichage (la grille
+   montre « Partition », la partition « Grille »). Les deux côte à côte
+   prenaient la place du titre, et faisaient 40 px. */
+@media (max-width: 599px) {
+  .idee-affichage { padding: 0; background: none; }
+  .idee-affichage > button[aria-pressed="true"] { display: none; }
+  .idee-affichage > button { color: var(--encre); }
+}
 @media (min-width: 600px) {
   .idee-affichage > button { padding: 0 12px; }
   .idee-affichage > button > span { display: inline; }
 }
-.idee-titres { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-.idee-titre { width: 100%; min-width: 0; font-family: var(--f-titre); font-size: 1.12rem; line-height: 1.25; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 1px 4px; margin: 0; text-overflow: ellipsis; }
-.idee-titre:hover, .idee-titre:focus { border-color: var(--trait-fort); background: var(--creux); }
+/* Le titre et, à côté, le tempo : deux cibles de 44 px côte à côte. Le résumé
+   « 90 · 4/4 · Do majeur » était une ligne de 17 px sous le titre (26 px) : on
+   ne pouvait viser ni l'un ni l'autre (audit du 04/10, I1). Au téléphone, le
+   bouton ne montre que la noire et le tempo ; la mesure et la tonalité s'y
+   ajoutent dès que la barre a la place. Son nom (aria-label, et la bulle de
+   l'appui long) dit toujours les trois. */
+.idee-titres { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 2px; }
+.idee-titre { flex: 1 1 auto; width: 100%; min-width: 0; min-height: 44px; font-family: var(--f-titre); font-size: 1.12rem; line-height: 1.25; color: var(--encre); border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 1px 6px; margin: 0; text-overflow: ellipsis; }
+.idee-titre:hover, .idee-titre:focus { border-color: var(--bord-champ); background: var(--creux); }
 .idee-titre:focus { outline: none; }
-.idee-resume { position: relative; align-self: flex-start; max-width: 100%; border: 0; background: none; padding: 0 4px; color: var(--gris); font-size: 0.8rem; line-height: 1.45; cursor: pointer; text-align: left; display: flex; }
-.idee-resume > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Le doigt n'a pas à viser la ligne mince : sa zone descend jusqu'au bas de la barre. */
-.idee-resume::after { content: ""; position: absolute; inset: -3px -8px -10px; }
-.idee-resume:hover { color: var(--encre); }
+.idee-resume { flex: none; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; border: 0; border-radius: 999px; background: none; padding: 0 8px 0 6px; color: var(--gris); font-size: 0.86rem; line-height: 1.2; cursor: pointer; white-space: nowrap; }
+.idee-resume:hover { color: var(--encre); background: var(--creux); }
+.idee-resume .resume-suite { display: none; }
+@media (min-width: 700px) { .idee-resume .resume-suite { display: inline; } }
 .idee-piste-puce { flex: none; padding: 0 12px; font-size: 0.82rem; margin-right: 2px; }
 
 /* La grille ou la partition : tout l'espace entre la barre et le pupitre */
@@ -71,6 +84,17 @@ body.plein .vue-idee { height: 100%; }
 .idee-transport .btn.rond[disabled] { opacity: 0.3; }
 .idee-modes { display: flex; }
 .idee-modes > button { min-height: 44px; }
+/* Moins de 390 px : le pupitre serre ses marges pour que les huit durées gardent
+   44 px de large (8 × 44 = 352 px). En dessous de 360, elles passent sur deux
+   rangées (idee-clavier.css), et le pupitre grandit d'autant. */
+@media (max-width: 389px) {
+  .idee-pupitre { padding-left: 8px; padding-right: 8px; }
+}
+@media (max-width: 359px) {
+  .vue-idee { --pupitre-mode: clamp(224px, calc(25dvh + 48px), 284px); }
+  .idee-transport { gap: 4px; }
+  .idee-modes > button { padding: 0 8px; gap: 4px; }
+}
 .idee-mode-dedans { height: var(--pupitre-mode); position: relative; }
 .idee-pupitre.avec-selection .idee-mode-dedans { height: calc(var(--pupitre-mode) - 52px); }
 .idee-mode-dedans > [role="tabpanel"] { height: 100%; }
@@ -155,7 +179,6 @@ body.plein .vue-idee { height: 100%; }
 .info-champ textarea { width: 100%; flex: none; resize: vertical; color: var(--encre); }
 .info-champ .etiquettes { display: flex; flex-wrap: wrap; gap: 6px; }
 .info-champ .etiquettes:empty { display: none; }
-.info-champ .etiquette button { min-width: 28px; min-height: 28px; align-items: center; justify-content: center; }
 #info-favori[aria-pressed="true"] { background: var(--surligneur-doux); border-color: var(--surligneur); color: var(--encre); }
 #memo-enregistrer[aria-pressed="true"] { border-color: var(--rouge); color: var(--rouge); }
 

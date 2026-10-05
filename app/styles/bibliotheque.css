@@ -180,7 +180,6 @@ button.reglages-ligne:hover, label.reglages-ligne:hover { background: var(--creu
 .reglages-texte { padding: 12px 14px; font-size: 0.85rem; color: var(--gris); border-bottom: 1px solid var(--trait); }
 .reglages-texte:empty { display: none; }
 .reglages-groupe .seg { flex: none; }
-.reglages-groupe .seg > button { min-height: 44px; }
 #zone-adresse:empty, #zone-synchro:empty { display: none; }
 /* Un rappel (la sauvegarde à refaire) : la couleur des avertissements, sans crier. */
 .reglages-rappel { display: flex; align-items: flex-start; gap: 8px; color: var(--alerte); }
