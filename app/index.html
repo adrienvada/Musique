@@ -158,6 +158,12 @@
         <h2 class="surtitre" id="rg-synchro">Synchronisation</h2>
         <div class="reglages-groupe">
           <p class="reglages-texte" id="mode-detail"></p>
+          <!-- Ce que la synchronisation a mis de côté, et pourquoi (D2, synchronisation-ui.js). -->
+          <div class="reglages-de-cote" id="synchro-de-cote" hidden>
+            <p class="reglages-texte reglages-rappel" id="de-cote-resume" role="status"></p>
+            <ul class="reglages-liste" id="de-cote-liste"></ul>
+            <button class="reglages-ligne principal" id="reessayer-synchro"><span>Réessayer</span><svg class="ico s" aria-hidden="true"><use href="#i-refaire"></use></svg></button>
+          </div>
           <button class="reglages-ligne principal" id="activer-synchro" hidden><span>Synchroniser mes appareils</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
           <button class="reglages-ligne" id="synchroniser" hidden><span>Synchroniser maintenant</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
         </div>

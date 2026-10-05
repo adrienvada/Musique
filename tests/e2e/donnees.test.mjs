@@ -14,6 +14,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { servir } from "./serveur.mjs";
 import { ORDINATEUR, TELEPHONE, contexte, dossierTemporaire, importerLesExemples, lancer, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { demarrerFauxStockage } from "../faux-cloud.mjs";
+import { Bibliotheque } from "../../supabase/functions/portee-remarkable/bibliotheque.js";
+import { coffreMemoire } from "../../supabase/functions/portee-remarkable/coffre.js";
+import { repondreHttp } from "../../supabase/functions/portee-remarkable/http.js";
+import { objetsSupabase } from "../../supabase/functions/portee-remarkable/objets.js";
+import { CloudRemarkable } from "../../supabase/functions/portee-remarkable/remarkable.js";
+import { Suggestions } from "../../supabase/functions/portee-remarkable/suggestions.js";
 
 let serveur, navigateur;
 before(async () => {
@@ -31,6 +38,60 @@ async function messageQui(page, motif) {
   return page.textContent("#toast");
 }
 
+/**
+ * Une bibliothèque commune : le vrai connecteur (http.js), suggestions
+ * comprises, sur le faux stockage des tests, à une adresse de la forme
+ * exacte que l'appli attend, assemblée ici (rien qui ressemble à un vrai
+ * secret dans le dépôt). `appareil()` : un navigateur neuf qui y est relié
+ * (l'adresse collée d'avance : la synchronisation part au démarrage).
+ */
+async function bibliothequeCommune() {
+  const stockage = await demarrerFauxStockage();
+  const projet = ["essai", "donnees"].join("").padEnd(20, "x");
+  const cle = ["cle", "d", "essai", "donnees"].join("-").padEnd(32, "0");
+  const adresse = `https://${projet}.supabase.co/functions/v1/portee-remarkable/${cle}`;
+  const objets = objetsSupabase(stockage.url, stockage.cle);
+  const bibliotheque = new Bibliotheque(objets);
+  const suggestions = new Suggestions(objets);
+  const tablette = new CloudRemarkable(coffreMemoire(null), { auth: "http://127.0.0.1:9", sync: "http://127.0.0.1:9" });
+  const appels = [];
+  const contextes = [];
+  async function appareil(appareil = ORDINATEUR) {
+    const ctx = await contexte(navigateur, {
+      appareil,
+      routes: [[(u) => u.hostname === `${projet}.supabase.co`, async (route) => {
+        const r = route.request();
+        const corps = r.postData();
+        try { appels.push(JSON.parse(corps).params.name); } catch { /* préflight */ }
+        const reponse = await repondreHttp(new Request(r.url(), { method: r.method(), headers: await r.allHeaders(), body: corps ?? undefined }), {
+          cle, cloud: () => tablette, bibliotheque: () => bibliotheque, suggestions: () => suggestions, origines: [serveur.origine],
+        });
+        await route.fulfill({ status: reponse.status, headers: Object.fromEntries(reponse.headers), body: Buffer.from(await reponse.arrayBuffer()) });
+      }]],
+    });
+    await ctx.addInitScript((a) => { try { localStorage.setItem("portee:connecteur", a); } catch { /* sans stockage */ } }, adresse);
+    contextes.push(ctx);
+    return ctx;
+  }
+  return {
+    objets, bibliotheque, suggestions, appareil, appels,
+    fermer: async () => { for (const c of contextes) await c.close(); await stockage.fermer(); },
+  };
+}
+
+/** Une idée telle que le connecteur la range (la forme de `idee_ecrire`). */
+const ideeCommune = (titre, notes = [{ id: 1, d: 0, l: 4, h: 72 }], extra = {}) => {
+  const maintenant = new Date().toISOString();
+  return {
+    type: "idee", titre, statut: "idee", nbPages: 0, modele: null, tempo: 90, note: "", etiquettes: [], favori: false, memo: null,
+    sequence: { version: 1, tempo: 90, mesure: [4, 4], tonalite: "C", accompagnement: "aucun", suivant: 50, accords: [], pistes: [{ nom: "Mélodie", cle: "sol", notes }] },
+    creeLe: maintenant, modifieLe: maintenant, ...extra,
+  };
+};
+
+/** Une passe de synchronisation tout de suite (comme au retour sur l'onglet). */
+const synchroniserMaintenant = (page) => page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+
 /** Une idée de trois notes, notée au clavier de l'ordinateur, puis retour au carnet. */
 async function noterUneIdee(page, n = 3) {
   await page.click("#nouvelle-idee");
@@ -40,6 +101,50 @@ async function noterUneIdee(page, n = 3) {
   await page.click("#vue-idee [data-retour]");
   await page.waitForSelector("#vue-biblio:not([hidden])");
 }
+
+// ---------------------------------------------------------------------------
+// D2 : ce que la synchronisation met de côté
+// ---------------------------------------------------------------------------
+
+test("ce que la synchronisation met de côté se voit, avec sa raison, en haut et dans les Réglages ; « Réessayer » relance (D2)", async () => {
+  const commun = await bibliothequeCommune();
+  try {
+    // Une fiche abîmée dans la bibliothèque commune : elle ne peut pas se ranger ici.
+    await commun.objets.ecrire("bibliotheque/pabimee.json", { id: "pabimee", donnees: "pas une fiche", modifieLe: new Date().toISOString(), supprime: false, pagesLe: null, rev: 1 });
+    const ctx = await commun.appareil(TELEPHONE);
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.waitForFunction(() => /1 mise de côté/.test(document.getElementById("mode").textContent), null, { timeout: 20000 });
+    assert.equal(await page.getAttribute("#etat-synchro", "data-ton"), "alerte");
+    assert.match(await page.getAttribute("#etat-synchro", "aria-label"), /1 mise de côté/);
+    await page.click("#etat-synchro");
+    await page.waitForSelector("#synchro-de-cote:not([hidden])");
+    assert.match(await page.textContent("#de-cote-resume"), /1 partition mise de côté : elle ne passe pas, les autres si\./);
+    assert.match(await page.textContent("#de-cote-liste"), /Une partition d'un autre appareil\s*Pas rangée ici : fiche illisible/);
+    // Une partition d'ici, datée de 2031 (une horloge déréglée) : la bibliothèque commune la refuse, et dit pourquoi.
+    await page.evaluate(() => new Promise((ok) => {
+      const r = indexedDB.open("portee");
+      r.onsuccess = () => {
+        const t = r.result.transaction(["partitions", "envois"], "readwrite");
+        const quand = "2031-01-01T00:00:00.000Z";
+        t.objectStore("partitions").put({ type: "idee", titre: "Venue du futur", statut: "idee", nbPages: 0, modele: null, abc: "", note: "", etiquettes: [], favori: false, memo: null, sequence: { version: 1, tempo: 90, mesure: [4, 4], tonalite: "C", accompagnement: "aucun", suivant: 2, accords: [], pistes: [{ nom: "Mélodie", notes: [{ id: 1, d: 0, l: 4, h: 72 }] }] }, creeLe: quand, modifieLe: quand }, "pfutur");
+        t.objectStore("envois").put({ numero: "essai-1", modifieLe: quand, pages: false, supprime: false }, "pfutur");
+        t.oncomplete = () => { r.result.close(); ok(); };
+      };
+    }));
+    await synchroniserMaintenant(page);
+    await page.waitForFunction(() => /2 partitions mises de côté/.test(document.getElementById("de-cote-resume").textContent), null, { timeout: 20000 });
+    assert.match(await page.textContent("#de-cote-liste"), /« Venue du futur »\s*Refusée par la bibliothèque commune : la date de modification est à plus d'un jour dans le futur : l'horloge de cet appareil est sans doute déréglée\./);
+    // Réparée là-bas, la fiche abîmée arrive à « Réessayer » ; celle du futur reste de côté, et le dit.
+    assert.equal((await commun.bibliotheque.ecrire({ id: "pabimee", donnees: ideeCommune("Réparée"), pages: [], modifieLe: new Date().toISOString() })).accepte, true);
+    await page.click("#reessayer-synchro");
+    assert.equal(await messageQui(page, /de côté|passé/), "1 partition reste de côté : la raison est dans la liste.");
+    await page.waitForFunction(() => /1 partition mise de côté/.test(document.getElementById("de-cote-resume").textContent));
+    assert.doesNotMatch(await page.textContent("#de-cote-liste"), /autre appareil/);
+    await page.click("#tab-carnet");
+    await page.waitForSelector('#liste .ligne-titre:text-is("Réparée")');
+    await verifierPropre(page);
+  } finally { await commun.fermer(); }
+});
 
 // ---------------------------------------------------------------------------
 // D7 : deux onglets

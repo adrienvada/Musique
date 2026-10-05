@@ -2320,6 +2320,31 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Écrans des données (D6, D7, D9, H3)
 
+- **Ce que la synchronisation met de côté se voit (D2,
+  `app/synchronisation-ui.js`).** Le lot données met de côté, au lieu de
+  tout bloquer, une partition que la bibliothèque commune refuse ou qu'on
+  ne peut pas ranger ici ; mais rien ne le montrait, et le nuage restait
+  vert. Maintenant, « Tes données » dit « Synchronisé à 14:03 · 1 mise de
+  côté », le nuage passe à l'ambre, et Réglages › Synchronisation liste
+  chacune avec sa raison (« Refusée par la bibliothèque commune : la date
+  de modification est à plus d'un jour dans le futur… », « Pas rangée
+  ici : fiche illisible… »), puis « Réessayer ». La raison passe par la
+  traduction des erreurs ; la brute reste dans la console.
+  - **« Réessayer » faisait oublier une réception (`synchro.js`, une
+    ligne).** Lever la quarantaine d'une réception jetait la fiche gardée,
+    et le curseur était déjà passé : elle ne revenait plus jamais. Une
+    réception se réessaie déjà à chaque passage ; « Réessayer » ne lève
+    plus que les envois. Trouvé en branchant le bouton ; essai : « D2 ·
+    « Réessayer » ne fait pas oublier une réception… »
+    (`tests/synchro.test.mjs`).
+  - Pendant une passe, la liste garde ce qu'elle montrait : elle ne
+    clignote pas toutes les 90 s.
+  - Une copie de conflit faite par la synchro se dit en message (« la
+    version de l'autre est à côté, dans ton carnet »), voir plus bas.
+  - Essai : « ce que la synchronisation met de côté… »
+    (`tests/e2e/donnees.test.mjs`) : une fiche abîmée dans la
+    bibliothèque commune et une partition datée de 2031, refusées avec
+    leur raison ; réparée là-bas, la première arrive à « Réessayer ».
 - **Ce qui garde ta bibliothèque se voit dans les Réglages (D9,
   `app/garde.js`, `app/sauvegarde-ui.js`).** « L'appli » dit maintenant si
   la bibliothèque est protégée sur cet appareil (Oui, Non, On ne sait pas)

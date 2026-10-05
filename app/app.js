@@ -331,7 +331,7 @@ async function demarrer() {
     montrerSynchro: (x) => accueil.montrerSynchro(x),
     ouverte: () => navigation.partitionOuverte(),
     quitter: () => { if (navigation.vue === "atelier" || navigation.vue === "lecteur") pageOuverte.fermer(); montrer("biblio"); },
-    rappel: () => (sauvegardes ? sauvegardes.rappel() : null),
+    rappel: () => (sauvegardes ? sauvegardes.rappel() : null), partitions: () => etat.partitions,
   });
   brancher();
   creerEditeur();

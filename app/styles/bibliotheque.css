@@ -164,7 +164,7 @@ svg.frise { width: 100%; height: 52px; display: block; border-radius: 10px; back
 /* ---------- Réglages : des groupes de lignes ---------- */
 .reglages { gap: 18px; }
 .reglages-bloc { display: flex; flex-direction: column; gap: 6px; }
-.reglages-bloc .surtitre { font-family: var(--f-texte); }
+.reglages-bloc .surtitre { font-family: var(--f-texte); scroll-margin-top: calc(var(--barre) + 12px); }
 .reglages-groupe { background: var(--feuille); border: 1px solid var(--trait); border-radius: 16px; overflow: hidden; }
 .reglages-ligne { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 6px 14px; border: 0; border-bottom: 1px solid var(--trait); background: none; color: inherit; font-size: 0.95rem; text-align: left; }
 button.reglages-ligne, label.reglages-ligne { cursor: pointer; }
@@ -182,6 +182,14 @@ button.reglages-ligne:hover, label.reglages-ligne:hover { background: var(--creu
 /* Un rappel (la sauvegarde à refaire) : la couleur des avertissements, sans crier. */
 .reglages-rappel { display: flex; align-items: flex-start; gap: 8px; color: var(--alerte); }
 .reglages-rappel .ico { flex: none; margin-top: 1px; }
+/* Ce que la synchronisation a mis de côté : le titre, puis pourquoi. */
+.reglages-de-cote { border-bottom: 1px solid var(--trait); }
+.reglages-de-cote .reglages-texte { border-bottom: 0; padding-bottom: 4px; }
+.reglages-liste { list-style: none; margin: 0; padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+.reglages-liste li { display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.de-cote-titre { font-weight: 600; font-size: 0.92rem; }
+.de-cote-raison { font-size: 0.85rem; color: var(--gris); }
+.reglages-de-cote .reglages-ligne { border-top: 1px solid var(--trait); border-bottom: 0; }
 /* Le guide d'installation (Safari) : un pas à pas, dans le groupe. */
 .reglages-guide { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--trait); background: var(--surligneur-doux); font-size: 0.9rem; }
 .reglages-guide .guide-titre { display: flex; align-items: center; gap: 8px; font-weight: 600; }

@@ -13,7 +13,8 @@
  */
 import { creerSynchro } from "./synchro.js";
 import { adresseEnregistree } from "./connecteur.js";
-import { cause } from "./erreurs.js";
+import { cause, explication } from "./erreurs.js";
+import { ico } from "./icones.js";
 import { $, el, heure, pluriel, toast } from "./ui.js";
 
 /**
@@ -28,12 +29,15 @@ import { $, el, heure, pluriel, toast } from "./ui.js";
  *     recharger(p) → true s'il a repris la version p (false : rien de ce qu'il montre n'a changé),
  *     supprimee(ou) → ce qu'on dit si elle a disparu ailleurs (`ou` : « sur un autre appareil »…) },
  *   quitter() (revenir à la bibliothèque),
- *   rappel() → le rappel de sauvegarde, ou null (sauvegarde-ui.js)
+ *   rappel() → le rappel de sauvegarde, ou null (sauvegarde-ui.js),
+ *   partitions() → la bibliothèque (les titres de ce qui est mis de côté)
  * }
  */
 export function creerSynchronisation(deps) {
   const { dansClaude, stockage } = deps;
   let synchro = null, minuterieSynchro = null, battement = null, dernierEtat = null;
+  let deCote = 0; // ce qui est mis de côté (D2), d'après le dernier état connu
+  let rendusDeCote = 0;
 
   const synchronisable = () => !dansClaude() && !!stockage() && stockage().synchronisable && !!adresseEnregistree();
 
@@ -124,15 +128,82 @@ export function creerSynchronisation(deps) {
       return;
     }
     const d = dernierEtat || { etat: "encours" };
+    // Pendant une passe, ce qui était de côté le reste jusqu'à preuve du contraire : la liste ne clignote pas.
+    if (d.etat !== "encours") deCote = d.quarantaine || 0;
     const attente = d.attente ? ` · ${pluriel(d.attente, "modification")} en attente` : "";
+    const enPlus = deCote ? ` · ${pluriel(deCote, "mise de côté", "mises de côté")}` : "";
     if (d.etat === "encours") $("mode").textContent = "Synchronisation…";
-    else if (d.etat === "ok") $("mode").textContent = `Synchronisé à ${heure(d.le)}` + attente;
-    else $("mode").textContent = (navigator.onLine === false ? "Hors ligne" : "Synchronisation impossible") + attente;
+    else if (d.etat === "ok") $("mode").textContent = `Synchronisé à ${heure(d.le)}` + attente + enPlus;
+    else $("mode").textContent = (navigator.onLine === false ? "Hors ligne" : "Synchronisation impossible") + attente + enPlus;
     $("mode-detail").textContent = d.etat === "erreur"
       ? `Tes partitions restent dans ce navigateur et partiront à la prochaine connexion. (${d.erreur ? cause(d.erreur) : "erreur"})`
       : "Ta bibliothèque est synchronisée : tu retrouves les mêmes partitions sur chaque appareil où tu as collé l'adresse du connecteur.";
-    // L'icône du haut : verte quand tout est parti, ambre quand quelque chose attend.
-    deps.montrerSynchro({ nuage: d.etat !== "erreur", ton: d.etat === "ok" ? "ok" : d.etat === "erreur" ? "alerte" : "gris", titre: $("mode").textContent });
+    // L'icône du haut : verte quand tout est parti, ambre quand quelque chose attend ou reste de côté.
+    deps.montrerSynchro({ nuage: d.etat !== "erreur", ton: d.etat === "erreur" || deCote ? "alerte" : d.etat === "ok" ? "ok" : "gris", titre: $("mode").textContent });
+    afficherDeCote();
+    // Changée ici et sur un autre appareil (le texte d'une page lue) : la version de l'autre est à côté (D4).
+    if (e && e.etat === "ok" && e.conflits) {
+      toast(e.conflits > 1
+        ? `${e.conflits} partitions ont été corrigées ici et sur un autre appareil : la version de l'autre est à côté de chacune, dans ton carnet (« À choisir »).`
+        : "Une partition a été corrigée ici et sur un autre appareil : la version de l'autre est à côté, dans ton carnet (« À choisir »).", 10000);
+    }
+  }
+
+  /**
+   * Ce que la synchronisation a mis de côté, et pourquoi (D2) : une fiche que
+   * la bibliothèque commune refuse, ou qu'on ne peut pas ranger ici, ne
+   * bloque plus les autres (lot données) ; encore fallait-il le voir. La
+   * liste se relit à chaque état ; « Réessayer » relance tout de suite.
+   */
+  async function afficherDeCote() {
+    const zone = $("synchro-de-cote");
+    if (!deCote || !synchro || !synchronisable()) { zone.hidden = true; return; }
+    const moi = ++rendusDeCote;
+    const liste = await synchro.quarantaine().catch(() => []);
+    // Le titre de chacune : dans la liste de l'appli, sinon dans le stockage (une réception n'y est pas encore).
+    const parId = new Map((deps.partitions ? deps.partitions() : []).map((p) => [p.id, p]));
+    const titres = await Promise.all(liste.map(async (q) => {
+      const p = parId.get(q.id) || (await stockage().lire(q.id).catch(() => null));
+      return p ? `« ${p.titre} »` : q.sens === "envoi" ? "Une partition de cet appareil" : "Une partition d'un autre appareil";
+    }));
+    if (moi !== rendusDeCote) return; // un état plus neuf est arrivé entre-temps
+    zone.hidden = liste.length === 0;
+    if (!liste.length) return;
+    const resume = $("de-cote-resume");
+    resume.innerHTML = ico("attention", "s");
+    resume.appendChild(el("span", "", `${pluriel(liste.length, "partition mise de côté", "partitions mises de côté")} : ${liste.length > 1 ? "elles ne passent" : "elle ne passe"} pas, les autres si.`));
+    const ul = $("de-cote-liste");
+    ul.textContent = "";
+    liste.forEach((q, i) => {
+      // La raison brute reste dans la console : à l'écran, elle passe par la traduction des erreurs.
+      console.warn("Synchronisation : mise de côté", q.id, q.sens, q.raison);
+      const li = el("li");
+      li.append(el("span", "de-cote-titre", titres[i]), el("span", "de-cote-raison", phraseDeCote(q)));
+      ul.appendChild(li);
+    });
+  }
+
+  /** « Refusée par la bibliothèque commune : trop lourde (…). », « Pas rangée ici : fiche illisible… » */
+  function phraseDeCote(q) {
+    const t = cause(new Error(String(q.raison || ""))).replace(/[\s.!…]+$/, "");
+    const raison = t ? t.charAt(0).toLowerCase() + t.slice(1) : "sans raison donnée";
+    return `${q.sens === "envoi" ? "Refusée par la bibliothèque commune" : "Pas rangée ici"} : ${raison}.`;
+  }
+
+  async function reessayer(ev) {
+    if (!synchro) return;
+    const b = ev.currentTarget;
+    b.disabled = true;
+    try {
+      const { quarantaine, recues } = await synchro.reessayer();
+      toast(quarantaine ? `${pluriel(quarantaine, "partition reste", "partitions restent")} de côté : la raison est dans la liste.` : "Tout est passé.");
+      if (recues) await rafraichirOuverte("sur un autre appareil");
+    } catch (e) {
+      console.error(e);
+      toast(`La synchronisation n'a pas abouti : ${explication(e)}`, 7000);
+    } finally {
+      b.disabled = false;
+    }
   }
 
   function formulaire() {
@@ -143,6 +214,7 @@ export function creerSynchronisation(deps) {
   }
 
   $("synchroniser").addEventListener("click", synchroniser);
+  $("reessayer-synchro").addEventListener("click", reessayer);
   $("activer-synchro").addEventListener("click", () => {
     if (!document.querySelector("#zone-synchro .aide-connecteur")) $("zone-synchro").appendChild(formulaire());
   });
