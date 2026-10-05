@@ -167,6 +167,8 @@ export function creerTablette(deps) {
     $("panneau-remarkable").scrollIntoView({ behavior: defilement(), block: "nearest" });
     $("arbre-rm").textContent = "";
     const m = await mcp();
+    // Sans connecteur, rien à chercher ni à actualiser : seule l'adresse à coller se montre.
+    $("outils-rm").hidden = !m;
     if (!m) {
       const bloc = el("div", "aide-connecteur");
       if (dansClaude()) {

@@ -177,7 +177,10 @@ for (const file = ["app.js"]; file.length;) {
 let version = null;
 if (autonome) {
   fichiers.push(copier("app/manifest.webmanifest", "manifest.webmanifest"));
-  for (const f of fs.readdirSync(path.join(racine, "app/icones"))) fichiers.push(copier(`app/icones/${f}`, `icones/${f}`));
+  // Les icônes, et les captures que le système montre avant d'installer (outils/images-appli.mjs, I4).
+  for (const f of fs.readdirSync(path.join(racine, "app/icones"), { recursive: true }).sort()) {
+    if (fs.statSync(path.join(racine, "app/icones", f)).isFile()) fichiers.push(copier(`app/icones/${f}`, `icones/${f.split(path.sep).join("/")}`));
+  }
   // Le cache hors ligne porte l'empreinte du contenu, service worker
   // compris : chaque version l'invalide.
   const source = fs.readFileSync(path.join(racine, "app/sw.js"), "utf8");
@@ -233,7 +236,8 @@ if (autonome) {
   const piano = fichiers.filter((f) => f.startsWith("piano/")).sort();
   const empreintePiano = crypto.createHash("sha256");
   for (const f of piano) empreintePiano.update(f).update(fs.readFileSync(path.join(dist, f)));
-  const gardes = fichiers.filter((f) => !f.startsWith("piano/") && !/\/LICENCE[^/]*\.txt$/.test(f));
+  // Ni les captures : seul le système les demande, avant d'installer (des centaines de Ko pour rien hors ligne).
+  const gardes = fichiers.filter((f) => !f.startsWith("piano/") && !/\/LICENCE[^/]*\.txt$/.test(f) && !f.startsWith("icones/captures/"));
   const enFond = gardes.filter((f) => f.startsWith("vendor/pdfjs/")).map(adresse);
   const coquille = ["./", ...gardes.filter((f) => !f.startsWith("vendor/pdfjs/")).map(adresse)];
   const sw = source

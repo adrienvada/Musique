@@ -17,7 +17,7 @@
  */
 import * as sq from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
-import { couleurDuJeton } from "./ui.js";
+import { couleurDuJeton, gravureSansTabulation } from "./ui.js";
 
 // La gravure se regroupe (audit du 04/10, M2, et audit de l'interface).
 // abcjs regrave toute la partition : de 10 à 40 ms pour une idée courte au
@@ -165,6 +165,9 @@ export function creerPartition(ctx) {
       },
     });
     if (!reprise) miseEnPage = { largeur, ...page };
+    // Au clavier, ← → choisissent la note et elle se dit (#idee-nom-choix) : ses notes gravées
+    // ne sont plus des arrêts de tabulation sans nom (I11).
+    gravureSansTabulation(zone, "La partition de l'idée");
     jetons = graves;
     elements = new Map();
     dernierJeton = null;

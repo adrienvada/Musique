@@ -2956,7 +2956,210 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - Essai : `tests/e2e/formats.test.mjs` (320 px, 200 %, couché) ; il échoue
     sur l'appli d'avant (« l'éditeur demande 507 px pour 390 »).
 
-<!-- lot interface -->
+**S'annoncer, se lancer, tenir la charge (I4, I9, I11, I12, I15)**
+
+- **Le lecteur d'écran entend une phrase, plus tout le carnet (I11).** La
+  liste du carnet était une région vivante (`aria-live`) : une étoile
+  touchée faisait relire ses 8 000 caractères. Elle ne l'est plus ; une
+  région à part (`#annonce`, `annoncer` dans `ui.js`) dit en une phrase ce
+  qui a changé : « « Ma ballade » est dans tes favoris. », ce qu'une
+  recherche ou un filtre laisse voir (« 2 idées et 3 partitions », compté
+  par sorte), l'écran qui s'ouvre (« Corriger : « Ma ballade » » ; le même
+  écran redessiné, par une version reçue d'ailleurs, ne se redit pas). La
+  recherche ne se dit qu'une fois la frappe arrêtée (0,8 s) : elle ne coupe
+  pas les lettres qu'on tape.
+- **Chaque écran a son titre, et l'onglet du navigateur le suit.** Un `h1`
+  par écran, caché à l'œil (« Corriger « Ma ballade » », « Idée « … » »…) :
+  le titre visible est un champ qu'on modifie, pas un titre. L'onglet dit
+  « Ma ballade · Corriger · Portée », « Partitions · Portée »… et suit un
+  renommage (`navigation.js`). Le logo se nomme « Portée, revenir au
+  carnet » : il commence par ce qu'on lit, pour la commande vocale (WCAG
+  2.5.3).
+- **Une ligne du carnet dit tout ce qu'elle montre.** Son nom était
+  « Ouvrir « titre » » seul : il perdait « À relire · 14:03 ». Il dit
+  maintenant l'état, le genre, la date, les étiquettes, le mémo, ce que
+  Claude propose (« ♩ 90 » devient « tempo 90 » : le signe se lit mal). Il
+  commence toujours par « Ouvrir « titre » » : les essais s'y fient, et la
+  commande vocale aussi. Les cartes des Partitions et des Morceaux de même.
+- **Les touches du piano à l'écran sont des boutons qui disent leur note**
+  (« do dièse 4 » : le signe ♯ se lit mal), hors de la tabulation (au
+  clavier, les lettres jouent déjà) ; activées par le lecteur d'écran (un
+  clic sans pointeur), elles jouent une note courte, comme les grosses
+  touches de gamme. Ce n'étaient que des `<div>` muets.
+  - Piège : l'essai des 44 px compte tout `[role=button]` ; les touches
+    noires (28 px de large, comme sur un vrai piano) et, à 320 px, les
+    blanches (42 px : une octave doit tenir) y sont une exception actée.
+- **La grille se prend au clavier** : sa zone qui défile (`.g-defil`) a
+  un nom et reçoit le focus (axe `scrollable-region-focusable`). Les
+  flèches y restent celles de l'éditeur ; Page haut et bas, Début et Fin la
+  font défiler.
+- **Les notes gravées ne sont plus deux cents arrêts de tabulation sans
+  nom.** abcjs rend chaque note qu'on peut toucher focalisable, sans nom :
+  dans l'éditeur et dans « Corriger », ← → choisissent déjà la note d'à
+  côté. Elles sortent de la tabulation (`gravureSansTabulation`, `ui.js`),
+  la partition s'appelle « La partition de l'idée » ou « La partition lue »
+  (abcjs disait « Sheet Music »), et la note choisie de « Corriger » se dit
+  (`#note-choisie`), comme celle de l'éditeur.
+- **Les onglets suivent les flèches** (Clavier, Chanter, Accords ;
+  Corriger, Écouter), comme ceux de l'accueil : → l'onglet suivant, ←
+  le précédent, Début et Fin. Seulement si l'on y est venu au clavier
+  (Tab) : un onglet touché à la souris garde le focus, et ← → y
+  choisissaient la note d'à côté ; c'est toujours le cas.
+  - Piège : `:focus-visible` ne distingue pas les deux. Chromium le passe
+    à vrai dès qu'une touche est pressée, avant qu'on la lise (essayé) :
+    `navigation.js` retient lui-même d'où vient le focus (Tab ou pointeur).
+- **Les messages passagers de l'écran qu'on quitte s'en vont.** Ils
+  restaient par-dessus « Ta page | Lue » ou la règle de la grille. Un
+  message de moins d'une seconde parle du changement lui-même (« … est
+  supprimée », « … est lue ») : il reste, comme « Une nouvelle version
+  est prête », qui vaut pour toute l'appli. Ils restent en haut.
+- **« Ma reMarkable » sans connecteur ne propose plus Chercher ni
+  Actualiser** : il n'y a rien à chercher tant que l'adresse n'est pas
+  collée. Et « Importer un PDF » dit « Importer un PDF ou un MIDI » : un
+  .mid de Live y devient une idée depuis le lot notation.
+- Hors de mes fichiers, deux lignes : `ecran-atelier.js` appelle
+  `gravureSansTabulation` après sa gravure. Et `navigation.js` fait un peu
+  plus que le titre et les messages : les flèches des onglets y sont, à côté
+  de la règle des fenêtres et des champs de texte, parce que c'est par lui
+  que passent toutes les touches.
+- Mesuré (axe-core, et à la main ; téléphone clair et sombre, ordinateur ;
+  le carnet, Corriger, Écouter, une idée en grille et en partition, un
+  morceau), avant → après : `page-has-heading-one`, 5 écrans → 0 ;
+  `scrollable-region-focusable`, 1 → 0 ; les notes gravées tabulables, 48
+  (Corriger) et 54 (la partition d'une idée) → 0 ; ce qu'une étoile fait
+  relire, tout le carnet (97 caractères pour deux pages, 8 000 pour un an)
+  → 48 (« « Essai… » est dans tes favoris. »). Restent les deux
+  `target-size`, d'I1.
+- Le contraste de la sélection (« noire », sous le nom de la note choisie,
+  4,17:1 en Studio et en sombre) est `--gris` sur `--surligneur-doux` : il
+  se corrige dans le jeton, avec I1 (l'autre moitié de l'interface).
+- **Une grosse bibliothèque reste fluide (I9).** Mesuré comme l'audit (150
+  documents, téléphone simulé, processeur ralenti ×4, `perf-grosse.mjs`),
+  avant → après : une lettre tapée dans la recherche, 584 à 936 ms →
+  16 à 72 ms ; une étoile touchée, une tâche de 719 ms → aucune au-delà
+  de 63 ms ; le pincement de la grille d'une idée de 64 mesures, 117 ms
+  par image (p95) et 19 images sautées → 17 ms et une seule (le vrai
+  dessin, au lever des doigts) ; l'ouverture du carnet, 948 → 318 ms de
+  blocage.
+  - **Le carnet ne refait que les lignes qui changent.** Chaque dessin
+    vidait et refaisait les 150 lignes (leurs vignettes, leurs dates) : une
+    étoile touchée, une lettre tapée, une synchro. Une ligne dont rien de
+    ce qu'elle montre n'a changé (sa fiche, dont la date change à chaque
+    écriture, ce que Claude propose, les idées d'un morceau) est reprise
+    telle quelle ; une recherche qui commence ne refait que les dates. Ses
+    écouteurs restent ceux de sa fiche : une fiche qui change refait sa
+    ligne.
+  - **La recherche se regroupe** : on dessine 150 ms après la dernière
+    lettre, pas à chaque lettre.
+  - **Les lignes hors de l'écran ne se mettent pas en page**
+    (`content-visibility: auto`), seulement là où `overflow-clip-margin`
+    existe : sans lui, l'anneau de focus des boutons d'une ligne était
+    rogné (essayé). Ailleurs, rien ne change.
+  - **Les vignettes de page mesurent leur cadre une fois par dessin**, pas
+    une fois chacune (chaque mesure forçait une mise en page de tout le
+    carnet), et **les dates ont leurs formats faits une fois**
+    (`formaterDate`, `ui.js`) : `toLocaleTimeString` en refaisait un à
+    chaque appel, trois cents par dessin. Même texte qu'avant.
+  - **Pincer étire la grille, sans la redessiner** : le dessin (dans une
+    enveloppe, `.g-etire`), la règle et les touches de gauche s'étirent par
+    une transformation, et le vrai dessin vient au lever des doigts, dans
+    la même image. C'est l'enveloppe qui s'étire, pas le plan : étiré, le
+    plan change la zone qui défile, et le navigateur rognait la position en
+    dézoomant.
+  - Piège : pas de `will-change: transform` sur ce dessin. Pour une idée de
+    64 mesures (des dizaines de milliers de pixels de large), il coûtait
+    105 ms par image au téléphone, plus que le redessin qu'il remplaçait
+    (mesuré : 24 images sautées avec, 2 sans).
+  - Hors de mes fichiers : l'essai « Portée, en haut : le carnet, dessiné
+    une seule fois » (`ecrans.test.mjs`) comptait les changements de la
+    liste ; un dessin qui ne change rien ne la touche plus. Il compte
+    maintenant ceux de ses filtres, que chaque dessin repose.
+  - À l'ordinateur aussi (même script) : une lettre, 184 → 32 ms au pire ;
+    une étoile, 123 ms → rien ; l'ouverture du carnet, 53 → 0 ms de blocage.
+  - Le prix : ouvrir l'éditeur prend 2 à 5 ms de plus (médiane de dix
+    ouvertures au processeur ×4, 153 à 164 → 165 à 181 ms). Le profil n'y
+    montre aucune fonction de plus d'une milliseconde (le titre de l'écran,
+    le nom des touches) : c'est le dessin de ces quelques attributs.
+- **L'aide du clavier montre les lettres de ton clavier (I12).** Les
+  touches jouent par leur place, comme dans Ableton (le lot architecture
+  l'a fait marcher en AZERTY) ; l'aide disait encore « A W S E D… Z X »,
+  les lettres d'un QWERTY, alors que sur ton clavier ce sont « Q Z S E D…
+  W X ». Chromium donne les vraies lettres (`navigator.keyboard`) ; sinon
+  (Safari, Firefox, la page dans claude.ai, où la carte est refusée),
+  Portée les apprend de la première touche jouée qui distingue les
+  dispositions (A, W, Z, Y : `dispositionDe`, `idee-clavier.js`) ; d'ici
+  là, une mention dit les lettres d'un AZERTY. Ctrl+Z, lui, se lit par
+  la lettre (la touche marquée Z) : l'aide le disait déjà juste.
+  - Piège : Chromium sans écran (les essais) rend une carte vide ; elle
+    compte pour « on ne sait pas ».
+  - Essais : `tests/aide-clavier.test.mjs`, et « l'aide du clavier montre
+    les lettres d'un AZERTY » (`tests/e2e/annonces.test.mjs`).
+- **Les premiers pas : essayer sans rien écrire est en vue (I15).** Au
+  premier lancement, au téléphone, « Essayer avec les pages d'essai »
+  tombait sous la barre d'onglets (y = 937 px pour un écran de 844) : il
+  passe en tête de l'accueil, juste sous la présentation, à côté d'« Ouvrir
+  une idée d'exemple ».
+  - **L'idée d'exemple** : « Au clair de la lune », douze mesures avec ses
+    accords (do, sol, ré mineur, en basse et accords), pour découvrir la
+    grille, la partition et les accords sans rien écrire (`ideeExemple`,
+    `accueil.js`). Rien ne s'écrit tant qu'on ne l'ouvre pas ; ouverte, elle
+    se range comme une idée tirée d'une phrase (l'éditeur l'enregistre tout
+    de suite, par le même chemin), et s'efface comme une autre (•••).
+  - Pourquoi pas une idée rangée d'office dans un carnet vide : un nouvel
+    appareil (ou la version claude.ai) l'ajouterait à chaque premier
+    lancement, et la synchronisation l'enverrait à tous tes appareils.
+- **L'appli installée : une identité, ses icônes, ses raccourcis, et des
+  fichiers qu'elle reçoit (I4, site seulement).** Le manifeste dit
+  maintenant :
+  - **`"id": "/Musique/"`**, son identité, celle qu'elle avait sans « id »
+    (son adresse) : une Portée déjà installée le reste. Pas `"./"`, que
+    proposait l'audit : un « id » se lit depuis la racine du domaine (la
+    spécification le dit, et Chromium aussi), et `"./"` aurait donné
+    `adrienvada.fr/`, la racine que tes autres sites partagent : une autre
+    appli, à réinstaller.
+  - **des icônes « any » (arrondies) et « maskable » (à fond perdu)
+    séparées** : Chrome déconseille « any maskable », qui servait aux deux.
+    La clé de sol reste dans la zone sûre d'Android (elle prend 32 % du
+    côté autour du centre, pour 40 % permis). Les captures que Chrome
+    montre avant d'installer (deux au téléphone, une à l'ordinateur, en
+    WebP : 143 Ko en tout) ; `categories: ["music"]`.
+  - **trois raccourcis** (appui long sur l'icône) : Nouvelle idée,
+    Chanter, Mémo, comme les trois tuiles (`./?idee`, `./?chanter`,
+    `./?memo`, lus par `accueil.raccourci`) ;
+  - **une seule fenêtre** (`launch_handler`, « focus-existing », à
+    l'ordinateur) : un raccourci ou un fichier ouvert alors que Portée l'est
+    déjà va dans la fenêtre ouverte (`launchQueue`, `import-pdf.js`), au lieu
+    d'en ouvrir une seconde sur la même bibliothèque ;
+  - **ouvrir d'un double clic** (Chrome et Edge sur l'ordinateur,
+    `file_handlers`) un PDF de la tablette, un .mid ou une sauvegarde
+    `.json` : le PDF et le .mid par l'import, la sauvegarde par la
+    restauration des Réglages (`sauvegardes.restaurer`). Aucun autre chemin
+    d'écriture.
+  - **partager un PDF vers Portée** (Android, `share_target`) depuis
+    l'appli reMarkable ou Fichiers, le plus court trajet de la tablette à
+    Portée. Le système l'envoie en POST : un site statique ne sait pas le
+    recevoir, le service worker le garde dans un cache à part
+    (`portee-partage`, qu'une mise à jour n'efface pas), rouvre la page sur
+    `?partage`, et la page l'importe une fois, comme un PDF choisi ; son
+    adresse redevient `/Musique/` (le même état d'historique) : un
+    rechargement plus tard n'y cherche plus de partage.
+  - Piège : Chrome ignore `launch_handler` pour un partage (il navigue
+    toujours, et le POST passe par le service worker), et ne l'applique
+    qu'à l'ordinateur ; sur Android, un raccourci ouvre son adresse.
+  - Les icônes et les captures se refont par `outils/images-appli.mjs`
+    (Chromium), jamais à la main ; l'assembleur copie le dossier des
+    captures, que le service worker ne garde pas (seul le système les
+    demande, avant d'installer). Le manifeste, les icônes et le service
+    worker restent propres au site : la version claude.ai n'en a pas.
+  - Hors de mes fichiers, deux lignes : `app.js` appelle
+    `accueil.raccourci` et `recevoirLancements` (à la place de la ligne
+    qui lisait `?idee`), et `sauvegarde-ui.js` donne sa restauration.
+  - Essais : « le manifeste : installable… », « les raccourcis
+    s'ouvrent », « un fichier ouvert d'un double clic… » et « un PDF
+    partagé vers Portée » (`tests/e2e/annonces.test.mjs`). Pas essayé sur
+    un vrai Android ni un vrai Windows ou macOS : les menus du système
+    (Partager, Ouvrir avec) ne s'atteignent pas d'ici.
+- Essais : `tests/e2e/annonces.test.mjs`.
 
 ### Claude dans l'éditeur d'idée (H2)
 
