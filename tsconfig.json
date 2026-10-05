@@ -12,6 +12,12 @@
   // normal ne sait pas deviner (`.value`, `.dataset`), pour aucun bogue
   // trouvé : pas tout de suite. Le mode strict n'en vaut pas la peine.
   //
+  // Les modules de Claude dans Portée (H1 à H3 : claude-idee, claude-doute,
+  // suggestions) y sont dès leur création. Ils n'importent ni sequence.js,
+  // ni harmonie.js, ni fiche.js : un module vérifié qui les importerait les
+  // ferait vérifier aussi, avec leurs erreurs. claude-idee.js reçoit donc
+  // les gestes de sequence.js en paramètre (docs/PROPOSITIONS.md).
+  //
   // La bibliothèque « WebWorker » plutôt que « DOM » : fetch, crypto,
   // TextEncoder, mais ni document ni window. Un module vérifié ici qui se
   // mettrait à toucher la page le dirait.
@@ -37,6 +43,9 @@
     "lecteur/traits.js",
     "app/edition.js",
     "app/doutes.js",
+    "app/claude-idee.js",
+    "app/claude-doute.js",
+    "app/suggestions.js",
     "app/zip.js",
     "app/ui.js",
     "supabase/functions/portee-remarkable/abc.js",

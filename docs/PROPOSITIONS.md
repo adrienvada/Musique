@@ -2001,6 +2001,98 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 <!-- lot claude -->
 
+### Claude dans Portée : ce qui part, ce qui est vérifié (H1, H2, H3)
+
+Trois modules purs, sans DOM, pour les écrans qui viendront. Le principe de
+l'audit : Claude propose, Portée vérifie, Adrien écoute puis choisit. Aucun
+module n'appelle `sample` ni n'écrit quoi que ce soit : l'écran appelle
+(avec `signal`, `onText` et les codes d'erreur), puis écrit ce qu'Adrien
+garde.
+
+- **Sur une idée (H2, `app/claude-idee.js`).** `demande`, `valider`,
+  `appliquer`, `outilsSurCopie`, et `empechement` pour griser un bouton.
+  - Ce qui part : un texte compact en français. Tempo, mesure en pas,
+    tonalité, accords en « mesure.temps », notes mesure par mesure (début et
+    durée en pas, hauteur MIDI et nom épelé dans la tonalité). Puis la
+    tâche, ses bornes et la forme exacte du JSON, avec un exemple. Les
+    bornes sont dites d'avance : Claude s'y tient, et chaque refus coûte un
+    aller-retour à Adrien.
+  - Genres : accords (l'idée ou la sélection), suite (deux mesures après la
+    dernière), variation (quatre intentions glosées : un mot seul laisse
+    trop de place), titre (au modèle rapide), libre (une phrase d'Adrien).
+  - Taille : l'idée la plus dense de 64 mesures (1 024 notes) fait 18 000
+    caractères, une idée ordinaire moins de 3 000. Au-delà de 2 000 notes,
+    on ne demande pas : mieux vaut un passage.
+  - `cache: false` : une réponse que Portée refuse a réussi pour `sample`,
+    qui la rejouerait cinq minutes à chaque « réessaie ».
+  - Ce qui revient est vérifié champ par champ : forme sûre (ni
+    `__proto__`, ni tableau énorme, ni NaN), clés exactes, entiers, notes
+    dans leur place, hauteurs de 21 à 108 et à une octave au plus de la
+    piste (deux pour « libre », où Adrien a pu demander un autre registre),
+    pas deux fois la même note en même temps, accords lisibles par
+    `accords.js`, un ou deux par mesure, sur un temps. Rien n'est réparé :
+    une réponse « presque juste » a souvent compris autre chose. Seul le
+    `pourquoi` est coupé s'il est trop long : il n'est qu'à montrer.
+  - Une variation identique à l'original n'est pas une proposition. Le
+    refus garde le `pourquoi` de Claude, que l'écran peut montrer.
+  - `appliquer` rend une nouvelle séquence, écrite d'un coup : un seul
+    « Annuler ». Des accords posés sur une sélection redisent à sa fin
+    celui qui sonnait, sinon la mesure d'après changerait d'harmonie. Le
+    premier accord met les accords plaqués en route, comme à la main.
+  - « libre » avec outils : ils ne touchent qu'une copie, et ce sont les
+    gestes de `sequence.js` (Claude fait ce que ferait le doigt d'Adrien).
+    Un geste qui ferait se chevaucher deux notes, ou déborderait, est
+    défait, et Claude lit pourquoi. La copie est revérifiée à la fin.
+  - Pourquoi les gestes passent en paramètre : `sequence.js` ne passe pas
+    encore `npm run types` (deux JSDoc), et un module vérifié qui
+    l'importerait l'y entraînerait. La mesure en pas et le nom des notes
+    sont recopiés ; un test les compare à `sequence.js` sur les 24
+    tonalités et les 88 touches.
+- **Sur un doute (H1, `app/claude-doute.js`).** `messageDoute`,
+  `validerAvis`, `avisPossible`, `OPTIONS_AVIS`.
+  - Ce qui part : la mesure en ABC (avec son chiffrage et son armure), ce
+    que le lecteur a compris (les têtes de gauche à droite et leur hauteur,
+    ce qui est sûr, ce qu'il a mesuré en interlignes), puis la question de
+    `poser` et ses réponses, exactement celles qu'Adrien voit, numérotées
+    de 1, avec ce que chacune fait.
+  - Le message dit que la hauteur vient de la position et qu'il ne faut pas
+    la contester : les modèles situent et comptent mal dans une image, le
+    lecteur, lui, mesure. Une phrase explique l'image quand l'écran en joint
+    une (le passage recadré, têtes numérotées dans le même ordre).
+  - L'exemple du JSON montre des emplacements, pas des valeurs : un « 1 »
+    d'exemple tirerait l'avis vers la première réponse.
+  - Ce qui revient : un numéro de la liste ou null (« je ne sais pas »,
+    un avis qu'on montre comme tel), une confiance de 0 à 1, une phrase.
+    Rien d'autre n'est accepté. `rang` est compté de 0, comme le rang d'un
+    doute au connecteur.
+  - Claude conseille, il ne corrige pas : c'est le toucher d'Adrien qui
+    applique le geste de la réponse, comme toujours. Une question à moins
+    de deux réponses fermées ne part pas : il n'y a rien à trancher.
+- **Les suggestions d'une conversation (H3, `app/suggestions.js`).**
+  `validerSuggestion`, `appliquerSuggestion`, `resumeSuggestion`.
+  - Le connecteur vérifie à l'écriture ; l'appli revérifie à la lecture :
+    une fiche peut venir d'un connecteur plus ancien, d'une main, d'un
+    stockage abîmé, et la partition a pu changer depuis. Mêmes bornes que
+    le connecteur (hauteurs de 21 à 108, durées positives, accords lisibles
+    par `accords.js`), plus celles de la bibliothèque (16 384 pas, 20 000
+    notes), au-delà desquelles `fiche.js` rabattrait en silence. Un test
+    fait écrire de vraies suggestions par `suggestion_ecrire` et les relit.
+  - La cible doit être celle de la fiche ; des notes et des accords ne
+    vont qu'à une idée. La suite commence à la barre qui suit la dernière
+    mesure ; une variation peut aller jusqu'au double de l'idée.
+  - Une suggestion qui ne changerait rien (déjà appliquée sur un autre
+    appareil, doute déjà réglé) est refusée avec `sansEffet` : l'écran peut
+    l'écarter sans la montrer.
+  - Une liste d'accords vide dans une variation n'efface pas ceux
+    d'Adrien : dans le doute, on ne détruit rien.
+  - Une réponse à un doute n'est qu'une phrase : elle ne peut pas réécrire
+    l'ABC. Appliquée, elle devient l'avis de Claude sur ce doute (`avis`),
+    que l'atelier montrera près de la question ; le doute reste ouvert.
+  - L'ABC d'une idée modifiée est vidé : le stockage le refait d'après les
+    notes (`normaliserFiche`), comme pour une idée écrite par le connecteur.
+    `suggestions.js` n'importe donc pas `fiche.js`, qui ne passe pas encore
+    `npm run types`.
+
 ## La refonte visuelle : le plan (02/10)
 
 Dans l'ordre (le numéro est celui du classement) :
