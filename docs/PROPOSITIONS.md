@@ -2409,9 +2409,10 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     tu vois ce qui a changé. Après une suite, le curseur va au bout.
   - `not_granted` : la feuille dit d'autoriser Claude, et « Autoriser
     Claude » ouvre le panneau de claude.ai (`permissions.manage()`, intégré
-    à la page, jamais déclaré) puis relit l'état ; d'ici là, la fonction se
-    cache pour la visite. `rate_limited` : « Claude est très demandé :
-    réessaie dans un moment ». Jamais de nouvel essai tout seul.
+    à la page, jamais déclaré) puis relit l'état ; sans panneau, la phrase
+    dit où le trouver (le menu Autorisations de la page). D'ici là, la
+    fonction se cache pour la visite. `rate_limited` : « Claude est très
+    demandé : réessaie dans un moment ». Jamais de nouvel essai tout seul.
   - L'entrée du « ••• » passe par idee.js, comme le Carnet et le Tempo, pas
     par gestes.js : elle a besoin de l'idée telle qu'elle est à l'écran (sa
     sélection), et « Ce que tu veux » sert aussi sur une idée vide, que les

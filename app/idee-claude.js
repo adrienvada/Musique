@@ -60,6 +60,7 @@ const GARDE = {
 
 const CHANGEE = "L'idée a changé pendant que Claude réfléchissait (sur un autre appareil ?) : redemande-lui.";
 const MENU_AUTORISATIONS = "Pour autoriser Claude, ouvre le menu Autorisations de cette page, sur claude.ai, puis redemande.";
+const SANS_PANNEAU = "Claude n'est pas autorisé pour cette page : autorise-le dans son menu Autorisations, sur claude.ai, puis redemande.";
 const AIDE_LIBRE = "En une phrase, avec tes mots. Rien ne change avant que tu aies écouté et gardé.";
 const ETAPES = ["genres", "intentions", "libre", "attente", "proposition", "message"];
 
@@ -138,7 +139,8 @@ export function creerClaude(ctx) {
       intentions: () => $("claude-intentions-choix").querySelector("button"),
       libre: () => $("claude-phrase"),
       attente: () => $("claude-arreter"),
-      proposition: () => (proposition && proposition.genre === "titre" ? $("claude-titre-champ") : $("claude-ecouter")),
+      // Un titre : « Garder », pas son champ (au téléphone, le clavier monterait par-dessus la proposition).
+      proposition: () => (proposition && proposition.genre === "titre" ? $("claude-garder") : $("claude-ecouter")),
       message: () => [$("claude-autoriser"), $("claude-reessayer"), $("claude-retour")].find((b) => !b.hidden),
     }[etape];
     const el = cible && cible();
@@ -310,7 +312,9 @@ export function creerClaude(ctx) {
     if (lu.sansOutils) outilsPermis = false;
     if (lu.cacher) { disponible = false; montrerEntrees(); }
     const autoriser = lu.autoriser ? await panneauDesAutorisations() : null;
-    montrerMessage(lu.texte, { reessayer: !lu.cacher, autoriser: !!autoriser });
+    // Sans panneau à ouvrir d'ici, la phrase dit où autoriser Claude.
+    const texte = lu.autoriser && !autoriser ? SANS_PANNEAU : lu.texte;
+    montrerMessage(texte, { reessayer: !lu.cacher, autoriser: !!autoriser });
   }
 
   function montrerMessage(texte, { pourquoi = "", reessayer = true, autoriser = false } = {}) {
@@ -396,7 +400,9 @@ export function creerClaude(ctx) {
       const places = ici.map((a, k) => {
         const va = vaAvecLaMelodie(seq, a, k + 1 < ici.length ? ici[k + 1].d : fin, roue);
         if (va) teintes++;
-        const temps = k ? `<span class="claude-temps mono">${(a.d - debut) / ppt + 1}ᵉ temps</span>` : "";
+        // Le temps de tout accord qui n'est pas sur le premier (même s'il est seul dans sa mesure).
+        const t = (a.d - debut) / ppt + 1;
+        const temps = t > 1 ? `<span class="claude-temps mono">${t}ᵉ temps</span>` : "";
         return `<span class="claude-accord${va ? " melodie" : ""}">${temps}${echapper(joliAccord(a.nom))}</span>`;
       });
       const changes = avaient.length && avaient.map((a) => a.nom).join(" ") !== ici.map((a) => a.nom).join(" ");
@@ -455,8 +461,11 @@ export function creerClaude(ctx) {
       return `<i class="claude-note ${classe}" style="left:${g.toFixed(2)}%;width:calc(${largeur.toFixed(2)}% - 1px);top:${(y0 + (sommet - n.h) * pente).toFixed(1)}px;height:${epaisseur.toFixed(1)}px"></i>`;
     }).join("");
     html += '<i class="claude-tete" id="claude-tete" hidden></i>';
-    const remplacees = notes.some((n) => n.classe === "claude-remplace");
-    const legende = `<p class="remarque claude-legende"><i class="claude-pastille claude-propose" aria-hidden="true"></i>proposé <i class="claude-pastille claude-reste" aria-hidden="true"></i>sans changement${remplacees ? ' <i class="claude-pastille claude-remplace" aria-hidden="true"></i>remplacé' : ""}</p>`;
+    // La légende ne dit que ce qui est dessiné.
+    const presentes = new Set(notes.map((n) => n.classe));
+    const legende = `<p class="remarque claude-legende">${[["claude-propose", "proposé"], ["claude-reste", "sans changement"], ["claude-remplace", "remplacé"]]
+      .filter(([classe]) => presentes.has(classe))
+      .map(([classe, dit]) => `<span><i class="claude-pastille ${classe}" aria-hidden="true"></i> ${dit}</span>`).join(" ")}</p>`;
     // Assez de place par mesure pour lire les notes : au-delà, la zone défile.
     const largeurMin = Math.round(((b - a) / ppm) * 72);
     return `<div class="claude-defil"><div class="claude-rouleau" role="img" aria-label="${echapper(majuscule(dit))}" style="min-width:${largeurMin}px">${html}</div></div>${legende}`;
@@ -544,7 +553,8 @@ export function creerClaude(ctx) {
     if (p.genre === "titre") {
       // Les champs qu'Adrien a pu retoucher ; un titre vide redevient celui du jour (le cœur s'en charge).
       const titre = nettoyer($("claude-titre-champ").value);
-      const etiquettes = [...new Set($("claude-etiquettes-champ").value.split(",").map((t) => nettoyer(t).toLowerCase()).filter(Boolean))];
+      // En minuscules et 40 caractères au plus : la forme que la bibliothèque leur donne (fiche.js).
+      const etiquettes = [...new Set($("claude-etiquettes-champ").value.split(",").map((t) => nettoyer(t).toLowerCase().slice(0, 40)).filter(Boolean))];
       ctx.changerTitre(titre, etiquettes);
     } else {
       const seq = aGarder(p);
