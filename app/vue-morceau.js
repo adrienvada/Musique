@@ -15,37 +15,11 @@
  */
 import { assembler, sourceDuMorceau, sectionSuivante, structure, couleursDesIdees, dureeEnTexte, SECTIONS } from "./morceau.js";
 import { nbMesures } from "./sequence.js";
-import { dessinerApercu } from "./idee.js";
+import { dessinerApercu } from "./apercus.js";
 import { ico } from "./icones.js";
 import { ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { $, pluriel } from "./ui.js";
 
-
-/**
- * La vignette d'un morceau dans la bibliothèque : sa frise en miniature, les
- * couleurs de l'écran Morceau. Un trait fin sépare les passages d'un même
- * bloc répété, un trait plus large les blocs entre eux ; elle se lit aussi
- * bien à 56 × 46 qu'à 240 × 120 (le dessin s'étire, sans rien de fin).
- */
-export function dessinerApercuMorceau(svg, morceau, idees) {
-  const a = assembler(morceau, idees);
-  svg.setAttribute("viewBox", "0 0 240 120");
-  svg.setAttribute("preserveAspectRatio", "none");
-  if (!a.fin) {
-    svg.innerHTML = `<rect class="mini-vide" x="8" y="32" width="224" height="56" rx="6"/>`;
-    return;
-  }
-  const couleurs = couleursDesIdees(morceau.blocs);
-  const ideeDuBloc = new Map((morceau.blocs || []).map((b) => [b.id, b.idee]));
-  const X = 8, L = 224;
-  svg.innerHTML = a.passages.map((p, i) => {
-    const suite = a.passages[i + 1];
-    const trait = !suite ? 0 : suite.bloc === p.bloc ? 1.5 : 4;
-    const x = X + (p.debut / a.fin) * L;
-    const w = Math.max(2.5, ((p.fin - p.debut) / a.fin) * L - trait);
-    return `<rect class="mini-seg section-${couleurs.get(ideeDuBloc.get(p.bloc)) || 1}" x="${x.toFixed(2)}" y="32" width="${w.toFixed(2)}" height="56" rx="4"/>`;
-  }).join("");
-}
 
 export function creerVueMorceau(deps) {
   const { transport, toast } = deps;

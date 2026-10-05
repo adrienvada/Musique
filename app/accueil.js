@@ -18,9 +18,7 @@
  * faut à l'appli (ouvrir une partition, écouter, exporter, importer…) lui est
  * passé en dépendances, comme pour l'éditeur d'idée et l'écran du morceau.
  */
-import { dessinerApercu } from "./idee.js";
-import { dessinerApercuMorceau } from "./vue-morceau.js";
-import { dessinerPage } from "./manuscrit.js";
+import { dessinerApercu, dessinerApercuMorceau, dessinerApercuPage } from "./apercus.js";
 import { assembler } from "./morceau.js";
 import { ico } from "./icones.js";
 import { $, dateCourte, echapper, el, heure, pluriel } from "./ui.js";
@@ -68,19 +66,6 @@ function dureeMorceau(p, idees) {
 /** « Intro · Couplet ×2 · Refrain » : les parties d'un morceau, dans l'ordre. */
 function partiesDuMorceau(p) {
   return (p.blocs || []).map((b) => (b.fois > 1 ? `${b.nom} ×${b.fois}` : b.nom)).filter(Boolean).join(" · ");
-}
-
-/**
- * L'aperçu d'une page écrite à la main : le début de la première portée, plus
- * grand que nature plutôt que toute la page en poussière. Le dessin de la page
- * (manuscrit.js) cadre sur toute la largeur ; on recadre ici sur le format de
- * la vignette, à gauche (la clé, les premières notes).
- */
-function dessinerApercuPage(svg, cal, traits, ratio) {
-  dessinerPage(svg, cal, traits, { compact: true, limite: 9 * cal.interligne });
-  const [x, y, , h] = svg.getAttribute("viewBox").split(" ").map(Number);
-  svg.setAttribute("viewBox", `${x} ${y} ${Math.round(h * ratio)} ${Math.round(h)}`);
-  svg.setAttribute("preserveAspectRatio", "xMinYMid slice");
 }
 
 /**

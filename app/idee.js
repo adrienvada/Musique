@@ -53,18 +53,6 @@ const CLE_DEFAUTS = "portee:idee-defauts";
 const CLE_MODE = "portee:mode-idee";
 const MODES = ["clavier", "chanter", "accords"];
 
-/** Une vignette de l'idée : ses notes en petits traits (pour la bibliothèque). */
-export function dessinerApercu(svg, seq) {
-  const notes = (seq && seq.pistes || []).flatMap((p) => p.notes);
-  svg.setAttribute("viewBox", "0 0 240 120");
-  svg.setAttribute("preserveAspectRatio", "none");
-  if (!notes.length) { svg.innerHTML = ""; return; }
-  const fin = Math.max(sq.pasParMesure(seq) * 2, ...notes.map((n) => n.d + n.l));
-  const bas = Math.min(...notes.map((n) => n.h)) - 2, haut = Math.max(...notes.map((n) => n.h)) + 2;
-  const ex = 228 / fin, ey = 104 / Math.max(12, haut - bas);
-  svg.innerHTML = notes.map((n) => `<rect class="apercu-note" x="${6 + n.d * ex}" y="${8 + (haut - n.h) * ey - 2}" width="${Math.max(2, n.l * ex - 1)}" height="4" rx="2"/>`).join("");
-}
-
 const titreDuJour = () => `Idée du ${dateCourte(new Date().toISOString())}`;
 
 function defauts() {

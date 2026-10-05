@@ -209,7 +209,7 @@ function normaliserBlocs(v) {
   });
 }
 
-/** La vignette d'une page lue : quelques traits [[x, y]…] (app.js, apercuTraits). */
+/** La vignette d'une page lue : quelques traits [[x, y]…] (apercus.js, apercuTraits). */
 function normaliserApercu(v) {
   if (!Array.isArray(v)) return undefined;
   // Déjà en forme (le cas de toutes les vignettes écrites par l'appli) : copiée telle quelle, sans tout refaire point par point.

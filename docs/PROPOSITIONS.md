@@ -1975,6 +1975,11 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   connecteur qui se tait, et dit en une phrase ce qui s'est passé puis quoi
   faire ; le détail reste dans la console. Un message que Portée écrit
   déjà en français passe tel quel. Essais : `tests/erreurs.test.mjs`.
+- **Les vignettes sont dans `app/apercus.js` (T3).** Celle d'une idée
+  vivait dans l'éditeur, celle d'un morceau dans l'écran Morceau, celle
+  d'une page dans l'accueil : l'accueil importait tout l'éditeur d'idée pour
+  dessiner des petits traits. Ce que la vignette d'une page garde de ses
+  traits à l'import (`apercuTraits`) les rejoint, avec son essai.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

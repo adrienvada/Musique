@@ -27,6 +27,7 @@ import { creerVueMorceau } from "./vue-morceau.js";
 import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
 import { ideeDepuisMidi, midiDeLIdee } from "./midi.js";
 import { creerExports } from "./exports.js";
+import { apercuTraits } from "./apercus.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerHistorique } from "./historique.js";
@@ -914,16 +915,6 @@ async function importerRemarkable(d, bouton) {
     bouton.disabled = false;
     bouton.textContent = libelle;
   }
-}
-
-/** Quelques traits simplifiés du haut de la page, pour la vignette. */
-function apercuTraits(traits, cal) {
-  const y0 = Math.min(...traits.flat().map((p) => p[1]));
-  const limite = y0 + 9 * cal.interligne;
-  return traits
-    .filter((t) => t.some((p) => p[1] < limite))
-    .map((t) => t.filter((_, i) => i % 3 === 0 || i === t.length - 1).map(([x, y]) => [Math.round(x), Math.round(y)]))
-    .slice(0, 400);
 }
 
 // ------------------------------------------------------------------------
