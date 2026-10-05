@@ -31,6 +31,16 @@ import { $, dateRelative, el, pluriel, toast } from "./ui.js";
 const couleur = (nom, secours) => getComputedStyle(document.documentElement).getPropertyValue(nom).trim() || secours;
 
 /**
+ * Les durées au clavier : 1 double croche… 5 ronde (en croches). Par la place
+ * de la touche, sans Maj (le « & » d'un AZERTY), ou par le chiffre tapé (Maj
+ * et « & » sur un AZERTY, le pavé numérique). Avec Maj, la place ne compte
+ * pas : sur un QWERTY, Maj et 3 donnent « # », le dièse.
+ */
+const DUREES_AU_CLAVIER = { Digit1: 0.5, Digit2: 1, Digit3: 2, Digit4: 4, Digit5: 8, Numpad1: 0.5, Numpad2: 1, Numpad3: 2, Numpad4: 4, Numpad5: 8 };
+const DUREES_PAR_CHIFFRE = { 1: 0.5, 2: 1, 3: 2, 4: 4, 5: 8 };
+const dureeDeLaTouche = (e) => (!e.shiftKey && DUREES_AU_CLAVIER[e.code]) || DUREES_PAR_CHIFFRE[e.key] || null;
+
+/**
  * @param deps {
  *   page (page-ouverte.js), piano, abcjs() → window.ABCJS, calibration(modele),
  *   ecouter(o) (atelier.js, creerEcoutePage), arreterEcoute(),
@@ -577,11 +587,22 @@ export function creerEcranAtelier(deps) {
   });
   $("supprimer").addEventListener("click", deps.supprimer);
 
-  /** Raccourcis de « Corriger » : les gestes sur la note choisie. Rend true si la touche a servi. */
+  /**
+   * Raccourcis de « Corriger » : les gestes sur la note choisie. Rend true si
+   * la touche a servi.
+   *
+   * Les durées se lisent par la touche (`code` : Digit1 à Digit5, et le pavé
+   * numérique), comme dans l'éditeur d'idée : sur un clavier AZERTY, celui
+   * d'Adrien, « 1 » sans Maj donne « & », et rien ne se passait (I12). Les
+   * lettres, elles, restent celles qu'on lit sur la touche (`key`) : b pour
+   * bémol, n pour naturel, z pour le silence de l'ABC ; la touche marquée Z
+   * d'un AZERTY est à la place du W d'un QWERTY.
+   */
   function toucheBas(e) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { annuler(); return true; }
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
-    const durees = { 1: 0.5, 2: 1, 3: 2, 4: 4, 5: 8 };
+    const duree = dureeDeLaTouche(e);
+    if (duree) { geste("duree", duree); return true; }
     const actions = {
       ArrowUp: () => geste("haut", e.shiftKey ? 7 : 1),
       ArrowDown: () => geste("bas", e.shiftKey ? 7 : 1),
@@ -597,9 +618,9 @@ export function creerEcranAtelier(deps) {
       Backspace: () => geste("supprimer"),
       Escape: laisserLaNote,
     };
-    if (durees[e.key]) { geste("duree", durees[e.key]); return true; }
-    if (actions[e.key] && (a.selection !== null || e.key.startsWith("Arrow"))) {
-      actions[e.key]();
+    const touche = e.code === "NumpadDecimal" ? "." : e.code === "NumpadAdd" ? "+" : e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (actions[touche] && (a.selection !== null || touche.startsWith("Arrow"))) {
+      actions[touche]();
       return true;
     }
     return false;

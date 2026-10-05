@@ -252,9 +252,17 @@ function brancher() {
   brancherInstallation();
 }
 
-/** Raccourcis : chaque écran a les siens (Espace pour écouter ; dans « Corriger », les gestes sur la note choisie). */
+/**
+ * Raccourcis : chaque écran a les siens (Espace pour écouter ; dans
+ * « Corriger », les gestes sur la note choisie). Une fenêtre ou une feuille
+ * ouverte garde les touches pour elle : avant, Suppr effaçait la note
+ * derrière la feuille « ••• », ↑ la montait, et Échap retirait la sélection
+ * au lieu de fermer la fenêtre (audit du 04/10, I6). Échap, laissé au
+ * navigateur, ferme le <dialog>.
+ */
 function clavier(e) {
   const cible = e.target;
+  if (document.querySelector("dialog[open]")) return;
   if (cible.closest && cible.closest("input, textarea, select, [contenteditable]")) return;
   if (navigation.vue === "idee") {
     if (cible.closest && cible.closest("button") && (e.key === " " || e.key === "Enter")) return;

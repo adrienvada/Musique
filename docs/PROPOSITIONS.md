@@ -2112,6 +2112,25 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     restauration (`bilanRestauration`, désormais essayée) ;
   - `app/mises-a-jour.js` : l'appli installable, le service worker et la
     proposition de recharger après une mise en ligne.
+- **Les touches restent à la fenêtre ou à la feuille ouverte (I6).** Avec
+  une note choisie et « ••• » ouvert, Suppr effaçait la note derrière et ↑
+  la montait ; dans l'éditeur, avec « Supprimer l'idée ? » ou « Ajouter à
+  un morceau » ouverte, ↑ montait la note et Retour arrière l'effaçait, et
+  Échap ne fermait jamais la fenêtre (l'éditeur la prenait pour lui, il ne
+  regardait que ses propres feuilles). Les raccourcis s'arrêtent dès qu'un
+  `<dialog>` est ouvert, où qu'il soit, et Échap est laissé au navigateur,
+  qui le ferme. Le focus va sur « Annuler » (voir plus haut).
+- **AZERTY : les durées de « Corriger » marchent (I12).** Elles se lisaient
+  par le caractère (`key`) : « 1 » sans Maj donne « & » sur le clavier
+  d'Adrien, et rien ne se passait, alors que l'éditeur, qui lit la touche
+  (`code`), réagissait. Les durées se lisent maintenant par la touche (sans
+  Maj), ou par le chiffre tapé (avec Maj, ou au pavé numérique). Avec Maj,
+  la place ne compte plus : sur un QWERTY, Maj et 3 donnent « # », le
+  dièse. Les lettres restent celles de la touche (`key`) : b pour bémol, n,
+  z pour le silence ; la touche marquée Z d'un AZERTY est à la place du W
+  d'un QWERTY.
+  - Essais : « une feuille ou une fenêtre ouverte garde les touches » et
+    « AZERTY » (`tests/e2e/ecrans.test.mjs`).
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

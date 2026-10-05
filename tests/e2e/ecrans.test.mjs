@@ -391,3 +391,69 @@ test("« Portée », en haut : le carnet, dessiné une seule fois (T3)", async (
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });
+
+test("une feuille ou une fenêtre ouverte garde les touches : rien ne traverse, Échap la ferme (I6)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    // « Corriger » : une note choisie, la feuille « ••• » ouverte par-dessus.
+    await ouvrirPartition(page, "Essai melodie");
+    await toucherNote(page, 2);
+    const abc0 = await page.inputValue("#abc");
+    const note0 = await page.textContent("#note-choisie");
+    await page.click("#plus-atelier");
+    await page.waitForSelector("#feuille-atelier[open]");
+    await page.keyboard.press("Delete");
+    await page.keyboard.press("ArrowUp");
+    assert.equal(await page.inputValue("#abc"), abc0, "Suppr et ↑ ne touchent pas la note derrière la feuille");
+    assert.equal(await page.textContent("#note-choisie"), note0);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#feuille-atelier:not([open])", { state: "attached" });
+    assert.equal(await page.isVisible("#outils-note"), true, "Échap ferme la feuille, la note reste choisie");
+    // L'éditeur : « Supprimer l'idée ? », la fenêtre de l'appli, par-dessus une note choisie.
+    await page.click("#vue-atelier [data-retour]");
+    await page.click("#nouvelle-idee");
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    for (const k of ["KeyA", "KeyS", "KeyD", "KeyF"]) await page.keyboard.press(k);
+    await page.keyboard.press("ArrowLeft");
+    await page.waitForFunction(() => document.getElementById("idee-nom-choix").textContent.trim() !== "");
+    const choisie = await page.textContent("#idee-nom-choix");
+    await page.click("#idee-plus");
+    await page.click('#idee-menu [data-menu="supprimer"]');
+    await page.waitForSelector("#dialogue[open]");
+    assert.equal(await focus(page), "Annuler");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Backspace");
+    assert.equal(await page.textContent("#idee-nom-choix"), choisie, "↑ ne monte pas la note derrière la fenêtre");
+    assert.equal(await page.locator("#idee-grille .g-note:not(.autre)").count(), 4, "Retour arrière ne l'efface pas");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#dialogue:not([open])", { state: "attached" });
+    assert.equal(await page.locator("#idee-grille .g-note:not(.autre)").count(), 4);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("AZERTY : « & » (la touche 1 sans Maj) donne la double croche dans « Corriger », comme dans l'éditeur (I12)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await ouvrirPartition(page, "Essai melodie");
+    await toucherNote(page, 2);
+    // Ce que donne un AZERTY : la touche du 1 (Digit1) sans Maj, c'est « & ».
+    const touche = (key, code, shiftKey = false) => page.evaluate((o) => {
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { ...o, bubbles: true, cancelable: true }));
+    }, { key, code, shiftKey });
+    await touche("&", "Digit1");
+    await page.waitForFunction(() => /double croche/.test(document.getElementById("note-choisie").textContent));
+    // Maj et « " » donnent « 3 » sur un AZERTY : la noire.
+    await touche("3", "Digit3", true);
+    await page.waitForFunction(() => /noire/.test(document.getElementById("note-choisie").textContent));
+    // Sur un QWERTY, Maj et 3, c'est « # » : le dièse, pas une durée.
+    await touche("#", "Digit3", true);
+    await page.waitForFunction(() => /♯|dièse/.test(document.getElementById("note-choisie").textContent));
+    assert.match(await page.textContent("#note-choisie"), /noire/);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});

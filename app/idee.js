@@ -1072,8 +1072,9 @@ export function creerEditeurIdee(deps) {
   /** Rend true si la touche a servi. */
   function toucheBas(ev) {
     if (!e.ouverte) return false;
-    // Une feuille ouverte, ou le menu en cercle : les touches sont à eux.
-    if (document.querySelector("#vue-idee dialog[open]") || selection.menuOuvert) return false;
+    // Une feuille ou une fenêtre ouverte (celle de l'appli aussi, « Supprimer l'idée ? »),
+    // ou le menu en cercle : les touches sont à eux, Échap les ferme (I6).
+    if (document.querySelector("dialog[open]") || selection.menuOuvert) return false;
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z") { revenir(ev.shiftKey ? e.refaire : e.annuler, ev.shiftKey ? e.annuler : e.refaire); return true; }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y") { revenir(e.refaire, e.annuler); return true; }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "a") { selection.tout(); return true; }
