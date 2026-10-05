@@ -8,7 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
-import { attenteAvant, CloudRemarkable, ESSAIS, hoteDeSynchro, SYNC_SECOURS } from "../supabase/functions/portee-remarkable/remarkable.js";
+import { attenteAvant, CloudRemarkable, ESSAIS, hoteDeSynchro, sujetPortee, SYNC_SECOURS } from "../supabase/functions/portee-remarkable/remarkable.js";
 import { coffreMemoire } from "../supabase/functions/portee-remarkable/coffre.js";
 import { traiter } from "../supabase/functions/portee-remarkable/mcp.js";
 import { demarrerFauxCloud } from "./faux-cloud.mjs";
@@ -129,6 +129,7 @@ test("document : toutes les pages sans paramètre, ou celles qu'on demande", asy
     assert.deepEqual(tout.pagesEcrites, [1, 2, 4, 5]);
     assert.deepEqual(tout.pagesRestantes, []);
     assert.equal(tout.modele, "melodie-standard");
+    assert.equal(tout.versionModele, 1);
     assert.deepEqual((await outil(c, "document", { id: "doc", pages: [4, 2] })).structuredContent.pages.map((p) => p.numero), [2, 4]);
     assert.deepEqual((await outil(c, "document", { id: "doc", pages: { de: 2, a: 4 } })).structuredContent.pages.map((p) => p.numero), [2, 4]);
     assert.deepEqual((await outil(c, "document", { id: "doc", pages: { de: 5 } })).structuredContent.pages.map((p) => p.numero), [5]);
@@ -183,17 +184,18 @@ test("le sujet du PDF se lit sans télécharger tout le PDF", async () => {
     const vers = (nom) => new RegExp(`/files/${faux.empreinteDe(nom)}`);
     try {
       const { c } = client(faux);
+      const lu = async (id) => { const d = await c.document(id); return [d.modele, d.versionModele]; };
       // Le modèle Portée (25 Ko) : une requête, et plus aucune la fois suivante.
-      assert.equal((await c.document("doc")).modele, "melodie-standard");
+      assert.deepEqual(await lu("doc"), ["melodie-standard", 1]);
       assert.equal(compter(faux, vers("doc.pdf")), 1);
-      await c.document("doc");
+      assert.deepEqual(await lu("doc"), ["melodie-standard", 1], "la version aussi est gardée");
       assert.equal(compter(faux, vers("doc.pdf")), 1);
       // Sujet en tête d'un gros PDF : la tête suffit, même sans Range.
-      assert.equal((await c.document("grand-debut")).modele, "piano-large");
+      assert.deepEqual(await lu("grand-debut"), ["piano-large", 1]);
       assert.equal(compter(faux, vers("grand-debut.pdf")), 1);
       // Sujet à la fin : la fin seule, si le cloud sait la servir.
-      assert.equal((await c.document("grand-fin")).modele, sansRange ? null : "piano-large");
-      assert.equal((await c.document("grand-sans")).modele, null);
+      assert.deepEqual(await lu("grand-fin"), sansRange ? [null, null] : ["piano-large", 1]);
+      assert.deepEqual(await lu("grand-sans"), [null, null]);
       if (!sansRange) {
         assert.deepEqual(faux.requetes.filter((r) => vers("grand-fin.pdf").test(r)).map((r) => r.replace(/^.*\[/, "[")), ["[bytes=0-32767]", "[bytes=-32768]"]);
       }
@@ -201,6 +203,34 @@ test("le sujet du PDF se lit sans télécharger tout le PDF", async () => {
     } finally {
       await faux.fermer();
     }
+  }
+});
+
+test("le sujet du PDF dit aussi la version du modèle ; `modele` garde le nom seul, pour l'appli déjà publiée", async () => {
+  // Le nom et la version, en nombre ; rien sans version, ni hors d'un sujet Portée.
+  const sujet = (texte) => sujetPortee(Buffer.from(`%PDF-1.4\n<< /Producer (ReportLab) /Subject (${texte}) >>`));
+  assert.deepEqual(sujet("portee:melodie-standard:v1"), { modele: "melodie-standard", version: 1 });
+  assert.deepEqual(sujet("portee:piano-large:v2"), { modele: "piano-large", version: 2 });
+  assert.deepEqual(sujet("portee:etalonnage:v12"), { modele: "etalonnage", version: 12 });
+  for (const autre of ["portee:melodie-standard", "portee:melodie-standard:vx", "portee:Melodie:v1", "autre:melodie-standard:v1"]) assert.equal(sujet(autre), null, autre);
+  assert.deepEqual(sujetPortee(MODELE), { modele: "melodie-standard", version: 1 }, "le vrai modèle, tel que le générateur l'écrit");
+  // Par l'outil : une page écrite sur un modèle v2, et un carnet sans PDF.
+  const v2 = Buffer.from("%PDF-1.4\n<< /Subject (portee:piano-large:v2) >>\n%%EOF\n");
+  const autres = [{ id: "doc-v2", nom: "Sur la v2", pdf: v2, pages: [page(1)] }, { id: "carnet", nom: "Carnet", pdf: null, pages: [page(1)] }];
+  const faux = await demarrerFauxCloud(doc([page(1)]), { autres });
+  try {
+    const { c } = client(faux);
+    const r = await outil(c, "document", { id: "doc-v2" });
+    assert.equal(r.structuredContent.modele, "piano-large");
+    assert.equal(r.structuredContent.versionModele, 2);
+    assert.match(r.content[0].text, /modèle piano-large v2/);
+    const v1 = (await outil(c, "document", { id: "doc" })).structuredContent;
+    assert.deepEqual([v1.modele, v1.versionModele], ["melodie-standard", 1]);
+    const carnet = await outil(c, "document", { id: "carnet" });
+    assert.deepEqual([carnet.structuredContent.modele, carnet.structuredContent.versionModele], [null, null]);
+    assert.match(carnet.content[0].text, /modèle inconnu/);
+  } finally {
+    await faux.fermer();
   }
 });
 

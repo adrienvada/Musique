@@ -139,7 +139,7 @@ export class CloudRemarkable {
     this.jetonAppareil = null;
     this.jetonUtilisateur = null;
     this.metadonnees = new Map(); // empreinte d'un document → { nom, type, parent… }
-    this.modeles = new Map();     // empreinte d'un PDF → modèle Portée (ou null)
+    this.sujets = new Map();      // empreinte d'un PDF → son sujet Portée { modele, version } (ou null)
   }
 
   /** Relie la tablette : le code devient un jeton d'appareil, rangé au coffre. */
@@ -287,13 +287,14 @@ export class CloudRemarkable {
   }
 
   /**
-   * Le modèle Portée d'un PDF, lu dans son sujet, sans télécharger tout le
-   * PDF : sa tête d'abord, sa fin ensuite. Un même modèle importé plusieurs
-   * fois garde la même empreinte : on ne le relit pas.
+   * Le modèle Portée d'un PDF et sa version ({ modele, version }, ou null),
+   * lus dans son sujet, sans télécharger tout le PDF : sa tête d'abord, sa
+   * fin ensuite. Un même modèle importé plusieurs fois garde la même
+   * empreinte : on ne le relit pas.
    */
-  async modeleDuPdf(f) {
-    if (!this.modeles.has(f.hash)) this.modeles.set(f.hash, await this.lireSujet(f));
-    return this.modeles.get(f.hash);
+  async sujetDuPdf(f) {
+    if (!this.sujets.has(f.hash)) this.sujets.set(f.hash, await this.lireSujet(f));
+    return this.sujets.get(f.hash);
   }
 
   async lireSujet(f) {
@@ -324,10 +325,10 @@ export class CloudRemarkable {
   }
 
   /**
-   * Un document : son nom, le modèle Portée sur lequel il a été écrit (lu
-   * dans le sujet du PDF d'origine), le nombre de pages, celles qui ont de
-   * l'encre (`pagesEcrites`), et les traits de chaque page écrite, dans
-   * l'ordre du document.
+   * Un document : son nom, le modèle Portée sur lequel il a été écrit et sa
+   * version (lus dans le sujet du PDF d'origine), le nombre de pages, celles
+   * qui ont de l'encre (`pagesEcrites`), et les traits de chaque page écrite,
+   * dans l'ordre du document.
    *
    * `options.pages` : les numéros voulus (à partir de 1), sinon toutes.
    * `options.budget` et `options.mesure(traits)` : la réponse s'arrête avant
@@ -345,7 +346,7 @@ export class CloudRemarkable {
     const meta = await lireJson(trouver(".metadata"));
     const contenu = await lireJson(trouver(".content"));
     const pdf = trouver(".pdf");
-    const modele = pdf ? await this.modeleDuPdf(pdf) : null;
+    const sujet = pdf ? await this.sujetDuPdf(pdf) : null;
     const ordre = ordrePages(contenu);
     const rmDe = (numero) => fichiers.find((x) => x.id === `${id}/${ordre[numero - 1]}.rm`);
     const pagesEcrites = ordre.map((_, i) => i + 1).filter((n) => rmDe(n));
@@ -378,7 +379,10 @@ export class CloudRemarkable {
     return {
       id,
       nom: meta ? meta.visibleName : id,
-      modele,
+      // Le nom seul, comme avant : la version de l'appli publiée sur claude.ai
+      // l'attend tel quel. La version vient à côté, dans un champ à elle.
+      modele: sujet ? sujet.modele : null,
+      versionModele: sujet ? sujet.version : null,
       nombrePages: ordre.length,
       pagesEcrites,
       pages: lues,
@@ -413,11 +417,17 @@ export function ordrePages(contenu) {
   return Array.isArray(contenu.pages) ? contenu.pages : [];
 }
 
-/** Le sujet d'un PDF Portée : « portee:<modèle>:v1 » (dictionnaire Info non compressé). */
+/**
+ * Le sujet d'un PDF Portée, « portee:<modèle>:v<N> » (dictionnaire Info non
+ * compressé) : { modele, version }, la version en nombre ; null s'il n'y en a
+ * pas. La version compte : chaque version d'un modèle a sa calibration
+ * (modeles/<modèle>-v<N>.json), et une page lue avec celle d'une autre
+ * aurait toutes ses notes de travers (lecteur/modeles.js).
+ */
 export function sujetPortee(octets) {
   const texte = new TextDecoder("latin1").decode(octets);
-  const m = texte.match(/\/Subject\s*\((portee:[a-z0-9-]+):v\d+\)/);
-  return m ? m[1].split(":")[1] : null;
+  const m = texte.match(/\/Subject\s*\(portee:([a-z0-9-]+):v(\d+)\)/);
+  return m ? { modele: m[1], version: Number(m[2]) } : null;
 }
 
 /** La taille du fichier entier, d'après Content-Range (« bytes 0-32767/1234567 »). */

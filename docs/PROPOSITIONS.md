@@ -1067,6 +1067,17 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   - Les bornes d'`idee_ecrire` tiennent déjà une idée sous les 256 Ko de la
     bibliothèque (194 Ko au plus, calculé) : c'est une garde, pour le jour
     où l'une des deux bougerait.
+- **La version du modèle d'une page (L9, `remarkable.js`).** Le sujet du
+  PDF dit `portee:<modèle>:v<N>`, et le connecteur jetait la version.
+  Chaque version d'un modèle a maintenant sa calibration
+  (`modeles/<modèle>-v<N>.json`) : l'appli doit savoir sur laquelle la page
+  a été écrite. `document` rend donc `versionModele` (un nombre, `null` si
+  inconnue), à côté de `modele`.
+  - `modele` garde le nom seul (ou `null`) : le connecteur est déployé dès
+    la fusion, la version claude.ai de l'appli plus tard, et elle l'attend
+    tel quel. Un champ de plus ne la gêne pas.
+  - `arborescence` n'a pas de `modele` (il faudrait lire le PDF de chaque
+    document) : rien n'y change.
 
 ### Données et synchronisation (S6, D1 à D10)
 

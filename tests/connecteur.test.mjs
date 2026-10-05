@@ -73,6 +73,7 @@ test("du faux cloud à l'ABC : même lecture que le PDF exporté", async () => {
     const r = await traiter({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "document", arguments: { id: "doc-piano" } } }, c);
     const doc = r.result.structuredContent;
     assert.equal(doc.modele, "piano-standard");
+    assert.equal(doc.versionModele, 1);
     assert.equal(doc.nom, "Essai piano");
     // Les traits, compactés au demi-pixel pour le voyage, relus par le lecteur.
     const cal = JSON.parse(fs.readFileSync("modeles/piano-standard.json", "utf8"));

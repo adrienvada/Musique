@@ -34,7 +34,7 @@ const OUTILS = [
   {
     name: "document",
     title: "Traits d'un document",
-    description: "Télécharge un document de la reMarkable : son nom, le modèle Portée sur lequel il a été écrit (null sinon), son nombre de pages (nombrePages), celles qui ont de l'encre (pagesEcrites), et les traits de chaque page écrite (entiers au demi-pixel, x et y alternés, repère de l'écran 1404×1872). Sans pages : toutes d'un coup. Avec pages (par exemple [1, 2] ou { de: 3, a: 5 }) : seulement celles-là, et la réponse s'arrête avant 140 000 caractères environ ; les pages qui n'y tenaient pas sont dans pagesRestantes, à demander ensuite. Une page illisible est dans pagesIllisibles, sans empêcher les autres.",
+    description: "Télécharge un document de la reMarkable : son nom, le modèle Portée sur lequel il a été écrit (modele, null sinon) et sa version (versionModele : un nombre, null si inconnue), son nombre de pages (nombrePages), celles qui ont de l'encre (pagesEcrites), et les traits de chaque page écrite (entiers au demi-pixel, x et y alternés, repère de l'écran 1404×1872). Sans pages : toutes d'un coup. Avec pages (par exemple [1, 2] ou { de: 3, a: 5 }) : seulement celles-là, et la réponse s'arrête avant 140 000 caractères environ ; les pages qui n'y tenaient pas sont dans pagesRestantes, à demander ensuite. Une page illisible est dans pagesIllisibles, sans empêcher les autres.",
     inputSchema: {
       type: "object",
       properties: {
@@ -227,7 +227,8 @@ function texteDe(nom, resultat) {
     const pages = (r.pages || []).map((p) => p.numero);
     const reste = (r.pagesRestantes || []).length ? ` ; à demander ensuite : ${r.pagesRestantes.join(", ")}` : "";
     const illisibles = (r.pagesIllisibles || []).length ? ` ; illisibles : ${r.pagesIllisibles.map((p) => p.numero).join(", ")}` : "";
-    return `« ${r.nom} » : ${pluriel(pages.length, "page")} (${pages.join(", ") || "aucune"}) sur ${r.nombrePages ?? "?"}, modèle ${r.modele || "inconnu"}${reste}${illisibles}. Traits dans structuredContent.`;
+    const modele = r.modele ? `${r.modele}${r.versionModele ? ` v${r.versionModele}` : ""}` : "inconnu";
+    return `« ${r.nom} » : ${pluriel(pages.length, "page")} (${pages.join(", ") || "aucune"}) sur ${r.nombrePages ?? "?"}, modèle ${modele}${reste}${illisibles}. Traits dans structuredContent.`;
   }
   if (nom.startsWith("bibliotheque_")) {
     if (Array.isArray(r.partitions)) return `${pluriel(r.partitions.length, "partition écrite", "partitions écrites")} depuis le curseur (détail dans structuredContent).`;
