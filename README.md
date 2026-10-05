@@ -7,7 +7,7 @@ la main sur la reMarkable y entrent aussi, lues et corrigées. Gratuitement.
 
 **L'appli : https://adrienvada.fr/Musique/**, sur l'ordinateur comme
 sur le téléphone. Elle s'installe comme une appli (bouton « Installer
-l'appli » du navigateur) et marche hors ligne. Une version privée existe aussi
+l'appli » du navigateur) et marche hors ligne dès la première visite. Une version privée existe aussi
 sur claude.ai : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj (bibliothèque
 enregistrée sur ton compte claude.ai).
 
@@ -25,7 +25,10 @@ enregistrée sur ton compte claude.ai).
 3. Ou **chante** (mode *Chanter*) : ta voix se dessine sur la grille, et
    une note tenue un instant s'écrit. Ou **joue en direct** (le bouton
    rouge) : un décompte, le métronome, puis tu choisis comment arrondir le
-   rythme en voyant ce que ça change.
+   rythme en voyant ce que ça change. Joué sans le bouton rouge ? La
+   pastille *Capturer* (ou C au clavier) reprend la dernière phrase jouée,
+   avec son rythme. Si tes notes jouées en direct tombent un peu tard, règle
+   ton appareil une fois : feuille Tempo, *Régler en tapant avec le clic*.
 4. **Corrige au doigt** dans la grille (toucher, glisser, tirer le bord) ou
    sur la partition : on passe de l'une à l'autre en haut de l'écran
    (Grille | Partition). Pince la grille en largeur pour zoomer dans le
@@ -36,14 +39,36 @@ enregistrée sur ton compte claude.ai).
    joues. Tout s'annule. Pour supprimer une idée, une partition ou un
    morceau : « ••• » sur sa ligne, puis Supprimer.
 5. **Envoie le MIDI** (bouton Partager) : AirDrop, Fichiers, mail… ou un
-   téléchargement. Une piste par voix, au tempo de l'idée. Aussi en
-   MusicXML pour MuseScore.
+   téléchargement. Une piste par voix, au tempo de l'idée, nommée sans
+   accent (« Melodie ») pour que tous les logiciels la lisent pareil ; avec
+   un accompagnement, « Accords » et « Basse des accords » arrivent sur deux
+   pistes. Chaque piste finit à la barre. Aussi en MusicXML pour MuseScore.
 
 Et pour aller plus loin : des **accords** (mode *Accords*, ou la roue de la
 tonalité : Portée cercle ceux qui suivent souvent et teinte ceux qui vont
 avec ta mélodie) et un accompagnement qui les joue ; des **morceaux** faits
 d'idées bout à bout (intro, couplet, refrain…), vus en frise ; un
 **carnet** (note, étiquettes, favoris, mémo vocal).
+
+Une phrase retravaillée dans Ableton revient dans Portée : dépose son `.mid`
+sur l'accueil (ou choisis-le avec « Importer un PDF »), il devient une idée
+(quatre pistes au plus, sans la batterie, notes recalées à la double
+croche). Un morceau s'exporte aussi en MusicXML (« ••• » du morceau), chaque
+bloc avec sa mesure et sa tonalité.
+
+**Avec Live, sur l'ordinateur** (Chrome ou Edge), Réglages › Avec Live.
+*Sortie MIDI* : ce que Portée joue part aussi, à l'heure, vers un port MIDI
+(sur Mac le Gestionnaire IAC, sur Windows un port loopMIDI). Dans Live, une
+piste MIDI qui écoute ce port le joue avec ses instruments, et le piano de
+Portée peut se taire. *Dossier des .mid* : Portée y écrit le .mid de chaque
+idée et de chaque morceau, et le réécrit à chaque changement ; ajoute ce
+dossier aux Emplacements du navigateur de Live.
+
+**Sur l'iPhone**, installe Portée sur l'écran d'accueil (Partager › Sur
+l'écran d'accueil) : sinon Safari efface la bibliothèque au bout de 7 jours
+sans visite. Le piano sonne même en mode silencieux, l'écran reste allumé
+pendant l'écoute, le direct, le chant et le mémo, et l'écran verrouillé
+montre ce qui joue.
 
 L'éditeur est en ambiance *Studio* (sombre) ; Réglages › Éditeur la remet en
 *Papier* si tu préfères.
@@ -64,16 +89,36 @@ L'éditeur est en ambiance *Studio* (sombre) ; Réglages › Éditeur la remet e
    note de la partition lue et choisis un geste. Rien à écrire, tout
    s'annule.
 5. **Écoute et exporte** : piano, tempo, transposition, puis « Télécharger le
-   MIDI » (une piste par main, prête pour Ableton, MuseScore ou GarageBand).
-   Aussi : imprimer ou PDF, MusicXML.
+   MIDI » (une piste par main, nommée, avec les changements de tonalité et
+   de mesure de la page et la transposition choisie ; prête pour Ableton,
+   MuseScore ou GarageBand). Aussi : imprimer ou PDF, MusicXML
+   (transposition et changements compris).
 
 Sur le site, ta bibliothèque se **synchronise entre tes appareils** :
 Réglages → « Synchroniser mes appareils », puis colle l'adresse de ton
 connecteur (une fois par appareil). Elle marche aussi hors ligne : les
-changements partent au retour du réseau. Réglages › Sauvegarde en fait en
+changements partent au retour du réseau. Elle se synchronise champ par
+champ : une étoile posée sur le téléphone n'efface plus les notes ajoutées
+sur l'ordinateur. Si deux corrections de la même page s'opposent, Portée
+garde les deux (une copie « (version de l'autre appareil) » apparaît). Une
+partition supprimée reste 30 jours dans la corbeille de la bibliothèque
+commune, et chaque partition garde ses 20 dernières versions. Réglages › Sauvegarde en fait en
 plus un fichier, et exporte tout en MIDI d'un coup. Le connecteur
 (reMarkable et synchronisation) se branche une fois : voir
 [docs/PROPOSITIONS.md](docs/PROPOSITIONS.md), « Brancher la reMarkable ».
+Chaque lundi, une sentinelle (GitHub Actions) vérifie que le connecteur
+répond ; GitHub t'écrit sinon.
+
+## Claude dans tes conversations
+
+Dans une conversation claude.ai où le connecteur « Portée reMarkable » est
+activé, Claude lit ta bibliothèque. Demande par exemple « Montre-moi Pluie »
+(la partition s'affiche et s'écoute dans la conversation), « Propose des
+accords pour Pluie » (la proposition t'attend dans Portée : tu l'appliques
+ou non), « Note cette mélodie comme une nouvelle idée » (elle arrive sur tes
+appareils à la synchro suivante ; rien n'est jamais écrit par-dessus une
+partition). Pour une page manuscrite, le prompt « Relire une page » fait
+passer Claude sur ses doutes, un par un.
 
 ## Le dépôt
 
@@ -81,15 +126,20 @@ plus un fichier, et exporte tout en MIDI d'un coup. Le connecteur
 |---|---|
 | `lecteur/` | Le lecteur de traits (JavaScript, sans dépendance) : PDF → traits → notes → ABC |
 | `app/` | L'appli : accueil (`accueil.js`), éditeur d'idée (`idee.js` et ses modules `idee-clavier`, `idee-chant`, `idee-accords`, `idee-selection`, `idee-direct` ; `sequence.js`, `grille.js`, `clavier.js`, `micro.js`, `transport.js`, `midi.js`, `musicxml.js`, `harmonie.js`, `menu-radial.js`), morceaux (`morceau.js`, `vue-morceau.js`), pages relues (`atelier.js`, `doutes.js`, `edition.js`), écoute et exports, piano échantillonné, site installable ; le système visuel (`styles/systeme.css`, `icones.js`, `feuilles.js`) et une feuille de style par écran (`styles/`) |
-| `supabase/functions/portee-remarkable/` | Le connecteur « Portée reMarkable » : lit le cloud reMarkable au clic (fonction Supabase) |
+| `supabase/functions/portee-remarkable/` | Le connecteur « Portée reMarkable » : lit le cloud reMarkable au clic, tient la bibliothèque synchronisée, et sert Claude dans tes conversations (fonction Supabase) |
 | `modeles/` | Les modèles de papier calibré (PDF, calibration JSON, aperçus) |
-| `outils/` | Générateur de modèles (Python), lecture en ligne de commande, assemblage de l'appli, déploiement du connecteur |
-| `tests/` | Les pages d'essai d'Adrien et les tests qui figent leur lecture ; ceux de l'éditeur d'idée (notation, MIDI, accords, micro) |
+| `outils/` | Générateur de modèles (Python), lecture en ligne de commande, banc d'essai du lecteur (`banc-lecteur.mjs`), échantillons du piano (`echantillons-piano.mjs`), assemblage de l'appli, déploiement du connecteur |
+| `tests/` | Les pages d'essai d'Adrien et les tests qui figent leur lecture ; ceux de l'éditeur d'idée (notation, MIDI, accords, micro), de la synchro et du connecteur |
+| `tests/e2e/` | Les essais de bout en bout dans Chromium (Playwright) : le site assemblé, servi comme GitHub Pages, et la version claude.ai simulée |
 | `docs/PROPOSITIONS.md` | Le plan, les décisions, l'état de chaque étape, les pièges connus |
 
 ```bash
-npm ci                      # pdf.js et abcjs, versions figées
-npm test                    # le lecteur relit les pages d'essai
+npm ci                      # dépendances figées (pdf.js, abcjs, polices, outils)
+npx playwright install chromium   # une fois : le Chromium des essais de bout en bout
+npm test                    # le lecteur relit les pages d'essai, et les autres tests
+npm run lint                # ESLint
+npm run types               # TypeScript lit les JSDoc, sans rien compiler
+npm run e2e                 # assemble le site et le parcourt dans Chromium, réseau coupé
 npm run lire -- page.pdf --svg   # lit une page, image de contrôle en prime
 npm run appli               # assemble l'appli dans dist/ (pour claude.ai)
 npm run appli -- --autonome # le site GitHub Pages (publié par .github/workflows/site.yml)
