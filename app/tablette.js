@@ -13,25 +13,74 @@
  * synchronisation : `appelerOutil`) et le panneau des modèles à mettre sur
  * la tablette.
  */
-import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE } from "./connecteur.js";
+import { adresseEnregistree, connecteurDirect, documentParTranches, enregistrerAdresse, FORME_ADRESSE } from "./connecteur.js";
 import { decompacter } from "./stockage.js";
 import { erreur, explication } from "./erreurs.js";
-import { $, dateCourte, el, toast } from "./ui.js";
+import { $, accorde, dateCourte, el, toast } from "./ui.js";
 
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
 export const CONNECTEUR = "Portée reMarkable";
 
-const MODELES = [
+/**
+ * Les modèles de papier de Portée : ceux qu'on télécharge pour la tablette,
+ * et ceux que l'import reconnaît à leurs lignes grises (import-pdf.js). La
+ * page d'étalonnage (L16) n'est pas une partition : remplie une fois, elle
+ * apprend à Portée tes silences, tes altérations et tes chiffres.
+ */
+export const MODELES = [
   { id: "melodie-standard", nom: "Mélodie", detail: "7 portées, pour une ligne mélodique." },
   { id: "melodie-large", nom: "Mélodie, large", detail: "5 portées aux interlignes plus grands." },
   { id: "piano-standard", nom: "Piano", detail: "4 systèmes de deux portées, main droite et main gauche." },
   { id: "piano-large", nom: "Piano, large", detail: "3 systèmes, plus de place pour écrire." },
+  { id: "etalonnage", nom: "Étalonnage", detail: "Une page à remplir une fois : tes silences, altérations et chiffres." },
 ];
+
+/** Le nom d'un modèle (« Piano, large ») ; un modèle inconnu garde son identifiant. */
+export function nomModele(id) {
+  const m = MODELES.find((x) => x.id === id);
+  return m ? m.nom : String(id || "");
+}
+
+/** « Quart de soupir » → « quart de soupir » ; « C (4/4) » et « 3 de triolet » restent tels quels. */
+const enMinuscule = (nom) => (/^[A-ZÀ-Ý][a-zà-ÿ]/.test(nom) ? nom.charAt(0).toLowerCase() + nom.slice(1) : nom);
+
+/**
+ * Ce qu'une page d'étalonnage a appris (L16), en clair : combien de signes,
+ * et quelles cases sont restées vides (à remplir pour que Portée les
+ * reconnaisse). `appris` : les exemples lus sur la page ; `neufs` : ceux
+ * que tes gabarits n'avaient pas encore (la même page importée deux fois
+ * n'apprend rien de plus) ; `vides` : les noms des cases sans exemple.
+ * @param {{ appris: number, neufs: number, vides: string[], cases: number }} bilan
+ */
+export function bilanEtalonnage({ appris, neufs, vides, cases }) {
+  if (!appris) return "Ta page d'étalonnage n'a rien appris à Portée : ses cases sont vides. Écris chaque signe trois fois dans sa case, à côté du signe gris, puis importe-la à nouveau.";
+  const quoi = neufs === appris ? `Portée a appris ${appris} ${accorde(appris, "signe")} de ton écriture.`
+    : neufs ? `Portée a appris ${neufs} ${accorde(neufs, "signe")} de ton écriture (elle en connaissait déjà ${appris - neufs}).`
+      : `Portée connaissait déjà ${appris === 1 ? "ce signe" : `ces ${appris} signes`} de ton écriture : rien de neuf.`;
+  if (!vides.length) return `${quoi} Toutes les cases sont remplies.`;
+  if (vides.length === cases) return quoi;
+  const liste = vides.map(enMinuscule);
+  return `${quoi} ${vides.length === 1 ? "Case restée vide" : "Cases restées vides"} : ${liste.join(", ")}. Tu peux les remplir et importer la page à nouveau.`;
+}
+
+/**
+ * Ce qu'on dit des pages que le connecteur n'a pas su lire (C3) :
+ * « La page 3 n'a pas pu être lue… », ou null s'il n'y en a pas. `liste` :
+ * `pagesIllisibles` du connecteur ([{ numero, raison }]).
+ * @param {unknown} liste
+ */
+export function pagesIllisibles(liste) {
+  const numeros = [...new Set((Array.isArray(liste) ? liste : []).map((p) => (p && typeof p === "object" ? p.numero : p)).filter(Number.isInteger))].sort((a, b) => a - b);
+  if (!numeros.length) return null;
+  if (numeros.length === 1) return `La page ${numeros[0]} n'a pas pu être lue : réessaie plus tard, ou exporte-la en PDF.`;
+  return `Les pages ${numeros.slice(0, -1).join(", ")} et ${numeros.at(-1)} n'ont pas pu être lues : réessaie plus tard, ou exporte-les en PDF.`;
+}
 
 /**
  * @param deps {
  *   dansClaude(), stockage() → le stockage ouvert, partitions() → la bibliothèque,
- *   ouvrir(id, vue), enregistrerLecture({ titre, modele, pages, source }) (import-pdf.js),
+ *   ouvrir(id, vue), enregistrerLecture({ titre, modele, version, pages, source, avertissement }) (import-pdf.js),
+ *   importerEtalonnage({ nom, pages, version, avertissement }) (import-pdf.js : une page d'étalonnage, L16),
  *   versPartitions() (l'onglet où vivent les panneaux), surAdresse() (une adresse
  *   enregistrée : la synchronisation démarre), surOubli() (l'adresse oubliée : elle s'arrête)
  * }
@@ -168,7 +217,10 @@ export function creerTablette(deps) {
     majReglagesRm();
     noeudsRm = (reponse && reponse.noeuds) || [];
     const n = noeudsRm.filter((x) => x.type === "document").length;
-    etatRm(n === 1 ? "1 document sur ta reMarkable." : `${n} documents sur ta reMarkable.`);
+    // Un document que le cloud n'a pas su rendre ne fait plus tomber les autres (C3) : on le compte.
+    const illisibles = Array.isArray(reponse && reponse.illisibles) ? reponse.illisibles.length : 0;
+    const aussi = !illisibles ? "" : ` ${illisibles === 1 ? "Un autre n'a pas pu être lu" : `${illisibles} autres n'ont pas pu être lus`} : réessaie dans un moment (Actualiser).`;
+    etatRm(`${n} ${accorde(n, "document")} sur ta reMarkable.${aussi}`);
     dessinerArbre();
   }
 
@@ -313,20 +365,38 @@ export function creerTablette(deps) {
     return ligne;
   }
 
+  /**
+   * Un document de la tablette. Sur claude.ai, par tranches : claude.ai coupe
+   * un résultat d'outil au-delà d'environ 150 000 caractères, et trois pages
+   * denses suffisaient (connecteur.js). Le site appelle le connecteur
+   * lui-même, sans cette limite : tout d'un coup, comme avant.
+   */
+  async function lireDocumentRm(m, id) {
+    if (m.direct) return (await m.callTool(CONNECTEUR, "document", { id }, { cache: false })).payload || {};
+    return documentParTranches(m, CONNECTEUR, id);
+  }
+
   async function importerRemarkable(d, bouton) {
     const m = await mcp();
     if (!m) return;
     await occuper(bouton, "Lecture…", async () => {
       try {
-        const r = await m.callTool(CONNECTEUR, "document", { id: d.id }, { cache: false });
-        const doc = r.payload || {};
+        const doc = await lireDocumentRm(m, d.id);
         if (!doc.modele) {
           toast(`« ${d.nom} » n'a pas été écrit sur un modèle Portée : impossible de savoir où sont les lignes.`, 9000);
           return;
         }
+        // La version du modèle, lue dans le sujet du PDF (L9) ; un connecteur d'avant ne la donne pas : la v1.
+        const version = Number.isInteger(doc.versionModele) ? doc.versionModele : null;
+        const illisibles = pagesIllisibles(doc.pagesIllisibles);
         const pages = (doc.pages || []).map((p) => decompacter(p.traits)).filter((t) => t.length > 0);
-        if (!pages.length) { toast(`« ${d.nom} » ne contient encore aucun trait.`); return; }
-        const id = await deps.enregistrerLecture({ titre: doc.nom || d.nom, modele: doc.modele, pages, source: { remarkable: d.id, modifie: d.modifie || null } });
+        if (!pages.length) {
+          toast(illisibles ? `« ${d.nom} » : ${illisibles.charAt(0).toLowerCase()}${illisibles.slice(1)}` : `« ${d.nom} » ne contient encore aucun trait.`, illisibles ? 9000 : 4000);
+          return;
+        }
+        // Une page d'étalonnage (L16) n'est pas une partition : elle apprend tes signes, et le panneau reste ouvert.
+        if (doc.modele === "etalonnage") { await deps.importerEtalonnage({ nom: doc.nom || d.nom, pages, version, avertissement: illisibles }); return; }
+        const id = await deps.enregistrerLecture({ titre: doc.nom || d.nom, modele: doc.modele, version, pages, source: { remarkable: d.id, modifie: d.modifie || null }, avertissement: illisibles });
         $("panneau-remarkable").hidden = true;
         deps.ouvrir(id, "atelier");
       } catch (e) {
@@ -353,6 +423,8 @@ export function creerTablette(deps) {
       b.addEventListener("click", async () => {
         try {
           const r = await fetch(new URL(`./modeles/${m.id}.pdf`, import.meta.url));
+          // Une réponse d'erreur (404, 503) se rangeait comme un PDF : un fichier illisible pour la tablette.
+          if (!r.ok) throw erreur("modele_absent", `le serveur ne l'a pas donné (erreur ${r.status}). Réessaie dans un moment.`);
           await deps.stockage().enregistrerFichier(`Portée - ${m.nom}.pdf`, new Blob([await r.arrayBuffer()], { type: "application/pdf" }));
         } catch (e) {
           if (e && e.code === "declined") return;

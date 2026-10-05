@@ -2316,7 +2316,233 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 
-<!-- lot atelier -->
+- **Chaque page se lit avec la calibration de sa version (L9, côté
+  appli).** `calibration(modele, version)` (`import-pdf.js`) charge
+  `modeles/<modèle>-v<N>.json`, à défaut la version en cours si c'est la
+  même, puis vérifie. Une version que l'appli ne connaît pas est refusée
+  (« mets l'appli à jour ») et rien n'est rangé : la lire avec une autre
+  calibration aurait mis toutes les notes de travers, sans un mot. La
+  version est rangée avec la page (`versionModele`, déclaré dans
+  `normaliserFiche`) : la page redessinée, une relecture et le banc d'essai
+  prennent la même. Une page d'avant, sans version, est une v1.
+- **Le modèle d'un PDF se reconnaît à ses lignes grises.** Quand le sujet
+  manque ou se trompe, les lignes décident, comme `npm run lire`, et le
+  message de lecture le dit (« Le PDF dit « Piano », mais ses lignes sont
+  celles de « Mélodie » : lue avec ce modèle. »). Une page qui a bougé
+  (boîte décalée, export redimensionné) se recale sur ses lignes. Depuis la
+  tablette, pas de lignes grises (le connecteur ne lit que tes traits) : le
+  sujet du PDF fait foi, avec sa version (`versionModele` ; un connecteur
+  d'avant n'en donne pas : la v1).
+- **Une page lue par l'ancien lecteur est relue.** L'appli gardait sa
+  propre constante (1) et ne voyait pas le lecteur passer à la version 2 :
+  elle importe maintenant celle du lecteur. Une page lue en v1 que tu n'as
+  pas touchée (rien de corrigé, aucun doute réglé, pas « Prête ») se relit
+  à l'ouverture de « Corriger » (le lecteur est déterministe), et un
+  message passager le dit. Pourquoi pas les autres : une page corrigée ou
+  validée porte ta lecture, et le banc d'essai (L17) la prend pour vraie.
+- **L'import par tranches sur claude.ai (C3, côté appli).** claude.ai
+  coupe un résultat d'outil vers 150 000 caractères, et trois pages
+  denses suffisaient : l'import échouait. `documentParTranches`
+  (`connecteur.js`) demande `document` par plages de 500 pages, puis les
+  pages restantes (`pagesRestantes`), jusqu'à la dernière ; un connecteur
+  d'avant, qui ignore `pages`, répond tout d'un coup et la boucle s'arrête.
+  Le site garde l'appel unique : il appelle le connecteur lui-même, sans
+  cette coupure.
+- **Ce que la tablette n'a pas su lire se dit.** Une page illisible
+  (`pagesIllisibles`) : « La page 3 n'a pas pu être lue : réessaie plus
+  tard, ou exporte-la en PDF. », à la suite du message de lecture. Un
+  document illisible (`illisibles`) est compté dans le panneau « Ma
+  reMarkable » : avant, une seule erreur faisait tout échouer, maintenant
+  elle passait sans un mot.
+- **Le PDF d'un modèle est vérifié avant d'être rangé** (défaut signalé
+  par le lot architecture) : une réponse d'erreur (404) s'enregistrait
+  comme un PDF, illisible sur la tablette. Le message dit maintenant que
+  le serveur ne l'a pas donné.
+- Essais : `tests/tablette.test.mjs` (les tranches, avec le vrai connecteur
+  sur le faux cloud ; un connecteur d'avant ; un carnet de 1 203 pages ; la
+  liste des modèles, qui doit suivre `modeles/`) et
+  `tests/e2e/atelier.test.mjs` (un PDF au sujet faux, sans sujet, en v2 ;
+  une page v1 relue, une page corrigée gardée ; le PDF de l'étalonnage
+  téléchargé, et un 404 qui n'est pas rangé).
+- **Les mesures se recomptent après chaque geste (L13, branché).** Après
+  une réponse ou une correction, `recalculerDoutes` relit les mesures de
+  l'ABC d'aujourd'hui : si la réponse en fausse une (« Croche » au doute du
+  crochet de ta mélodie : 11 croches), son doute vient aussitôt, avec ses
+  propositions (« 8ᵉ note en noire »). Une proposition règle aussi les
+  doutes qu'elle tranche (`regle`, L15), en un seul « Annuler ».
+  - Le doute répondu est réglé avant le recompte : sinon, il proposait la
+    lecture qu'on venait justement de choisir.
+  - Dans le mode avancé, le recompte se fait en quittant le champ, pas à
+    chaque touche : une note à moitié tapée aurait laissé un doute de trop
+    (le recompte en ajoute, il n'en retire jamais).
+- **« Annuler » remet tous les doutes comme ils étaient.** Il ne gardait que
+  leur état et leur note visée : un geste d'armure décalait aussi la ligne
+  qu'un autre doute vise, et les propositions d'une mesure, qu'« Annuler »
+  ne remettait pas en place (la réponse suivante pouvait réécrire la
+  mauvaise ligne) ; les doutes ajoutés par le recompte restaient. Il en
+  garde maintenant une copie entière. « Revenir à la lecture de Portée »
+  rouvre aussi les doutes de la lecture, chacun à sa place, sans ceux du
+  recompte.
+- **Chaque genre de doute a sa carte**, vérifié au navigateur, au téléphone
+  et à l'ordinateur : les dix-sept genres et variantes de `poser` (crochet,
+  mesure, noire et ronde sans hampe, triolet, ligature, hauteur, point,
+  tête, tête manquante, signe, les trois armures, les deux chiffrages,
+  autre), chacun avec sa loupe et ses réponses fermées (44 px au moins), qui
+  s'appliquent puis s'annulent. Trouvé en chemin : avec beaucoup de doutes,
+  les points d'avancement passaient sous « Annuler » au téléphone ; ils
+  vont maintenant à la ligne.
+- **La note touchée sonne à sa place** (`hauteursMidiA`) : avec l'armure et
+  les altérations écrites plus tôt dans la mesure (le second fa de
+  « ^F2 F2 » sonnait naturel).
+- **L'avis que Claude a rangé depuis une conversation** (H3, `avis.texte`)
+  se lit dans la carte de son doute, marqué « Claude », comme du texte ; il
+  ne s'applique jamais seul, le doute reste ouvert.
+- **Le texte d'une réponse est échappé (S1)** : une proposition de mesure ou
+  un chiffrage viennent de la fiche, qui peut arriver d'une sauvegarde ou
+  de la synchro.
+- **Le mode avancé se plaint en français (I13)** : « Ligne 6, 18ᵉ caractère
+  (« h ») : un caractère que la gravure ne connaît pas, ignoré. » au lieu de
+  « Music Line:7:18: Unknown character ignored… » (défaut signalé par le lot
+  architecture). La ligne est celle que tu vois (la gravure en ajoute une
+  en tête) ; le détail d'abcjs reste dans la console.
+- Essais : `tests/atelier.test.mjs` (l'avertissement) ;
+  `tests/e2e/atelier.test.mjs` (« Croche », le recompte, la proposition et
+  deux « Annuler » ; chaque genre de doute, au téléphone et à l'ordinateur ;
+  l'avis rangé et le mode avancé).
+- **La page d'étalonnage s'importe (L16).** Depuis la tablette ou en PDF,
+  une page sur le modèle « Étalonnage » (son sujet le dit, ou ses lignes
+  grises) n'est pas une partition : chaque case apprend son signe, page
+  après page, et le message dit combien de signes sont appris et quelles
+  cases sont restées vides (« Cases restées vides : quart de soupir,
+  chiffre 7. Tu peux les remplir et importer la page à nouveau. »). Elle
+  est dans Partitions › Modèles pour la tablette.
+- **Tes gabarits voyagent avec ta bibliothèque.** Une fiche cachée par
+  signe (`gabarits-bemol`…, `type: "gabarits"`) : 24 exemples d'un signe
+  font 13 Ko, les 18 signes ensemble plus de 200, trop près des 256 Kio
+  d'un document de claude.ai et de la bibliothèque commune. Elles ne sont
+  ni dans le carnet, ni dans les partitions, ni dans « Tout en MIDI »
+  (`stockage.js` les écarte de la liste) ; la synchro, la base de claude.ai,
+  la sauvegarde et la restauration les emportent.
+  - Deux versions d'une fiche se réunissent (l'union de leurs exemples,
+    `fusionnerFiches`), avec ou sans base, jamais « le plus récent gagne » :
+    un signe appris sur le téléphone disparaissait dès que l'ordinateur en
+    apprenait un autre. La restauration les réunit aussi à ceux d'ici (une
+    partition déjà là, elle, reste telle quelle).
+  - `normaliserFiche` ne garde que les exemples justes de leur signe :
+    32 points finis, un identifiant, 24 au plus (les plus anciens partent).
+  - La liste des signes et la règle de fusion sont recopiées de
+    `gabarits.js` dans `fiche.js`, qui ne peut pas importer le lecteur (il
+    est ailleurs dans `dist/`, et la vérification des types le suivrait) :
+    un test vérifie qu'elles restent d'accord.
+- **Chaque lecture se fait avec tes gabarits** : l'import d'un PDF ou de la
+  tablette, la relecture d'une page de l'ancien lecteur. Sans gabarits, rien
+  ne change (le lot lecteur le vérifie).
+- **Une réponse t'apprend le signe** (un signe inconnu, un triolet, un
+  chiffrage : les réponses qui portent `apprendre`). Pas au toucher : en
+  quittant la page, seules les réponses qui tiennent encore apprennent. Une
+  réponse annulée n'apprend rien : un exemple faux resterait (les gabarits
+  se réunissent d'un appareil à l'autre, rien n'en sort) et ferait lire de
+  travers les signes qui lui ressemblent.
+- **Quand tes gabarits changent, Portée propose de relire tes pages pas
+  encore corrigées** (rien de corrigé, aucun doute réglé, pas « Prête ») :
+  une question après une page d'étalonnage, un message avec « Relire »
+  quand tu quittes une page dont les réponses ont appris. Jamais d'office,
+  et une page que tu as corrigée ne bouge pas.
+- Essais : `tests/gabarits-bibliotheque.test.mjs` (la forme, la fusion
+  d'accord avec le lecteur, IndexedDB, deux appareils qui apprennent chacun
+  de leur côté et se synchronisent, la sauvegarde et la restauration, la
+  base de claude.ai pleine : 18 fiches de moins de 32 Ko) ; le bilan d'une
+  page d'étalonnage (`tests/tablette.test.mjs`) ; au navigateur, une croix
+  apprise comme dièse puis l'autre page relue sans question
+  (`tests/e2e/atelier.test.mjs`), et la page d'étalonnage venue de la
+  tablette dans la version claude.ai simulée
+  (`tests/e2e/atelier-claude.test.mjs`).
+- **Corriger au téléphone (I14).** Une note gravée faisait 4 à 7 px de
+  large sous le doigt, et ← → n'existaient qu'au clavier.
+  - Une note choisie a maintenant ‹ et › de part et d'autre de son nom, dans
+    le panneau du bas, comme dans la sélection de l'éditeur (44 px, les
+    icônes du système).
+  - La partition lue se zoome : − et + vont de cran en cran (100 % à 300 %),
+    deux doigts s'écartent ou se rapprochent entre les deux. Elle s'élargit
+    dans son cadre, qui défile de côté, et la note choisie reste en vue : au
+    milieu du cadre, entre la barre du haut et le panneau du bas. Le zoom est
+    retenu sur cet appareil.
+  - Le pincement reste à Portée : abcjs prenait le glissé des deux doigts
+    pour celui d'une note, et en changeait la hauteur. La gravure repart
+    d'un état propre quand le dernier doigt se lève, et le navigateur
+    n'agrandit plus la page à cet endroit (`touch-action`).
+  - Trouvé en chemin : après une barre de mesure (« |: c2 »), abcjs fait
+    commencer la note à l'espace qui la précède ; elle ne se lisait pas.
+    Toucher ces notes ne les choisissait pas, et ← → s'y perdaient (le
+    panneau des outils disparaissait). L'espace est sauté.
+  - Essai : « I14 · au téléphone » (`tests/e2e/atelier.test.mjs`) : ‹ et ›,
+    trois crans jusqu'à 200 % (une note deux fois plus large), quatorze notes
+    de suite toujours en vue, un pincement envoyé à Chromium comme deux vrais
+    doigts (300 %, aucune note changée), le zoom retenu.
+- **« Demander à Claude » sur un doute (H1).** Un second avis, sous la
+  question, sur claude.ai seulement.
+  - Le bouton n'est là que si `claude.use("sample")` rend une fonction, et
+    que la question a deux réponses fermées (`avisPossible`). Le site ne le
+    montre jamais : il n'y a personne à qui demander.
+  - Ce qui part : ce que décrit la section « Claude dans Portée » plus bas.
+    `entreeDoute` (`claude-doute.js`) le prépare : la mesure du doute, son
+    chiffrage et son armure, les têtes du passage relues sur la portée du
+    doute, de gauche à droite. Le texte dit aussi laquelle vise la
+    question (« La question porte sur la tête 2. »). La boîte d'un doute
+    entoure parfois un signe et pas sa tête (le crochet, au bout de la
+    queue) : on prend les têtes à une queue près.
+  - L'image, quand `limits()` en annonce : le passage redessiné sur un
+    canevas hors écran (`dessinerPassage`, `manuscrit.js`), environ 1 100 px
+    de large. Il montre la boîte du doute à quatre interlignes près et toute
+    sa portée. Le dessin est en noir sur blanc quel que soit le thème, les
+    lignes du modèle en gris. Un cadre bleu en pointillés entoure ce que
+    vise le doute, et chaque tête porte un numéro, dans l'ordre du texte. Le
+    texte dit que les numéros sont ceux de l'image, puisque les modèles
+    situent mal dans une image. Une image refusée (`images_unavailable`,
+    `image_rejected`) : la question repart une fois, en texte seul.
+  - Pendant l'attente, « Claude regarde… » et « Arrêter » (un
+    `AbortController`). L'avis reste attaché à son doute : tu peux en
+    régler un autre pendant que Claude regarde (5 à 60 s), et le retrouver
+    en revenant. Ouvrir une autre page ou quitter l'écran l'arrête :
+    personne ne l'attendrait plus, et il compterait quand même.
+  - L'avis passe par `validerAvis`, puis s'affiche : « Claude pense :
+    Croche — assez sûr » et sa phrase. Il ne s'applique jamais seul. Un
+    toucher fait exactement ce que fait le toucher de la réponse
+    (`repondre`) : un seul « Annuler », la mesure recomptée, le signe
+    appris s'il y a lieu. C'est Adrien qui a choisi. Si l'ABC a changé
+    depuis la question, la proposition est retirée et on le dit.
+  - Les échecs (`issueAvis`), selon sample.d.ts :
+    - `cancelled` ne dit rien : c'est Adrien qui a arrêté ;
+    - `not_granted`, et les autres refus (Claude coupé pour le compte, la
+      capacité absente) cachent la fonction jusqu'au prochain chargement ;
+      « Autoriser » ouvre les autorisations de claude.ai
+      (`permissions.manage()`), et le bouton revient si elles le
+      permettent ;
+    - `rate_limited` : « réessaie dans un moment » ;
+    - une réponse qui ne tient pas, illisible ou vide, une coupure
+      (`upstream_error`), un code inconnu : « Claude n'a pas su répondre :
+      réessaie, ou réponds toi-même », comme pour une idée ;
+    - une vraie Error vient de Portée (la page à relire, le modèle à
+      charger), pas de `sample` : elle passe par `erreurs.js`.
+    Rien ne repart tout seul : chaque essai compte dans les limites
+    d'Adrien.
+  - Un avis rangé depuis une conversation (H3, `d.avis.texte`) se lit au
+    même endroit, échappé et marqué « Claude », sans s'appliquer.
+  - Trouvé en chemin : « Un silence d'une croche » (et plus « de une »).
+  - Essais :
+    - `tests/claude-doute.test.mjs` : sur la vraie page d'essai, la
+      mesure, l'armure, la tête visée ; chaque code d'erreur ;
+    - `tests/atelier.test.mjs` : le cadre de l'image et son dessin ;
+    - trois essais H1 dans `tests/e2e/atelier-claude.test.mjs`, avec un faux
+      `sample` dans la version claude.ai simulée : au téléphone, la
+      proposition appliquée puis annulée ; « Arrêter », un avis hors liste,
+      `rate_limited`, « ne sait pas » ; sans images, puis `not_granted` et
+      « Autoriser » ;
+    - au site, pas de bouton (`tests/e2e/atelier.test.mjs`).
+  - À la republication de l'artefact, la capacité `sample` doit être
+    déclarée : sans elle, le bouton ne paraît pas. `permissions` aussi,
+    si elle se déclare : sans elle, « Autoriser » laisse place à un simple
+    message.
 
 ### Écrans des données (D6, D7, D9, H3)
 

@@ -184,7 +184,9 @@ const ideesParId = () => new Map(etat.partitions.filter((x) => x.type === "idee"
 
 // L'import des PDF et des .mid (import-pdf.js) ; la tablette (tablette.js) range ce
 // qu'elle lit par le même chemin.
-const { importer, importerExemples, enregistrerLecture } = creerImport({ stockage: () => etat.stockage, ouvrir: (id, vue) => ouvrir(id, vue) });
+// La page d'étalonnage et tes gabarits (L16) passent aussi par lui : « Corriger » y range ce que tes réponses apprennent.
+const lecture = creerImport({ stockage: () => etat.stockage, ouvrir: (id, vue) => ouvrir(id, vue), partitions: () => etat.partitions });
+const { importer, importerExemples, enregistrerLecture } = lecture;
 
 // Les exports (MIDI, MusicXML, ABC, partage) : exports.js.
 const { exporterMidi, toutEnMidi, partagerMidi, exporterMusicXml, exporterAbc } = creerExports({
@@ -311,6 +313,9 @@ function creerEcransDePage() {
   atelier = creerEcranAtelier({
     page: pageOuverte, piano, abcjs: ABCJS, calibration, ecouter: ecouterPage, arreterEcoute,
     valider: () => montrer("lecteur"), supprimer: gestes.supprimerOuverte,
+    gabarits: lecture.gabarits, apprendre: lecture.apprendre, aRelire: lecture.aRelire, relireEtDire: lecture.relireEtDire,
+    // Le second avis de Claude sur un doute (H1) : sur claude.ai seulement.
+    claude: dansClaude() ? window.claude : null,
   });
   lecteur = creerEcranLecteur({
     page: pageOuverte, abcjs: ABCJS, ecouter: ecouterPage, arreterEcoute,
@@ -368,7 +373,7 @@ async function demarrer() {
   creerAccueilDeLAppli();
   tablette = creerTablette({
     dansClaude, stockage: () => etat.stockage, partitions: () => etat.partitions,
-    ouvrir: (id, vue) => ouvrir(id, vue), enregistrerLecture, versPartitions,
+    ouvrir: (id, vue) => ouvrir(id, vue), enregistrerLecture, importerEtalonnage: lecture.importerEtalonnage, versPartitions,
     surAdresse: () => synchronisation.demarrer(), surOubli: () => synchronisation.arreter(),
   });
   synchronisation = creerSynchronisation({

@@ -655,7 +655,7 @@ export function poser(d, abc) {
         ...sortie, titre: `Il manque ${enCroches(manque)}`,
         reponses: [
           ...proposees,
-          reponse("silence", "Ajouter un silence", "silence", (a) => ed.ajouterSilence(a, derniere(a), manque), `Un silence de ${enCroches(manque)} complète la mesure.`),
+          reponse("silence", "Ajouter un silence", "silence", (a) => ed.ajouterSilence(a, derniere(a), manque), `Un silence ${/^une /.test(enCroches(manque)) ? "d'" : "de "}${enCroches(manque)} complète la mesure.`),
           reponse("allonger", "Allonger la dernière note", "allonger", (a) => ed.fixerDuree(a, derniere(a), derniere(a).croches + manque), "La dernière note est allongée."),
         ],
       };

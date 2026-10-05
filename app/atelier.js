@@ -16,7 +16,7 @@ import { cadreDoute, dessinerPage, fenetreLoupe } from "./manuscrit.js";
 import { ecrirePref, lirePref } from "./preferences.js";
 import { notesDePage, surlignage } from "./ecoute-page.js";
 import { expliquer } from "./erreurs.js";
-import { $, el, pluriel, toast } from "./ui.js";
+import { $, echapper, el, pluriel, toast } from "./ui.js";
 
 const NS = "http://www.w3.org/2000/svg";
 
@@ -51,6 +51,28 @@ export function pastilleBarre(p) {
   const restants = (p.doutes || []).filter((d) => !d.leve).length;
   if (p.statut === "prete") return el("span", "pastille p-ok", "Prête");
   return el("span", "pastille p-doute", restants ? pluriel(restants, "doute") : "À relire");
+}
+
+/**
+ * Un message passager qui propose un geste (« Relire »), comme celui d'une
+ * mise à jour (mises-a-jour.js, `.toast-action`) : seul son bouton prend le
+ * toucher, et il part seul au bout de `duree`. Ce n'est pas une question qui
+ * arrête tout : on peut l'ignorer.
+ */
+export function proposerGeste(texte, libelle, geste, duree = 12000) {
+  $("toast-geste")?.remove();
+  const m = el("div", "toast toast-action");
+  m.id = "toast-geste";
+  m.setAttribute("role", "status");
+  m.setAttribute("popover", "manual");
+  const b = el("button", "btn btn-petit", libelle);
+  b.type = "button";
+  b.addEventListener("click", () => { m.remove(); geste(); });
+  m.append(el("span", "", texte), b);
+  document.body.appendChild(m);
+  // En « popover », comme les autres messages : au-dessus d'une feuille ouverte.
+  if (m.showPopover) { try { m.showPopover(); } catch { /* sans popover : il s'affiche quand même */ } }
+  setTimeout(() => m.remove(), duree);
 }
 
 /** Le panneau du bas est fixé : l'écran lui laisse sa hauteur, mesurée, pour que rien ne passe dessous. */
@@ -137,8 +159,41 @@ export function dessinerPas(doutes, actif, surChoix, enMain = false) {
 }
 
 /**
+ * Le second avis de Claude dans la carte d'un doute (H1) : ce qu'il regarde
+ * (avec « Arrêter »), ce qu'il pense (un toucher l'applique, comme ta
+ * réponse), ou pourquoi il n'a pas répondu. `c` : { etat: "attente" |
+ * "pret" | "erreur", titre, pourquoi, applicable, message }.
+ */
+function dessinerAvisClaude(c, o) {
+  const bloc = el("div", "avis-claude");
+  bloc.dataset.avis = c.etat;
+  bloc.appendChild(el("span", "surtitre", "Claude"));
+  if (c.etat === "attente") {
+    const ligne = el("div", "avis-ligne");
+    const t = el("p", "", "Claude regarde…");
+    t.setAttribute("role", "status");
+    const arreter = bouton("btn btn-petit", "Arrêter", o.surArreter);
+    arreter.dataset.geste = "arreter-avis";
+    ligne.append(t, arreter);
+    bloc.appendChild(ligne);
+  } else if (c.etat === "pret") {
+    if (c.applicable) {
+      // La proposition elle-même : la toucher l'applique, par le même chemin que ta réponse (un seul « Annuler »).
+      const b = bouton("btn avis-proposition", `${ico("ok", "s")}<span>${echapper(c.titre)}</span>`, o.surAppliquerAvis);
+      b.dataset.geste = "appliquer-avis";
+      bloc.appendChild(b);
+    } else bloc.appendChild(el("p", "avis-titre", c.titre));
+    if (c.pourquoi) bloc.appendChild(el("p", "", c.pourquoi));
+  } else {
+    bloc.appendChild(el("p", "", c.message || ""));
+  }
+  return bloc;
+}
+
+/**
  * La carte d'un doute : la loupe sur le passage, la question, les réponses.
- * @param o { doute, question (doutes.poser), cal, traits, surReponse(r), surRouvrir, surMoiMeme, surVoulu }
+ * @param o { doute, question (doutes.poser), cal, traits, surReponse(r), surRouvrir, surMoiMeme, surVoulu,
+ *   claude (H1, ou null : { possible, etat, … }), surDemander, surArreter, surAppliquerAvis }
  */
 export function dessinerCarteDoute(zone, o) {
   const { doute, question, cal, traits } = o;
@@ -158,6 +213,14 @@ export function dessinerCarteDoute(zone, o) {
   const texte = el("div", "doute-texte");
   texte.append(el("h2", "doute-question", question.titre), el("p", "doute-detail", question.detail));
   carte.appendChild(texte);
+  // L'avis que Claude a rangé depuis une conversation (H3, suggestions.js) :
+  // une phrase, montrée comme la sienne, jamais appliquée seule.
+  const avisRange = doute.avis && typeof doute.avis.texte === "string" ? doute.avis.texte.trim() : "";
+  if (avisRange) {
+    const bloc = el("div", "avis-claude");
+    bloc.append(el("span", "surtitre", "Claude"), el("p", "", avisRange));
+    texte.appendChild(bloc);
+  }
 
   if (doute.leve) {
     const etat = el("div", "doute-etat");
@@ -172,12 +235,21 @@ export function dessinerCarteDoute(zone, o) {
 
   const reponses = el("div", "reponses");
   for (const r of question.reponses) {
-    const b = bouton("reponse", `${ico(r.icone)}<span>${r.texte}</span>`, () => o.surReponse(r));
+    // Le texte d'une réponse peut venir de la fiche (une proposition, un chiffrage) : échappé (S1).
+    const b = bouton("reponse", `${ico(r.icone)}<span>${echapper(r.texte)}</span>`, () => o.surReponse(r));
     b.dataset.reponse = r.id;
     reponses.appendChild(b);
   }
   if (question.reponses.length) carte.appendChild(reponses);
+  // Le second avis de Claude (H1) : sa réponse sous la question, jamais à la place de la tienne.
+  const c = o.claude;
+  if (c && c.etat) texte.appendChild(dessinerAvisClaude(c, o));
   const aide = el("div", "doute-aide");
+  if (c && c.possible && c.etat !== "attente" && c.etat !== "pret") {
+    const demander = bouton("btn btn-fantome", "Demander à Claude", o.surDemander);
+    demander.dataset.geste = "demander-avis";
+    aide.appendChild(demander);
+  }
   if (question.manuel) aide.appendChild(bouton("btn btn-fantome", "Je corrige moi-même", o.surMoiMeme));
   if (question.voulu) aide.appendChild(bouton("btn btn-fantome", "C'est voulu, laisser", o.surVoulu));
   if (aide.children.length) carte.appendChild(aide);
@@ -221,6 +293,41 @@ export function dessinerRelu(zone, { aucun, surRevoir, surValider }) {
 // positions (startChar) dans ce texte-là : on retranche le préfixe.
 export const PREFIXE_GRAVURE = "%%stretchlast 1\n";
 export const pourGravure = (abc) => PREFIXE_GRAVURE + abc;
+
+// Ce qu'abcjs reproche, en mots d'Adrien (du plus précis au plus général).
+const RAISONS_ABC = [
+  [/Unknown character/i, "un caractère que la gravure ne connaît pas, ignoré"],
+  [/to end the chord/i, "un accord qui n'est pas fermé (il manque « ] »)"],
+  [/Spaces are not allowed in chords/i, "une espace dans un accord"],
+  [/nest triplets/i, "un triolet dans un triolet"],
+  [/triplet/i, "un triolet mal écrit"],
+  [/decoration/i, "une décoration inconnue"],
+  [/bar type/i, "une barre de mesure inconnue"],
+  [/key signature/i, "une armure que la gravure ne connaît pas"],
+];
+const ENTITES_ABC = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'" };
+
+/**
+ * Ce qu'abcjs reproche au texte ABC (le mode avancé), en français. abcjs le
+ * dit en anglais et en HTML (« Music Line:7:18: Unknown character ignored:
+ * … <span …>h</span>… ») : l'avertissement s'affichait tel quel (défaut
+ * signalé par le lot architecture, I13). On garde où (la ligne du texte que
+ * tu vois : la gravure en a une de plus en tête, PREFIXE_GRAVURE) et le
+ * caractère en cause ; le détail reste dans la console.
+ * @param {string} brut  un avertissement d'abcjs
+ * @param {number} [autres]  combien d'autres avertissements suivent
+ */
+export function avertissementAbc(brut, autres = 0) {
+  const texte = String(brut || "");
+  const place = /^Music Line:(\d+):(\d+):/.exec(texte);
+  const fautif = /<span[^>]*>([^<]*)<\/span>/.exec(texte);
+  const raison = (RAISONS_ABC.find(([motif]) => motif.test(texte)) || [null, "un passage que la gravure ne comprend pas"])[1];
+  const caractere = fautif && fautif[1] && fautif[1] !== "SPACE" ? fautif[1].replace(/&(amp|lt|gt|quot|#39);/g, (e) => ENTITES_ABC[e]) : "";
+  const lignes = PREFIXE_GRAVURE.split("\n").length - 1;
+  const ou = place ? `Ligne ${Math.max(1, Number(place[1]) - lignes)}, ${Number(place[2])}ᵉ caractère${caractere ? ` (« ${caractere} »)` : ""} : ` : "";
+  const suite = autres > 0 ? ` Et ${autres === 1 ? "un autre endroit" : `${autres} autres endroits`}.` : "";
+  return `${ou || "Quelque part : "}${raison}.${suite}`;
+}
 
 /** Tempo en noires par minute, d'après la partition gravée. */
 export function tempoInitial(objet) {
