@@ -259,6 +259,8 @@ const NORMES = {
   blocs: normaliserBlocs,
   apercu: normaliserApercu,
   versionLecteur: (v) => entier(v, 0, 10000, undefined),
+  // La version du modèle de papier de la page (L9) : sa calibration, et pas une autre.
+  versionModele: (v) => entier(v, 1, 10000, undefined),
   source: (v) => (estObjet(v) ? jsonSur(v, 4096) ?? null : null),
   conflitDe: (v) => (typeof v === "string" && ID.test(v) ? v : undefined),
   creeLe: (v) => dateIso(v) ?? undefined,

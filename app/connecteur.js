@@ -29,6 +29,53 @@ export function enregistrerAdresse(adresse) {
   } catch { /* navigation privée : l'adresse ne sera pas gardée */ }
 }
 
+/**
+ * Un document de la tablette, par tranches (audit du 04/10, C3). claude.ai
+ * coupe un résultat d'outil au-delà d'environ 150 000 caractères, et trois
+ * pages denses suffisaient à le dépasser : l'import échouait. Avec `pages`,
+ * le connecteur s'arrête avant (140 000) et dit ce qui reste à lire
+ * (`pagesRestantes`, des numéros) : on le redemande jusqu'à la dernière page,
+ * 500 au plus par demande (sa limite). Un connecteur d'avant ignore `pages`
+ * et rend tout d'un coup : la boucle s'arrête au premier tour.
+ *
+ * Rend la réponse du premier tour, avec toutes les pages (dans l'ordre) et
+ * toutes les pages illisibles.
+ * @param {{ callTool: (serveur: string, outil: string, args: object, options?: object) => Promise<any> }} m  la capacité `mcp`, ou connecteurDirect
+ * @param {string} serveur  le nom du connecteur (« Portée reMarkable »)
+ * @param {string} id  le document
+ */
+export async function documentParTranches(m, serveur, id, { tranche = 500, toursMax = 400 } = {}) {
+  /** @type {any} */
+  let premier = null;
+  const pages = new Map(), illisibles = new Map();
+  // Une page sans numéro (aucun connecteur connu n'en rend, mais on ne la perd pas) : à la suite, dans l'ordre.
+  const sansNumero = [];
+  /** @type {number[] | { de: number, a: number } | null} */
+  let demande = { de: 1, a: tranche };
+  let fin = tranche; // la dernière page de la plage demandée en dernier
+  for (let tour = 0; demande && tour < toursMax; tour++) {
+    const r = await m.callTool(serveur, "document", { id, pages: demande }, { cache: false });
+    const d = (r && r.payload) || {};
+    premier ??= d;
+    const avant = pages.size + illisibles.size;
+    for (const p of Array.isArray(d.pages) ? d.pages : []) {
+      if (p && Number.isInteger(p.numero)) pages.set(p.numero, p);
+      else if (p) sansNumero.push(p);
+    }
+    for (const p of Array.isArray(d.pagesIllisibles) ? d.pagesIllisibles : []) if (p && Number.isInteger(p.numero)) illisibles.set(p.numero, p);
+    const restantes = (Array.isArray(d.pagesRestantes) ? d.pagesRestantes : []).filter((n) => Number.isInteger(n) && !pages.has(n) && !illisibles.has(n));
+    // Rien de neuf à ce tour : on ne redemande pas la même chose sans fin.
+    if (pages.size + illisibles.size === avant && tour > 0) break;
+    if (restantes.length) demande = restantes.slice(0, tranche);
+    else if (Number.isInteger(d.nombrePages) && fin < d.nombrePages) {
+      demande = { de: fin + 1, a: Math.min(fin + tranche, d.nombrePages) };
+      fin = demande.a;
+    } else demande = null;
+  }
+  const parNumero = (/** @type {any} */ x, /** @type {any} */ y) => x.numero - y.numero;
+  return { ...(premier || {}), pages: [...[...pages.values()].sort(parNumero), ...sansNumero], pagesIllisibles: [...illisibles.values()].sort(parNumero), pagesRestantes: [] };
+}
+
 /** Un connecteur appelé directement, avec l'interface de la capacité `mcp`. */
 export function connecteurDirect(adresse) {
   let numero = 0;

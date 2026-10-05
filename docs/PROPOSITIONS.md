@@ -2316,7 +2316,53 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 
-<!-- lot atelier -->
+- **Chaque page se lit avec la calibration de sa version (L9, côté
+  appli).** `calibration(modele, version)` (`import-pdf.js`) charge
+  `modeles/<modèle>-v<N>.json`, à défaut la version en cours si c'est la
+  même, puis vérifie. Une version que l'appli ne connaît pas est refusée
+  (« mets l'appli à jour ») et rien n'est rangé : la lire avec une autre
+  calibration aurait mis toutes les notes de travers, sans un mot. La
+  version est rangée avec la page (`versionModele`, déclaré dans
+  `normaliserFiche`) : la page redessinée, une relecture et le banc d'essai
+  prennent la même. Une page d'avant, sans version, est une v1.
+- **Le modèle d'un PDF se reconnaît à ses lignes grises.** Quand le sujet
+  manque ou se trompe, les lignes décident, comme `npm run lire`, et le
+  message de lecture le dit (« Le PDF dit « Piano », mais ses lignes sont
+  celles de « Mélodie » : lue avec ce modèle. »). Une page qui a bougé
+  (boîte décalée, export redimensionné) se recale sur ses lignes. Depuis la
+  tablette, pas de lignes grises (le connecteur ne lit que tes traits) : le
+  sujet du PDF fait foi, avec sa version (`versionModele` ; un connecteur
+  d'avant n'en donne pas : la v1).
+- **Une page lue par l'ancien lecteur est relue.** L'appli gardait sa
+  propre constante (1) et ne voyait pas le lecteur passer à la version 2 :
+  elle importe maintenant celle du lecteur. Une page lue en v1 que tu n'as
+  pas touchée (rien de corrigé, aucun doute réglé, pas « Prête ») se relit
+  à l'ouverture de « Corriger » (le lecteur est déterministe), et un
+  message passager le dit. Pourquoi pas les autres : une page corrigée ou
+  validée porte ta lecture, et le banc d'essai (L17) la prend pour vraie.
+- **L'import par tranches sur claude.ai (C3, côté appli).** claude.ai
+  coupe un résultat d'outil vers 150 000 caractères, et trois pages
+  denses suffisaient : l'import échouait. `documentParTranches`
+  (`connecteur.js`) demande `document` par plages de 500 pages, puis les
+  pages restantes (`pagesRestantes`), jusqu'à la dernière ; un connecteur
+  d'avant, qui ignore `pages`, répond tout d'un coup et la boucle s'arrête.
+  Le site garde l'appel unique : il appelle le connecteur lui-même, sans
+  cette coupure.
+- **Ce que la tablette n'a pas su lire se dit.** Une page illisible
+  (`pagesIllisibles`) : « La page 3 n'a pas pu être lue : réessaie plus
+  tard, ou exporte-la en PDF. », à la suite du message de lecture. Un
+  document illisible (`illisibles`) est compté dans le panneau « Ma
+  reMarkable » : avant, une seule erreur faisait tout échouer, maintenant
+  elle passait sans un mot.
+- **Le PDF d'un modèle est vérifié avant d'être rangé** (défaut signalé
+  par le lot architecture) : une réponse d'erreur (404) s'enregistrait
+  comme un PDF, illisible sur la tablette. Le message dit maintenant que
+  le serveur ne l'a pas donné.
+- Essais : `tests/tablette.test.mjs` (les tranches, avec le vrai connecteur
+  sur le faux cloud ; un connecteur d'avant ; un carnet de 1 203 pages ; la
+  liste des modèles, qui doit suivre `modeles/`) et
+  `tests/e2e/atelier.test.mjs` (un PDF au sujet faux, sans sujet, en v2 ;
+  une page v1 relue, une page corrigée gardée).
 
 ### Écrans des données (D6, D7, D9, H3)
 

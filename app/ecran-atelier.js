@@ -16,10 +16,10 @@
  * état est à lui ; la page ouverte (sa fiche, ses traits, ses
  * enregistrements) est partagée avec « Écouter » (page-ouverte.js).
  */
-import { lirePartition } from "./lecteur/partition.js";
+import { lirePartition, VERSION_LECTEUR } from "./lecteur/partition.js";
 import { dessinerPage } from "./manuscrit.js";
 import * as ed from "./edition.js";
-import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, suivre } from "./doutes.js";
+import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, preparerDoutes, suivre } from "./doutes.js";
 import {
   afficherVueAtelier, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes,
   pastilleBarre, placerOnglets, PREFIXE_GRAVURE, pourGravure, suivreDock, tempoInitial,
@@ -104,6 +104,7 @@ export function creerEcranAtelier(deps) {
     afficherVueAtelier();
     initialiserVise(x.doutes || [], x.abc, x.abcLu);
     try {
+      if (await relireSiAncienne(x)) poserAbc(x.abc);
       await retrouverCibles(x);
       await dessinerManuscrit();
     } catch (e) {
@@ -124,6 +125,29 @@ export function creerEcranAtelier(deps) {
     return page.vider();
   }
 
+  /** Le titre que la lecture avait écrit dans l'ABC (T:), pour qu'une relecture écrive le même. */
+  const titreLu = (x) => (x.abcLu.match(/^T:(.*)$/m) || [])[1] ?? x.titre;
+
+  /**
+   * Une page lue par un lecteur plus ancien (VERSION_LECTEUR) et que tu n'as
+   * pas encore touchée : rien de corrigé, aucun doute réglé, pas « Prête ». Le
+   * lecteur est déterministe : on la relit avec celui d'aujourd'hui, qui lit
+   * mieux et pose ses questions avec des réponses fermées (L1 à L19). Une page
+   * corrigée ou validée garde sa lecture : c'est la tienne (le banc d'essai
+   * la prend pour vraie, L17). Rend true si elle a été relue.
+   */
+  async function relireSiAncienne(x) {
+    const doutes = x.doutes || [];
+    if ((x.versionLecteur || 1) >= VERSION_LECTEUR || x.abc !== x.abcLu || x.statut === "prete" || doutes.some((d) => d.leve) || !page.pages.length) return false;
+    const cal = await calibration(x.modele, x.versionModele);
+    const res = lirePartition(page.pages, cal, { titre: titreLu(x) });
+    if (p() !== x) return false; // une autre page s'est ouverte pendant la lecture
+    page.changer({ abc: res.abc, abcLu: res.abc, doutes: preparerDoutes(res.doutes), versionLecteur: VERSION_LECTEUR, versionModele: cal.version || 1 }, { p: x });
+    const bilan = res.doutes.length ? `${pluriel(res.doutes.length, "point")} à vérifier` : "rien à signaler";
+    toast(`« ${x.titre} » a été relue par le lecteur d'aujourd'hui, qui lit mieux : ${bilan}.`, 6000);
+    return true;
+  }
+
   /**
    * Une partition lue avant que les doutes sachent où est leur note : tant que rien
    * n'a été corrigé, on relit ses traits (c'est déterministe) pour la leur donner.
@@ -132,8 +156,8 @@ export function creerEcranAtelier(deps) {
     const doutes = x.doutes || [];
     if (!doutes.some((d) => !d.type) || x.abc !== x.abcLu || !page.pages.length) return;
     try {
-      const titre = (x.abcLu.match(/^T:(.*)$/m) || [])[1] ?? x.titre;
-      const res = lirePartition(page.pages, await calibration(x.modele), { titre });
+      const titre = titreLu(x);
+      const res = lirePartition(page.pages, await calibration(x.modele, x.versionModele), { titre });
       if (res.abc !== x.abcLu) return; // la lecture a changé depuis : on ne devine pas
       // Pour cette page-là, même si une autre s'est ouverte pendant la relecture.
       page.changer({ doutes: completerDoutes(doutes, res.doutes) }, { p: x });
@@ -154,7 +178,7 @@ export function creerEcranAtelier(deps) {
         nav.appendChild(b);
       });
     }
-    const cal = await calibration(x.modele);
+    const cal = await calibration(x.modele, x.versionModele);
     if (p() !== x) return;
     const svg = $("page");
     dessinerPage(svg, cal, page.pages[a.numeroPage] || []);
@@ -443,7 +467,7 @@ export function creerEcranAtelier(deps) {
     dessinerPas(doutes, actif, ouvrirDoute, a.manuel !== null);
     majStatut();
     let cal = null;
-    try { cal = await calibration(x.modele); } catch (e) { console.error(e); }
+    try { cal = await calibration(x.modele, x.versionModele); } catch (e) { console.error(e); }
     if (rendu !== renduDoutes || p() !== x) return;
     const zone = $("doutes");
     if (a.manuel !== null) {
