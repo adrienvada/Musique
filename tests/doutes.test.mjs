@@ -11,6 +11,7 @@ import { completerDoutes, deplacerVise, jetonsDeLaMesure, modifEntre, noteVisee,
 
 const MELODIE = "tests/pages/2026-09-30-melodie-standard.pdf";
 const total = (d, abc) => jetonsDeLaMesure(d, abc).reduce((t, j) => t + j.croches, 0);
+const corpsDe = (abc) => abc.split("\n").filter((l) => !/^[A-Za-z]:|^%%/.test(l)).join("\n");
 
 /** Applique une réponse comme l'atelier : le geste, puis le suivi des autres doutes. */
 function repondre(abc, doutes, i, id) {
@@ -25,11 +26,16 @@ function repondre(abc, doutes, i, id) {
 
 test("la lecture dit où est chaque doute dans l'ABC, sans changer l'ABC", async () => {
   const r = await lireFichier(MELODIE);
-  assert.deepEqual(r.doutes.map((d) => d.type), ["crochet", "mesure"]);
-  const [crochet, mesure] = r.doutes;
+  // Dans l'ordre de la page. Depuis le 04/10 (L2), une ligature qui s'arrête au
+  // ras d'une hampe et une tête entre deux places sont aussi des questions.
+  assert.deepEqual(r.doutes.map((d) => d.type), ["crochet", "ligature", "mesure", "hauteur", "hauteur", "ligature"]);
+  assert.deepEqual(r.doutes.map((d) => d.id), ["d1", "d2", "d3", "d4", "d5", "d6"]);
+  const [crochet, , mesure] = r.doutes;
   assert.equal(r.abc.slice(crochet.cible.debut, crochet.cible.fin), "c2");
   assert.equal(r.abc.slice(mesure.cible.debut, mesure.cible.fin), "c2 c edc g2 z GG");
-  assert.deepEqual([mesure.ligne, mesure.rang, mesure.trouve, mesure.attendu], [2, 3, 11, 12]);
+  // La levée (le sol seul, devant la reprise) n'est pas une mesure : la mesure
+  // de 11 croches est la 2ᵉ de la ligne, plus la 3ᵉ (audit du 04/10, L19).
+  assert.deepEqual([mesure.ligne, mesure.rang, mesure.trouve, mesure.attendu], [2, 2, 11, 12]);
   // Rien d'interne ne sort de la lecture : les doutes se rangent tels quels.
   assert.equal(JSON.stringify(r.doutes), JSON.stringify(JSON.parse(JSON.stringify(r.doutes))));
   assert.ok(r.doutes.every((d) => !("_ev" in d) && !("_mes" in d)));
@@ -52,18 +58,18 @@ test("répondre « croche » puis « ajouter un silence » : la note change, la 
   assert.equal(abc.length, r.abc.length - 1);
   assert.equal(noteVisee(doutes[0], abc) && abc.slice(doutes[0].vise.debut, doutes[0].vise.fin), "c"); // la même note, devenue croche
   // Le doute de la mesure vise toujours sa mesure, décalée d'un caractère.
-  assert.equal(abc.slice(doutes[1].vise.debut, doutes[1].vise.fin), "c2 c edc g2 z GG");
+  assert.equal(abc.slice(doutes[2].vise.debut, doutes[2].vise.fin), "c2 c edc g2 z GG");
 
-  const q = poser(doutes[1], abc);
+  const q = poser(doutes[2], abc);
   assert.equal(q.titre, "Il manque une croche");
-  assert.equal(q.detail, "Ligne 2, 3ᵉ mesure : j'en compte 11 au lieu de 12.");
+  assert.equal(q.detail, "Ligne 2, 2ᵉ mesure : j'en compte 11 au lieu de 12."); // la levée ne compte pas
   assert.deepEqual(q.reponses.map((x) => x.texte), ["Ajouter un silence", "Allonger la dernière note"]);
   assert.ok(q.voulu && q.manuel);
 
-  abc = repondre(abc, doutes, 1, "silence");
-  assert.equal(abc.slice(doutes[1].vise.debut, doutes[1].vise.fin), "c2 c edc g2 z GG z");
-  assert.equal(total(doutes[1], abc), 12);
-  assert.equal(poser(doutes[1], abc).titre, "La mesure est complète");
+  abc = repondre(abc, doutes, 2, "silence");
+  assert.equal(abc.slice(doutes[2].vise.debut, doutes[2].vise.fin), "c2 c edc g2 z GG z");
+  assert.equal(total(doutes[2], abc), 12);
+  assert.equal(poser(doutes[2], abc).titre, "La mesure est complète");
   const [tune] = abcjs.parseOnly(abc);
   assert.equal((tune.warnings || []).length, 0);
 });
@@ -71,11 +77,11 @@ test("répondre « croche » puis « ajouter un silence » : la note change, la 
 test("« allonger la dernière note » complète aussi la mesure, et « raccourcir » en retire une", async () => {
   const r = await lireFichier(MELODIE);
   const doutes = preparerDoutes(r.doutes);
-  const abc = repondre(r.abc, doutes, 1, "allonger");
-  assert.equal(abc.slice(doutes[1].vise.debut, doutes[1].vise.fin), "c2 c edc g2 z GG2"); // le dernier G, collé au premier, passe de 1 à 2
-  assert.equal(total(doutes[1], abc), 12);
+  const abc = repondre(r.abc, doutes, 2, "allonger");
+  assert.equal(abc.slice(doutes[2].vise.debut, doutes[2].vise.fin), "c2 c edc g2 z GG2"); // le dernier G, collé au premier, passe de 1 à 2
+  assert.equal(total(doutes[2], abc), 12);
   // Une mesure de trop : on raccourcit la dernière note.
-  const trop = preparerDoutes([{ ...r.doutes[1] }]);
+  const trop = preparerDoutes([{ ...r.doutes[2] }]);
   const abcTrop = r.abc.replace("z GG", "z GG3"); // 13 croches
   suivre(trop, { de: trop[0].vise.fin, a: trop[0].vise.fin, longueur: 1 }); // le « 3 » écrit à la fin de la mesure
   const q = poser(trop[0], abcTrop);
@@ -97,7 +103,7 @@ test("répondre « noire » ne change pas l'ABC ; défaire une note ôte les ré
   assert.deepEqual([q.reponses.length, q.manuel], [0, true]);
   assert.equal(q.titre, "Croche ou noire ?");
   // L'autre doute a suivi.
-  assert.equal(res.abc.slice(sans[1].vise.debut, sans[1].vise.fin), "c2 c edc g2 z GG");
+  assert.equal(res.abc.slice(sans[2].vise.debut, sans[2].vise.fin), "c2 c edc g2 z GG");
 });
 
 test("suivre les corrections : une note ne s'étend pas à ses voisines, une mesure grandit à ses bords", () => {
@@ -118,7 +124,8 @@ test("suivre les corrections : une note ne s'étend pas à ses voisines, une mes
 
 test("les anciens doutes, sans type ni cible : la question se pose, mais sans réponse fermée", async () => {
   const r = await lireFichier(MELODIE);
-  const anciens = r.doutes.map(({ message, page, portee, boite }) => ({ message, page, portee, boite, leve: false }));
+  // Une partition lue avant le 02/10 : ses seuls doutes étaient le crochet et la mesure, sans type ni cible.
+  const anciens = r.doutes.filter((d) => ["crochet", "mesure"].includes(d.type)).map(({ message, page, portee, boite }) => ({ message, page, portee, boite, leve: false }));
   assert.deepEqual(anciens.map(typeDe), ["crochet", "mesure"]);
   const q = poser(anciens[1], r.abc);
   assert.equal(q.titre, "Il manque une croche");
@@ -140,7 +147,52 @@ test("les autres doutes : une question fermée chacun", () => {
   assert.equal(sans.reponses[1].geste("e c2 d").abc, "e d");
   assert.equal(poser({ type: "signe" }, "").reponses.length, 1);
   assert.equal(poser({ type: "chiffrage" }, "").reponses.length, 1);
+  // Une ronde loin de la portée (L6) et une hampe sans tête (L8).
+  const ronde = poser({ type: "sans-hampe", message: "Tête vide sans hampe, loin de la portée : lue comme une ronde.", vise: { debut: 0, fin: 3 } }, "c'8 d2");
+  assert.equal(ronde.titre, "Est-ce une ronde ?");
+  assert.deepEqual(ronde.reponses.map((x) => x.id), ["ronde", "enlever"]);
+  const manque = poser({ type: "tete-manquante", vise: { debut: 0, fin: 2 } }, "F2 A2");
+  assert.equal(manque.titre, "Il manque une note ?");
+  assert.deepEqual([manque.reponses.map((x) => x.id), manque.manuel, manque.cible.genre], [["ignorer"], true, "note"]);
   assert.equal(poser({ message: "?" }, "").titre, "À vérifier");
+});
+
+test("armure ou altération de la première note : chaque réponse réécrit la ligne en un seul geste", async () => {
+  const { chargerFabrique, Page, lire } = await import("./fabrique.mjs");
+  const f = await chargerFabrique();
+  const pg = new Page(f);
+  pg.diese(220, 1); pg.haut(270, 1); pg.haut(380, 2); pg.haut(490, 3); pg.bas(600, 4); pg.barre(720);
+  const { r } = lire(pg);
+  const doutes = preparerDoutes(r.doutes);
+  const q = poser(doutes[0], r.abc);
+  assert.equal(q.titre, "Armure ou altération ?");
+  assert.deepEqual(q.reponses.map((x) => x.texte), ["Cette note seulement", "Toute la ligne : sol majeur"]);
+  assert.equal(q.cible.genre, "note");
+  // « Toute la ligne » : sol majeur à l'armure, et le fa n'a plus son dièse.
+  const abc = repondre(r.abc, doutes, 0, "ligne");
+  assert.match(abc, /^K:G$/m);
+  assert.equal(corpsDe(abc), "F2 G2 A2 B2 |");
+  assert.equal(abc.slice(doutes[0].vise.debut, doutes[0].vise.fin), "F2"); // la note suivie à travers les deux modifications
+  const [tune] = abcjs.parseOnly(abc);
+  assert.equal((tune.warnings || []).length, 0);
+});
+
+test("armure mêlée et armure reprise : des réponses qui écrivent l'armure choisie", () => {
+  const abc = "X:1\nT:x\nM:4/4\nL:1/8\nK:C\nG2 A2 B2 c2 |\nc2 B2 A2 G2 |";
+  const ligne = { debut: abc.indexOf("G2 A2"), fin: abc.indexOf("\n", abc.indexOf("G2 A2")) };
+  const melee = preparerDoutes([{ type: "armure", variante: "melee", cle: "Bb", autres: ["G", "C"], bemols: 2, dieses: 1, cible: null, cibleLigne: ligne }]);
+  // La lecture avait choisi si♭ (deux bémols, un dièse) : le K: est déjà là, la réponse « Sol majeur » le change.
+  const avecBb = abc.replace("K:C", "K:Bb");
+  melee[0].viseLigne = { debut: ligne.debut + 1, fin: ligne.fin + 1 };
+  const q = poser(melee[0], avecBb);
+  assert.equal(q.titre, "Bémols ou dièses ?");
+  assert.deepEqual(q.reponses.map((x) => x.texte), ["Si♭ majeur", "Sol majeur", "Sans armure"]);
+  assert.match(repondre(avecBb, melee, 0, "cle-G"), /^K:G$/m);
+  const reprise = preparerDoutes([{ type: "armure", cle: "Eb", message: "Pas d'armure en début de ligne…", cibleLigne: { debut: abc.indexOf("c2 B2"), fin: abc.length } }]);
+  const texte = abc.replace("K:C", "K:Eb");
+  reprise[0].viseLigne = { debut: texte.indexOf("c2 B2"), fin: texte.length };
+  assert.deepEqual(poser(reprise[0], texte).reponses.map((x) => x.texte), ["Oui, la même", "Non, sans armure"]);
+  assert.equal(repondre(texte, reprise, 0, "sans").split("\n").pop(), "[K:C]c2 B2 A2 G2 |");
 });
 
 test("quand la page a été lue : des mots, pas une horloge", async () => {

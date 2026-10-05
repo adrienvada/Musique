@@ -36,9 +36,6 @@ export default [
       "no-throw-literal": "warn",
     },
   },
-  // En attendant le lot du lecteur (L19, le code mort) : `cal` ne sert plus
-  // dans assembler() (lecteur/lecteur.js:548). À retirer avec lui.
-  { files: ["lecteur/lecteur.js"], rules: { "no-unused-vars": ["warn", inutilisees] } },
   // Le connecteur refuse exprès les caractères de contrôle dans ce qu'il
   // reçoit (CONTROLE, conversation.js) : l'expression les nomme, c'est voulu.
   { files: ["supabase/functions/portee-remarkable/conversation.js"], rules: { "no-control-regex": "off" } },
