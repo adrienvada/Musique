@@ -1207,9 +1207,7 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   le morceau, `{ depuis }` à l'enregistrement et un rechargement quand un
   autre onglet change la partition (`stockage.surAutreOnglet`).
 
-### Son, temps, notation et exports (M1 à M12, N1 à N7)
-
-**Son, temps et micro**
+### Son, temps et micro (M1 à M13)
 
 Mesures avant et après dans Chromium, avec les bancs d'essai de l'audit
 (contexte audio hors ligne, l'appli assemblée, téléphone simulé), et en Node
