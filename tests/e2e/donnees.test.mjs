@@ -147,6 +147,75 @@ test("ce que la synchronisation met de côté se voit, avec sa raison, en haut e
 });
 
 // ---------------------------------------------------------------------------
+// D4 : la version de l'autre appareil
+// ---------------------------------------------------------------------------
+
+/** La fiche de la bibliothèque commune qui répond à `critere`, dès qu'elle y est. */
+async function ficheCommune(commun, critere, { timeout = 20000 } = {}) {
+  const fin = Date.now() + timeout;
+  for (;;) {
+    const f = (await commun.bibliotheque.changements()).partitions.find(critere);
+    if (f) return f;
+    if (Date.now() > fin) throw new Error("la fiche n'est jamais arrivée dans la bibliothèque commune");
+    await new Promise((ok) => setTimeout(ok, 200));
+  }
+}
+
+/** Ouvre une partition lue depuis le carnet (son titre commence par `titre`). */
+async function ouvrirPartition(page, titre) {
+  await page.click(`#liste .ligne-carnet button[aria-label^="Ouvrir « ${titre}"]`);
+  await page.waitForSelector("#vue-atelier:not([hidden]) #gravure-atelier svg .abcjs-note", { state: "attached" });
+}
+
+test("une page corrigée ici et sur un autre appareil : la version de l'autre est à côté, « À choisir » ; « Garder celle-ci » la met à la place, l'autre va à la corbeille (D4)", async () => {
+  const commun = await bibliothequeCommune();
+  try {
+    const ctx = await commun.appareil(ORDINATEUR);
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    const fiche = await ficheCommune(commun, (f) => f.donnees && f.donnees.titre === "Essai melodie-standard");
+    await page.waitForFunction(() => /^Synchronisé à [\d:]+$/.test(document.getElementById("mode").textContent), null, { timeout: 20000 });
+    // Un autre appareil corrige la page.
+    const abcLa = `${fiche.donnees.abc}% corrigée sur l'autre appareil\n`;
+    const plusTard = new Date(Date.now() + 1000).toISOString();
+    assert.equal((await commun.bibliotheque.ecrire({ id: fiche.id, donnees: { ...fiche.donnees, abc: abcLa }, pages: null, modifieLe: plusTard, base: fiche.modifieLe, baseRev: fiche.rev })).accepte, true);
+    // Ici, la même page corrigée autrement : une note montée d'un degré.
+    await ouvrirPartition(page, "Essai melodie");
+    await page.click('#vues-atelier [data-vue="lue"]');
+    const note = await page.locator("#gravure-atelier .abcjs-note").nth(2).boundingBox();
+    await page.mouse.click(note.x + note.width / 2, note.y + note.height / 2);
+    await page.waitForSelector("#outils-note:not([hidden])");
+    await page.click('#outils-note [data-geste="haut"]');
+    await page.click("#vue-atelier [data-retour]");
+    // La synchronisation ne mélange pas les deux textes : celui de l'autre appareil est à côté, et ça se dit.
+    assert.match(await messageQui(page, /corrigée ici et sur un autre appareil/), /dans ton carnet \(« À choisir »\)/);
+    const copie = page.locator(".ligne-carnet", { has: page.locator('.ligne-titre:text-is("Essai melodie-standard (version de l\'autre appareil)")') });
+    await copie.waitFor();
+    assert.equal(await copie.locator(".pastille.p-conflit").textContent(), "À choisir");
+    // Son « ••• » : trancher d'abord.
+    await copie.locator(".plus").click();
+    await page.waitForSelector("#feuille-actions[open]");
+    assert.match(await page.textContent("#feuille-sous"), /La version de l'autre appareil de « Essai melodie-standard »/);
+    const choix = await page.locator("#feuille-liste .btn").allTextContents();
+    assert.deepEqual(choix.slice(0, 3), ["Garder celle-ci", "Garder les deux", "Garder l'autre"]);
+    await page.click('#feuille-liste .btn:has-text("Garder celle-ci")');
+    await page.waitForSelector("#dialogue[open]");
+    assert.match(await page.textContent("#dialogue"), /qui part à la corbeille : tu pourras la récupérer pendant 30 jours/);
+    await page.click('#dialogue button[value="oui"]');
+    assert.match(await messageQui(page, /est gardée/), /cette version est gardée/);
+    // Il n'en reste qu'une, sans marque, avec le texte de l'autre appareil ; l'autre est dans la corbeille commune.
+    await page.waitForFunction(() => [...document.querySelectorAll("#liste .ligne-titre")].filter((t) => t.textContent.startsWith("Essai melodie")).length === 1);
+    assert.equal(await page.locator("#liste .p-conflit").count(), 0);
+    const debut = Date.now();
+    while (!(await commun.bibliotheque.corbeille()).some((e) => e.id === fiche.id)) {
+      assert.ok(Date.now() - debut < 20000, "l'autre version est allée à la corbeille de la bibliothèque commune");
+      await new Promise((ok) => setTimeout(ok, 200));
+    }
+    await verifierPropre(page);
+  } finally { await commun.fermer(); }
+});
+
+// ---------------------------------------------------------------------------
 // D7 : deux onglets
 // ---------------------------------------------------------------------------
 

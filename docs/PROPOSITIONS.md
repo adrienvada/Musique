@@ -2345,6 +2345,39 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     (`tests/e2e/donnees.test.mjs`) : une fiche abîmée dans la
     bibliothèque commune et une partition datée de 2031, refusées avec
     leur raison ; réparée là-bas, la première arrive à « Réessayer ».
+- **La version de l'autre appareil : tu tranches d'un geste (D4,
+  `app/conflits.js`, `app/versions-ui.js`).** Quand le texte d'une page
+  lue a changé ici et sur un autre appareil, la synchronisation garde
+  celui d'ici et range l'autre à côté, « Valse (version de l'autre
+  appareil) » (lot données). Elle se voyait comme une partition de plus.
+  Maintenant, elle porte « À choisir » (une pastille cerclée d'ambre, à la
+  place de « À relire ») dans le carnet et dans Partitions, la synchro le
+  dit en message, et son « ••• » commence par trois choix :
+  - « Garder celle-ci » : elle remplace l'autre, qui part à la corbeille
+    (30 jours pour la récupérer), et reprend le titre sans la marque ;
+  - « Garder les deux » : la marque s'en va, les deux restent ;
+  - « Garder l'autre » : celle-ci part à la corbeille.
+  - Les deux qui font partir une version demandent d'abord (la question
+    dit où elle va : la corbeille avec la synchronisation, sinon pour de
+    bon). Tout passe par `stockage.modifier` et `stockage.supprimer` : la
+    synchro emporte le choix partout.
+  - Pourquoi « Garder celle-ci » supprime l'autre plutôt que de recopier
+    son texte dedans : c'est ce que tu as demandé (l'autre va à la
+    corbeille, d'où elle revient entière), et une page lue n'est citée par
+    rien d'autre ; son identifiant peut changer sans rien casser.
+  - **Sur claude.ai, un champ ne pouvait pas s'effacer (`stockage.js`,
+    quelques lignes).** `update` de la base fusionne : la marque
+    `conflitDe` ne s'en allait jamais. Un champ donné à `undefined` s'en
+    va maintenant comme dans IndexedDB (le document est réécrit, sans
+    lui). Aucun écran ne passait de champ à `undefined` jusque-là ; le
+    changement ne touche que ce geste. Une copie de conflit n'arrive sur
+    claude.ai que par une sauvegarde du site, mais elle doit s'y trancher
+    aussi.
+  - Essais : `tests/conflits.test.mjs` (IndexedDB, et la base de
+    claude.ai sur une fausse base), et « une page corrigée ici et sur un
+    autre appareil… » (`tests/e2e/donnees.test.mjs`) : la vraie synchro
+    fait la copie, « Garder celle-ci » la met à la place, et l'autre est
+    dans la corbeille de la bibliothèque commune.
 - **Ce qui garde ta bibliothèque se voit dans les Réglages (D9,
   `app/garde.js`, `app/sauvegarde-ui.js`).** « L'appli » dit maintenant si
   la bibliothèque est protégée sur cet appareil (Oui, Non, On ne sait pas)

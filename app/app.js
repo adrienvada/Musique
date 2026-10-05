@@ -36,6 +36,7 @@ import { calibration, creerImport } from "./import-pdf.js";
 import { creerTablette } from "./tablette.js";
 import { creerSynchronisation } from "./synchronisation-ui.js";
 import { brancherSauvegarde } from "./sauvegarde-ui.js";
+import { creerVersions } from "./versions-ui.js";
 import { brancherHorsLigne, brancherInstallation } from "./mises-a-jour.js";
 import { installerEveil } from "./eveil.js";
 import { brancherLive } from "./reglages-live.js";
@@ -195,6 +196,12 @@ const gestes = creerGestes({
   exports: { exporterMidi, exporterMusicXml },
 });
 
+// Les autres versions d'une partition : la copie de conflit (D4), la corbeille et les versions précédentes (D6) : versions-ui.js.
+const versions = creerVersions({
+  stockage: () => etat.stockage, partitions: () => etat.partitions,
+  synchronisee: () => !!synchronisation && synchronisation.active(),
+});
+
 /** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */
 function ouvrirIdee(p = null, options = {}) {
   navigation.retenir();
@@ -294,6 +301,7 @@ function creerAccueilDeLAppli() {
     partagerMidi, exporterMidi,
     supprimer: async (p) => { if (await veutSupprimer(p, etat.partitions)) await gestes.supprimerDeLaBibliotheque(p); },
     afficherReglages: () => sauvegardes && sauvegardes.afficher(),
+    versions,
   });
 }
 
