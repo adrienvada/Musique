@@ -18,9 +18,10 @@
  */
 import { lirePartition, VERSION_LECTEUR } from "./lecteur/partition.js";
 import { ajouterExemple, gabaritsVides } from "./lecteur/gabarits.js";
-import { dessinerPage } from "./manuscrit.js";
+import { cadreAvis, dessinerPage, dessinerPassage } from "./manuscrit.js";
 import * as ed from "./edition.js";
 import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, preparerDoutes, recalculerDoutes, suivre } from "./doutes.js";
+import { avisPossible, direAvis, entreeDoute, issueAvis, messageDoute, OPTIONS_AVIS, PAS_SU_REPONDRE, validerAvis } from "./claude-doute.js";
 import {
   afficherVueAtelier, avertissementAbc, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes,
   pastilleBarre, placerOnglets, PREFIXE_GRAVURE, pourGravure, proposerGeste, suivreDock, tempoInitial,
@@ -55,7 +56,8 @@ const bornerZoom = (z) => Math.min(ZOOMS.at(-1), Math.max(ZOOMS[0], Math.round(z
  *   valider() (« C'est bon » : la page est prête, on va l'écouter),
  *   supprimer() (la page ouverte, après la question),
  *   gabarits() → tes gabarits (L16), apprendre(g) → le nombre d'exemples neufs,
- *   aRelire(sauf) → les pages pas encore corrigées, relireEtDire(ids) (import-pdf.js)
+ *   aRelire(sauf) → les pages pas encore corrigées, relireEtDire(ids) (import-pdf.js),
+ *   claude → window.claude sur claude.ai, sinon null (le second avis de Claude, H1)
  * }
  */
 export function creerEcranAtelier(deps) {
@@ -81,6 +83,11 @@ export function creerEcranAtelier(deps) {
   let lecons = [];
   let zoom = bornerZoom(Number(lirePref("portee:atelier-zoom")) || 1);
   let pincement = null; // deux doigts sur la partition lue : { d0, z0, x }
+  // Le second avis de Claude (H1) : la fonction `sample` de claude.ai (null sur le site : la fonction
+  // n'existe pas), si elle envoie des images, si Claude est caché pour cette visite (pas permis),
+  // et l'avis de chaque doute de la page ouverte : { etat, ctl, abc, resultat, message }.
+  let sample = null, imagesPossibles = false, claudeCache = false;
+  const avis = new Map();
 
   const p = () => page.partition;
   const doutesDe = () => (p() && p().doutes) || [];
@@ -90,6 +97,8 @@ export function creerEcranAtelier(deps) {
   /** Une autre page s'ouvre : « Corriger » repart d'un historique neuf, sans note choisie (ce que la page d'avant a appris part d'abord). */
   function ouvrir() {
     apprendreDesReponses();
+    arreterLesAvis();
+    avis.clear();
     Object.assign(a, { numeroPage: 0, douteActif: -1, selection: null, historique: [], manuel: null });
   }
 
@@ -187,6 +196,8 @@ export function creerEcranAtelier(deps) {
     a.ouvert = false;
     clearTimeout(minuterieGravure);
     apprendreDesReponses();
+    // Un avis que plus personne n'attend ne se paie pas : Claude s'arrête (sample : `signal`).
+    arreterLesAvis();
     return page.vider();
   }
 
@@ -679,12 +690,18 @@ export function creerEcranAtelier(deps) {
       dessinerConsigne(zone, q.cible && q.cible.genre === "mesure" ? "Touche la note à corriger dans la mesure surlignée de la partition lue." : "Touche la note à corriger dans la partition lue.");
     } else if (actif >= 0) {
       const d = doutes[actif];
+      const question = poser(d, a.abc);
       dessinerCarteDoute(zone, {
-        doute: d, question: poser(d, a.abc), cal, traits: page.pages[(d.page || 1) - 1] || [],
+        doute: d, question, cal, traits: page.pages[(d.page || 1) - 1] || [],
         surReponse: (r) => repondre(actif, r),
         surRouvrir: () => leverDoute(actif, false),
         surMoiMeme: () => commencerManuel(actif),
         surVoulu: () => leverDoute(actif, true, "C'est voulu"),
+        // Le second avis de Claude (H1) : sur claude.ai seulement, et pour une question à deux réponses fermées au moins.
+        claude: etatClaude(d, actif, question),
+        surDemander: () => demanderAvis(actif),
+        surArreter: () => { const e = avis.get(cleAvis(d, actif)); if (e && e.etat === "attente") e.ctl.abort(); },
+        surAppliquerAvis: () => appliquerAvis(actif),
       });
     } else {
       dessinerRelu(zone, { aucun: !doutes.length, surRevoir: () => ouvrirDoute(0), surValider: valider });
@@ -759,6 +776,158 @@ export function creerEcranAtelier(deps) {
   }
 
   // ------------------------------------------------------------------------
+  // Le second avis de Claude sur un doute (H1, claude.ai seulement)
+  // ------------------------------------------------------------------------
+  //
+  // Claude voit le passage (une image, si cette vue en envoie), ce que le
+  // lecteur a compris et la question fermée, et dit quelle réponse il
+  // choisirait (claude-doute.js). Son avis se montre comme une proposition :
+  // un toucher l'applique par le même chemin que ta réponse, jamais seul.
+  // Demandé d'un geste, jamais au chargement ni en boucle ; un nouvel essai
+  // ne part jamais tout seul.
+
+  /** `sample`, une fois, sans rien demander à Adrien (l'accord vient au premier appel). Null : la fonction n'existe pas. */
+  async function preparerClaude() {
+    if (!deps.claude || typeof deps.claude.use !== "function") return;
+    try {
+      const s = await deps.claude.use("sample");
+      if (!s || typeof s.json !== "function") return;
+      sample = s;
+      const limites = typeof s.limits === "function" ? await s.limits().catch(() => null) : null;
+      imagesPossibles = !!(limites && limites.images);
+      if (a.ouvert) afficherDoutes();
+    } catch { /* pas de Claude ici : rien ne change */ }
+  }
+
+  /** L'avis d'un doute se retrouve par sa partition et son numéro (sa place, pour un doute d'avant les numéros). */
+  const cleAvis = (d, i) => `${p() ? p().id : ""}:${d.id !== undefined ? d.id : `#${i}`}`;
+
+  /** Ce que la carte du doute montre de Claude, ou null s'il n'est pas là. */
+  function etatClaude(d, i, question) {
+    if (!sample || claudeCache || d.leve) return null;
+    const e = avis.get(cleAvis(d, i));
+    const possible = avisPossible(question);
+    if (!e) return possible ? { possible, etat: null } : null;
+    if (e.etat === "pret") return { possible, etat: "pret", ...direAvis(e.resultat), applicable: e.resultat.rang !== null };
+    return { possible, etat: e.etat, message: e.message };
+  }
+
+  function arreterLesAvis() {
+    for (const e of avis.values()) if (e.etat === "attente") e.ctl.abort();
+  }
+
+  /** Claude n'est pas permis ici : sa fonction se cache, pour toute la visite. */
+  function cacherClaude() {
+    claudeCache = true;
+    arreterLesAvis();
+    avis.clear();
+  }
+
+  /**
+   * L'image du passage (un PNG d'environ 1 100 pixels de côté : claude.ai la
+   * ramène de toute façon vers 1,2 mégapixel), les têtes numérotées comme
+   * dans le texte, ce que vise le doute encadré.
+   */
+  async function imageDuPassage(cal, traits, vue, tetes, cadre) {
+    const echelle = Math.min(4, Math.max(1.5, 1100 / Math.max(vue.w, vue.h)));
+    const canevas = document.createElement("canvas");
+    canevas.width = Math.round(vue.w * echelle);
+    canevas.height = Math.round(vue.h * echelle);
+    dessinerPassage(canevas.getContext("2d"), cal, traits, { vue, echelle, tetes, cadre });
+    return new Promise((ok) => canevas.toBlob((b) => ok(b), "image/png"));
+  }
+
+  /**
+   * Ce qui part avec la question : le passage (les têtes que le lecteur y a
+   * lues, de gauche à droite, relues sur la page : c'est déterministe), la
+   * mesure en ABC, et l'image si cette vue en envoie.
+   */
+  async function preparerEntree(x, d) {
+    const cal = await calibration(x.modele, x.versionModele);
+    const traits = page.pages[(d.page || 1) - 1] || [];
+    const vue = d.boite ? cadreAvis(cal, d.boite) : null;
+    let tetes = [];
+    if (vue && traits.length) {
+      try {
+        const lue = lirePartition([traits], cal, { titre: "passage" }).lues[0];
+        tetes = (lue ? lue.tetes : [])
+          .filter((t) => t.portee === d.portee && t.cx >= vue.x && t.cx <= vue.x + vue.w && t.cy >= vue.y && t.cy <= vue.y + vue.h)
+          .sort((u, v) => u.cx - v.cx || u.cy - v.cy).slice(0, 32);
+      } catch (e) { console.warn("Les têtes du passage ne se relisent pas : la question part sans elles.", e); }
+    }
+    const texte = entreeDoute({ doute: d, abc: a.abc, tetes, interligne: cal.interligne });
+    const image = imagesPossibles && vue && traits.length ? await imageDuPassage(cal, traits, vue, tetes, d.boite) : null;
+    return { texte, image };
+  }
+
+  /** « Demander à Claude » : la question part, « Claude regarde… » jusqu'à son avis, qu'on peut arrêter. */
+  async function demanderAvis(i) {
+    const x = p(), d = doutesDe()[i];
+    if (!sample || claudeCache || !x || !d) return;
+    const question = poser(d, a.abc);
+    if (!avisPossible(question)) return;
+    const cle = cleAvis(d, i);
+    const e = { etat: "attente", ctl: new AbortController(), abc: a.abc, resultat: null, message: "" };
+    avis.set(cle, e);
+    afficherDoutes();
+    try {
+      const entree = await preparerEntree(x, d);
+      // Une copie de la question telle qu'elle part : l'avis se vérifie contre elle.
+      const demande = (image) => sample.json(messageDoute({ question, ...entree.texte, image: !!image }), { ...OPTIONS_AVIS, signal: e.ctl.signal, ...(image ? { images: [image] } : {}) });
+      let reponse;
+      try {
+        reponse = await demande(entree.image);
+      } catch (err) {
+        // Cette vue n'envoie pas d'image, ou l'a refusée : la question repart sans elle, une fois.
+        if (!entree.image || !issueAvis(err).sansImage) throw err;
+        imagesPossibles = false;
+        reponse = await demande(null);
+      }
+      const v = validerAvis(reponse, question);
+      if (v.ok) Object.assign(e, { etat: "pret", resultat: v });
+      else { console.warn("L'avis de Claude ne tient pas :", v.raison, reponse); Object.assign(e, { etat: "erreur", message: PAS_SU_REPONDRE }); }
+    } catch (err) {
+      const issue = issueAvis(err);
+      if (err && err.code !== "cancelled") console.warn("Claude n'a pas répondu :", err);
+      if (issue.cacher) {
+        // Pas permis ici : la fonction se cache pour la visite ; s'il y a de quoi l'autoriser, on le propose.
+        cacherClaude();
+        proposerAutorisation(issue.message);
+      } else if (issue.message === null) {
+        if (avis.get(cle) === e) avis.delete(cle);
+      } else Object.assign(e, { etat: "erreur", message: issue.message });
+    }
+    if (a.ouvert) afficherDoutes();
+  }
+
+  /** Claude n'est pas permis pour cette page : le dire, et ouvrir les autorisations de claude.ai si elles existent ici. */
+  async function proposerAutorisation(message) {
+    const permissions = deps.claude ? await deps.claude.use("permissions").catch(() => null) : null;
+    if (!permissions || typeof permissions.manage !== "function") { toast(message, 8000); return; }
+    proposerGeste(message, "Autoriser", async () => {
+      try {
+        await permissions.manage();
+        const etat = await permissions.state("sample").catch(() => null);
+        if (etat === "granted" || etat === "prompt") { claudeCache = false; if (a.ouvert) afficherDoutes(); }
+      } catch {
+        toast("Les autorisations de la page s'ouvrent depuis son menu, en haut de claude.ai.", 6000);
+      }
+    });
+  }
+
+  /** L'avis de Claude, touché : sa réponse s'applique comme si tu l'avais touchée (un seul « Annuler »). */
+  function appliquerAvis(i) {
+    const d = doutesDe()[i];
+    const e = d && avis.get(cleAvis(d, i));
+    if (!e || e.etat !== "pret" || e.resultat.rang === null) return;
+    avis.delete(cleAvis(d, i));
+    // La partition a changé depuis la question : son avis ne vaut plus.
+    const r = e.abc === a.abc ? poser(d, a.abc).reponses[e.resultat.rang] : null;
+    if (!r || r.id !== e.resultat.choix.id) { toast("La partition a changé depuis : redemande à Claude, ou réponds toi-même."); afficherDoutes(); return; }
+    repondre(i, r);
+  }
+
+  // ------------------------------------------------------------------------
   // Branchements
   // ------------------------------------------------------------------------
 
@@ -817,6 +986,8 @@ export function creerEcranAtelier(deps) {
   $("zoom-moins").addEventListener("click", () => zoomer(-1));
   $("zoom-plus").addEventListener("click", () => zoomer(1));
   brancherPincement($("cadre-lue"));
+  // Claude dans la page (H1) : sur claude.ai, la fonction se prépare sans rien demander.
+  preparerClaude();
   $("replier-dock").addEventListener("click", () => { dockReplie = !dockReplie; majDock(); });
   $("vues-atelier").addEventListener("click", (e) => {
     const b = e.target.closest("[data-vue]");

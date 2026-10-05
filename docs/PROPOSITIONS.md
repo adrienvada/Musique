@@ -2478,6 +2478,70 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     trois crans jusqu'à 200 % (une note deux fois plus large), quatorze notes
     de suite toujours en vue, un pincement envoyé à Chromium comme deux vrais
     doigts (300 %, aucune note changée), le zoom retenu.
+- **« Demander à Claude » sur un doute (H1).** Un second avis, sous la
+  question, sur claude.ai seulement.
+  - Le bouton n'est là que si `claude.use("sample")` rend une fonction, et
+    que la question a deux réponses fermées (`avisPossible`). Le site ne le
+    montre jamais : il n'y a personne à qui demander.
+  - Ce qui part : ce que décrit la section « Claude dans Portée » plus bas.
+    `entreeDoute` (`claude-doute.js`) le prépare : la mesure du doute, son
+    chiffrage et son armure, les têtes du passage relues sur la portée du
+    doute, de gauche à droite. Le texte dit aussi laquelle vise la
+    question (« La question porte sur la tête 2. »). La boîte d'un doute
+    entoure parfois un signe et pas sa tête (le crochet, au bout de la
+    queue) : on prend les têtes à une queue près.
+  - L'image, quand `limits()` en annonce : le passage redessiné sur un
+    canevas hors écran (`dessinerPassage`, `manuscrit.js`), environ 1 100 px
+    de large. Il montre la boîte du doute à quatre interlignes près et toute
+    sa portée. Le dessin est en noir sur blanc quel que soit le thème, les
+    lignes du modèle en gris. Un cadre bleu en pointillés entoure ce que
+    vise le doute, et chaque tête porte un numéro, dans l'ordre du texte. Le
+    texte dit que les numéros sont ceux de l'image, puisque les modèles
+    situent mal dans une image. Une image refusée (`images_unavailable`,
+    `image_rejected`) : la question repart une fois, en texte seul.
+  - Pendant l'attente, « Claude regarde… » et « Arrêter » (un
+    `AbortController`). L'avis reste attaché à son doute : tu peux en
+    régler un autre pendant que Claude regarde (5 à 60 s), et le retrouver
+    en revenant. Ouvrir une autre page ou quitter l'écran l'arrête :
+    personne ne l'attendrait plus, et il compterait quand même.
+  - L'avis passe par `validerAvis`, puis s'affiche : « Claude pense :
+    Croche — assez sûr » et sa phrase. Il ne s'applique jamais seul. Un
+    toucher fait exactement ce que fait le toucher de la réponse
+    (`repondre`) : un seul « Annuler », la mesure recomptée, le signe
+    appris s'il y a lieu. C'est Adrien qui a choisi. Si l'ABC a changé
+    depuis la question, la proposition est retirée et on le dit.
+  - Les échecs (`issueAvis`), selon sample.d.ts :
+    - `cancelled` ne dit rien : c'est Adrien qui a arrêté ;
+    - `not_granted`, et les autres refus (Claude coupé pour le compte, la
+      capacité absente) cachent la fonction jusqu'au prochain chargement ;
+      « Autoriser » ouvre les autorisations de claude.ai
+      (`permissions.manage()`), et le bouton revient si elles le
+      permettent ;
+    - `rate_limited` : « réessaie dans un moment » ;
+    - une réponse qui ne tient pas, illisible ou vide, une coupure
+      (`upstream_error`), un code inconnu : « Claude n'a pas su répondre :
+      réessaie, ou réponds toi-même », comme pour une idée ;
+    - une vraie Error vient de Portée (la page à relire, le modèle à
+      charger), pas de `sample` : elle passe par `erreurs.js`.
+    Rien ne repart tout seul : chaque essai compte dans les limites
+    d'Adrien.
+  - Un avis rangé depuis une conversation (H3, `d.avis.texte`) se lit au
+    même endroit, échappé et marqué « Claude », sans s'appliquer.
+  - Trouvé en chemin : « Un silence d'une croche » (et plus « de une »).
+  - Essais :
+    - `tests/claude-doute.test.mjs` : sur la vraie page d'essai, la
+      mesure, l'armure, la tête visée ; chaque code d'erreur ;
+    - `tests/atelier.test.mjs` : le cadre de l'image et son dessin ;
+    - trois essais H1 dans `tests/e2e/atelier-claude.test.mjs`, avec un faux
+      `sample` dans la version claude.ai simulée : au téléphone, la
+      proposition appliquée puis annulée ; « Arrêter », un avis hors liste,
+      `rate_limited`, « ne sait pas » ; sans images, puis `not_granted` et
+      « Autoriser » ;
+    - au site, pas de bouton (`tests/e2e/atelier.test.mjs`).
+  - À la republication de l'artefact, la capacité `sample` doit être
+    déclarée : sans elle, le bouton ne paraît pas. `permissions` aussi,
+    si elle se déclare : sans elle, « Autoriser » laisse place à un simple
+    message.
 
 ### Écrans des données (D6, D7, D9, H3)
 

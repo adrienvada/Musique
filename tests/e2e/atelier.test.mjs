@@ -172,7 +172,7 @@ test("L13 · L15 · « Croche » fausse une mesure : son doute vient aussitôt, 
   } finally { await ctx.close(); }
 });
 
-test("H3 · l'avis que Claude a rangé depuis une conversation se lit dans la carte du doute, comme du texte ; I13 · le mode avancé se plaint en français", async () => {
+test("H3 · l'avis que Claude a rangé depuis une conversation se lit dans la carte du doute, comme du texte, et le site ne propose pas de « Demander à Claude » (H1) ; I13 · le mode avancé se plaint en français", async () => {
   const doutes = preparerDoutes(melodie.doutes).map((d, k) => (k === 0 ? { ...d, avis: { auteur: "claude", texte: "<img src=x>Plutôt une croche : le crochet est net." } } : d));
   const date = new Date().toISOString();
   const fichier = sauvegarde("avis", [{
@@ -191,6 +191,8 @@ test("H3 · l'avis que Claude a rangé depuis une conversation se lit dans la ca
     assert.deepEqual(avis, { etiquette: "Claude", texte: "<img src=x>Plutôt une croche : le crochet est net.", images: 0 });
     // L'avis ne s'applique pas : le doute reste ouvert, la réponse reste à toucher.
     assert.equal(await page.locator("#pas-doutes .pas-doute.fait").count(), 0);
+    // Hors de claude.ai, personne à qui demander : pas de bouton « Demander à Claude » (H1).
+    assert.equal(await page.locator('#doutes [data-geste="demander-avis"]').count(), 0);
     // Le mode avancé : un caractère que la gravure ne connaît pas se dit en français.
     await page.click("#plus-atelier");
     await page.click("#voir-abc");

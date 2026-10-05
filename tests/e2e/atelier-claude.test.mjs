@@ -13,11 +13,11 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { servir } from "./serveur.mjs";
-import { ORDINATEUR, RACINE, attendrePortee, contexte, dossierTemporaire, lancer, nouvellePage, verifierPropre } from "./commun.mjs";
+import { ORDINATEUR, RACINE, TELEPHONE, attendrePortee, contexte, dossierTemporaire, lancer, nouvellePage, verifierPropre } from "./commun.mjs";
 import { installerFauxClaude } from "./faux-claude.mjs";
 import { demarrerFauxCloud, ecrireRm } from "../faux-cloud.mjs";
 import { chargerFabrique, deformer, forme, Page } from "../fabrique.mjs";
-import { chargerCalibration } from "../../outils/lire.mjs";
+import { chargerCalibration, lireFichier } from "../../outils/lire.mjs";
 import { compacter, decompacter } from "../../app/fiche.js";
 import { lireEtalonnage } from "../../lecteur/gabarits.js";
 import { lirePartition } from "../../lecteur/partition.js";
@@ -68,8 +68,13 @@ before(async () => {
   fabrique = await chargerFabrique();
   quarts = pageQuarts(fabrique);
   etalonnage = etalonnageRempli(fabrique);
-  cloud = await demarrerFauxCloud({ id: "doc-quarts", nom: "Quarts", pdf: fs.readFileSync(path.join(RACINE, "modeles/melodie-standard.pdf")), pages: [quarts] }, {
-    autres: [{ id: "doc-etalonnage", nom: "Étalonnage", pdf: fs.readFileSync(path.join(RACINE, "modeles/etalonnage.pdf")), pages: [etalonnage.traits] }],
+  const melodie = await lireFichier(path.join(RACINE, "tests/pages/2026-09-30-melodie-standard.pdf"));
+  const pdfMelodie = fs.readFileSync(path.join(RACINE, "modeles/melodie-standard.pdf"));
+  cloud = await demarrerFauxCloud({ id: "doc-quarts", nom: "Quarts", pdf: pdfMelodie, pages: [quarts] }, {
+    autres: [
+      { id: "doc-etalonnage", nom: "Étalonnage", pdf: fs.readFileSync(path.join(RACINE, "modeles/etalonnage.pdf")), pages: [etalonnage.traits] },
+      { id: "doc-melodie", nom: "Mélodie", pdf: pdfMelodie, pages: [melodie.pages[0].traits] },
+    ],
   });
   navigateur = await lancer();
 });
@@ -80,11 +85,51 @@ after(async () => {
   fs.rmSync(dossier, { recursive: true, force: true });
 });
 
-/** Un navigateur avec le faux claude.ai, et une tablette que l'essai relie. */
-async function avecClaude() {
+/**
+ * Un faux `sample` (et `permissions`), d'après leurs définitions (sample.d.ts,
+ * permissions.d.ts) : `sample.json(entree, options)` note chaque appel (le
+ * texte, les options, l'image décrite : son type et sa taille) et répond ce
+ * que l'essai a prévu, dans l'ordre : { json } (l'avis), { erreur: { code } },
+ * ou { attendre: true } (il ne répond jamais : on l'arrête). Un `signal`
+ * arrêté rejette { code: "cancelled" }, comme le vrai. `images` : ce que dit
+ * `limits()`. Il enveloppe le faux claude.ai de faux-claude.mjs.
+ */
+async function installerFauxSample(ctx, { reponses, images = true }) {
+  const appels = [];
+  await ctx.exposeBinding("__fauxSample", async (_source, entree, options) => {
+    appels.push({ entree, options });
+    return reponses[Math.min(appels.length, reponses.length) - 1];
+  });
+  await ctx.addInitScript(({ avecImages }) => {
+    const use = window.claude.use;
+    const decrire = async (b) => { const i = await createImageBitmap(b); return { type: b.type, octets: b.size, largeur: i.width, hauteur: i.height }; };
+    // Le vrai `sample` rejette un objet simple { code, message }, pas une Error : le faux aussi.
+    const sample = Object.assign(async () => Promise.reject({ code: "invalid_request", message: "seul sample.json sert ici" }), {
+      async json(entree, options = {}) {
+        const vues = {
+          modelTier: options.modelTier, cache: options.cache, signal: options.signal instanceof AbortSignal,
+          images: options.images ? await Promise.all([].concat(options.images).map(decrire)) : [],
+        };
+        if (options.signal && options.signal.aborted) return Promise.reject({ code: "cancelled", message: "aborted" });
+        return new Promise((ok, ko) => {
+          if (options.signal) options.signal.addEventListener("abort", () => ko({ code: "cancelled", message: "aborted" }));
+          window.__fauxSample(entree, vues).then((r) => { if (r && r.erreur) ko(r.erreur); else if (r && !r.attendre) ok(r.json); }, ko);
+        });
+      },
+      limits: async () => ({ maxPromptBytes: 262144, ...(avecImages ? { images: { maxCount: 5, maxInputBytes: 5 * 1024 * 1024, mediaTypes: ["image/png", "image/jpeg"] } } : {}) }),
+    });
+    window.__autorisations = 0;
+    const permissions = { state: async () => "granted", request: async () => ({ sample: "granted" }), manage: async () => { window.__autorisations++; } };
+    window.claude = { use: async (nom) => (nom === "sample" ? sample : nom === "permissions" ? permissions : use(nom)) };
+  }, { avecImages: images });
+  return appels;
+}
+
+/** Un navigateur avec le faux claude.ai, et une tablette que l'essai relie. `sample` : les options d'installerFauxSample ; `appareil` : l'ordinateur, ou le téléphone. */
+async function avecClaude({ sample = null, appareil = ORDINATEUR } = {}) {
   const tablette = new CloudRemarkable(coffreMemoire(null), { auth: cloud.url, sync: cloud.url });
   const appels = [];
-  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  const ctx = await contexte(navigateur, { appareil });
   const claude = await installerFauxClaude(ctx, {
     async appelerOutil(serveurMcp, outil, args) {
       appels.push({ outil, args });
@@ -95,7 +140,8 @@ async function avecClaude() {
       return { payload: r.result.structuredContent };
     },
   });
-  return { ctx, claude, appels };
+  const avis = sample ? await installerFauxSample(ctx, sample) : null;
+  return { ctx, claude, appels, avis };
 }
 
 async function ouvrir(ctx) {
@@ -158,6 +204,124 @@ test("claude.ai · L16 · la page d'étalonnage, venue de la tablette : pas une 
     await page.waitForSelector("#vue-atelier:not([hidden]) #gravure-atelier svg .abcjs-note", { state: "attached" });
     assert.equal(await page.inputValue("#abc"), avec.abc);
     assert.equal(await page.textContent("#dock-titre"), "Doute 1 sur 1");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+// ------------------------------------------------------------------------
+// Le second avis de Claude sur un doute (H1)
+// ------------------------------------------------------------------------
+
+/** La mélodie importée de la tablette, ouverte dans « Corriger » sur son premier doute (« Croche ou noire ? »). */
+async function melodieOuverte(page) {
+  await relierLaTablette(page);
+  await importer(page, "Mélodie");
+  await page.waitForSelector("#vue-atelier:not([hidden]) #gravure-atelier svg .abcjs-note", { state: "attached", timeout: 20000 });
+  assert.equal(await page.textContent("#doutes .doute-question"), "Croche ou noire ?");
+}
+/** Ce que la carte montre de Claude : son état, et ses textes l'un après l'autre. */
+const carteAvis = (page) => page.evaluate(() => {
+  const b = document.querySelector("#doutes .avis-claude[data-avis]");
+  if (!b) return null;
+  const textes = [...b.querySelectorAll("*")].filter((e) => !e.children.length).map((e) => e.textContent.trim()).filter(Boolean);
+  return { etat: b.dataset.avis, texte: textes.join(" ") };
+});
+
+test("claude.ai · H1 · au téléphone, « Demander à Claude » : le passage et la question partent ; « Claude pense : Croche » ; un toucher l'applique, un « Annuler » le défait", async () => {
+  const pourquoi = "Le petit trait au bout de la hampe est un crochet, net.";
+  const { ctx, avis } = await avecClaude({ appareil: TELEPHONE, sample: { reponses: [{ json: { reponse: 2, confiance: 0.7, pourquoi } }] } });
+  try {
+    const page = await ouvrir(ctx);
+    await melodieOuverte(page);
+    const abc0 = await page.inputValue("#abc");
+    await page.click('#doutes [data-geste="demander-avis"]');
+    await page.waitForSelector('#doutes .avis-claude[data-avis="pret"]');
+    assert.deepEqual(await carteAvis(page), { etat: "pret", texte: `Claude Claude pense : Croche — assez sûr ${pourquoi}` });
+    // Ce qui est parti : une question, avec les réponses que tu vois et ce que le lecteur a compris, et l'image du passage.
+    assert.equal(avis.length, 1);
+    const [{ entree, options }] = avis;
+    for (const x of ["Question : Croche ou noire ?", "1. Noire", "2. Croche (la note devient une croche)", "M:12/8", "K:Eb (mi♭ majeur)", "c2 c2 edc g2 GG G",
+      "numérotées comme sur l'image", "ne la conteste pas", "Têtes, de gauche à droite", "La question porte sur la tête ", "un cadre bleu en pointillés"]) assert.ok(entree.includes(x), `« ${x} » manque :\n${entree}`);
+    assert.deepEqual({ ...options, images: options.images.map((i) => i.type) }, { modelTier: "default", cache: false, signal: true, images: ["image/png"] });
+    assert.ok(options.images[0].largeur >= 600 && options.images[0].hauteur >= 200, JSON.stringify(options.images[0]));
+    // L'avis ne s'applique pas tout seul.
+    assert.equal(await page.inputValue("#abc"), abc0);
+    assert.equal(await page.locator("#pas-doutes .pas-doute.fait").count(), 0);
+    // Un toucher sur la proposition : la réponse « Croche », comme si tu l'avais touchée ; la mesure recomptée le dit.
+    await page.click('#doutes [data-geste="appliquer-avis"]');
+    await page.waitForFunction((abc) => document.getElementById("abc").value !== abc, abc0);
+    assert.equal(await page.textContent("#doutes .doute-question"), "Il manque une croche");
+    assert.equal(await page.isVisible("#pas-doutes .pas-doute:nth-child(1).fait"), true);
+    // Un seul « Annuler » défait le tout.
+    await page.click("#annuler");
+    await page.waitForFunction((abc) => document.getElementById("abc").value === abc, abc0);
+    assert.equal(await page.locator("#pas-doutes .pas-doute.fait").count(), 0);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("claude.ai · H1 · « Arrêter », un avis qui ne tient pas, Claude très demandé, Claude qui ne sait pas : rien ne s'applique, et rien ne repart tout seul", async () => {
+  const { ctx, avis } = await avecClaude({ sample: { reponses: [
+    { attendre: true },
+    { json: { reponse: 7, confiance: 0.9, pourquoi: "La septième." } },
+    { erreur: { code: "rate_limited", message: "too many requests" } },
+    { json: { reponse: null, pourquoi: "Le trait est trop court pour trancher." } },
+  ] } });
+  try {
+    const page = await ouvrir(ctx);
+    await melodieOuverte(page);
+    const abc0 = await page.inputValue("#abc");
+    const demander = async () => { await page.click('#doutes [data-geste="demander-avis"]'); };
+    // « Claude regarde… », puis « Arrêter » : la question s'arrête, le bouton revient.
+    await demander();
+    await page.waitForSelector('#doutes .avis-claude[data-avis="attente"]');
+    assert.equal((await carteAvis(page)).texte, "Claude Claude regarde… Arrêter");
+    // On arrête une question déjà partie : arrêtée pendant que l'image se dessine, elle ne partirait pas du tout
+    // (sample rejette d'emblée un signal arrêté), et le faux servirait sa première réponse à la question suivante.
+    for (let t = 0; avis.length < 1 && t < 200; t++) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(avis.length, 1);
+    await page.click('#doutes [data-geste="arreter-avis"]');
+    await page.waitForSelector('#doutes [data-geste="demander-avis"]');
+    assert.equal(await carteAvis(page), null);
+    // Une réponse hors de la liste : « Claude n'a pas su répondre ».
+    await demander();
+    await page.waitForSelector('#doutes .avis-claude[data-avis="erreur"]');
+    assert.equal((await carteAvis(page)).texte, "Claude Claude n'a pas su répondre : réessaie, ou réponds toi-même.");
+    // Trop d'appels : dit en clair ; le bouton reste, rien ne repart seul.
+    await demander();
+    await page.waitForFunction(() => /très demandé/.test(document.querySelector("#doutes .avis-claude")?.textContent || ""));
+    assert.equal((await carteAvis(page)).texte, "Claude Claude est très demandé : réessaie dans un moment.");
+    // Claude ne sait pas : un avis qu'on montre tel quel, sans rien à toucher.
+    await demander();
+    await page.waitForSelector('#doutes .avis-claude[data-avis="pret"]');
+    assert.equal((await carteAvis(page)).texte, "Claude Claude ne sait pas trancher. Le trait est trop court pour trancher.");
+    assert.equal(await page.locator('#doutes [data-geste="appliquer-avis"]').count(), 0);
+    assert.equal(avis.length, 4);
+    assert.equal(await page.inputValue("#abc"), abc0);
+    // Ailleurs dans la page : ce que la console garde de ces échecs n'est pas une erreur.
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("claude.ai · H1 · sans images, la question part en texte seul ; pas permis, Claude se cache pour la visite, et « Autoriser » le fait revenir", async () => {
+  const { ctx, avis } = await avecClaude({ sample: { images: false, reponses: [{ erreur: { code: "not_granted", message: "denied" } }, { json: { reponse: 1, confiance: 0.9, pourquoi: "Une noire." } }] } });
+  try {
+    const page = await ouvrir(ctx);
+    await melodieOuverte(page);
+    await page.click('#doutes [data-geste="demander-avis"]');
+    await page.waitForSelector("#toast-geste button");
+    assert.equal(await page.textContent("#toast-geste span"), "Tu n'as pas autorisé Claude pour cette page : ses avis sont cachés jusqu'au prochain chargement.");
+    assert.deepEqual(avis[0].options.images, []);
+    assert.ok(!avis[0].entree.includes("image"), avis[0].entree);
+    // Caché pour toute la visite : sur ce doute et sur les autres.
+    assert.equal(await page.locator('#doutes [data-geste="demander-avis"]').count(), 0);
+    await page.click("#pas-doutes .pas-doute:nth-child(2)");
+    await page.waitForFunction(() => document.getElementById("dock-titre").textContent.startsWith("Doute 2 sur"));
+    assert.equal(await page.locator('#doutes [data-geste="demander-avis"]').count(), 0);
+    // « Autoriser » ouvre les autorisations de la page ; accordé, le bouton revient.
+    await page.click("#toast-geste button");
+    await page.waitForSelector('#doutes [data-geste="demander-avis"]');
+    assert.equal(await page.evaluate(() => window.__autorisations), 1);
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });

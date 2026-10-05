@@ -159,8 +159,41 @@ export function dessinerPas(doutes, actif, surChoix, enMain = false) {
 }
 
 /**
+ * Le second avis de Claude dans la carte d'un doute (H1) : ce qu'il regarde
+ * (avec « Arrêter »), ce qu'il pense (un toucher l'applique, comme ta
+ * réponse), ou pourquoi il n'a pas répondu. `c` : { etat: "attente" |
+ * "pret" | "erreur", titre, pourquoi, applicable, message }.
+ */
+function dessinerAvisClaude(c, o) {
+  const bloc = el("div", "avis-claude");
+  bloc.dataset.avis = c.etat;
+  bloc.appendChild(el("span", "surtitre", "Claude"));
+  if (c.etat === "attente") {
+    const ligne = el("div", "avis-ligne");
+    const t = el("p", "", "Claude regarde…");
+    t.setAttribute("role", "status");
+    const arreter = bouton("btn btn-petit", "Arrêter", o.surArreter);
+    arreter.dataset.geste = "arreter-avis";
+    ligne.append(t, arreter);
+    bloc.appendChild(ligne);
+  } else if (c.etat === "pret") {
+    if (c.applicable) {
+      // La proposition elle-même : la toucher l'applique, par le même chemin que ta réponse (un seul « Annuler »).
+      const b = bouton("btn avis-proposition", `${ico("ok", "s")}<span>${echapper(c.titre)}</span>`, o.surAppliquerAvis);
+      b.dataset.geste = "appliquer-avis";
+      bloc.appendChild(b);
+    } else bloc.appendChild(el("p", "avis-titre", c.titre));
+    if (c.pourquoi) bloc.appendChild(el("p", "", c.pourquoi));
+  } else {
+    bloc.appendChild(el("p", "", c.message || ""));
+  }
+  return bloc;
+}
+
+/**
  * La carte d'un doute : la loupe sur le passage, la question, les réponses.
- * @param o { doute, question (doutes.poser), cal, traits, surReponse(r), surRouvrir, surMoiMeme, surVoulu }
+ * @param o { doute, question (doutes.poser), cal, traits, surReponse(r), surRouvrir, surMoiMeme, surVoulu,
+ *   claude (H1, ou null : { possible, etat, … }), surDemander, surArreter, surAppliquerAvis }
  */
 export function dessinerCarteDoute(zone, o) {
   const { doute, question, cal, traits } = o;
@@ -208,7 +241,15 @@ export function dessinerCarteDoute(zone, o) {
     reponses.appendChild(b);
   }
   if (question.reponses.length) carte.appendChild(reponses);
+  // Le second avis de Claude (H1) : sa réponse sous la question, jamais à la place de la tienne.
+  const c = o.claude;
+  if (c && c.etat) texte.appendChild(dessinerAvisClaude(c, o));
   const aide = el("div", "doute-aide");
+  if (c && c.possible && c.etat !== "attente" && c.etat !== "pret") {
+    const demander = bouton("btn btn-fantome", "Demander à Claude", o.surDemander);
+    demander.dataset.geste = "demander-avis";
+    aide.appendChild(demander);
+  }
   if (question.manuel) aide.appendChild(bouton("btn btn-fantome", "Je corrige moi-même", o.surMoiMeme));
   if (question.voulu) aide.appendChild(bouton("btn btn-fantome", "C'est voulu, laisser", o.surVoulu));
   if (aide.children.length) carte.appendChild(aide);

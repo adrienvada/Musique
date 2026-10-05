@@ -264,6 +264,8 @@ function creerEcransDePage() {
     page: pageOuverte, piano, abcjs: ABCJS, calibration, ecouter: ecouterPage, arreterEcoute,
     valider: () => montrer("lecteur"), supprimer: gestes.supprimerOuverte,
     gabarits: lecture.gabarits, apprendre: lecture.apprendre, aRelire: lecture.aRelire, relireEtDire: lecture.relireEtDire,
+    // Le second avis de Claude sur un doute (H1) : sur claude.ai seulement.
+    claude: dansClaude() ? window.claude : null,
   });
   lecteur = creerEcranLecteur({
     page: pageOuverte, abcjs: ABCJS, ecouter: ecouterPage, arreterEcoute,

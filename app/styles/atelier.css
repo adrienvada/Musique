@@ -126,6 +126,10 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 .avis-claude { margin-top: 6px; padding: 6px 10px; border-left: 3px solid var(--stylo); border-radius: 0 10px 10px 0; background: var(--stylo-doux); display: flex; flex-direction: column; gap: 2px; }
 .avis-claude .surtitre { color: var(--stylo); }
 .avis-claude p { font-size: 0.9rem; color: var(--encre); }
+/* Second avis (H1) : « Claude regarde… » et « Arrêter » sur une ligne ; la proposition, un bouton à toucher. */
+.avis-ligne { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.avis-claude .avis-proposition { justify-content: flex-start; min-height: 48px; white-space: normal; text-align: left; border-color: var(--stylo); color: var(--stylo); background: var(--feuille); font-weight: 600; }
+.avis-claude .avis-titre { font-weight: 600; }
 .reponses { display: flex; flex-wrap: wrap; gap: 10px; }
 .reponse { flex: 1 1 130px; min-height: 56px; padding: 6px 12px; border: 1.5px solid var(--trait-fort); border-radius: 14px; background: var(--feuille); color: var(--encre); font-size: 1rem; font-weight: 600; line-height: 1.2; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
 .reponse:hover { border-color: var(--stylo); }

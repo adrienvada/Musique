@@ -23,9 +23,17 @@
  * Rien n'appelle `sample` ici, rien n'écrit, et l'image (le passage
  * recadré, têtes numérotées) est fabriquée par l'écran.
  *
- * Sans dépendance hors doutes.js et claude-idee.js (la lecture des réponses).
+ * Autour, pour l'écran (lot atelier) : `entreeDoute` prépare ce qui part
+ * avec la question (la mesure du doute en ABC, son chiffrage, son armure,
+ * ce que le lecteur a compris), `issueAvis` dit quoi faire d'un code
+ * d'erreur de `sample`, et `direAvis` met l'avis en mots.
+ *
+ * Sans dépendance hors doutes.js, edition.js et claude-idee.js (la lecture
+ * des réponses).
  */
-import { nomCle } from "./doutes.js";
+import { mesuresDeLAbc, nomCle, typeDe } from "./doutes.js";
+import { champA } from "./edition.js";
+import { expliquer } from "./erreurs.js";
 import { champs, couper, entierDans, formeSure, lirePourquoi, nettoyer } from "./claude-idee.js";
 
 /**
@@ -38,6 +46,7 @@ import { champs, couper, entierDans, formeSure, lirePourquoi, nettoyer } from ".
  * @property {{ nom: string, duree?: string, sure?: boolean }[]} [notes]  les têtes de gauche à droite (numérotées ainsi sur l'image) ; nom : la hauteur calculée par la position, « sol4 »
  * @property {string[]} [sur]  ce qui est sûr : « les barres de mesure », « trois têtes »
  * @property {{ quoi: string, valeur: number, seuil?: number }[]} [mesures]  des longueurs en interlignes : « distance du point à sa tête », 2.3, seuil 2.2
+ * @property {number[]} [concernees]  les numéros (comptés de 1) des têtes que vise le doute, quand il n'en vise qu'une partie
  */
 
 /**
@@ -94,6 +103,8 @@ function decrireCompris(/** @type {Compris | string | undefined} */ compris, /**
       return `${i + 1}. ${nom}${duree ? `, ${duree}` : ""}${doute}`;
     });
     lignes.push(`Têtes, de gauche à droite${image ? " (numérotées comme sur l'image)" : ""} : ${tetes.join(" ; ")}.`);
+    const visees = (Array.isArray(compris.concernees) ? compris.concernees : []).filter((k) => Number.isInteger(k) && k >= 1 && k <= notes.length).slice(0, MAX_LISTE);
+    if (visees.length) lignes.push(`La question porte sur ${visees.length === 1 ? `la tête ${visees[0]}` : `les têtes ${visees.slice(0, -1).join(", ")} et ${visees.at(-1)}`}.`);
   }
   const sur = Array.isArray(compris.sur) ? compris.sur.map((s) => texte(s, 80)).filter(Boolean).slice(0, MAX_LISTE) : [];
   if (sur.length) lignes.push(`Sûr : ${sur.join(" ; ")}.`);
@@ -129,9 +140,9 @@ export function messageDoute({ question, abcMesure = "", chiffrage = "", armure 
     "",
     "Ce que le programme a compris :",
     ...decrireCompris(compris, image),
-    "La hauteur de chaque tête vient de sa place sur les lignes de la portée, que le programme mesure : ne la conteste pas. La question porte sur autre chose.",
+    "La hauteur de chaque tête vient de sa place sur les lignes de la portée, que le programme mesure : la question ne porte pas sur elle, ne la conteste pas.",
   ];
-  if (image) lignes.push("", "L'image jointe montre ce passage, recadré, tel qu'Adrien l'a écrit : les têtes y sont numérotées dans le même ordre que ci-dessus.");
+  if (image) lignes.push("", "L'image jointe montre ce passage, recadré, tel qu'Adrien l'a écrit : les têtes y sont numérotées dans le même ordre que ci-dessus, et un cadre bleu en pointillés entoure ce sur quoi porte la question. Les lignes grises sont celles de la portée imprimée.");
   const titre = texte(question.titre, 200), detail = texte(question.detail, 600);
   lignes.push("", `Question : ${titre || "À vérifier"}`, ...(detail ? [detail] : []), "", "Réponses possibles :");
   question.reponses.forEach((r, i) => {
@@ -182,4 +193,113 @@ export function validerAvis(reponse, question) {
   if (p.raison) return refus(p.raison);
   const rang = numero === null ? null : numero - 1;
   return { ok: /** @type {true} */ (true), rang, choix: rang === null ? null : question.reponses[rang], confiance, pourquoi: p.pourquoi };
+}
+
+// ------------------------------------------------------------------------
+// Autour de la question : ce que l'écran prépare, et ce qu'il fait de l'avis
+// ------------------------------------------------------------------------
+
+/**
+ * Une tête du passage, d'après le lecteur (lecteur.js, `lues[].tetes`) : son
+ * nom (« sol4 », d'après sa place sur les lignes) et son écart à cette place,
+ * en demi-interlignes (à 0,5, elle changerait de note), et son centre sur la
+ * page (pour savoir si le doute la vise).
+ * @typedef {{ nom?: string, ecart?: number, cx?: number, cy?: number }} Tete
+ */
+
+/** Où vise un doute dans l'ABC d'aujourd'hui : sa note ou sa mesure, ses voisines, ou sa ligne. */
+function viseeDe(/** @type {any} */ d) {
+  for (const v of [d.vise, d.viseSuivante, d.visePrecedente, d.viseAccord]) if (v && Number.isInteger(v.debut)) return { ...v, ligne: false };
+  return d.viseLigne && Number.isInteger(d.viseLigne.debut) ? { ...d.viseLigne, ligne: true } : null;
+}
+
+/**
+ * Ce qui part avec la question (les champs de messageDoute, sauf la question
+ * et l'image) : la mesure du doute en ABC (ou sa ligne, pour une armure ou
+ * un chiffrage), son chiffrage et son armure, et ce que le lecteur a compris
+ * du passage. `tetes` : celles du passage, de gauche à droite, numérotées
+ * ainsi sur l'image ; `interligne` : celui de la page, pour reconnaître les
+ * têtes que vise le doute. Rien n'est inventé : un doute qui ne vise plus
+ * rien part sans mesure (le message le dit).
+ * @param {{ doute: any, abc: string, tetes?: Tete[], interligne?: number }} entree
+ * @returns {{ abcMesure: string, chiffrage: string, armure: string, compris: Compris }}
+ */
+export function entreeDoute({ doute, abc, tetes = [], interligne = 0 }) {
+  const d = doute || {};
+  const v = viseeDe(d);
+  let abcMesure = "";
+  if (v && v.ligne) abcMesure = abc.slice(v.debut, v.fin);
+  else if (v) {
+    const m = mesuresDeLAbc(abc).find((x) => x.debut <= v.debut && v.debut < Math.max(x.fin, x.debut + 1));
+    abcMesure = m ? abc.slice(m.debut, m.fin) : abc.slice(v.debut, v.fin);
+  }
+  const pos = v ? v.debut : abc.length;
+  const metre = champA(abc, pos, "M");
+  const lues = (Array.isArray(tetes) ? tetes : []).filter((t) => t && typeof t.nom === "string").slice(0, 32);
+  const notes = lues.map((t) => ({ nom: t.nom, ...(Number.isFinite(t.ecart) && Math.abs(t.ecart) >= 0.4 ? { sure: false } : {}) }));
+  // Les têtes que vise le doute, quand il n'en vise qu'une partie : Claude sait de laquelle on parle.
+  // Sa boîte entoure parfois un signe plutôt que la tête (le crochet, au bout de la queue) : une
+  // marge d'une queue en hauteur, et d'une tête vers la gauche (la queue montante est à droite).
+  const b = d.boite, il = Number.isFinite(interligne) && interligne > 0 ? interligne : 0;
+  const dedans = (/** @type {Tete} */ t) => !!b && Number.isFinite(t.cx) && Number.isFinite(t.cy)
+    && t.cx >= b.x0 - 0.8 * il && t.cx <= b.x1 + 0.2 * il && t.cy >= b.y0 - 4 * il && t.cy <= b.y1 + 4 * il;
+  const concernees = lues.map((t, k) => (dedans(t) ? k + 1 : 0)).filter(Boolean);
+  const sur = [];
+  if (notes.length) sur.push(notes.length === 1 ? "une seule tête dans ce passage" : `${notes.length} têtes dans ce passage`);
+  const type = typeDe(d);
+  if (type === "mesure" && Number.isFinite(d.trouve) && Number.isFinite(d.attendu)) sur.push(`le chiffrage demande ${d.attendu} croches par mesure`);
+  /** @type {{ quoi: string, valeur: number, seuil?: number }[]} */
+  const mesures = [];
+  if (type === "hauteur" && Number.isFinite(d.ecart)) mesures.push({ quoi: "écart de la tête douteuse au milieu de sa place", valeur: d.ecart / 2, seuil: 0.25 });
+  if (type === "ligature" && Number.isFinite(d.ecart)) mesures.push({ quoi: "écart entre le bout de la ligature et la queue de la note", valeur: d.ecart, seuil: 0.55 });
+  const compris = { notes, sur, mesures, ...(concernees.length && concernees.length < notes.length ? { concernees } : {}) };
+  return { abcMesure, chiffrage: metre && metre !== "none" ? metre : "", armure: champA(abc, pos, "K"), compris };
+}
+
+/** Ce qu'on dit quand l'avis n'a pas pu venir, ou ne tient pas (un numéro hors de la liste, du JSON illisible). */
+export const PAS_SU_REPONDRE = "Claude n'a pas su répondre : réessaie, ou réponds toi-même.";
+
+/**
+ * Ce que l'écran fait d'un échec : `cacher` la fonction pour la visite
+ * (Claude n'est pas permis ici), `sansImage` (refaire sans l'image : cette
+ * vue n'en envoie pas, ou l'a refusée), sinon un `message` (null : rien à
+ * dire, Adrien a arrêté). Jamais de nouvel essai tout seul, sauf sans
+ * l'image, une fois.
+ *
+ * `sample` rejette un objet simple qui porte son code (sample.d.ts,
+ * `SampleErrorCode`). `invalid_json`, `empty_completion`, `upstream_error`
+ * et tout code inconnu disent PAS_SU_REPONDRE, comme MESSAGE_REFUS pour une
+ * idée : « réessaie » vaut pour une coupure comme pour une réponse
+ * illisible. Une vraie Error vient de Portée (la page n'a pas pu se relire,
+ * son modèle se charger) : elle passe par la traduction des erreurs, comme
+ * partout ailleurs.
+ * @param {any} err
+ * @returns {{ cacher?: boolean, sansImage?: boolean, message: string | null }}
+ */
+export function issueAvis(err) {
+  if (err instanceof Error) return { message: expliquer(err, PAS_SU_REPONDRE) };
+  switch (err && err.code) {
+    case "cancelled": return { message: null };
+    case "not_granted": return { cacher: true, message: "Tu n'as pas autorisé Claude pour cette page : ses avis sont cachés jusqu'au prochain chargement." };
+    case "sampling_disabled": case "not_declared": case "capability_disabled": case "capability_removed":
+      return { cacher: true, message: "Claude n'est pas disponible ici : ses avis sont cachés jusqu'au prochain chargement." };
+    case "images_unavailable": case "image_rejected": return { sansImage: true, message: PAS_SU_REPONDRE };
+    case "rate_limited": return { message: "Claude est très demandé : réessaie dans un moment." };
+    case "session_expired": return { message: "Ta session claude.ai a expiré : reconnecte-toi, puis réessaie." };
+    case "refused": return { message: "Claude a préféré ne pas répondre à cette question : réponds toi-même." };
+    default: return { message: PAS_SU_REPONDRE }; // la console garde le détail
+  }
+}
+
+/** La confiance en mots : Adrien n'a pas à lire un nombre. */
+const assurance = (/** @type {number} */ c) => (c >= 0.85 ? "sûr" : c >= 0.65 ? "assez sûr" : c >= 0.45 ? "hésitant" : "très hésitant");
+
+/**
+ * L'avis validé (validerAvis), en mots : « Claude pense : Croche — assez
+ * sûr », ou « Claude ne sait pas trancher. », et sa phrase.
+ * @param {{ rang: number | null, choix: Reponse | null, confiance: number, pourquoi?: string }} avis
+ */
+export function direAvis(avis) {
+  const titre = avis.choix ? `Claude pense : ${avis.choix.texte} — ${assurance(avis.confiance)}` : "Claude ne sait pas trancher.";
+  return { titre, pourquoi: avis.pourquoi || "" };
 }

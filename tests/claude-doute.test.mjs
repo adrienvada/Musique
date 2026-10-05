@@ -8,7 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { lireFichier } from "../outils/lire.mjs";
 import { poser, preparerDoutes } from "../app/doutes.js";
-import { OPTIONS_AVIS, avisPossible, messageDoute, validerAvis } from "../app/claude-doute.js";
+import { OPTIONS_AVIS, PAS_SU_REPONDRE, avisPossible, direAvis, entreeDoute, issueAvis, messageDoute, validerAvis } from "../app/claude-doute.js";
 
 const MELODIE = "tests/pages/2026-09-30-melodie-standard.pdf";
 const QUESTION = { type: "crochet", titre: "Croche ou noire ?", detail: "Il y a un petit trait au bout de la hampe : un crochet, ou un reste de geste ?", reponses: [{ id: "noire", texte: "Noire", fait: "La note est une noire." }, { id: "croche", texte: "Croche", fait: "La note devient une croche." }] };
@@ -35,7 +35,7 @@ test("le message porte les réponses de poser, toutes, dans l'ordre, numérotée
   const q = poser(doutes[2], r.abc);
   const m = messageDoute({ question: q, abcMesure: r.abc.slice(doutes[2].vise.debut, doutes[2].vise.fin), chiffrage: "4/4", armure: "C" });
   for (const x of ["c2 c edc g2 z GG", "M:4/4", "K:C (sans altération à la clé)", "Question : Il manque une croche", "j'en compte 11 au lieu de 12",
-    "1. Ajouter un silence (un silence de une croche complète la mesure)", "2. Allonger la dernière note (la dernière note est allongée)"]) {
+    "1. Ajouter un silence (un silence d'une croche complète la mesure)", "2. Allonger la dernière note (la dernière note est allongée)"]) {
     assert.ok(m.includes(x), `« ${x} » manque :\n${m}`);
   }
 });
@@ -111,4 +111,74 @@ test("un avis faux ou mal formé est refusé, jamais réparé", () => {
     [{ reponse: 2, confiance: 0.8, pourquoi: "x".repeat(30000) }, /texte trop long/],
     [null, /objet/], ["2", /objet/], [[2, 0.8], /objet/], [2, /objet/],
   ]) non(validerAvis(avis, QUESTION), motif);
+});
+
+// ------------------------------------------------------------------------
+// Autour de la question (lot atelier) : ce qui part, ce qu'on fait d'un échec
+// ------------------------------------------------------------------------
+
+test("ce qui part avec la question : la mesure du doute, son chiffrage et son armure, et ce que le lecteur a compris", async () => {
+  const r = await lireFichier(MELODIE);
+  const doutes = preparerDoutes(r.doutes);
+  // Le crochet de la 2ᵉ ligne : sa mesure entière, en 12/8 et mi♭ majeur, telle que l'ABC d'aujourd'hui l'écrit.
+  const crochet = doutes.find((d) => d.type === "crochet");
+  const tetes = [{ nom: "do5", ecart: 0.1 }, { nom: "do5", ecart: -0.45 }, { nom: "mi♭5" }];
+  const e = entreeDoute({ doute: crochet, abc: r.abc, tetes });
+  assert.equal(e.abcMesure, "c2 c2 edc g2 GG G");
+  assert.deepEqual([e.chiffrage, e.armure], ["12/8", "Eb"]);
+  assert.deepEqual(e.compris.notes, [{ nom: "do5" }, { nom: "do5", sure: false }, { nom: "mi♭5" }]);
+  assert.deepEqual(e.compris.sur, ["3 têtes dans ce passage"]);
+  // Le message qui en part : la mesure, l'armure dite en clair, les têtes numérotées comme sur l'image.
+  const m = messageDoute({ question: poser(crochet, r.abc), ...e, image: true });
+  for (const x of ["M:12/8", "K:Eb (mi♭ majeur)", "c2 c2 edc g2 GG G", "1. do5 ; 2. do5 (à vérifier) ; 3. mi♭5", "numérotées comme sur l'image", "ne la conteste pas"]) assert.ok(m.includes(x), `« ${x} » manque :\n${m}`);
+  // Les vraies têtes du passage : la question dit laquelle elle vise (celle de la boîte du doute).
+  const autour = r.lues[0].tetes.filter((t) => t.portee === crochet.portee && t.cx >= crochet.boite.x0 - 150 && t.cx <= crochet.boite.x1 + 150).sort((u, v) => u.cx - v.cx);
+  const ec = entreeDoute({ doute: crochet, abc: r.abc, tetes: autour, interligne: r.cal.interligne });
+  assert.equal(ec.compris.concernees.length, 1, JSON.stringify(ec.compris));
+  const k = ec.compris.concernees[0];
+  assert.ok(autour[k - 1].cx >= crochet.boite.x0 && autour[k - 1].cx <= crochet.boite.x1);
+  assert.ok(messageDoute({ question: poser(crochet, r.abc), ...ec }).includes(`La question porte sur la tête ${k}.`));
+  // Toutes les têtes visées (une mesure entière) : rien à préciser.
+  assert.equal(entreeDoute({ doute: { ...crochet, boite: { x0: 0, y0: 0, x1: 5000, y1: 5000 } }, abc: r.abc, tetes: autour }).compris.concernees, undefined);
+  // Une tête entre deux places : son écart, en interlignes, et ce qui la ferait changer de note.
+  const hauteur = doutes.find((d) => d.type === "hauteur");
+  assert.deepEqual(entreeDoute({ doute: hauteur, abc: r.abc }).compris.mesures, [{ quoi: "écart de la tête douteuse au milieu de sa place", valeur: hauteur.ecart / 2, seuil: 0.25 }]);
+  const ligature = doutes.find((d) => d.type === "ligature");
+  assert.deepEqual(entreeDoute({ doute: ligature, abc: r.abc }).compris.mesures.map((x) => [x.valeur, x.seuil]), [[ligature.ecart, 0.55]]);
+  // Une armure ou un chiffrage : toute la ligne. Un doute qui ne vise plus rien : pas de mesure (le message le dit).
+  const ligne = { type: "armure", cle: "Eb", viseLigne: { debut: r.abc.indexOf("[K:Eb]"), fin: r.abc.indexOf("\n", r.abc.indexOf("[K:Eb]")) } };
+  assert.ok(entreeDoute({ doute: ligne, abc: r.abc }).abcMesure.startsWith("[K:Eb][M:12/8]G |:"));
+  assert.equal(entreeDoute({ doute: { type: "crochet", vise: null }, abc: r.abc }).abcMesure, "");
+  // Une tête sans nom (une donnée abîmée) ne part pas.
+  assert.deepEqual(entreeDoute({ doute: crochet, abc: r.abc, tetes: [{ ecart: 0 }, null, { nom: "la4" }] }).compris.notes, [{ nom: "la4" }]);
+});
+
+test("un échec de sample : caché pour la visite, refait sans image, ou dit en clair ; « Arrêter » ne dit rien ; une erreur de Portée se traduit", () => {
+  // Ce que rejette sample : un objet simple, avec son code (sample.d.ts).
+  const echec = (code) => issueAvis({ code, message: "in English" });
+  assert.deepEqual(echec("cancelled"), { message: null });
+  for (const code of ["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"]) {
+    const i = echec(code);
+    assert.equal(i.cacher, true, code);
+    assert.match(i.message, /cachés jusqu'au prochain chargement/);
+  }
+  assert.match(echec("not_granted").message, /^Tu n'as pas autorisé Claude/);
+  for (const code of ["images_unavailable", "image_rejected"]) assert.equal(echec(code).sansImage, true, code);
+  assert.equal(echec("rate_limited").message, "Claude est très demandé : réessaie dans un moment.");
+  assert.match(echec("session_expired").message, /reconnecte-toi/);
+  assert.match(echec("refused").message, /préféré ne pas répondre/);
+  for (const code of ["invalid_json", "empty_completion", "upstream_error", "invalid_request", "prompt_too_large", "un_code_inconnu", undefined]) assert.deepEqual(echec(code), { message: PAS_SU_REPONDRE }, String(code));
+  assert.deepEqual(issueAvis(null), { message: PAS_SU_REPONDRE });
+  // Une erreur de Portée (la page relue, le modèle chargé) : la traduction des erreurs, comme partout.
+  assert.match(issueAvis(new TypeError("Failed to fetch")).message, /^Pas de connexion\. Réessaie quand le réseau sera revenu\.$/);
+  assert.equal(issueAvis(Object.assign(new Error("Cette page a été écrite sur le modèle « Piano », que cette version de Portée ne connaît pas : mets l'appli à jour."), { code: "modele_inconnu" })).message,
+    "Cette page a été écrite sur le modèle « Piano », que cette version de Portée ne connaît pas : mets l'appli à jour.");
+  assert.equal(issueAvis(new Error("boom")).message, PAS_SU_REPONDRE);
+});
+
+test("l'avis se dit en mots : la réponse choisie et son assurance, ou « ne sait pas trancher »", () => {
+  const avis = (rang, confiance) => ok(validerAvis({ reponse: rang === null ? null : rang + 1, confiance, pourquoi: "Le trait au bout de la hampe est net." }, QUESTION));
+  assert.deepEqual(direAvis(avis(1, 0.7)), { titre: "Claude pense : Croche — assez sûr", pourquoi: "Le trait au bout de la hampe est net." });
+  assert.deepEqual([0.95, 0.85, 0.65, 0.5, 0.2].map((c) => direAvis(avis(0, c)).titre.split(" — ")[1]), ["sûr", "sûr", "assez sûr", "hésitant", "très hésitant"]);
+  assert.equal(direAvis(avis(null, 0.3)).titre, "Claude ne sait pas trancher.");
 });

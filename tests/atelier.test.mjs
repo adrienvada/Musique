@@ -6,6 +6,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import abcjs from "abcjs";
 import { avertissementAbc, pourGravure } from "../app/atelier.js";
+import { cadreAvis, cadrePage, dessinerPassage } from "../app/manuscrit.js";
+import { lireFichier } from "../outils/lire.mjs";
 
 /** Les avertissements d'abcjs pour cet ABC, tel que l'atelier le grave (avec son préfixe). */
 const avertissements = (abc) => abcjs.parseOnly(pourGravure(abc))[0].warnings || [];
@@ -25,4 +27,28 @@ test("I13 · ce qu'abcjs reproche au texte ABC se dit en français, à la ligne 
   for (const x of a) assert.doesNotMatch(avertissementAbc(x), /Unknown|Expected|nest|span/);
   // Un ABC juste : rien à dire.
   assert.deepEqual(avertissements("X:1\nM:4/4\nL:1/8\nK:C\nC2 D2 E2 F2 |\n"), []);
+});
+
+test("H1 · le passage d'un doute, pour Claude : sa boîte, toute sa portée et ses lignes supplémentaires, sans sortir de la page", async () => {
+  const r = await lireFichier("tests/pages/2026-09-30-melodie-standard.pdf");
+  const { cal } = r, il = cal.interligne, page = cadrePage(cal);
+  for (const d of r.doutes) {
+    const v = cadreAvis(cal, d.boite);
+    assert.ok(v.x <= d.boite.x0 && v.x + v.w >= d.boite.x1 && v.y <= d.boite.y0 && v.y + v.h >= d.boite.y1, `${d.type} : la boîte dépasse`);
+    const p = cal.systemes.flatMap((s) => s.portees)[d.portee];
+    assert.ok(v.y <= p.lignes[0] - 2 * il && v.y + v.h >= p.lignes[4] + 2 * il, `${d.type} : la portée n'est pas entière`);
+    assert.ok(v.x >= page.gauche && v.x + v.w <= page.droite && v.y >= 0 && v.y + v.h <= page.hauteur, `${d.type} : hors de la page`);
+  }
+  // Au bord de la page : le cadre s'arrête au bord.
+  const bord = cadreAvis(cal, { x0: page.gauche + 2, y0: 4, x1: page.gauche + 20, y1: 30 });
+  assert.deepEqual([bord.x, bord.y], [page.gauche, 0]);
+  // Le dessin : du blanc, les lignes, tes traits, un numéro par tête (dans l'ordre donné).
+  const appels = [];
+  const ctx = new Proxy({}, { get: (_o, nom) => (...args) => appels.push([nom, ...args]), set: (_o, nom, v) => { appels.push([`=${String(nom)}`, v]); return true; } });
+  const vue = cadreAvis(cal, r.doutes[0].boite);
+  const tetes = r.lues[0].tetes.slice(0, 3);
+  dessinerPassage(ctx, cal, r.pages[0].traits, { vue, echelle: 2, tetes });
+  assert.deepEqual(appels.slice(0, 2), [["=fillStyle", "#ffffff"], ["fillRect", 0, 0, vue.w * 2, vue.h * 2]]);
+  assert.deepEqual(appels.filter(([n]) => n === "fillText").map((x) => x[1]), ["1", "2", "3"]);
+  assert.equal(appels.filter(([n]) => n === "stroke").length, cal.systemes.flatMap((s) => s.portees).length * 5 + r.pages[0].traits.filter((t) => t.length >= 2).length);
 });
