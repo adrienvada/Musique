@@ -2540,9 +2540,18 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
       « Autoriser » ;
     - au site, pas de bouton (`tests/e2e/atelier.test.mjs`).
   - À la republication de l'artefact, la capacité `sample` doit être
-    déclarée : sans elle, le bouton ne paraît pas. `permissions` aussi,
-    si elle se déclare : sans elle, « Autoriser » laisse place à un simple
-    message.
+    déclarée : sans elle, le bouton ne paraît pas. `permissions`, elle, ne
+    se déclare jamais : claude.ai la donne à toute page.
+- **À la fusion des lots (04/10), trois raccords.** Chaque lot était vert
+  seul ; réunis, trois endroits ne se connaissaient pas :
+  - les outils de Claude dans une conversation (`partitions_lister`,
+    `partition_lire`, `suggestion_ecrire`) écartent les fiches cachées des
+    gabarits : sinon Claude les aurait vues comme des pages ;
+  - le carnet charge la calibration d'une page avec sa version (L9), comme
+    « Corriger » ;
+  - le bilan d'une restauration dit combien d'exemples de ton écriture la
+    sauvegarde a appris : une sauvegarde qui n'apportait qu'eux se disait
+    « vide ».
 
 ### Écrans des données (D6, D7, D9, H3)
 

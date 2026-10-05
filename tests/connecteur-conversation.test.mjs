@@ -43,6 +43,8 @@ async function monde() {
   await bib.ecrire({ id: "pluie", donnees: IDEE, pages: [], modifieLe: QUAND });
   await bib.ecrire({ id: "chanson", donnees: MORCEAU, pages: [], modifieLe: QUAND });
   await bib.ecrire({ id: "efface", supprime: true, modifieLe: QUAND });
+  // Une fiche cachée de gabarits (L16) : elle voyage avec la bibliothèque, mais n'est pas une partition.
+  await bib.ecrire({ id: "gabarits-bemol", donnees: { type: "gabarits", titre: "Gabarits : bémol", exemples: [] }, pages: [], modifieLe: QUAND });
   const outil = async (name, args = {}) => (await traiter({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, null, bib, { suggestions: sug })).result;
   return { stockage, bib, sug, outil };
 }
@@ -80,6 +82,9 @@ test("partitions_lister : titres, types et doutes, sans les supprimées ; recher
     assert.equal((await outil("partitions_lister", { recherche: "" })).structuredContent.total, 3);
     assert.equal((await outil("partitions_lister", { type: "dessin" })).isError, true);
     assert.equal((await outil("partitions_lister", { tri: "titre" })).isError, true);
+    // Les gabarits ne sont ni listés, ni lisibles, ni visés par une suggestion.
+    assert.equal((await outil("partition_lire", { id: "gabarits-bemol" })).isError, true);
+    assert.equal((await outil("suggestion_ecrire", { cible: "gabarits-bemol", genre: "texte", contenu: { titre: "Bémols" }, pourquoi: "essai" })).isError, true);
   } finally {
     await stockage.fermer();
   }

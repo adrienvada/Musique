@@ -12,6 +12,10 @@ import { bilanRestauration, messageSauvegarde, sortesRevenues } from "../app/sau
 test("le bilan d'une restauration, en une phrase", () => {
   assert.equal(bilanRestauration({}), "Cette sauvegarde est vide.");
   assert.equal(bilanRestauration({ ignorees: 3 }), "Rien à restaurer : tout est déjà dans ta bibliothèque.");
+  // Une sauvegarde qui n'apporte que des exemples de ton écriture (L16) n'est pas « vide ».
+  assert.equal(bilanRestauration({ gabarits: 12 }), "12 exemples de ton écriture appris.");
+  assert.equal(bilanRestauration({ gabarits: 1, ignorees: 2 }), "1 exemple de ton écriture appris · 2 déjà là.");
+  assert.equal(bilanRestauration({ revenues: 1, sortes: { idee: 1, morceau: 0, partition: 0 }, gabarits: 3 }), "1 idée revenue · 3 exemples de ton écriture appris.");
   assert.equal(bilanRestauration({ revenues: 1 }), "1 élément revenu.");
   assert.equal(bilanRestauration({ revenues: 2, ignorees: 1, differentes: 1 }), "2 éléments revenus · 1 déjà là (dont 1 modifié depuis, gardé tel quel).");
   const echecs = [1, 2, 3, 4].map((i) => ({ titre: `P${i}`, raison: "illisible" }));

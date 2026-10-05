@@ -125,7 +125,7 @@ export function toutesEtiquettes(partitions) {
  *   ouvrir(id, vue), ouvrirIdee(p, options), ouvrirMorceau(p),
  *   partagerMidi(p), exporterMidi(p),
  *   supprimer(p) (demande confirmation, puis supprime),
- *   calibration(modele), ideesParId(), importer(fichiers), toast(texte),
+ *   calibration(modele, version), ideesParId(), importer(fichiers), toast(texte),
  *   afficherReglages() (les Réglages relisent ce qui garde la bibliothèque, sauvegarde-ui.js),
  *   versions (versions-ui.js : la copie de conflit, les versions précédentes),
  *   suggestionsPour(id) → combien de suggestions de Claude attendent (suggestions-ui.js)
@@ -233,7 +233,8 @@ export function creerAccueil(deps) {
     } else if (p.type === "morceau") dessinerApercuMorceau(svg, p, deps.ideesParId());
     else if (p.apercu && p.modele) {
       // Le cadre réel de la vignette (il change d'un écran à l'autre) ; à défaut, celui qu'on attendait.
-      deps.calibration(p.modele).then((cal) => {
+      // La calibration de la version sur laquelle la page a été écrite (L9) : jamais celle d'une autre.
+      deps.calibration(p.modele, p.versionModele).then((cal) => {
         const r = svg.getBoundingClientRect();
         dessinerApercuPage(svg, cal, p.apercu, r.width && r.height ? r.width / r.height : ratio);
       }).catch(() => {});

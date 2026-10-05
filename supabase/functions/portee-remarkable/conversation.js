@@ -260,10 +260,16 @@ function tempoAbc(abc) {
   return q ? Math.round(Number(q[3]) * (q[1] ? (4 * Number(q[1])) / Number(q[2]) : 1)) : null;
 }
 
-/** Les fiches vivantes de la bibliothèque (sans les pierres tombales). */
+/**
+ * Les fiches vivantes de la bibliothèque (sans les pierres tombales), et
+ * seulement des partitions. Les gabarits de l'écriture d'Adrien (L16)
+ * voyagent avec la bibliothèque dans des fiches cachées (`type: "gabarits"`) :
+ * ce ne sont pas des partitions, Claude ne les liste, ne les lit ni ne les
+ * vise (sinon ils compteraient comme des pages).
+ */
 async function fiches(bibliotheque) {
   const { partitions } = await bibliotheque.changements(null);
-  return (partitions || []).filter((f) => f && !f.supprime && f.donnees && typeof f.donnees === "object");
+  return (partitions || []).filter((f) => f && !f.supprime && f.donnees && typeof f.donnees === "object" && f.donnees.type !== "gabarits");
 }
 
 export async function lireFiche(bibliotheque, id, toutes = null) {

@@ -46,9 +46,16 @@ export function sortesRevenues(contenu, dejaLa, bilan) {
  * (même supprimées ailleurs depuis), combien étaient déjà là (gardées telles
  * quelles), et lesquelles n'ont pas pu revenir, avec la raison. `sortes` :
  * ce qui est revenu, par sorte (sortesRevenues) ; sans lui, des « éléments ».
+ * `gabarits` : les exemples de ton écriture (L16) que la sauvegarde a appris
+ * en plus à cette bibliothèque ; sans les dire, une sauvegarde qui n'apporte
+ * qu'eux se disait « vide ».
  */
-export function bilanRestauration({ revenues = 0, ignorees = 0, differentes = 0, echecs = [], sortes = null }) {
-  if (!revenues && !echecs.length) return ignorees ? "Rien à restaurer : tout est déjà dans ta bibliothèque." : "Cette sauvegarde est vide.";
+export function bilanRestauration({ revenues = 0, ignorees = 0, differentes = 0, echecs = [], sortes = null, gabarits = 0 }) {
+  const appris = gabarits > 0 ? pluriel(gabarits, "exemple de ton écriture appris", "exemples de ton écriture appris") : "";
+  if (!revenues && !echecs.length) {
+    if (appris) return `${appris}${ignorees ? ` · ${ignorees} déjà là` : ""}.`;
+    return ignorees ? "Rien à restaurer : tout est déjà dans ta bibliothèque." : "Cette sauvegarde est vide.";
+  }
   const morceaux = [];
   if (revenues) {
     const compte = sortes ? compteParSorte(sortes) : null;
@@ -62,6 +69,7 @@ export function bilanRestauration({ revenues = 0, ignorees = 0, differentes = 0,
     const lesquelles = echecs.slice(0, 3).map((x) => `« ${x.titre} » (${x.raison})`).join(", ") + (echecs.length > 3 ? "…" : "");
     morceaux.push(`${pluriel(echecs.length, "n'a pas pu revenir", "n'ont pas pu revenir")} : ${lesquelles}`);
   }
+  if (appris) morceaux.push(appris);
   return morceaux.join(" · ") + ".";
 }
 
