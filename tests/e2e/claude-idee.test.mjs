@@ -224,6 +224,11 @@ test("un titre et des étiquettes retouchés avant de garder ; « Ce que tu veux
     await page.click("#idee-annuler");
     await page.waitForFunction(() => document.querySelector("#idee-grille .g-note:not(.autre)").textContent.trim() === "do4");
     assert.match(await page.textContent("#idee-resume"), /Do majeur/);
+    // Le bouton « précédent » du téléphone ferme la feuille, comme les autres, sans quitter l'idée.
+    await ouvrirClaude(page);
+    await page.goBack();
+    await page.waitForSelector("#idee-claude:not([open])", { state: "attached" });
+    assert.equal(await page.isVisible("#vue-idee"), true);
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });

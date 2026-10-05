@@ -2417,12 +2417,14 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     demandé : réessaie dans un moment ». Jamais de nouvel essai tout seul.
   - L'entrée du « ••• » passe par idee.js, comme le Carnet et le Tempo, pas
     par gestes.js : elle a besoin de l'idée telle qu'elle est à l'écran (sa
-    sélection), et « Ce que tu veux » sert aussi sur une idée vide, que les
-    gestes de gestes.js refusent.
+    sélection), et « Ce que tu veux » sert aussi sur une idée vide, alors
+    que les actions de gestes.js reçoivent l'idée enregistrée (le « ••• »
+    dit « L'idée est vide » avant de leur passer la main).
   - Essais : `tests/e2e/claude-idee.test.mjs`, au téléphone, avec un faux
     `sample` (`tests/e2e/faux-sample.mjs`, posé par-dessus le faux
-    claude.ai) qui répond ce que l'essai prévoit ; et rien n'apparaît sur
-    le site ni dans une version claude.ai sans `sample`.
+    claude.ai) qui répond ce que l'essai prévoit ; « précédent » ferme la
+    feuille comme les autres ; et rien n'apparaît sur le site ni dans une
+    version claude.ai sans `sample`.
   - Piège : `.gardee` et `.neuve` servent déjà au mode Chanter
     (idee-chant.css), sans qualificatif : le rouleau prend des noms à lui
     (`claude-reste`, `claude-propose`, `claude-remplace`).
