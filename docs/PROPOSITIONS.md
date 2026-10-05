@@ -2866,6 +2866,47 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - Le composant « visuellement caché » était recopié quatre fois (l'annonce
     du mode, celle du chant, celle des accords, l'état du morceau) : tous
     prennent `.visuellement-cache`.
+- **Les feuilles montent et redescendent, les fenêtres apparaissent en
+  douceur (I3).** Une feuille du bas monte du bas de l'écran (0,26 s) et y
+  redescend en se fermant ; la fenêtre d'une question grandit à peine en
+  apparaissant ; le voile se fond. L'entrée part de `@starting-style`, la
+  sortie garde le `<dialog>` dans la couche du dessus le temps qu'il s'en va
+  (`overlay`, `display` en `allow-discrete`). Là où `overlay` manque (Safari,
+  Firefox), la feuille se fermerait derrière le reste de la page : elle s'y
+  ferme d'un coup, comme avant. Ce qui s'en va ne prend plus aucun toucher.
+  - **Pas de `closedby="any"`, essayé puis écarté.** Il ferme une feuille au
+    voile sans rien écrire, mais au doigt, Chromium la ferme dès qu'on relève
+    le doigt, et le toucher atteint ce qui est sous le voile : la recherche
+    s'ouvrait sous la feuille, trois fois sur trois (vérifié aussi sur
+    l'appli d'avant, où l'on posait l'attribut à la main). `feuilles.js`
+    ferme sur le clic, une fois le toucher fini : rien ne passe au travers,
+    et Safari, qui ne connaît pas closedby, fait pareil.
+  - **L'écran qui s'ouvre se pose d'un fondu** (0,18 s), l'onglet de
+    l'accueil aussi. Pas de `document.startViewTransition` : il change la
+    page un instant plus tard, alors que `montrer()` doit la changer tout de
+    suite (l'éditeur se mesure et prend les couleurs du Studio juste après).
+    Un fondu seulement : rien ne bouge sous le doigt.
+  - **Moins de mouvement demandé** (le réglage du téléphone) : ni animation,
+    ni transition, ni défilement doux. Quatre défilements glissaient malgré
+    lui (« Corriger » vers la partition lue et le mode avancé, les panneaux
+    de la tablette et des modèles) : ils passent par `defilement()`
+    (`app/mouvement.js`, sans DOM, vérifié par les types), comme celui du
+    morceau, qui avait sa propre fonction.
+  - **« Précédent » ferme la fenêtre du dessus.** Avec une question posée
+    sur une feuille de la racine de la page (les versions, la corbeille), il
+    fermait la feuille et laissait la question ouverte : l'ordre de la page
+    n'est pas celui de l'écran. La question passe d'abord. Sur Android, le
+    geste retour ferme déjà le `<dialog>` du dessus sans toucher à
+    l'historique : rien ne se ferme deux fois.
+  - **La barre du navigateur suit l'écran** (`theme-color`) : la couleur de
+    la barre du Studio dans l'éditeur, le papier clair ou sombre ailleurs
+    (`navigation.js` garde les deux couleurs de l'assembleur pour y revenir).
+  - Essais : `tests/e2e/feuilles.test.mjs` (le voile qui ferme sans toucher
+    ce qui est dessous, la sortie qui ne prend plus le doigt, Échap et
+    « précédent » avec une question sur une feuille, le mouvement réduit, la
+    barre du navigateur). L'essai de la boîte à outils qui laisse la place à
+    Claude (`claude-idee.test.mjs`) attend maintenant qu'elle soit
+    redescendue.
 
 <!-- lot interface -->
 

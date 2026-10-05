@@ -18,6 +18,7 @@ import { nbMesures } from "./sequence.js";
 import { dessinerApercu } from "./apercus.js";
 import { ico } from "./icones.js";
 import { ouvrirFeuille, fermerFeuille } from "./feuilles.js";
+import { defilement } from "./mouvement.js";
 import { $, pluriel } from "./ui.js";
 import { creerEnregistreur } from "./enregistreur.js";
 import { creerEcoute } from "./ecoute.js";
@@ -44,7 +45,6 @@ export function creerVueMorceau(deps) {
   const lignes = () => [...$("morceau-blocs").children];
   const ligne = (id) => lignes().find((li) => li.dataset.id === id);
   const segment = (id) => [...$("morceau-frise").querySelectorAll(".frise-seg")].find((s) => s.dataset.id === id);
-  const reduireMouvement = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   $("morceau-sections").innerHTML = SECTIONS.map((s) => `<option value="${s}">`).join("");
 
@@ -323,7 +323,7 @@ export function creerVueMorceau(deps) {
 
   /** Amène une carte sous les yeux, sans toucher à la page si elle y est déjà. */
   function defiler(li) {
-    li.scrollIntoView({ block: "nearest", behavior: reduireMouvement() ? "auto" : "smooth" });
+    li.scrollIntoView({ block: "nearest", behavior: defilement() });
   }
 
   // --- Choisir une idée à ajouter ---------------------------------------------------

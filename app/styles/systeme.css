@@ -248,24 +248,57 @@ select.champ { padding-right: 8px; }
 .panneau { background: var(--feuille); border: 1px solid var(--trait); border-radius: var(--r-16); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .panneau > .surtitre { display: flex; align-items: center; gap: 8px; }
 
-/* La fenêtre au milieu (choix courts, confirmations) */
-.dialogue { border: 0; border-radius: var(--r-16); background: var(--feuille); color: var(--encre); padding: 0; width: min(420px, calc(100vw - 32px)); box-shadow: var(--ombre); }
-.dialogue::backdrop { background: var(--voile); }
+/* LES FENÊTRES ET LES FEUILLES ENTRENT ET SORTENT EN DOUCEUR (audit du 04/10, I3).
+   L'entrée part de @starting-style (l'état d'avant l'ouverture) ; la sortie a
+   besoin que le navigateur garde le <dialog> dans la couche du dessus le temps
+   qu'il s'en va (`overlay`, et `display` en allow-discrete) : là où `overlay`
+   manque (Safari, Firefox), il se fermerait derrière le reste de la page, il s'y
+   ferme donc d'un coup. Qui s'en va ne prend plus aucun toucher. Tout cela
+   s'arrête si l'on a demandé moins de mouvement (la dernière règle de cette
+   feuille). */
+:root { --sortie-feuille: cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* La fenêtre au milieu (choix courts, confirmations) : elle apparaît en grandissant à peine. */
+.dialogue { border: 0; border-radius: var(--r-16); background: var(--feuille); color: var(--encre); padding: 0; width: min(420px, calc(100vw - 32px)); box-shadow: var(--ombre); opacity: 0; scale: 0.96; transition: opacity 0.16s ease-out, scale 0.16s ease-out; }
+.dialogue[open] { opacity: 1; scale: 1; }
+.dialogue::backdrop { background: transparent; transition: background-color 0.16s ease-out; }
+.dialogue[open]::backdrop { background: var(--voile); }
+@starting-style {
+  .dialogue[open] { opacity: 0; scale: 0.96; }
+  .dialogue[open]::backdrop { background: transparent; }
+}
 .dialogue-dedans { display: flex; flex-direction: column; gap: 10px; padding: 18px; }
 .dialogue-dedans h2 { font-size: var(--t-20); }
 .dialogue-dedans .liste-choix { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
 .dialogue-dedans .liste-choix .btn { justify-content: flex-start; white-space: normal; text-align: left; }
 
-/* La feuille du bas : un <dialog class="feuille-bas">, ouvert par feuilles.js.
-   Au téléphone, elle monte sous le pouce ; à l'ordinateur, elle reste
-   centrée en bas, pas plus large qu'un téléphone. */
-dialog.feuille-bas { position: fixed; inset: auto 0 0 0; margin: 0 auto; width: 100%; max-width: 560px; max-height: min(90dvh, 780px); border: 0; border-radius: var(--r-22) var(--r-22) 0 0; background: var(--feuille); color: var(--encre); padding: 6px 16px calc(18px + env(safe-area-inset-bottom, 0px)); box-shadow: var(--ombre); overflow: auto; overscroll-behavior: contain; }
-dialog.feuille-bas::backdrop { background: var(--voile); }
+/* La feuille du bas : un <dialog class="feuille-bas">, ouvert par feuilles.js (un
+   toucher sur le voile la ferme). Au téléphone, elle monte sous le
+   pouce ; à l'ordinateur, elle reste centrée en bas, pas plus large qu'un téléphone.
+   Elle monte du bas de l'écran, et y redescend en se fermant. */
+dialog.feuille-bas { position: fixed; inset: auto 0 0 0; margin: 0 auto; width: 100%; max-width: 560px; max-height: min(90dvh, 780px); border: 0; border-radius: var(--r-22) var(--r-22) 0 0; background: var(--feuille); color: var(--encre); padding: 6px 16px calc(18px + env(safe-area-inset-bottom, 0px)); box-shadow: var(--ombre); overflow: auto; overscroll-behavior: contain; translate: 0 100%; transition: translate 0.26s var(--sortie-feuille); }
+dialog.feuille-bas[open] { translate: 0 0; }
+dialog.feuille-bas::backdrop { background: transparent; transition: background-color 0.26s ease-out; }
+dialog.feuille-bas[open]::backdrop { background: var(--voile); }
+@starting-style {
+  dialog.feuille-bas[open] { translate: 0 100%; }
+  dialog.feuille-bas[open]::backdrop { background: transparent; }
+}
 dialog.feuille-bas::before { content: ""; display: block; width: 36px; height: 4px; border-radius: var(--r-trait); background: var(--trait-fort); margin: 4px auto 12px; }
-dialog.feuille-bas[open] { animation: feuille-monte 0.18s ease-out; }
 dialog.feuille-bas .feuille-tete { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: var(--t-22); }
-@keyframes feuille-monte { from { transform: translateY(28px); opacity: 0.6; } }
+@supports (overlay: auto) {
+  .dialogue, .dialogue::backdrop { transition-property: opacity, scale, background-color, display, overlay; transition-behavior: allow-discrete; }
+  dialog.feuille-bas, dialog.feuille-bas::backdrop { transition-property: translate, background-color, display, overlay; transition-behavior: allow-discrete; }
+}
+dialog:not([open]), dialog:not([open])::backdrop { pointer-events: none; }
+
+/* L'écran qui s'ouvre (et l'onglet de l'accueil qu'on choisit) se pose d'un fondu
+   court. Un fondu seulement : rien ne bouge sous le doigt, et l'écran change
+   d'un coup dans la page, comme avant (navigation.js en dépend : l'éditeur se
+   mesure dès qu'il est montré). */
+.vue { animation: vue-arrive 0.18s ease-out; }
+@keyframes vue-arrive { from { opacity: 0; } }
 
 /* Les messages passagers s'affichent en haut : en bas, ils cachaient le
    clavier et la liste, là où va le pouce. Ils laissent passer les doigts :

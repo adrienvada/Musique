@@ -27,6 +27,7 @@ import {
   pastilleBarre, placerOnglets, PREFIXE_GRAVURE, pourGravure, proposerGeste, suivreDock, tempoInitial,
 } from "./atelier.js";
 import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
+import { defilement } from "./mouvement.js";
 import { ecrirePref, lirePref } from "./preferences.js";
 import { explication } from "./erreurs.js";
 import { $, couleurDuJeton as couleur, dateRelative, el, pluriel, toast } from "./ui.js";
@@ -752,7 +753,7 @@ export function creerEcranAtelier(deps) {
     // Zoomée, la partition lue défile de côté jusqu'à la note visée.
     garderEnVue({ verticale: false });
     // Une fois le panneau redimensionné (sa hauteur règle la marge du bas), on amène la partition lue sous la barre.
-    setTimeout(() => $("zone-lue").scrollIntoView({ behavior: "smooth", block: "start" }), 250);
+    setTimeout(() => $("zone-lue").scrollIntoView({ behavior: defilement(), block: "start" }), 250);
     if (a.selection !== null) entendre(jetonChoisi());
   }
 
@@ -1008,7 +1009,7 @@ export function creerEcranAtelier(deps) {
   $("voir-abc").addEventListener("click", () => {
     const avance = document.querySelector("#vue-atelier .avance");
     avance.open = true;
-    avance.scrollIntoView({ behavior: "smooth", block: "start" });
+    avance.scrollIntoView({ behavior: defilement(), block: "start" });
   });
   $("supprimer").addEventListener("click", deps.supprimer);
 

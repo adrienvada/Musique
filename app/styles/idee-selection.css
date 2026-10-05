@@ -31,7 +31,7 @@
 
 /* La boîte à outils : « ••• » de la pilule. Le voile est léger, pour qu'on voie
    la grille bouger derrière à chaque geste. */
-.idee-boite::backdrop { background: color-mix(in srgb, var(--voile) 40%, transparent); }
+dialog.idee-boite[open]::backdrop { background: color-mix(in srgb, var(--voile) 40%, transparent); }
 .idee-boite[open] { gap: 10px; }
 /* Le titre dit ce qui est choisi : un accord à quatre notes passe sur deux lignes plutôt que d'être coupé. */
 dialog.idee-boite .feuille-tete h2 { font-size: var(--t-20); line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }

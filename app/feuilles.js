@@ -4,8 +4,17 @@
  * Une feuille est un <dialog class="feuille-bas"> (systeme.css) : elle monte
  * sous le pouce, au-dessus d'un voile, et garde le focus tant qu'elle est
  * ouverte. Le <dialog> natif fait déjà le plus dur (Échap, focus, couche du
- * dessus) ; ici, on ajoute ce qu'il ne fait pas : fermer d'un toucher sur
- * le voile, et prévenir quand la feuille se ferme.
+ * dessus, et le geste retour d'Android, qui la ferme) ; ici, on ajoute ce
+ * qu'il ne fait pas : fermer d'un toucher sur le voile, et prévenir quand la
+ * feuille se ferme.
+ *
+ * Pourquoi pas `closedby="any"`, qui ferme au voile sans rien écrire (Chrome
+ * 134, Firefox 141) ? Essayé (audit du 04/10, I3) : au doigt, Chromium ferme la
+ * feuille dès qu'on relève le doigt, et le toucher atteint alors ce qui est
+ * sous le voile (la recherche s'ouvrait, trois fois sur trois). Ici, la feuille
+ * se ferme sur le clic, une fois le toucher fini : ce clic est à elle, rien ne
+ * passe au travers ; et cela marche aussi sur Safari, qui ne connaît pas
+ * closedby. L'essai le garde (tests/e2e/feuilles.test.mjs).
  */
 
 /**
@@ -16,8 +25,8 @@
 export function brancherFeuille(dlg, { surFermer } = {}) {
   if (dlg.dataset.branchee) return dlg;
   dlg.dataset.branchee = "1";
-  // Un toucher hors du cadre de la feuille tombe sur le voile (::backdrop),
-  // que le navigateur attribue au <dialog> lui-même.
+  // Un toucher hors du cadre de la feuille tombe sur le voile (::backdrop), que le
+  // navigateur attribue au <dialog> lui-même.
   dlg.addEventListener("click", (e) => {
     if (e.target !== dlg) return;
     const r = dlg.getBoundingClientRect();
