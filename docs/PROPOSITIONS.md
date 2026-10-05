@@ -1288,8 +1288,12 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     chacun à sa crête, la force fait déjà le volume ; les couches donnent le
     timbre, sans saut de volume quand on passe de l'une à l'autre.
   - Les fichiers changent de nom (`060-mf.mp3`, `echantillons.json`) : le
-    service worker garde le piano sans jamais le redemander, et les anciens
-    noms auraient gardé les anciens sons.
+    service worker d'alors gardait le piano sans jamais le redemander, et
+    les anciens noms auraient gardé les anciens sons. Depuis le lot
+    outillage, son cache suit l'empreinte des fichiers du piano et les
+    garde tous, PP et FF compris (1,7 Mo de plus, en tâche de fond, à la
+    première visite) : sur le site, « à la demande » ne vaut plus que pour
+    le décodage, et pour claude.ai, qui n'a pas de service worker.
 - **Les pages lues jouent sur l'horloge du son (M5).** abcjs les jouait au
   fil de ses minuteries, au rythme des images de l'écran : des croches de
   250 ms en faisaient de 238 à 270 ms au repos, de 119 à 392 ms quand le fil
