@@ -1,7 +1,6 @@
 <title>Portée</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<!-- Les polices viennent du site, plus de Google Fonts (styles/polices.css). -->
+<link rel="stylesheet" href="styles/polices.css">
 <link rel="stylesheet" href="styles/systeme.css">
 <link rel="stylesheet" href="styles/bibliotheque.css">
 <link rel="stylesheet" href="styles/atelier.css">
@@ -12,10 +11,12 @@
 <link rel="stylesheet" href="styles/idee-direct.css">
 <link rel="stylesheet" href="styles/idee-accords.css">
 <link rel="stylesheet" href="styles/idee-selection.css">
+<link rel="stylesheet" href="styles/idee-claude.css">
 
 <header class="barre-haut">
   <div class="dedans">
-    <button class="logo" id="aller-biblio" aria-label="Revenir au carnet">
+    <!-- Le nom commence par ce qu'on lit (« Portée ») : la commande vocale le trouve (WCAG 2.5.3, I11). -->
+    <button class="logo" id="aller-biblio" aria-label="Portée, revenir au carnet">
       <svg viewBox="-10 -1110 690 1780" aria-hidden="true"><path fill="currentColor" d="M376,-415C374,-427 376,-428 382,-434C398,-449 419,-470 438,-491C522,-583 572,-702 572,-815C572,-902 548,-988 507,-1048C492,-1070 466,-1098 455,-1098C441,-1098 410,-1072 390,-1050C316,-968 292,-843 292,-739C292,-681 299,-616 306,-575C308,-563 309,-561 297,-551C233,-498 164,-437 112,-373C43,-287 0,-194 0,-87C0,87 119,252 364,252C387,252 413,250 433,246C444,244 446,243 448,255C460,322 475,409 475,456C475,604 375,622 316,622C262,622 236,606 236,593C236,586 245,583 268,576C299,567 335,540 335,482C335,427 300,380 239,380C172,380 132,433 132,495C132,560 171,658 322,658C389,658 519,628 519,458C519,401 501,306 490,244C488,232 489,233 503,227C604,187 671,102 671,-11C671,-139 577,-252 430,-252C404,-252 404,-252 401,-270ZM470,-943C503,-943 530,-916 530,-861C530,-792 497,-728 419,-650C403,-634 379,-611 356,-591C349,-585 345,-586 343,-599C339,-625 337,-659 337,-691C337,-847 409,-943 470,-943ZM361,-262C364,-243 364,-244 346,-238C258,-208 201,-129 201,-44C201,46 248,110 316,133C324,136 336,139 343,139C351,139 355,134 355,128C355,121 347,118 340,115C298,97 268,54 268,8C268,-49 307,-92 368,-109C384,-113 386,-112 388,-101L438,197C440,208 439,208 424,211C408,214 388,216 368,216C193,216 80,119 80,-20C80,-79 90,-158 173,-252C233,-319 279,-356 326,-394C336,-402 338,-401 340,-390ZM430,-103C428,-115 429,-118 441,-117C522,-110 589,-42 589,46C589,109 551,160 495,188C483,194 481,194 479,182Z"/></svg>
       Portée
     </button>
@@ -61,12 +62,17 @@
       <div id="vide" class="vide" hidden>
         <h2>Bienvenue dans Portée</h2>
         <p>Ton carnet de musique : note une mélodie dès qu'elle te vient, écoute-la au piano, ajoute des accords, et envoie-la en MIDI dans Ableton. Tes pages écrites à la main sur la reMarkable y entrent aussi.</p>
+        <!-- Essayer sans rien écrire, en tête : au premier lancement, au téléphone, l'essai avec les pages
+             d'essai tombait sous la barre d'onglets (I15). L'idée d'exemple ne s'écrit qu'une fois ouverte. -->
+        <div class="rangee vide-essayer">
+          <button class="btn" id="exemple-idee"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Ouvrir une idée d'exemple</button>
+          <button class="btn" id="exemples"><svg class="ico s" aria-hidden="true"><use href="#i-page"></use></svg>Essayer avec les pages d'essai</button>
+        </div>
         <ol class="etapes">
           <li><strong>Note une idée</strong><span class="remarque">Au clavier, en chantant les notes une à une, ou avec un mémo vocal : les trois tuiles, juste au-dessus.</span><button class="btn btn-petit btn-plein" id="vide-idee">Nouvelle idée</button></li>
           <li><strong>Ou écris sur la tablette</strong><span class="remarque">Sur un modèle Portée : des portées calibrées pour une mélodie ou le piano.</span><button class="btn btn-petit" id="vide-modeles">Voir les modèles</button></li>
           <li><strong>Et importe tes pages</strong><span class="remarque">Depuis ta reMarkable, ou en déposant le PDF exporté.</span><button class="btn btn-petit" id="vide-remarkable">Importer de ma reMarkable</button></li>
         </ol>
-        <div class="rangee"><button class="btn btn-petit" id="exemples">Essayer avec les pages d'essai</button></div>
       </div>
       <div class="filtres" id="filtres-carnet" role="group" aria-label="Filtrer le carnet">
         <button class="puce" data-filtre="tout" aria-pressed="true">Tout</button>
@@ -76,7 +82,9 @@
         <button class="puce" data-filtre="favori" aria-pressed="false"><svg class="ico s" aria-hidden="true"><use href="#i-etoile"></use></svg>Favoris</button>
         <span class="filtres-etiquettes" id="filtres-etiquettes"></span>
       </div>
-      <div id="liste" class="liste-carnet" aria-live="polite"></div>
+      <!-- Pas d'aria-live ici : une étoile touchée faisait relire tout le carnet (8 000 caractères).
+           Ce qui change se dit en une phrase dans #annonce (I11). -->
+      <div id="liste" class="liste-carnet"></div>
       <p class="remarque" id="aucun" hidden>Rien ne correspond. Essaie un autre mot, ou le filtre « Tout ».</p>
     </div>
 
@@ -92,11 +100,11 @@
       <div class="depot" id="depot">
         <button class="btn btn-plein" id="ouvrir-remarkable"><svg class="ico s" aria-hidden="true"><use href="#i-tablette"></use></svg>Importer de ma reMarkable</button>
         <div class="depot-autres">
-          <label class="btn" for="fichier" tabindex="0" id="importer-pdf"><svg class="ico s" aria-hidden="true"><use href="#i-page"></use></svg>Importer un PDF</label>
+          <label class="btn" for="fichier" tabindex="0" id="importer-pdf"><svg class="ico s" aria-hidden="true"><use href="#i-page"></use></svg>Importer un PDF ou un MIDI</label>
           <button class="btn" id="ouvrir-modeles"><svg class="ico s" aria-hidden="true"><use href="#i-partition"></use></svg>Modèles pour la tablette</button>
         </div>
         <p class="remarque">Une page écrite sur un modèle Portée s'exporte de la tablette en PDF (<em>Partager → PDF</em>) : importe-le, ou glisse-le sur cet onglet.</p>
-        <input id="fichier" type="file" accept="application/pdf,.pdf" multiple hidden>
+        <input id="fichier" type="file" accept="application/pdf,.pdf,audio/midi,audio/x-midi,.mid,.midi" multiple hidden>
       </div>
       <div class="panneau" id="panneau-modeles" hidden>
         <div class="panneau-tete">
@@ -111,7 +119,8 @@
           <h2>Ma reMarkable</h2>
           <button class="btn btn-fantome btn-petit" id="fermer-rm"><svg class="ico s" aria-hidden="true"><use href="#i-fermer"></use></svg>Fermer</button>
         </div>
-        <div class="rangee">
+        <!-- Chercher et Actualiser n'apparaissent qu'avec un connecteur (tablette.js) : sans adresse, il n'y a rien à chercher. -->
+        <div class="rangee" id="outils-rm" hidden>
           <input class="champ" id="recherche-rm" type="search" placeholder="Chercher un document…" aria-label="Chercher un document de la reMarkable">
           <button class="btn btn-petit" id="actualiser-rm">Actualiser</button>
         </div>
@@ -159,8 +168,16 @@
         <h2 class="surtitre" id="rg-synchro">Synchronisation</h2>
         <div class="reglages-groupe">
           <p class="reglages-texte" id="mode-detail"></p>
+          <!-- Ce que la synchronisation a mis de côté, et pourquoi (D2, synchronisation-ui.js). -->
+          <div class="reglages-de-cote" id="synchro-de-cote" hidden>
+            <p class="reglages-texte reglages-rappel" id="de-cote-resume" role="status"></p>
+            <ul class="reglages-liste" id="de-cote-liste"></ul>
+            <button class="reglages-ligne principal" id="reessayer-synchro"><span>Réessayer</span><svg class="ico s" aria-hidden="true"><use href="#i-refaire"></use></svg></button>
+          </div>
           <button class="reglages-ligne principal" id="activer-synchro" hidden><span>Synchroniser mes appareils</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
           <button class="reglages-ligne" id="synchroniser" hidden><span>Synchroniser maintenant</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
+          <!-- Ce que la bibliothèque commune garde 30 jours (D6, versions-ui.js) : avec la synchronisation seulement. -->
+          <button class="reglages-ligne" id="ouvrir-corbeille" data-avec-synchro aria-haspopup="dialog" hidden><span>Corbeille (30 jours)</span><svg class="ico s" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
         </div>
         <div id="zone-synchro"></div>
       </section>
@@ -185,11 +202,35 @@
         </div>
       </section>
 
+      <!-- Avec Live : la sortie MIDI et le dossier des .mid (reglages-live.js). Chrome et Edge sur ordinateur seulement : caché ailleurs. -->
+      <section class="reglages-bloc" id="reglages-live" aria-labelledby="rg-live" hidden>
+        <h2 class="surtitre" id="rg-live">Avec Live</h2>
+        <div class="reglages-groupe" id="live-sortie" hidden>
+          <button class="reglages-ligne" id="sortie-midi" aria-haspopup="dialog" aria-controls="feuille-sortie-midi"><span>Sortie MIDI</span><span class="valeur" id="sortie-midi-nom">Aucune</span></button>
+          <button class="reglages-ligne" id="sortie-midi-muet" role="switch" aria-checked="false" hidden>
+            <span>Piano de Portée muet</span>
+            <span class="interrupteur" aria-hidden="true"></span>
+          </button>
+          <p class="reglages-texte">Ce que joue Portée part aussi vers ce port, à l'heure : dans Live, une piste MIDI qui l'écoute le joue avec son propre son. Sur Mac, mets en ligne le « Gestionnaire IAC » (Configuration audio et MIDI, Studio MIDI) ; sur Windows, crée un port avec loopMIDI.</p>
+        </div>
+        <div class="reglages-groupe" id="live-dossier" hidden>
+          <button class="reglages-ligne" id="dossier-midi"><span>Dossier des .mid</span><span class="valeur" id="dossier-midi-nom">Aucun</span></button>
+          <button class="reglages-ligne principal" id="dossier-midi-autoriser" hidden><span>Autoriser Portée à y écrire</span><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg></button>
+          <button class="reglages-ligne" id="dossier-midi-tout" hidden><span>Tout réécrire</span><svg class="ico s" aria-hidden="true"><use href="#i-refaire"></use></svg></button>
+          <button class="reglages-ligne" id="dossier-midi-oublier" hidden><span>Ne plus écrire dans ce dossier</span><svg class="ico s" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+          <p class="reglages-texte" id="dossier-midi-etat" role="status"></p>
+          <p class="reglages-texte">Portée y écrit le .mid de chaque idée et de chaque morceau (sous-dossiers Idées et Morceaux), et le réécrit une seconde après chaque changement. Dans Live, ajoute ce dossier aux Emplacements (Places) du navigateur : la dernière version y est toujours, à glisser sur une piste.</p>
+        </div>
+      </section>
+
       <section class="reglages-bloc" aria-labelledby="rg-sauvegarde">
         <h2 class="surtitre" id="rg-sauvegarde">Sauvegarde</h2>
         <div class="reglages-groupe">
+          <!-- Sans synchronisation, au-delà de 30 jours sans sauvegarde : un rappel (sauvegarde-ui.js, garde.js). -->
+          <p class="reglages-texte reglages-rappel" id="rappel-sauvegarde" role="status" hidden></p>
           <button class="reglages-ligne" id="tout-midi"><span>Tout exporter en MIDI (.zip)</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
           <button class="reglages-ligne" id="sauvegarder"><span>Sauvegarder ma bibliothèque</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
+          <div class="reglages-ligne" id="derniere-sauvegarde-ligne" hidden><span>Dernière sauvegarde</span><span class="valeur" id="derniere-sauvegarde">Jamais</span></div>
           <label class="reglages-ligne" for="restaurer" tabindex="0" id="restaurer-ligne"><span>Restaurer une sauvegarde</span><svg class="ico s" aria-hidden="true"><use href="#i-partager"></use></svg></label>
           <input id="restaurer" type="file" accept="application/json,.json" hidden>
         </div>
@@ -200,11 +241,27 @@
         <div class="reglages-groupe">
           <button class="reglages-ligne" id="installer" hidden><span>Installer l'appli sur cet appareil</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
           <div class="reglages-ligne"><span>Tes données</span><span class="valeur" id="mode">Ouverture de ta bibliothèque…</span></div>
+          <!-- Ce qui garde la bibliothèque de ce navigateur (D9, sauvegarde-ui.js) : rien de cela sur claude.ai. -->
+          <div class="reglages-ligne" id="garde-ligne" hidden><span>Bibliothèque protégée sur cet appareil</span><span class="valeur" id="garde-protegee"></span></div>
+          <div class="reglages-ligne" id="garde-place-ligne" hidden><span>Place prise</span><span class="valeur" id="garde-place"></span></div>
+          <p class="reglages-texte" id="garde-conseil" hidden></p>
+          <button class="reglages-ligne principal" id="garde-proteger" hidden><span>Demander au navigateur de la garder</span><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg></button>
+          <div class="reglages-guide" id="garde-guide" role="note" hidden></div>
         </div>
       </section>
     </div>
 
     <!-- Les actions d'une ligne ou d'une carte (« ••• ») : la même feuille pour toutes. -->
+    <!-- La sortie MIDI : un port de l'ordinateur, ou aucun (reglages-live.js). -->
+    <dialog class="feuille-bas" id="feuille-sortie-midi" aria-labelledby="sortie-midi-titre">
+      <div class="feuille-tete">
+        <h2 id="sortie-midi-titre">Sortie MIDI</h2>
+        <button class="btn rond btn-fantome" id="sortie-midi-fermer" aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+      </div>
+      <p class="remarque" id="sortie-midi-sous">Le port vers lequel Portée envoie ce qu'elle joue.</p>
+      <div class="feuille-liste" id="sortie-midi-liste"></div>
+    </dialog>
+
     <dialog class="feuille-bas" id="feuille-actions" aria-labelledby="feuille-titre">
       <div class="feuille-tete">
         <h2 id="feuille-titre"></h2>
@@ -219,6 +276,9 @@
   <!-- La page d'abord, les doutes un par un : sa barre, ta page et la partition lue, et en bas un panneau
        fixé (doute, ou outils de la note choisie). Les doutes s'y posent en questions fermées (doutes.js). -->
   <section class="vue vue-partition vue-atelier" id="vue-atelier" hidden>
+    <!-- Le titre de l'écran pour le lecteur d'écran, complété par navigation.js (« Corriger « Ma ballade » », I11) :
+         le titre visible est un champ qu'on modifie, pas un titre. -->
+    <h1 class="visuellement-cache" id="titre-ecran-atelier">Corriger</h1>
     <header class="barre-ecran">
       <button class="btn btn-fantome rond" data-retour aria-label="Retour à la bibliothèque"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
       <div class="barre-titre">
@@ -233,11 +293,8 @@
         <button role="tab" id="onglet-lecteur" aria-selected="false">Écouter et exporter</button>
       </div>
     </header>
-    <div class="confirmer" id="confirmer" hidden>
-      <span>Supprimer cette partition et ses pages ? C'est définitif.</span>
-      <button class="btn btn-petit btn-danger" id="confirmer-oui">Supprimer</button>
-      <button class="btn btn-petit" id="confirmer-non">Garder</button>
-    </div>
+    <!-- Les suggestions rangées par Claude depuis une conversation (H3, suggestions-ui.js). -->
+    <div class="bandeau-claude" id="atelier-suggestions" role="region" aria-label="Suggestions de Claude" hidden></div>
     <div class="regle-vues">
       <div class="seg" id="vues-atelier" role="group" aria-label="Ce que tu vois">
         <button data-vue="page" aria-pressed="false">Ta page</button>
@@ -257,9 +314,15 @@
       <section class="zone zone-lue" id="zone-lue" aria-label="Ce que Portée a lu">
         <div class="zone-tete">
           <p class="surtitre">Ce que Portée a lu</p>
+          <!-- Le zoom (I14) : au doigt, une note gravée faisait 4 à 7 px de large. On peut aussi pincer. -->
+          <span class="zoom" role="group" aria-label="Taille de la partition lue">
+            <button class="btn btn-fantome rond" id="zoom-moins" aria-label="Réduire la partition lue" title="Réduire"><svg class="ico" aria-hidden="true"><use href="#i-moins"></use></svg></button>
+            <span class="val" id="zoom-val">100 %</span>
+            <button class="btn btn-fantome rond" id="zoom-plus" aria-label="Agrandir la partition lue" title="Agrandir"><svg class="ico" aria-hidden="true"><use href="#i-plus"></use></svg></button>
+          </span>
           <button class="btn btn-petit" id="ecouter-atelier"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Écouter</button>
         </div>
-        <div class="page-cadre gravure-cadre"><div class="gravure gravure-edit" id="gravure-atelier"></div></div>
+        <div class="page-cadre gravure-cadre" id="cadre-lue"><div class="gravure-zoom" id="zoom-lue"><div class="gravure gravure-edit" id="gravure-atelier"></div></div></div>
         <p class="guide" id="guide">Touche une note pour la corriger, ou glisse-la vers le haut ou le bas.<span class="raccourcis"> Au clavier : <kbd>↑</kbd> <kbd>↓</kbd> hauteur, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>.</kbd> point, <kbd>Suppr</kbd>, <kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler.</span></p>
         <p class="etat" id="etat-abc" role="status"></p>
       </section>
@@ -282,7 +345,12 @@
           <span class="pas" id="pas-doutes"></span>
         </div>
         <div class="dock-gauche" id="tete-note" hidden>
-          <span class="note-choisie" id="note-choisie"></span>
+          <!-- Note précédente et suivante (I14), comme dans la sélection de l'éditeur : au clavier, ← et →. -->
+          <button class="btn btn-fantome rond" id="note-precedente" aria-label="Note précédente" title="Note précédente (←)"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
+          <!-- La note choisie se dit (← →, ou au toucher), comme dans l'éditeur (#idee-nom-choix) : les notes
+               gravées ne sont plus des arrêts de tabulation (I11). -->
+          <span class="note-choisie" id="note-choisie" aria-live="polite"></span>
+          <button class="btn btn-fantome rond" id="note-suivante" aria-label="Note suivante" title="Note suivante (→)"><svg class="ico" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
         </div>
         <span class="remarque pousse" id="enregistre" role="status"></span>
         <button class="btn btn-fantome rond" id="annuler" disabled aria-label="Annuler le dernier geste"><svg class="ico" aria-hidden="true"><use href="#i-annuler"></use></svg></button>
@@ -297,9 +365,9 @@
       <div class="outils-note" id="outils-note" role="toolbar" aria-label="Corriger la note choisie" hidden>
         <button class="btn outil" data-geste="haut" aria-label="Un degré plus haut" title="Un degré plus haut"><svg class="ico" aria-hidden="true"><use href="#i-haut"></use></svg></button>
         <button class="btn outil" data-geste="bas" aria-label="Un degré plus bas" title="Un degré plus bas"><svg class="ico" aria-hidden="true"><use href="#i-bas"></use></svg></button>
-        <button class="btn outil signe" data-alteration="^" aria-label="Dièse" title="Dièse">♯</button>
-        <button class="btn outil signe" data-alteration="_" aria-label="Bémol" title="Bémol">♭</button>
-        <button class="btn outil signe" data-alteration="=" aria-label="Bécarre" title="Bécarre">♮</button>
+        <button class="btn outil" data-alteration="^" aria-label="Dièse" title="Dièse"><svg class="ico" aria-hidden="true"><use href="#i-diese"></use></svg></button>
+        <button class="btn outil" data-alteration="_" aria-label="Bémol" title="Bémol"><svg class="ico" aria-hidden="true"><use href="#i-bemol"></use></svg></button>
+        <button class="btn outil" data-alteration="=" aria-label="Bécarre" title="Bécarre"><svg class="ico" aria-hidden="true"><use href="#i-becarre"></use></svg></button>
         <button class="btn outil" data-geste="silence" id="bouton-silence" aria-label="Changer en silence" title="Note ou silence"><svg class="ico" aria-hidden="true"><use href="#i-silence"></use></svg></button>
         <button class="btn outil" data-geste="dupliquer" aria-label="Une note de plus, juste après" title="Une de plus"><svg class="ico" aria-hidden="true"><use href="#i-repeter"></use></svg></button>
         <span class="separe" aria-hidden="true"></span>
@@ -325,6 +393,7 @@
 
   <!-- ===== Lecteur ===== -->
   <section class="vue vue-partition vue-lecteur" id="vue-lecteur" hidden>
+    <h1 class="visuellement-cache" id="titre-ecran-lecteur">Écouter et exporter</h1>
     <header class="barre-ecran">
       <button class="btn btn-fantome rond" data-retour aria-label="Retour à la bibliothèque"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
       <div class="barre-titre">
@@ -334,11 +403,6 @@
       <span id="statut-lecteur"></span>
       <button class="btn btn-fantome rond" id="plus-lecteur" aria-label="Plus d'actions" aria-haspopup="dialog"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
     </header>
-    <div class="confirmer" id="confirmer-lecteur" hidden>
-      <span>Supprimer cette partition et ses pages ? C'est définitif.</span>
-      <button class="btn btn-petit btn-danger" id="confirmer-lecteur-oui">Supprimer</button>
-      <button class="btn btn-petit" id="confirmer-lecteur-non">Garder</button>
-    </div>
     <div class="exports">
       <button class="btn" id="export-midi"><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg>Télécharger le MIDI</button>
       <button class="btn" id="imprimer" aria-label="Imprimer ou enregistrer en PDF"><svg class="ico s" aria-hidden="true"><use href="#i-imprimer"></use></svg>Imprimer</button>
@@ -349,7 +413,7 @@
     <aside class="dock dock-transport" id="transport-lecteur" aria-label="Écoute">
       <div class="transport-haut">
         <button class="btn btn-plein" id="ecouter" title="Espace"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Écouter</button>
-        <label class="tempo" for="tempo"><span class="remarque">Tempo</span><input type="range" id="tempo" min="30" max="200" value="90"><span class="val" id="tempo-val">♩ = 90</span></label>
+        <label class="tempo" for="tempo"><span class="remarque">Tempo</span><input type="range" id="tempo" min="30" max="200" value="90"><span class="val tempo-noire"><svg class="ico s" aria-hidden="true"><use href="#i-d4"></use></svg><span id="tempo-val">90</span></span></label>
       </div>
       <div class="transport-bas">
         <span class="transposer" role="group" aria-label="Transposer">
@@ -362,7 +426,6 @@
           <label class="bascule"><input type="checkbox" id="main-droite" checked> Main droite</label>
           <label class="bascule"><input type="checkbox" id="main-gauche" checked> Main gauche</label>
         </span>
-        <span class="remarque" id="etat-son"></span>
       </div>
     </aside>
 
@@ -378,6 +441,7 @@
   </section>
   <!-- ===== Morceau ===== -->
   <section class="vue vue-morceau" id="vue-morceau" hidden>
+    <h1 class="visuellement-cache" id="titre-ecran-morceau">Morceau</h1>
     <!-- La barre et la frise restent en haut quand la liste défile : on voit la tête de lecture avancer. -->
     <div class="morceau-tete">
       <div class="morceau-barre">
@@ -430,7 +494,7 @@
       <div class="menu-tempo">
         <div class="menu-tempo-tete">
           <label class="surtitre" for="morceau-tempo">Tempo</label>
-          <span class="mono menu-tempo-val" id="morceau-tempo-val"></span>
+          <span class="mono menu-tempo-val tempo-noire"><svg class="ico s" aria-hidden="true"><use href="#i-d4"></use></svg><span id="morceau-tempo-val"></span></span>
         </div>
         <div class="menu-tempo-reglage">
           <button class="btn rond" id="morceau-tempo-moins" aria-label="Un battement de moins par minute"><svg class="ico" aria-hidden="true"><use href="#i-moins"></use></svg></button>
@@ -440,6 +504,7 @@
       </div>
       <div class="menu-actions">
         <button class="btn btn-plein" id="morceau-midi"><svg class="ico" aria-hidden="true"><use href="#i-partager"></use></svg>Envoyer le MIDI</button>
+        <button class="btn" id="morceau-musicxml"><svg class="ico" aria-hidden="true"><use href="#i-partition"></use></svg>MusicXML (MuseScore)</button>
         <button class="btn btn-danger" id="morceau-supprimer"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg>Supprimer le morceau</button>
       </div>
     </dialog>
@@ -452,12 +517,13 @@
        comme la sélection (idee-selection.js) et le jeu en direct
        (idee-direct.js) : un bloc commenté par module ci-dessous. -->
   <section class="vue vue-idee" id="vue-idee" hidden>
+    <h1 class="visuellement-cache" id="titre-ecran-idee">Idée</h1>
     <!-- Barre du haut (idee.js) -->
     <header class="idee-barre-haut">
       <button class="btn btn-fantome rond" data-retour aria-label="Retour au carnet"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
       <div class="idee-titres">
         <input class="idee-titre" id="idee-titre" aria-label="Titre de l'idée" autocomplete="off" spellcheck="false">
-        <button class="idee-resume" id="idee-reglages-bouton" aria-haspopup="dialog" aria-controls="idee-reglages" aria-label="Tempo, mesure et tonalité"><span class="mono" id="idee-resume"></span></button>
+        <button class="idee-resume" id="idee-reglages-bouton" aria-haspopup="dialog" aria-controls="idee-reglages" aria-label="Tempo, mesure et tonalité"><svg class="ico s" aria-hidden="true"><use href="#i-d4"></use></svg><span class="mono" id="idee-resume"></span></button>
       </div>
       <button class="puce idee-piste-puce" id="idee-piste-puce" hidden></button>
       <div class="seg idee-affichage" id="idee-affichage" role="group" aria-label="Affichage">
@@ -467,6 +533,8 @@
       <button class="btn btn-fantome rond" id="idee-partager" aria-label="Envoyer le MIDI" title="Envoyer le MIDI (AirDrop, Fichiers, mail…) ou le télécharger"><svg class="ico" aria-hidden="true"><use href="#i-partager"></use></svg></button>
       <button class="btn btn-fantome rond" id="idee-plus" aria-haspopup="dialog" aria-controls="idee-menu" aria-label="Plus d'actions"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
     </header>
+    <!-- Les suggestions rangées par Claude depuis une conversation (H3, suggestions-ui.js). -->
+    <div class="bandeau-claude bandeau-plein" id="idee-suggestions" role="region" aria-label="Suggestions de Claude" hidden></div>
 
     <!-- La grille ou la partition (idee.js, grille.js) -->
     <div class="idee-surface" id="idee-surface">
@@ -507,7 +575,9 @@
         </div>
         <button class="btn dir-arreter" id="idee-arreter" title="Annuler (R)"></button>
       </div>
-      <span class="idee-mode" id="idee-mode" role="status"></span>
+      <!-- Capture après coup · la dernière phrase jouée au clavier, reprise avec son rythme (idee-direct.js, M13) -->
+      <button class="btn dir-capturer" id="idee-capturer" aria-label="Capturer les dernières notes jouées, avec leur rythme (C)" title="Capturer ce que tu viens de jouer, avec son rythme (C)" hidden><svg class="ico s" aria-hidden="true"><use href="#i-onde"></use></svg><span>Capturer</span></button>
+      <span class="idee-mode visuellement-cache" id="idee-mode" role="status"></span>
     </div>
 
     <!-- Le pupitre : transport (idee.js), modes, et le contenu du mode -->
@@ -524,9 +594,9 @@
       </div>
 
       <div class="seg idee-modes" id="idee-modes" role="tablist" aria-label="Façon d'écrire">
-        <button role="tab" data-mode="clavier" aria-selected="true" aria-controls="pupitre-clavier"><svg class="ico s" aria-hidden="true"><use href="#i-clavier"></use></svg>Clavier</button>
-        <button role="tab" data-mode="chanter" aria-selected="false" aria-controls="micro-panneau"><svg class="ico s" aria-hidden="true"><use href="#i-micro"></use></svg>Chanter</button>
-        <button role="tab" data-mode="accords" aria-selected="false" aria-controls="pupitre-accords"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Accords</button>
+        <button role="tab" data-mode="clavier" aria-selected="true" aria-controls="pupitre-clavier" title="Clavier"><svg class="ico s" aria-hidden="true"><use href="#i-clavier"></use></svg>Clavier</button>
+        <button role="tab" data-mode="chanter" aria-selected="false" aria-controls="micro-panneau" title="Chanter"><svg class="ico s" aria-hidden="true"><use href="#i-micro"></use></svg>Chanter</button>
+        <button role="tab" data-mode="accords" aria-selected="false" aria-controls="pupitre-accords" title="Accords"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Accords</button>
       </div>
 
       <!-- Sélection · la rangée du pupitre, au-dessus du mode tant qu'une note est choisie (idee-selection.js) -->
@@ -594,7 +664,7 @@
               <ul id="chant-gardees" aria-label="Dernières notes écrites"></ul>
             </div>
             <!-- Dit « la4 écrite » au lecteur d'écran, sans rien montrer -->
-            <span class="chant-annonce" id="chant-annonce" role="status"></span>
+            <span class="chant-annonce visuellement-cache" id="chant-annonce" role="status"></span>
           </div>
         </div>
 
@@ -604,7 +674,7 @@
             <button class="btn btn-fantome rond" id="accords-mesure-avant" aria-label="Mesure précédente"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
             <span class="accords-mesure" id="accords-mesure"></span>
             <button class="btn btn-fantome rond" id="accords-mesure-apres" aria-label="Mesure suivante"><svg class="ico" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
-            <button class="btn btn-fantome accords-lien" id="accords-plus"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Tous les accords</button>
+            <button class="btn btn-fantome accords-lien" id="accords-plus" title="Tous les accords"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Tous les accords</button>
           </div>
           <div class="accords-pads" id="accords-pads" role="group" aria-label="Les accords de la tonalité"></div>
         </div>
@@ -619,7 +689,9 @@
       <div class="feuille-tete">
         <h2 id="idee-arrondi-titre">Notes jouées</h2>
       </div>
-      <p class="remarque">Choisis comment arrondir le rythme. Fermer la feuille garde ce que tu vois.</p>
+      <p class="remarque" id="idee-arrondi-aide">Choisis comment arrondir le rythme. Fermer la feuille garde ce que tu vois.</p>
+      <!-- M11 : combien de notes jouées pendant le décompte ne sont pas gardées -->
+      <p class="remarque dir-perdues" id="idee-arrondi-decompte" role="status" hidden></p>
       <div class="dir-defil">
         <div class="dir-plan" id="idee-plan-arrondi">
           <span class="surtitre dir-etiquette">Tel que joué</span>
@@ -685,6 +757,8 @@
           </div>
         </div>
       </div>
+      <!-- Seulement dans la version claude.ai, quand la page peut interroger Claude (idee-claude.js) -->
+      <button class="btn boite-claude" data-action="claude" data-avec-claude hidden><svg class="ico" aria-hidden="true"><use href="#i-etincelle"></use></svg>Demander à Claude</button>
     </dialog>
 
 
@@ -739,6 +813,16 @@
           <button data-grille="1" aria-pressed="false">Double croche</button>
         </div>
       </div>
+      <!-- Jeu en direct · la latence de l'appareil, réglée en tapant avec le clic (idee-direct.js, M6) -->
+      <div class="reglage-bloc" id="idee-latence-bloc">
+        <span class="surtitre">Jeu en direct : latence</span>
+        <div class="rangee">
+          <button class="btn" id="idee-latence" aria-pressed="false"><svg class="ico s" aria-hidden="true"><use href="#i-taper"></use></svg><span id="idee-latence-texte">Régler en tapant avec le clic</span></button>
+          <span class="remarque" id="idee-latence-etat" role="status"></span>
+        </div>
+        <button class="btn btn-plein latence-pad" id="idee-latence-pad" hidden>Écoute le clic, puis tape ici avec lui</button>
+        <span class="remarque">Si tes notes jouées en direct tombent toujours un peu tard, ou un peu tôt : huit tapes en même temps que le clic, avec ce dont tu joues (l'écran, ou ton clavier MIDI).</span>
+      </div>
       <div class="reglage-bloc">
         <span class="surtitre">Pistes</span>
         <div class="rangee">
@@ -767,7 +851,9 @@
         </div>
         <span class="remarque idee-zoom-aide">Ou pince la grille à deux doigts : en largeur pour le temps, en hauteur pour les notes.</span>
       </div>
-      <p class="remarque idee-raccourcis">Clavier de l'ordinateur, comme dans Ableton : <kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd>… pour jouer, <kbd>Z</kbd> <kbd>X</kbd> octave, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>0</kbd> silence, <kbd>Espace</kbd> écouter, <kbd>R</kbd> jouer en direct, <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> choisir et monter, <kbd>Ctrl</kbd> + molette pour zoomer dans le temps, <kbd>Alt</kbd> + molette en hauteur.</p>
+      <!-- Les lettres marquées data-touche jouent par leur place (comme dans Ableton) : idee-clavier.js les
+           réécrit avec celles de ton clavier (sur un AZERTY, la place de A porte Q ; I12). -->
+      <p class="remarque idee-raccourcis" id="idee-raccourcis">Clavier de l'ordinateur, comme dans Ableton : <kbd data-touche="KeyA">A</kbd> <kbd data-touche="KeyW">W</kbd> <kbd data-touche="KeyS">S</kbd> <kbd data-touche="KeyE">E</kbd> <kbd data-touche="KeyD">D</kbd>… pour jouer, <kbd data-touche="KeyZ">Z</kbd> <kbd data-touche="KeyX">X</kbd> octave, <kbd>1</kbd> à <kbd>5</kbd> durée, <kbd>0</kbd> silence, <kbd>Espace</kbd> écouter, <kbd data-touche="KeyR">R</kbd> jouer en direct, <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> choisir et monter, <kbd>Ctrl</kbd> + molette pour zoomer dans le temps, <kbd>Alt</kbd> + molette en hauteur.<span id="idee-raccourcis-azerty"> Sur un clavier AZERTY : <kbd>Q</kbd> <kbd>Z</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd>… pour jouer, <kbd>W</kbd> <kbd>X</kbd> octave.</span></p>
       <button class="btn btn-plein idee-fini" data-fermer>C'est bon</button>
     </dialog>
 
@@ -779,10 +865,14 @@
         <button class="btn btn-fantome rond" data-fermer aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
       </div>
       <div class="idee-actions">
+        <!-- Seulement dans la version claude.ai, quand la page peut interroger Claude (idee-claude.js) -->
+        <button class="btn" data-menu="claude" data-avec-claude hidden><svg class="ico" aria-hidden="true"><use href="#i-etincelle"></use></svg>Demander à Claude</button>
         <button class="btn" data-menu="telecharger-midi"><svg class="ico" aria-hidden="true"><use href="#i-telecharger"></use></svg>Télécharger le MIDI</button>
         <button class="btn" data-menu="musicxml"><svg class="ico" aria-hidden="true"><use href="#i-partition"></use></svg>MusicXML (MuseScore)</button>
         <button class="btn" data-menu="morceau"><svg class="ico" aria-hidden="true"><use href="#i-morceau"></use></svg>Ajouter à un morceau</button>
         <button class="btn" data-menu="dupliquer"><svg class="ico" aria-hidden="true"><use href="#i-copier"></use></svg>Dupliquer l'idée</button>
+        <!-- Les versions gardées par la bibliothèque commune (D6, versions-ui.js) : avec la synchronisation seulement. -->
+        <button class="btn" data-menu="versions" data-avec-synchro hidden><svg class="ico" aria-hidden="true"><use href="#i-historique"></use></svg>Versions précédentes</button>
         <button class="btn" data-menu="infos"><svg class="ico" aria-hidden="true"><use href="#i-carnet"></use></svg>Notes, étiquettes, mémo</button>
         <button class="btn" data-menu="reglages"><svg class="ico" aria-hidden="true"><use href="#i-reglages"></use></svg>Tempo, mesure et réglages</button>
         <button class="btn btn-danger" data-menu="supprimer"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg>Supprimer l'idée</button>
@@ -812,6 +902,75 @@
           <button class="btn" id="memo-ecouter" hidden><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg><span>Écouter</span></button>
           <button class="btn btn-danger" id="memo-effacer" hidden>Effacer</button>
           <span class="remarque mono" id="memo-etat"></span>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Feuille · Demander à Claude (idee-claude.js, idee-claude.css). Seulement dans la version
+         claude.ai, quand la page peut interroger Claude (la capacité « sample ») : sur le site, ni
+         cette feuille ni ses deux entrées (le ••• de l'idée, la boîte à outils) ne se montrent.
+         Claude propose, Portée vérifie, tu écoutes, puis tu gardes : un seul « Annuler ». -->
+    <dialog class="feuille-bas idee-feuille feuille-claude" id="idee-claude" aria-labelledby="claude-titre">
+      <div class="feuille-tete">
+        <button class="btn btn-fantome rond" id="claude-retour" aria-label="Demander autre chose" title="Demander autre chose" hidden><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
+        <h2 id="claude-titre">Demander à Claude</h2>
+        <button class="btn btn-fantome rond" data-fermer aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+      </div>
+      <p class="remarque claude-sur" id="claude-sur"></p>
+
+      <!-- 1. Ce que tu demandes (les cinq demandes, dessinées par idee-claude.js) -->
+      <div class="claude-etape claude-genres" id="claude-genres" role="group" aria-label="Ce que tu demandes à Claude"></div>
+
+      <!-- 2. La précision : l'intention d'une variation, ou ta phrase -->
+      <div class="claude-etape" id="claude-intentions" role="group" aria-labelledby="claude-intentions-titre" hidden>
+        <span class="surtitre" id="claude-intentions-titre">Une variation, mais comment ?</span>
+        <div class="claude-intentions" id="claude-intentions-choix"></div>
+      </div>
+      <form class="claude-etape claude-libre" id="claude-libre" hidden>
+        <label class="surtitre" for="claude-phrase">Dis-lui ce que tu veux</label>
+        <textarea class="champ" id="claude-phrase" rows="3" maxlength="500" aria-describedby="claude-libre-aide" placeholder="Transpose en ré et double les durées de la deuxième mesure"></textarea>
+        <p class="remarque" id="claude-libre-aide" role="status">En une phrase, avec tes mots. Rien ne change avant que tu aies écouté et gardé.</p>
+        <button class="btn btn-plein" type="submit"><svg class="ico s" aria-hidden="true"><use href="#i-etincelle"></use></svg>Demander à Claude</button>
+      </form>
+
+      <!-- 3. Claude réfléchit : rien ne s'affiche de ce qu'il écrit (du JSON), seulement où il en est -->
+      <div class="claude-etape claude-attente" id="claude-attente" hidden>
+        <svg class="ico l claude-souffle" aria-hidden="true"><use href="#i-etincelle"></use></svg>
+        <p class="claude-reflechit" id="claude-reflechit" role="status">Claude réfléchit…</p>
+        <p class="remarque claude-progres" id="claude-progres" aria-live="polite" hidden></p>
+        <p class="remarque" id="claude-attente-aide">Souvent 10 à 60 secondes. Portée vérifie sa réponse avant de te la montrer.</p>
+        <button class="btn" id="claude-arreter"><svg class="ico s" aria-hidden="true"><use href="#i-stop"></use></svg>Arrêter</button>
+      </div>
+
+      <!-- 4. Ce que Claude propose, vérifié : la bande des mesures (des accords), un aperçu des
+           notes, ou les champs du titre ; écouter, en redemander une autre, garder -->
+      <div class="claude-etape" id="claude-proposition" hidden>
+        <p class="claude-resume" id="claude-resume"></p>
+        <div class="claude-apercu" id="claude-apercu"></div>
+        <div class="claude-styles" id="claude-styles-bloc" hidden>
+          <span class="surtitre" id="claude-styles-titre">Accompagnement</span>
+          <div class="seg" id="claude-styles" role="group" aria-labelledby="claude-styles-titre"></div>
+        </div>
+        <div class="claude-champs" id="claude-champs" hidden>
+          <label class="claude-champ">Titre<input class="champ" id="claude-titre-champ" maxlength="60" autocomplete="off" spellcheck="false"></label>
+          <label class="claude-champ">Étiquettes<input class="champ" id="claude-etiquettes-champ" autocomplete="off" spellcheck="false" aria-describedby="claude-etiquettes-aide"></label>
+          <span class="remarque" id="claude-etiquettes-aide">Séparées par des virgules. Retouche ce que tu veux avant de garder.</span>
+        </div>
+        <p class="claude-pourquoi" id="claude-pourquoi" hidden></p>
+        <div class="claude-actions">
+          <button class="btn" id="claude-ecouter" aria-pressed="false"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg><span>Écouter</span></button>
+          <button class="btn" id="claude-autre"><svg class="ico s" aria-hidden="true"><use href="#i-refaire"></use></svg>Une autre</button>
+          <button class="btn btn-plein" id="claude-garder"><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg>Garder</button>
+        </div>
+      </div>
+
+      <!-- 5. Un message : une réponse que Portée refuse, un échec, l'autorisation à donner -->
+      <div class="claude-etape" id="claude-message" hidden>
+        <p class="claude-message-texte" id="claude-message-texte" role="status"></p>
+        <p class="claude-pourquoi" id="claude-message-pourquoi" hidden></p>
+        <div class="claude-actions">
+          <button class="btn btn-plein" id="claude-autoriser" hidden>Autoriser Claude</button>
+          <button class="btn" id="claude-reessayer"><svg class="ico s" aria-hidden="true"><use href="#i-refaire"></use></svg>Réessayer</button>
         </div>
       </div>
     </dialog>
@@ -851,13 +1010,18 @@
         <button class="btn btn-danger" id="accord-retirer">Retirer</button>
         <button class="btn" id="accords-tout"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Harmoniser toute l'idée</button>
       </div>
-      <span class="accords-annonce" id="accords-annonce" role="status"></span>
+      <span class="accords-annonce visuellement-cache" id="accords-annonce" role="status"></span>
     </dialog>
   </section>
 </main>
 
 <div class="toast" id="toast" role="status" popover="manual" hidden></div>
+<!-- Ce que le lecteur d'écran doit entendre sans rien voir changer : l'écran ouvert, une étoile
+     touchée, le nombre de résultats d'une recherche (ui.js, annoncer ; I11). Une phrase courte. -->
+<p class="visuellement-cache" id="annonce" role="status"></p>
 <dialog class="dialogue" id="dialogue"><form method="dialog" class="dialogue-dedans" id="dialogue-dedans"></form></dialog>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.7.1/abcjs-basic-min.js"></script>
+<!-- abcjs vient du site (copié de node_modules par l'assembleur, version figée par package.json) : plus de CDN.
+     « defer » : il ne retient plus le premier affichage, et passe toujours avant app.js (même ordre). -->
+<script defer src="vendor/abcjs/abcjs-basic-min.js"></script>
 <script type="module" src="app.js"></script>

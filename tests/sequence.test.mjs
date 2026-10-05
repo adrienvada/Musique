@@ -41,6 +41,35 @@ test("syncopes et notes longues : coupées au temps, liées, et toujours justes"
   assert.deepEqual(entendu(abc), attendu(seq));
 });
 
+test("mesures composées : chaque temps se voit, la ronde pointée remplit un 12/8", () => {
+  const corps = (abc) => abc.split("\n").slice(5).join("\n").trim();
+  // 6/8 : quatre croches en tête de mesure, noire pointée liée à une croche (pas une blanche,
+  // qui cacherait le 2ᵉ temps) ; cinq croches, noire pointée liée à une noire.
+  const six = idee([[0, 8, 66], [8, 4, 69], [12, 10, 74], [22, 2, 73], [24, 12, 74]], { mesure: [6, 8], tonalite: "D" });
+  assert.equal(corps(sq.ecrireAbc(six).abc), "F3- F A2 | d3- d2 c | d6 |]");
+  assert.deepEqual(entendu(sq.ecrireAbc(six).abc), attendu(six));
+  // 12/8 : une mesure entière est une ronde pointée, pas ronde + croche + noire pointée.
+  const douze = idee([[0, 24, 63], [24, 16, 66], [40, 8, 65], [48, 18, 70], [66, 6, 62]], { mesure: [12, 8], tonalite: "Ebm" });
+  assert.equal(corps(sq.ecrireAbc(douze).abc), "E12 | G6- G2 F- F3 | B6- B3 =D3 |]");
+  assert.deepEqual(entendu(sq.ecrireAbc(douze).abc), attendu(douze));
+  // 9/8 : trois temps n'ont pas de signe unique (blanche pointée liée à une noire pointée).
+  const neuf = idee([[0, 18, 60], [18, 4, 62], [22, 2, 64], [24, 12, 65]], { mesure: [9, 8] });
+  assert.equal(corps(sq.ecrireAbc(neuf).abc), "C6- C3 | D2 E F6 |]");
+  assert.deepEqual(entendu(sq.ecrireAbc(neuf).abc), attendu(neuf));
+  // Ailleurs, rien ne change : la blanche pointée d'un 3/4, la ronde d'un 4/4.
+  assert.equal(corps(sq.ecrireAbc(idee([[0, 12, 60]], { mesure: [3, 4] })).abc), "C6 |]");
+  assert.equal(corps(sq.ecrireAbc(idee([[0, 16, 60]])).abc), "C8 |]");
+});
+
+test("en 3/8, les trois croches d'une mesure se lient ensemble", () => {
+  const seq = idee([[0, 2, 60], [2, 2, 62], [4, 2, 64], [6, 1, 65], [7, 1, 67], [8, 4, 69]], { mesure: [3, 8] });
+  const { abc } = sq.ecrireAbc(seq);
+  assert.equal(abc.split("\n")[5], "CDE | F/G/ A2 |]");
+  assert.deepEqual(entendu(abc), attendu(seq));
+  // En 2/4, la ligature suit toujours la noire.
+  assert.equal(sq.ecrireAbc(idee([[0, 2, 60], [2, 2, 62], [4, 2, 64], [6, 2, 65]], { mesure: [2, 4] })).abc.split("\n")[5], "CD EF |]");
+});
+
 test("altérations : armure, bécarre dans la mesure, note liée par-dessus la barre", () => {
   // En sol majeur : fa♯ (armure), fa bécarre, fa♯ à nouveau, fa♯ lié par-dessus la barre, puis fa, fa♯.
   const seq = idee([[0, 2, 66], [2, 2, 65], [4, 2, 66], [8, 12, 66], [20, 4, 65], [24, 4, 66]], { tonalite: "G" });
@@ -54,6 +83,39 @@ test("altérations : armure, bécarre dans la mesure, note liée par-dessus la b
   assert.equal(sq.nomNote(66, "Bb"), "sol♭4");
   assert.equal(sq.nomNote(60, "C#"), "si♯3");
   assert.equal(sq.nomNote(71, "Gb"), "do♭5");
+});
+
+test("orthographe : les notes d'un accord s'écrivent comme l'accord, les autres suivent la ligne", () => {
+  // Une voix d'accompagnement (les notes de l'accord) et une mélodie, sous des accords posés.
+  const epel = (tonalite, accords, voix) => {
+    const seq = sq.nouvelleSequence({ tonalite });
+    seq.accords = accords.map(([d, nom]) => ({ d, nom }));
+    const lesVoix = voix.map((notes, i) => ({ nom: `V${i}`, notes: notes.map(([d, l, h], j) => ({ id: i * 100 + j, d, l, h })) }));
+    seq.pistes = lesVoix;
+    const { parVoix } = sq.mettreEnMesures(seq, { voix: lesVoix });
+    const noms = parVoix.map((couches) => couches.flatMap((mesures) => mesures.flat().flatMap((t) => t.notes.filter((n) => !n.suite).map((n) => n.e.lettre + ({ "-1": "b", 0: "", 1: "#" })[n.e.alt]))));
+    // Et abcjs relit les mêmes hauteurs.
+    const { abc } = sq.ecrireAbc(seq, { voix: lesVoix });
+    assert.deepEqual(entendu(abc), lesVoix.flatMap((v) => v.notes.map((n) => [n.d, n.l, n.h])).sort(trier), abc);
+    return noms;
+  };
+  // Ré 7 en fa majeur : fa♯ (MuseScore recevait un sol♭).
+  assert.deepEqual(epel("F", [[0, "D7"]], [[[0, 16, 50], [0, 16, 54], [0, 16, 57], [0, 16, 60]]])[0], ["D", "F#", "A", "C"]);
+  // En do : mi 7 a son sol♯, si 7 son ré♯ et son fa♯, ré♭ son ré♭ et son la♭.
+  const enDo = epel("C", [[0, "E7"], [16, "B7"], [32, "Db"]], [[[0, 16, 56]], [[16, 16, 63], [16, 16, 66]], [[32, 16, 61], [32, 16, 68]]].map((x) => x));
+  assert.deepEqual(enDo, [["G#"], ["D#", "F#"], ["Db", "Ab"]]);
+  // En sol : si♭ et fa bécarre dans B♭ (pas la♯), mi♭ dans Cm (pas ré♯).
+  assert.deepEqual(epel("G", [[0, "Bb"], [16, "Cm"]], [[[0, 16, 58], [0, 16, 65], [16, 16, 63]]])[0], ["Bb", "F", "Eb"]);
+  // Sans accord, une note de passage montante prend le dièse, descendante le bémol, en do comme en si♭.
+  assert.deepEqual(epel("C", [], [[[0, 4, 60], [4, 4, 61], [8, 4, 62], [12, 4, 62], [16, 4, 61], [20, 4, 60]]])[0], ["C", "C#", "D", "D", "Db", "C"]);
+  assert.deepEqual(epel("Bb", [], [[[0, 4, 65], [4, 4, 66], [8, 4, 67], [12, 4, 67], [16, 4, 66], [20, 4, 65]]])[0], ["F", "F#", "G", "G", "Gb", "F"]);
+  // La broderie inférieure revient vers le haut : ré♯, pas mi♭, entre deux mi.
+  assert.deepEqual(epel("C", [], [[[0, 4, 64], [4, 4, 63], [8, 4, 64]]])[0], ["E", "D#", "E"]);
+  // La mélodie suit l'accord avant la ligne : sol♯ sous E7, même s'il descend vers sol.
+  assert.deepEqual(epel("C", [[0, "E7"]], [[[0, 4, 68], [4, 4, 67]]])[0], ["G#", "G"]);
+  // Hors contexte, l'épellation de la tonalité ne change pas (nomNote).
+  assert.equal(sq.nomNote(66, "F"), "sol♭4");
+  assert.equal(sq.nomNote(68, "Am"), "sol♯4");
 });
 
 test("accords, symboles d'accords et deux voix", () => {
@@ -140,6 +202,33 @@ test("d'un ABC à une idée : notes, mesure, tonalité, tempo, reprises déplié
   assert.deepEqual(entendu(sq.ecrireAbc(seq).abc), attendu(seq));
 });
 
+test("une page lue : temps exacts, levée calée, changements de tonalité et de mesure", () => {
+  // Comme la page de mélodie du 30/09 : une gamme en mesure libre, puis [K:Eb][M:12/8] avec une levée.
+  const page = sq.lirePage("X:1\nM:none\nL:1/8\nQ:1/4=90\nK:C\nC2 D2 E2 F2 G2 A2 B2 c2\n[K:Eb][M:12/8]G |: c2 c2 edc g2 GG G :|\n", abcjs);
+  assert.equal(page.tempo, 90);
+  assert.deepEqual(page.sections.map((s) => [s.d, s.barre, s.mesure, s.tonalite]), [[0, 0, null, "C"], [32, 34, [12, 8], "Eb"]]);
+  // L'idée qui en sort : la plus longue section (12/8, mi♭), ses barres sur celles de l'idée.
+  const seq = sq.sequenceDepuisAbc("X:1\nM:none\nL:1/8\nQ:1/4=90\nK:C\nC2 D2 E2 F2 G2 A2 B2 c2\n[K:Eb][M:12/8]G |: c2 c2 edc g2 GG G :|\n", abcjs);
+  assert.deepEqual([seq.mesure, seq.tonalite], [[12, 8], "Eb"]);
+  const notes = seq.pistes[0].notes;
+  // La levée (sol, la 9ᵉ note), puis le premier temps du 12/8 sur une barre de l'idée.
+  assert.deepEqual([notes[8].h, notes[9].h, notes[9].d % 24], [67, 72, 0]);
+  assert.equal(notes[9].d - notes[8].d, 2);
+  // Un triolet garde ses temps exacts dans la page (4/3 de pas) ; l'idée les arrondit au pas.
+  const triolet = sq.lirePage("X:1\nM:2/4\nL:1/8\nQ:1/4=90\nK:C\n(3CDE G2|c4|]\n", abcjs);
+  assert.deepEqual(triolet.voix[0].notes.slice(0, 3).map((n) => [Math.round(n.d * 3), Math.round(n.l * 3)]), [[0, 4], [4, 4], [8, 4]]);
+  // Une levée en tête de page tombe à la fin d'une mesure de silences.
+  const levee = sq.sequenceDepuisAbc("X:1\nM:4/4\nL:1/8\nQ:1/4=90\nK:G\nD2 | G2 G2 B2 G2 | d8 |]\n", abcjs);
+  assert.deepEqual(levee.pistes[0].notes.slice(0, 2).map((n) => [n.d, n.h]), [[12, 62], [16, 67]]);
+  // Un changement juste après une barre commence sur elle ; un K: après une reprise aussi.
+  assert.deepEqual(sq.lirePage("X:1\nM:4/4\nL:1/8\nQ:1/4=90\nK:C\nC8|[M:3/4]D6|E6|]\n", abcjs).sections.map((s) => [s.d, s.barre, s.mesure]), [[0, 16, [4, 4]], [16, 16, [3, 4]]]);
+  assert.deepEqual(sq.lirePage("X:1\nM:2/4\nL:1/8\nQ:1/4=90\nK:C\n|:CD EF:|[K:F]B2 A2|]\n", abcjs).sections.slice(1).map((s) => [s.d, s.barre, s.tonalite]), [[16, 16, "F"]]);
+  // Deux mains : deux voix ; une tonalité que le menu n'a pas prend son nom enharmonique.
+  const mains = sq.lirePage("X:1\nM:3/4\nL:1/8\nQ:1/4=100\nK:G\n%%score {1 2}\nV:1 clef=treble\nV:2 clef=bass\n[V:1] B2 c2 d2|g6|\n[V:2] G,,6|D,6|\n", abcjs);
+  assert.equal(mains.voix.length, 2);
+  assert.equal(sq.sequenceDepuisAbc("X:1\nM:4/4\nL:1/8\nK:Gb\nG8|]\n", abcjs).tonalite, "F#");
+});
+
 test("écrire comme dans un texte : insérer, effacer, ⌫, changer la durée", () => {
   const seq = idee([[0, 2, 60], [2, 2, 62], [4, 4, 64]]);
   const [nouvelle] = sq.inserer(seq, 0, 2, [67], 2);
@@ -192,7 +281,8 @@ test("jouer en direct : les notes se recalent sur la grille", () => {
     { h: 67, debut: 9.9, fin: 12.6 },   // jeu lié : déborde sur la suivante
     { h: 69, debut: 12.1, fin: 13.9 },
   ], { grille: 2, origine: 16 });
-  assert.deepEqual(notes.map((n) => [n.d, n.l, n.h]), [[16, 2, 60], [18, 2, 62], [20, 4, 64], [24, 2, 64], [26, 2, 67], [28, 2, 69]]);
+  // La dernière, relâchée une croche avant la fin de son temps, tient jusqu'à elle (jeu lié).
+  assert.deepEqual(notes.map((n) => [n.d, n.l, n.h]), [[16, 2, 60], [18, 2, 62], [20, 4, 64], [24, 2, 64], [26, 2, 67], [28, 4, 69]]);
   // Des noires jouées un peu détachées (relâchées une croche trop tôt) restent des noires ;
   // un vrai silence (plus d'une croche) reste un silence.
   const detachees = sq.quantifier([
@@ -202,4 +292,40 @@ test("jouer en direct : les notes se recalent sur la grille", () => {
   // Un accord tenu sous la mélodie, lui, reste tenu.
   const tenu = sq.quantifier([{ h: 48, debut: 0, fin: 8 }, { h: 72, debut: 2, fin: 4 }], { grille: 2 });
   assert.deepEqual(tenu.map((n) => [n.d, n.l, n.h]), [[0, 8, 48], [2, 2, 72]]);
+});
+
+test("l'arrondi : la dernière note se prolonge comme les autres, une double attaque ne compte qu'une fois", () => {
+  const brut = (n) => [n.d, n.l, n.h];
+  // Des noires tenues à 60 % : toutes restent des noires, la dernière aussi (avant : une croche).
+  const noires = [0, 4, 8, 12].map((d, i) => ({ h: 60 + i, debut: d + 0.1, fin: d + 0.1 + 2.4 }));
+  assert.deepEqual(sq.quantifier(noires, { grille: 2 }).map(brut), [[0, 4, 60], [4, 4, 61], [8, 4, 62], [12, 4, 63]]);
+  assert.deepEqual(sq.quantifier(noires.map((n) => ({ ...n, fin: n.debut + 3 })), { grille: 1 }).map(brut), [[0, 4, 60], [4, 4, 61], [8, 4, 62], [12, 4, 63]]);
+  // Le dernier accord relâché en désordre : toutes ses notes tiennent jusqu'au temps.
+  const accord = [{ h: 60, debut: 0, fin: 3.4 }, { h: 64, debut: 0, fin: 3.6 }, { h: 67, debut: 0, fin: 4.4 }];
+  assert.deepEqual(sq.quantifier(accord, { grille: 1 }).map(brut), [[0, 4, 60], [0, 4, 64], [0, 4, 67]]);
+  // Au-delà d'un pas de grille, c'est un silence, pour la dernière comme pour les autres ;
+  // une note qui dépasse déjà son temps (syncope) ne bouge pas ; en 6/8, le temps est la noire pointée.
+  assert.deepEqual(sq.quantifier([{ h: 60, debut: 0, fin: 1.6 }], { grille: 1 }).map(brut), [[0, 2, 60]]);
+  assert.deepEqual(sq.quantifier([{ h: 60, debut: 2, fin: 5.8 }], { grille: 2 }).map(brut), [[2, 4, 60]]);
+  assert.deepEqual(sq.quantifier([{ h: 60, debut: 0, fin: 4.2 }], { grille: 2, temps: 6 }).map(brut), [[0, 6, 60]]);
+  // La même note attaquée deux fois dans le même pas de grille : une seule note, la plus longue.
+  const repetee = sq.quantifier([{ h: 60, debut: 0, fin: 0.6 }, { h: 60, debut: 0.8, fin: 1.6 }, { h: 60, debut: 2, fin: 3 }], { grille: 2 });
+  assert.deepEqual(repetee.map(brut), [[0, 2, 60], [2, 2, 60]]);
+  // Le compte des notes gardées est donc celui des notes écrites.
+  const seq = sq.nouvelleSequence();
+  for (const n of repetee) sq.poser(seq, 0, n);
+  assert.equal(seq.pistes[0].notes.length, repetee.length);
+});
+
+test("les notes rangées par pas, comme le transport les lit, et leur fin", () => {
+  const notes = [{ d: 0, l: 4, h: 60 }, { d: 4, l: 2, h: 62 }, { d: 0, l: 8, h: 48 }];
+  const { notesA, fin, vide } = sq.indexerParPas(notes);
+  // Un accord : les notes du même pas, dans l'ordre où elles venaient.
+  assert.deepEqual(notesA(0).map((n) => n.h), [60, 48]);
+  assert.deepEqual(notesA(4).map((n) => n.h), [62]);
+  assert.deepEqual(notesA(2), []);
+  assert.equal(fin, 8, "la fin de la plus longue, pas de la dernière commencée");
+  assert.equal(vide, false);
+  const rien = sq.indexerParPas([]);
+  assert.deepEqual([rien.fin, rien.vide, rien.notesA(0)], [0, true, []]);
 });

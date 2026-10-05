@@ -81,8 +81,10 @@ export function fenetreOctaves(octave, debut = 2, nb = OCTAVES_CARTE) {
 
 /**
  * @param conteneur l'élément qui reçoit la barre et le clavier
- * @param options { surNote(h, bas, vitesse), surOctave(bas) (l'octave a changé
- *   par un geste sur les chevrons ou la carte), surFacon("piano" | "gamme") }
+ * @param options { surNote(h, bas, vitesse, quand), surOctave(bas) (l'octave a
+ *   changé par un geste sur les chevrons ou la carte), surFacon("piano" | "gamme") }.
+ *   `quand` : l'instant du geste (event.timeStamp, l'horloge de la page) ; le
+ *   jeu en direct place la note à cet instant-là, pas à celui où le code tourne.
  */
 export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFacon = () => {} }) {
   let bas = null; // la touche la plus à gauche : toujours un do
@@ -125,6 +127,19 @@ export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFaco
 
   // --- Le piano ---------------------------------------------------------------
 
+  /**
+   * Une touche du piano, pour le lecteur d'écran : un bouton qui dit sa note
+   * (« do4 », « do dièse 4 »). Hors de la tabulation : au clavier de l'ordinateur,
+   * les lettres jouent déjà (A W S E D…) ; au doigt, VoiceOver et TalkBack
+   * la trouvent quand même (audit du 04/10, I11 : c'étaient des <div> muets).
+   */
+  function nommer(t, h) {
+    t.setAttribute("role", "button");
+    // « do dièse 4 » : le signe ♯ se lit mal, ou pas du tout, selon la voix.
+    t.setAttribute("aria-label", nomNote(h).replace(/[♯♭]/, (s) => (s === "♯" ? " dièse " : " bémol ")).replace(/\s+/g, " "));
+    t.tabIndex = -1;
+  }
+
   function dessiner() {
     const largeur = conteneur.clientWidth;
     if (!largeur) return; // caché : on dessinera quand il se montrera
@@ -143,6 +158,7 @@ export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFaco
       const t = document.createElement("div");
       t.className = "touche blanche";
       t.dataset.h = h;
+      nommer(t, h);
       t.style.left = `calc(${i} * 100% / var(--blanches))`;
       // Le nom de la note : « do4 » pour un do (avec son octave), « ré » pour les autres.
       const nom = document.createElement("span");
@@ -158,6 +174,7 @@ export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFaco
       const t = document.createElement("div");
       t.className = "touche noire";
       t.dataset.h = h;
+      nommer(t, h);
       t.style.left = `calc((${i + 1} - 0.31) * 100% / var(--blanches))`;
       zone.appendChild(t);
     }
@@ -293,12 +310,12 @@ export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFaco
   const toucheDe = (cible) => cible.closest(".touche, .pad");
   const allumer = (h, oui) => conteneur.querySelectorAll(`.touche[data-h="${h}"], .pad[data-h="${h}"]`).forEach((t) => t.classList.toggle("enfoncee", oui));
 
-  function relacher(id) {
+  function relacher(id, quand) {
     const h = enfoncees.get(id);
     if (h === undefined) return;
     enfoncees.delete(id);
     if (![...enfoncees.values()].includes(h)) allumer(h, false);
-    surNote(h, false);
+    surNote(h, false, undefined, quand);
   }
 
   for (const surface of [zone, pads]) {
@@ -309,21 +326,24 @@ export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFaco
       const h = Number(t.dataset.h);
       enfoncees.set(e.pointerId, h);
       t.classList.add("enfoncee");
-      surNote(h, true, Math.round(70 + 40 * Math.min(1, e.pressure || 0.5)));
+      surNote(h, true, Math.round(70 + 40 * Math.min(1, e.pressure || 0.5)), e.timeStamp);
     });
     // Pas de menu ni de loupe quand on laisse le doigt sur une touche.
     surface.addEventListener("contextmenu", (e) => e.preventDefault());
   }
-  for (const type of ["pointerup", "pointercancel"]) window.addEventListener(type, (e) => relacher(e.pointerId));
-  // Au clavier de l'ordinateur, une grosse touche (Tab, puis Entrée) joue une note courte.
-  pads.addEventListener("click", (e) => {
-    const t = e.target.closest(".pad");
-    if (!t || e.detail !== 0) return;
-    const h = Number(t.dataset.h);
-    surNote(h, true, 90);
-    allumer(h, true);
-    setTimeout(() => { allumer(h, false); surNote(h, false); }, 300);
-  });
+  for (const type of ["pointerup", "pointercancel"]) window.addEventListener(type, (e) => relacher(e.pointerId, e.timeStamp));
+  // Au clavier de l'ordinateur, une grosse touche (Tab, puis Entrée) joue une note courte ;
+  // une touche du piano aussi, quand le lecteur d'écran l'active (un clic sans pointeur, I11).
+  for (const [surface, quoi] of [[pads, ".pad"], [zone, ".touche"]]) {
+    surface.addEventListener("click", (e) => {
+      const t = e.target.closest(quoi);
+      if (!t || e.detail !== 0) return;
+      const h = Number(t.dataset.h);
+      surNote(h, true, 90, e.timeStamp);
+      allumer(h, true);
+      setTimeout(() => { allumer(h, false); surNote(h, false, undefined, performance.now()); }, 300);
+    });
+  }
 
   function decaler(sens) {
     sauter(bas + 12 * sens);

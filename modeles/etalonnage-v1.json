@@ -1,0 +1,277 @@
+{
+  "modele": "etalonnage",
+  "titre": "Étalonnage",
+  "genre": "etalonnage",
+  "version": 1,
+  "page": {
+    "largeur": 1404,
+    "hauteur": 1872,
+    "unite": "pixel de l'écran de la reMarkable 2 (226 ppp), origine en haut à gauche, y vers le bas"
+  },
+  "interligne": 32,
+  "ecart_entre_blocs": 139.0,
+  "x_debut": 80,
+  "x_fin": 1344,
+  "systemes": [
+    {
+      "portees": [
+        {
+          "lignes": [
+            219.5,
+            251.5,
+            283.5,
+            315.5,
+            347.5
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "lignes": [
+            486.5,
+            518.5,
+            550.5,
+            582.5,
+            614.5
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "lignes": [
+            753.5,
+            785.5,
+            817.5,
+            849.5,
+            881.5
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "lignes": [
+            1020.5,
+            1052.5,
+            1084.5,
+            1116.5,
+            1148.5
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "lignes": [
+            1287.5,
+            1319.5,
+            1351.5,
+            1383.5,
+            1415.5
+          ]
+        }
+      ]
+    },
+    {
+      "portees": [
+        {
+          "lignes": [
+            1554.5,
+            1586.5,
+            1618.5,
+            1650.5,
+            1682.5
+          ]
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "etiquette": "soupir",
+      "nom": "Soupir",
+      "rangee": 0,
+      "x0": 182.4,
+      "y0": 150.0,
+      "x1": 501.3,
+      "y1": 417.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "demi-soupir",
+      "nom": "Demi-soupir",
+      "rangee": 0,
+      "x0": 603.7,
+      "y0": 150.0,
+      "x1": 922.7,
+      "y1": 417.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "quart-soupir",
+      "nom": "Quart de soupir",
+      "rangee": 0,
+      "x0": 1025.1,
+      "y0": 150.0,
+      "x1": 1344.0,
+      "y1": 417.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "diese",
+      "nom": "Dièse",
+      "rangee": 1,
+      "x0": 182.4,
+      "y0": 417.0,
+      "x1": 501.3,
+      "y1": 684.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "bemol",
+      "nom": "Bémol",
+      "rangee": 1,
+      "x0": 603.7,
+      "y0": 417.0,
+      "x1": 922.7,
+      "y1": 684.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "becarre",
+      "nom": "Bécarre",
+      "rangee": 1,
+      "x0": 1025.1,
+      "y0": 417.0,
+      "x1": 1344.0,
+      "y1": 684.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "1",
+      "nom": "Chiffre 1",
+      "rangee": 2,
+      "x0": 182.4,
+      "y0": 684.0,
+      "x1": 501.3,
+      "y1": 951.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "2",
+      "nom": "Chiffre 2",
+      "rangee": 2,
+      "x0": 603.7,
+      "y0": 684.0,
+      "x1": 922.7,
+      "y1": 951.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "3",
+      "nom": "Chiffre 3",
+      "rangee": 2,
+      "x0": 1025.1,
+      "y0": 684.0,
+      "x1": 1344.0,
+      "y1": 951.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "4",
+      "nom": "Chiffre 4",
+      "rangee": 3,
+      "x0": 182.4,
+      "y0": 951.0,
+      "x1": 501.3,
+      "y1": 1218.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "5",
+      "nom": "Chiffre 5",
+      "rangee": 3,
+      "x0": 603.7,
+      "y0": 951.0,
+      "x1": 922.7,
+      "y1": 1218.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "6",
+      "nom": "Chiffre 6",
+      "rangee": 3,
+      "x0": 1025.1,
+      "y0": 951.0,
+      "x1": 1344.0,
+      "y1": 1218.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "7",
+      "nom": "Chiffre 7",
+      "rangee": 4,
+      "x0": 182.4,
+      "y0": 1218.0,
+      "x1": 501.3,
+      "y1": 1485.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "8",
+      "nom": "Chiffre 8",
+      "rangee": 4,
+      "x0": 603.7,
+      "y0": 1218.0,
+      "x1": 922.7,
+      "y1": 1485.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "9",
+      "nom": "Chiffre 9",
+      "rangee": 4,
+      "x0": 1025.1,
+      "y0": 1218.0,
+      "x1": 1344.0,
+      "y1": 1485.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "C",
+      "nom": "C (4/4)",
+      "rangee": 5,
+      "x0": 182.4,
+      "y0": 1485.0,
+      "x1": 501.3,
+      "y1": 1752.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "C|",
+      "nom": "C barré (2/2)",
+      "rangee": 5,
+      "x0": 603.7,
+      "y0": 1485.0,
+      "x1": 922.7,
+      "y1": 1752.0,
+      "exemples": 3
+    },
+    {
+      "etiquette": "triolet",
+      "nom": "3 de triolet",
+      "rangee": 5,
+      "x0": 1025.1,
+      "y0": 1485.0,
+      "x1": 1344.0,
+      "y1": 1752.0,
+      "exemples": 3
+    }
+  ]
+}

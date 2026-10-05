@@ -10,50 +10,115 @@
  *
  * Les autres feuilles (bibliotheque, atelier, morceau, idee) n'emploient que
  * ces jetons et ces composants : une couleur ou une forme qui manque
- * s'ajoute ici, pas dans l'écran qui en a besoin.
+ * s'ajoute ici, pas dans l'écran qui en a besoin. Une couleur qui change
+ * entre le clair et le sombre s'écrit light-dark(clair, sombre).
  */
 
+/* Chaque jeton dit sa couleur claire puis sa couleur sombre : light-dark()
+ * choisit selon le réglage du téléphone (color-scheme: light dark). Dans
+ * claude.ai, la page reçoit data-theme="light" ou "dark", qui l'emporte.
+ * La palette sombre était écrite deux fois mot pour mot (pour le réglage du
+ * téléphone, puis pour data-theme), et une troisième pour morceau.css :
+ * elle ne l'est plus qu'une fois (audit du 04/10, T5). */
 :root {
-  --papier: #EDEEEA; --feuille: #F8F8F5; --creux: #E3E5DF; --encre: #1C1E21; --gris: #565A61;
-  --trait: #D3D5CF; --trait-fort: #A9ACA5; --stylo: #2F4BC2; --stylo-doux: #DDE3F6; --sur-stylo: #FFFFFF;
-  --surligneur: #F2D04B; --surligneur-doux: #FBF1B0; --rouge: #D93A3F; --ok: #2F7A4D; --ok-doux: #DCEFE2;
-  --alerte: #9A5B00; --danger: #A5281B;
+  color-scheme: light dark;
+  --papier: light-dark(#EDEEEA, #17181B); --feuille: light-dark(#F8F8F5, #202226); --creux: light-dark(#E3E5DF, #2A2D32);
+  --encre: light-dark(#1C1E21, #E6E6E1); --gris: light-dark(#565A61, #A3A7AE);
+  --trait: light-dark(#D3D5CF, #34373C); --trait-fort: light-dark(#A9ACA5, #50545A);
+  /* Le bord de ce qu'on remplit ou qu'on bascule (champs, interrupteurs) : 3:1 au
+     moins sur la feuille, le papier et le creux (WCAG 1.4.11). --trait-fort, qui
+     dessine les lignes, n'en faisait que 2:1 (audit du 04/10, I1). */
+  --bord-champ: light-dark(#80827D, #74777C);
+  --stylo: light-dark(#2F4BC2, #93A8FF); --stylo-doux: light-dark(#DDE3F6, #242C4A); --sur-stylo: light-dark(#FFFFFF, #10162E);
+  /* Le surligneur doux du sombre, un peu plus sombre : le gris s'y lit à 4,6:1 (4,18 avant, I1). */
+  --surligneur: light-dark(#F2D04B, #E6CB3A); --surligneur-doux: light-dark(#FBF1B0, #433C12);
+  /* Le vert du clair, un peu plus sombre : « Prête » se lit à 4,6:1 sur son vert doux (4,36 avant, I1). */
+  --rouge: light-dark(#D93A3F, #FF6B6F); --ok: light-dark(#2D764A, #74C995); --ok-doux: light-dark(#DCEFE2, #1D3527);
+  --alerte: light-dark(#9A5B00, #E8B35A); --danger: light-dark(#A5281B, #F0877A);
   /* Le surligneur reste clair dans toutes les ambiances : on y écrit toujours en sombre. */
   --sur-surligneur: #1C1E21;
   /* Le piano reste un piano, mais n'éblouit pas en sombre. */
-  --touche-blanche: #FAFAF7; --touche-noire: #1C1E21; --touche-texte: #565A61; --touche-bord: #A9ACA5;
-  --voile: rgba(28, 30, 33, 0.34);
-  --ombre: 0 10px 28px rgba(28, 30, 33, 0.18);
+  --touche-blanche: light-dark(#FAFAF7, #D9DAD4); --touche-noire: light-dark(#1C1E21, #08090A);
+  --touche-texte: light-dark(#565A61, #3B3E44); --touche-bord: light-dark(#A9ACA5, #0B0C0E);
+  --voile: light-dark(rgba(28, 30, 33, 0.34), rgba(0, 0, 0, 0.55));
+  /* light-dark() ne choisit que des couleurs, et l'ombre sombre est aussi plus
+     grande : deux ombres, celle de l'autre ambiance transparente. */
+  --ombre: 0 10px 28px light-dark(rgba(28, 30, 33, 0.18), transparent), 0 12px 32px light-dark(transparent, rgba(0, 0, 0, 0.55));
   --f-titre: "Young Serif", "Iowan Old Style", Georgia, serif;
   --f-texte: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-code: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --barre: 56px;
+  /* La barre d'onglets fixée en bas du téléphone, sans la zone de sécurité de l'écran. */
+  --onglets: 70px;
+  /* Le texte posé sur le rouge (enregistrer, arrêter le jeu en direct) : le fond de
+     l'écran, sombre en sombre, clair en clair (le blanc manquait de contraste sur le
+     rouge clair du sombre). */
+  --sur-rouge: light-dark(#EDEEEA, #17181B);
+  /* Pour l'impression seulement : noir sur blanc, quel que soit le thème de l'écran. */
+  --blanc-imprime: #FFFFFF; --noir-imprime: #000000;
+
+  /* LES TAILLES DE TEXTE, en rem : elles suivent la taille de texte choisie dans le
+     navigateur ou le téléphone (le corps était à 15 px fixes). Le nom dit la taille
+     à 16 px, la taille d'ordinaire. Il y en avait 50 différentes ; seize suffisent. */
+  --t-10: 0.625rem; --t-11: 0.6875rem; --t-12: 0.75rem; --t-13: 0.8125rem; --t-14: 0.875rem;
+  --t-15: 0.9375rem; --t-16: 1rem; --t-18: 1.125rem; --t-20: 1.25rem; --t-22: 1.375rem; --t-24: 1.5rem;
+  --t-32: 2rem; --t-40: 2.5rem; --t-48: 3rem; --t-56: 3.5rem; --t-72: 4.5rem;
+
+  /* LES RAYONS, du trait fin à la feuille du bas (il y en avait 23). Un cercle reste à 50 %. */
+  --r-trait: 2px;   /* les petites marques : notes d'aperçu, têtes de lecture, pointe d'une bulle */
+  --r-4: 4px;       /* touches de clavier écrites (kbd), pastilles de légende, notes de la grille */
+  --r-8: 8px;       /* titres qu'on renomme, cases, vignettes */
+  --r-10: 10px;     /* boutons et champs */
+  --r-12: 12px;     /* cartes, loupes, rubans, grosses touches */
+  --r-16: 16px;     /* panneaux, bandeaux, cartes de la bibliothèque */
+  --r-22: 22px;     /* les feuilles du bas et le panneau du bas */
+  --r-plein: 999px; /* puces, pastilles, pilules */
+
+  /* LES COUCHES (z-index), de bas en haut : onze valeurs dans neuf feuilles, à un seul endroit. */
+  --z-fond: 0;      /* sous ses voisins, dans sa carte (le bouton qui couvre la tête d'un bloc) */
+  --z-dessus: 1;    /* au-dessus de ses voisins : la note choisie, une touche noire */
+  --z-tete: 2;      /* les têtes de lecture, ce qu'on glisse */
+  --z-calque: 3;    /* posé sur la grille : la trace de la voix, « Capturer » */
+  --z-scene: 4;     /* la scène du jeu en direct, le pied du morceau */
+  --z-barre: 5;     /* les barres collées en haut, la pilule de la sélection */
+  --z-dock: 6;      /* le panneau du bas, les onglets fixés */
+  --z-cadre: 20;    /* le cadre rouge du jeu en direct */
+  --z-menu: 30;     /* le menu en cercle */
+  --z-message: 40;  /* les messages passagers */
+  --z-bulle: 41;    /* la bulle d'un appui long, au-dessus de tout */
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --papier: #17181B; --feuille: #202226; --creux: #2A2D32; --encre: #E6E6E1; --gris: #A3A7AE;
-    --trait: #34373C; --trait-fort: #50545A; --stylo: #93A8FF; --stylo-doux: #242C4A; --sur-stylo: #10162E;
-    --surligneur: #E6CB3A; --surligneur-doux: #4A4214; --rouge: #FF6B6F; --ok: #74C995; --ok-doux: #1D3527;
-    --alerte: #E8B35A; --danger: #F0877A;
-    --touche-blanche: #D9DAD4; --touche-noire: #08090A; --touche-texte: #3B3E44; --touche-bord: #0B0C0E;
-    --voile: rgba(0, 0, 0, 0.55); --ombre: 0 12px 32px rgba(0, 0, 0, 0.55);
-    color-scheme: dark;
-  }
+/* Les jetons qui se calculent d'autres jetons se redéclarent dans le Studio : une
+   propriété se calcule là où elle est déclarée, et l'éditeur garderait sinon les
+   couleurs du Papier. */
+:root, .studio {
+  /* Une ombre courte : un segment choisi, le bouton d'un interrupteur. */
+  --ombre-douce: 0 1px 3px rgba(0, 0, 0, 0.2);
+  /* La lueur d'une tête de lecture (le surligneur) et celle du jeu en direct (le rouge). */
+  --lueur: 0 0 8px color-mix(in srgb, var(--surligneur) 60%, transparent);
+  --lueur-rouge: 0 0 8px color-mix(in srgb, var(--rouge) 60%, transparent);
+  /* Le bleu de la gamme sur les touches du piano, lisible sur la blanche et sur la noire
+     dans les trois ambiances (le stylo est foncé en Papier clair, clair dans les deux autres). */
+  --gamme-blanche: color-mix(in srgb, var(--stylo) 62%, var(--touche-noire));
+  --gamme-noire: color-mix(in srgb, var(--stylo) 40%, var(--touche-blanche));
+  /* Les six couleurs de section d'un morceau (morceau.css) : la frise, les cartes, la
+     feuille « Quelle idée ? » et la vignette de la bibliothèque. --sur-section-N est le
+     texte qui se lit dessus : en clair, des teintes soutenues sous du blanc ; en sombre,
+     des teintes claires sous du bleu nuit (le rôle de --sur-stylo). Seul le jaune du
+     surligneur est clair dans les deux ambiances : il garde un texte sombre. */
+  --section-1: var(--stylo);                                              --sur-section-1: var(--sur-stylo);
+  --section-2: var(--surligneur);                                         --sur-section-2: light-dark(var(--encre), var(--sur-stylo));
+  --section-3: var(--ok);                                                 --sur-section-3: var(--sur-stylo);
+  --section-4: color-mix(in oklab, var(--danger) 55%, var(--alerte));     --sur-section-4: var(--sur-stylo);
+  --section-5: color-mix(in oklab, var(--stylo) 55%, var(--danger));      --sur-section-5: var(--sur-stylo);
+  --section-6: var(--gris);                                               --sur-section-6: var(--sur-stylo);
 }
-:root[data-theme="dark"] {
-  --papier: #17181B; --feuille: #202226; --creux: #2A2D32; --encre: #E6E6E1; --gris: #A3A7AE;
-  --trait: #34373C; --trait-fort: #50545A; --stylo: #93A8FF; --stylo-doux: #242C4A; --sur-stylo: #10162E;
-  --surligneur: #E6CB3A; --surligneur-doux: #4A4214; --rouge: #FF6B6F; --ok: #74C995; --ok-doux: #1D3527;
-  --alerte: #E8B35A; --danger: #F0877A;
-  --touche-blanche: #D9DAD4; --touche-noire: #08090A; --touche-texte: #3B3E44; --touche-bord: #0B0C0E;
-  --voile: rgba(0, 0, 0, 0.55); --ombre: 0 12px 32px rgba(0, 0, 0, 0.55);
-  color-scheme: dark;
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 .studio {
   --papier: #121315; --feuille: #1B1D21; --creux: #26292E; --encre: #ECECE7; --gris: #A3A7AE;
-  --trait: #2B2E33; --trait-fort: #464A51; --stylo: #8EA2FF; --stylo-doux: #262E52; --sur-stylo: #0E1330;
-  --surligneur: #F2D04B; --surligneur-doux: #4A4214; --rouge: #FF5A5F; --ok: #74C995; --ok-doux: #1D3527;
-  --alerte: #E8B35A; --danger: #F0877A;
+  --trait: #2B2E33; --trait-fort: #464A51; --bord-champ: #707378; --stylo: #8EA2FF; --stylo-doux: #262E52; --sur-stylo: #0E1330;
+  --surligneur: #F2D04B; --surligneur-doux: #433C12; --rouge: #FF5A5F; --ok: #74C995; --ok-doux: #1D3527;
+  --alerte: #E8B35A; --danger: #F0877A; --sur-rouge: #121315;
   --touche-blanche: #D9DAD4; --touche-noire: #050506; --touche-texte: #3B3E44; --touche-bord: #0B0C0E;
   --voile: rgba(0, 0, 0, 0.58); --ombre: 0 12px 32px rgba(0, 0, 0, 0.6);
   color-scheme: dark;
@@ -62,13 +127,19 @@
 /* Les bases */
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { background: var(--papier); color: var(--encre); font-family: var(--f-texte); font-size: 15px; line-height: 1.55; margin: 0; -webkit-font-smoothing: antialiased; }
+body { background: var(--papier); color: var(--encre); font-family: var(--f-texte); font-size: var(--t-15); line-height: 1.55; margin: 0; -webkit-font-smoothing: antialiased; padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px); }
+/* (Le téléphone couché : son encoche passe sur le côté, et la page, posée jusqu'au bord de
+   l'écran (viewport-fit=cover), passait dessous. Les panneaux fixés font de même.) */
 h1, h2, h3 { font-family: var(--f-titre); font-weight: 400; margin: 0; line-height: 1.2; text-wrap: balance; }
 p { margin: 0; }
 button, input, textarea, select { font: inherit; color: inherit; }
 /* Un appui long sur un bouton montre sa bulle (infobulles.js) : ni sélection de
    texte, ni menu du navigateur, ni loupe par-dessus. */
 button { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* Deux touchers rapides sur un bouton (↑ trois fois de suite) sont deux gestes,
+   pas un double toucher qui agrandit la page (iPhone). Ce qui suit le doigt
+   (notes de la grille, poignées, clavier) garde son touch-action: none. */
+button, a[href], label, summary, select, input { touch-action: manipulation; }
 :focus-visible { outline: 2px solid var(--stylo); outline-offset: 2px; }
 code, .mono { font-family: var(--f-code); font-size: 0.9em; }
 .mono { font-variant-numeric: tabular-nums; }
@@ -79,15 +150,16 @@ code, .mono { font-family: var(--f-code); font-size: 0.9em; }
 .ico { width: 22px; height: 22px; flex: none; display: block; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 .ico.s { width: 18px; height: 18px; }
 .ico.l { width: 28px; height: 28px; }
+/* Un tempo : la noire, puis le nombre (« ♩ = 90 » s'écrivait en caractères). */
+.tempo-noire { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; }
 
 /* La barre du haut */
-.barre-haut { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--papier); border-bottom: 1px solid var(--trait); }
+.barre-haut { position: sticky; top: env(safe-area-inset-top, 0px); z-index: var(--z-barre); background: var(--papier); border-bottom: 1px solid var(--trait); }
 .barre-haut .dedans { max-width: 1240px; margin: 0 auto; min-height: var(--barre); padding: 6px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
-.logo { font-family: var(--f-titre); font-size: 1.35rem; display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; min-height: 44px; cursor: pointer; }
+.logo { font-family: var(--f-titre); font-size: var(--t-22); display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; min-height: 44px; cursor: pointer; }
 .logo svg { width: 18px; height: 30px; color: var(--stylo); }
-.fil { display: flex; align-items: center; gap: 6px; color: var(--gris); font-size: 0.92rem; min-width: 0; }
+.fil { display: flex; align-items: center; gap: 6px; color: var(--gris); font-size: var(--t-15); min-width: 0; }
 .fil b { color: var(--encre); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
-.mode { margin-left: auto; font-size: 0.8rem; color: var(--gris); }
 
 main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex; flex-direction: column; gap: 18px; }
 .vue { display: flex; flex-direction: column; gap: 18px; }
@@ -97,7 +169,10 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 
 /* Les boutons. Une action principale par écran (.btn-plein) ; le reste
    discret. Au doigt, rien ne fait moins de 44 px. */
-.btn { min-height: 40px; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); padding: 0 14px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.94rem; font-weight: 500; white-space: nowrap; text-decoration: none; }
+.btn { min-height: 40px; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); padding: 0 14px; border-radius: var(--r-10); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: var(--t-15); font-weight: 500; line-height: 1.2; text-wrap: balance; text-decoration: none; }
+/* Un libellé trop long pour la place (320 px, le texte agrandi) passe à la ligne : en nowrap, il
+   sortait de l'écran (« Importer de ma reMarkable », « Revenir à la lecture de Portée », audit du
+   04/10, I10). Un bouton ne passe à la ligne que s'il manque de place : sinon, rien ne change. */
 .btn:hover { border-color: var(--encre); }
 .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 .btn[disabled]:hover { border-color: var(--trait-fort); }
@@ -106,90 +181,157 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 .btn-fantome { background: transparent; border-color: transparent; }
 .btn-fantome:hover { background: var(--creux); border-color: transparent; }
 .btn-danger { color: var(--danger); }
-.btn-petit { min-height: 32px; padding: 0 10px; font-size: 0.86rem; border-radius: 8px; }
-.btn.rond { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; }
-.btn.rond.grand { width: 52px; height: 52px; }
+.btn-petit { min-height: 32px; padding: 0 10px; font-size: var(--t-14); border-radius: var(--r-8); }
+/* Un bouton rond ne rétrécit jamais : dans une rangée trop étroite, c'est le
+   texte d'à côté qui cède (il se coupait à 33 px, audit du 04/10, I1). */
+.btn.rond { flex: none; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; }
+.btn.rond.grand { width: 52px; min-width: 52px; height: 52px; min-height: 52px; }
 /* Allumé (boucle, métronome, durée choisie…) : le bleu du stylo. */
 .btn[aria-pressed="true"] { background: var(--stylo-doux); border-color: var(--stylo); color: var(--stylo); }
 .btn-plein[aria-pressed="true"] { background: var(--stylo); color: var(--sur-stylo); }
 /* Enregistrer : le seul rouge de l'appli. */
 .btn.enr { color: var(--rouge); border: 2px solid var(--rouge); background: transparent; }
-.btn.enr[aria-pressed="true"] { background: var(--rouge); color: #fff; }
+.btn.enr[aria-pressed="true"] { background: var(--rouge); color: var(--sur-rouge); }
 .rangee { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .pousse { margin-left: auto; }
-.remarque { font-size: 0.85rem; color: var(--gris); }
-.surtitre { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gris); font-weight: 600; }
+.remarque { font-size: var(--t-14); color: var(--gris); }
+.surtitre { font-size: var(--t-12); letter-spacing: 0.08em; text-transform: uppercase; color: var(--gris); font-weight: 600; }
 
 /* Commutateur à segments : un seul choix parmi deux à quatre. */
-.seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 13px; background: var(--creux); }
-.seg > button { flex: 1 1 0; min-height: 36px; border: 0; background: transparent; border-radius: 10px; padding: 0 14px; color: var(--gris); font-weight: 500; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
-.seg > button[aria-selected="true"], .seg > button[aria-pressed="true"] { background: var(--feuille); color: var(--encre); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14); }
+.seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: calc(var(--r-10) + 3px); background: var(--creux); }
+.seg > button { flex: 1 1 0; min-height: 36px; border: 0; background: transparent; border-radius: var(--r-10); padding: 0 14px; color: var(--gris); font-weight: 500; font-size: var(--t-15); line-height: 1.2; text-wrap: balance; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.seg > button[aria-selected="true"], .seg > button[aria-pressed="true"] { background: var(--feuille); color: var(--encre); box-shadow: var(--ombre-douce); }
 
 /* Interrupteur : un <button role="switch" aria-checked> qui contient
    <span class="interrupteur"></span> (réglages oui / non). */
-.interrupteur { flex: none; position: relative; width: 46px; height: 28px; border-radius: 999px; background: var(--trait-fort); transition: background 0.15s; }
-.interrupteur::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--feuille); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 0.15s; }
+.interrupteur { flex: none; position: relative; width: 46px; height: 28px; border-radius: var(--r-plein); background: var(--bord-champ); transition: background 0.15s; }
+.interrupteur::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--feuille); box-shadow: var(--ombre-douce); transition: transform 0.15s; }
 [aria-checked="true"] > .interrupteur { background: var(--stylo); }
 [aria-checked="true"] > .interrupteur::after { transform: translateX(18px); background: var(--sur-stylo); }
 
 /* Filtres et étiquettes */
-.puce { min-height: 34px; border: 1px solid var(--trait-fort); background: transparent; color: var(--encre); border-radius: 999px; padding: 0 14px; cursor: pointer; font-size: 0.88rem; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.puce { min-height: 34px; border: 1px solid var(--trait-fort); background: transparent; color: var(--encre); border-radius: var(--r-plein); padding: 0 14px; cursor: pointer; font-size: var(--t-14); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .puce[aria-pressed="true"] { background: var(--encre); color: var(--papier); border-color: var(--encre); }
-.pastille { display: inline-flex; align-items: center; min-height: 24px; font-size: 0.75rem; font-weight: 600; padding: 0 9px; border-radius: 999px; white-space: nowrap; border: 0; }
+.pastille { display: inline-flex; align-items: center; min-height: 24px; font-size: var(--t-12); font-weight: 600; padding: 0 9px; border-radius: var(--r-plein); white-space: nowrap; border: 0; }
 .p-doute { background: var(--surligneur-doux); color: var(--encre); }
 .p-ok { background: var(--ok-doux); color: var(--ok); }
 .p-idee { background: var(--stylo-doux); color: var(--stylo); }
 .p-morceau { background: var(--ok-doux); color: var(--ok); }
-.etiquette { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--stylo-doux); color: var(--encre); }
-.etiquette button { border: 0; background: none; cursor: pointer; padding: 0 4px; color: var(--gris); display: inline-flex; }
+/* La version de l'autre appareil (une copie de conflit) : elle attend un choix, cerclée d'ambre. */
+.p-conflit { background: transparent; color: var(--alerte); box-shadow: inset 0 0 0 1.5px currentColor; }
+/* Une idée que Claude a notée (idee_ecrire) : cerclée du bleu du stylo. */
+.p-claude { background: transparent; color: var(--stylo); box-shadow: inset 0 0 0 1.5px currentColor; }
+
+/* Le bandeau des suggestions de Claude (suggestions-ui.js), en haut de l'idée ou de la page :
+   une ligne discrète, le pourquoi se déplie dessous. `.bandeau-plein` : bord à bord (l'éditeur). */
+.bandeau-claude { display: flex; flex-direction: column; gap: 2px; padding: 2px 4px 2px 12px; border: 1px solid var(--trait); border-radius: var(--r-16); background: var(--stylo-doux); color: var(--encre); min-width: 0; }
+.bandeau-claude.bandeau-plein { flex: none; border-width: 0 0 1px; border-radius: 0; }
+.bandeau-rang { display: flex; align-items: center; gap: 4px; min-width: 0; }
+/* Les gestes gardent leur taille ; c'est le texte qui se raccourcit. */
+.bandeau-rang .btn { flex: none; }
+.bandeau-quoi { flex: 1 1 auto; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: inherit; font-weight: 500; text-align: left; cursor: pointer; }
+.bandeau-quoi .ico { color: var(--stylo); }
+.bandeau-texte { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Déplié, le résumé se lit en entier. */
+.bandeau-quoi[aria-expanded="true"] .bandeau-texte { white-space: normal; }
+.bandeau-compte { flex: none; font-size: var(--t-13); color: var(--gris); }
+.bandeau-pourquoi { padding: 0 8px 8px 26px; font-size: var(--t-14); color: var(--gris); overflow-wrap: anywhere; }
+/* Au téléphone, les trois gestes gardent leur icône (et leur nom, à l'appui long). */
+@media (max-width: 560px) {
+  .bandeau-rang .btn { width: 44px; padding: 0; }
+  .bandeau-libelle { display: none; }
+}
+.etiquette { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-13); padding: 2px 4px 2px 10px; border-radius: var(--r-plein); background: var(--stylo-doux); color: var(--encre); }
+.etiquette button { border: 0; background: none; cursor: pointer; padding: 0 4px; color: var(--gris); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-plein); }
 
 /* Champs */
-.champ { min-height: 40px; border: 1px solid var(--trait-fort); background: var(--feuille); border-radius: 10px; padding: 7px 12px; min-width: 0; flex: 1 1 220px; }
+.champ { min-height: 40px; border: 1px solid var(--bord-champ); background: var(--feuille); border-radius: var(--r-10); padding: 7px 12px; min-width: 0; flex: 1 1 220px; }
+/* Un curseur (tempo) : la boîte fait 44 px de haut au doigt, le rail reste fin au milieu. */
+input[type="range"] { accent-color: var(--stylo); }
 select.champ { padding-right: 8px; }
 
-.panneau { background: var(--feuille); border: 1px solid var(--trait); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.panneau { background: var(--feuille); border: 1px solid var(--trait); border-radius: var(--r-16); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .panneau > .surtitre { display: flex; align-items: center; gap: 8px; }
 
-/* La fenêtre au milieu (choix courts, confirmations) */
-.dialogue { border: 0; border-radius: 16px; background: var(--feuille); color: var(--encre); padding: 0; width: min(420px, calc(100vw - 32px)); box-shadow: var(--ombre); }
-.dialogue::backdrop { background: rgba(10, 11, 13, 0.4); }
+/* LES FENÊTRES ET LES FEUILLES ENTRENT ET SORTENT EN DOUCEUR (audit du 04/10, I3).
+   L'entrée part de @starting-style (l'état d'avant l'ouverture) ; la sortie a
+   besoin que le navigateur garde le <dialog> dans la couche du dessus le temps
+   qu'il s'en va (`overlay`, et `display` en allow-discrete) : là où `overlay`
+   manque (Safari, Firefox), il se fermerait derrière le reste de la page, il s'y
+   ferme donc d'un coup. Qui s'en va ne prend plus aucun toucher. Tout cela
+   s'arrête si l'on a demandé moins de mouvement (la dernière règle de cette
+   feuille). */
+:root { --sortie-feuille: cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* La fenêtre au milieu (choix courts, confirmations) : elle apparaît en grandissant à peine. */
+.dialogue { border: 0; border-radius: var(--r-16); background: var(--feuille); color: var(--encre); padding: 0; width: min(420px, calc(100vw - 32px)); box-shadow: var(--ombre); opacity: 0; scale: 0.96; transition: opacity 0.16s ease-out, scale 0.16s ease-out; }
+.dialogue[open] { opacity: 1; scale: 1; }
+.dialogue::backdrop { background: transparent; transition: background-color 0.16s ease-out; }
+.dialogue[open]::backdrop { background: var(--voile); }
+@starting-style {
+  .dialogue[open] { opacity: 0; scale: 0.96; }
+  .dialogue[open]::backdrop { background: transparent; }
+}
 .dialogue-dedans { display: flex; flex-direction: column; gap: 10px; padding: 18px; }
-.dialogue-dedans h2 { font-size: 1.3rem; }
+.dialogue-dedans h2 { font-size: var(--t-20); }
 .dialogue-dedans .liste-choix { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
 .dialogue-dedans .liste-choix .btn { justify-content: flex-start; white-space: normal; text-align: left; }
 
-/* La feuille du bas : un <dialog class="feuille-bas">, ouvert par feuilles.js.
-   Au téléphone, elle monte sous le pouce ; à l'ordinateur, elle reste
-   centrée en bas, pas plus large qu'un téléphone. */
-dialog.feuille-bas { position: fixed; inset: auto 0 0 0; margin: 0 auto; width: 100%; max-width: 560px; max-height: min(90dvh, 780px); border: 0; border-radius: 22px 22px 0 0; background: var(--feuille); color: var(--encre); padding: 6px 16px calc(18px + env(safe-area-inset-bottom, 0px)); box-shadow: var(--ombre); overflow: auto; overscroll-behavior: contain; }
-dialog.feuille-bas::backdrop { background: rgba(10, 11, 13, 0.45); }
-dialog.feuille-bas::before { content: ""; display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--trait-fort); margin: 4px auto 12px; }
-dialog.feuille-bas[open] { animation: feuille-monte 0.18s ease-out; }
+/* La feuille du bas : un <dialog class="feuille-bas">, ouvert par feuilles.js (un
+   toucher sur le voile la ferme). Au téléphone, elle monte sous le
+   pouce ; à l'ordinateur, elle reste centrée en bas, pas plus large qu'un téléphone.
+   Elle monte du bas de l'écran, et y redescend en se fermant. */
+dialog.feuille-bas { position: fixed; inset: auto 0 0 0; margin: 0 auto; width: 100%; max-width: 560px; max-height: min(90dvh, 780px); border: 0; border-radius: var(--r-22) var(--r-22) 0 0; background: var(--feuille); color: var(--encre); padding: 6px 16px calc(18px + env(safe-area-inset-bottom, 0px)); box-shadow: var(--ombre); overflow: auto; overscroll-behavior: contain; translate: 0 100%; transition: translate 0.26s var(--sortie-feuille); }
+dialog.feuille-bas[open] { translate: 0 0; }
+dialog.feuille-bas::backdrop { background: transparent; transition: background-color 0.26s ease-out; }
+dialog.feuille-bas[open]::backdrop { background: var(--voile); }
+@starting-style {
+  dialog.feuille-bas[open] { translate: 0 100%; }
+  dialog.feuille-bas[open]::backdrop { background: transparent; }
+}
+dialog.feuille-bas::before { content: ""; display: block; width: 36px; height: 4px; border-radius: var(--r-trait); background: var(--trait-fort); margin: 4px auto 12px; }
 dialog.feuille-bas .feuille-tete { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: 1.35rem; }
-@keyframes feuille-monte { from { transform: translateY(28px); opacity: 0.6; } }
+dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: var(--t-22); }
+@supports (overlay: auto) {
+  .dialogue, .dialogue::backdrop { transition-property: opacity, scale, background-color, display, overlay; transition-behavior: allow-discrete; }
+  dialog.feuille-bas, dialog.feuille-bas::backdrop { transition-property: translate, background-color, display, overlay; transition-behavior: allow-discrete; }
+}
+dialog:not([open]), dialog:not([open])::backdrop { pointer-events: none; }
+
+/* L'écran qui s'ouvre (et l'onglet de l'accueil qu'on choisit) se pose d'un fondu
+   court. Un fondu seulement : rien ne bouge sous le doigt, et l'écran change
+   d'un coup dans la page, comme avant (navigation.js en dépend : l'éditeur se
+   mesure dès qu'il est montré). */
+.vue { animation: vue-arrive 0.18s ease-out; }
+@keyframes vue-arrive { from { opacity: 0; } }
 
 /* Les messages passagers s'affichent en haut : en bas, ils cachaient le
    clavier et la liste, là où va le pouce. Ils laissent passer les doigts :
    un message posé sur un bouton ne doit pas l'avaler. */
-.toast { pointer-events: none; inset: auto; margin: 0; border: 0; overflow: visible; position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + var(--barre) + 10px); background: var(--encre); color: var(--papier); padding: 10px 16px; border-radius: 12px; font-size: 0.92rem; font-weight: 500; max-width: min(92vw, 560px); z-index: 40; box-shadow: var(--ombre); }
+.toast { pointer-events: none; inset: auto; margin: 0; border: 0; overflow: visible; position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + var(--barre) + 10px); background: var(--encre); color: var(--papier); padding: 10px 16px; border-radius: var(--r-12); font-size: var(--t-15); font-weight: 500; max-width: min(92vw, 560px); z-index: var(--z-message); box-shadow: var(--ombre); }
+/* Un message passager qui propose un geste (« Recharger », app.js) : lui seul prend le toucher. */
+.toast.toast-action { pointer-events: auto; display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 16px; width: max-content; }
 
 /* La bulle d'un appui long (infobulles.js) : ce que fait une icône, au-dessus du
    doigt, avec une pointe vers elle. En « popover », elle passe au-dessus des
    feuilles ; elle ne prend aucun toucher. */
-.infobulle { pointer-events: none; inset: auto; margin: 0; border: 0; overflow: visible; position: fixed; z-index: 41; width: max-content; max-width: min(300px, calc(100vw - 16px)); padding: 8px 12px; border-radius: 10px; background: var(--encre); color: var(--papier); font-size: 0.92rem; font-weight: 500; line-height: 1.35; box-shadow: var(--ombre); animation: infobulle-vient 0.12s ease-out; }
-.infobulle::after { content: ""; position: absolute; left: var(--fleche, 50%); bottom: -5px; width: 10px; height: 10px; background: inherit; border-radius: 2px; transform: translateX(-50%) rotate(45deg); }
+.infobulle { pointer-events: none; inset: auto; margin: 0; border: 0; overflow: visible; position: fixed; z-index: var(--z-bulle); width: max-content; max-width: min(300px, calc(100vw - 16px)); padding: 8px 12px; border-radius: var(--r-10); background: var(--encre); color: var(--papier); font-size: var(--t-15); font-weight: 500; line-height: 1.35; box-shadow: var(--ombre); animation: infobulle-vient 0.12s ease-out; }
+.infobulle::after { content: ""; position: absolute; left: var(--fleche, 50%); bottom: -5px; width: 10px; height: 10px; background: inherit; border-radius: var(--r-trait); transform: translateX(-50%) rotate(45deg); }
 .infobulle.dessous::after { bottom: auto; top: -5px; }
 @keyframes infobulle-vient { from { opacity: 0; transform: translateY(4px); } }
 
+/* Au doigt, rien sous 44 px (audit du 04/10, I1) : les segments faisaient 40 px
+   (atelier.css et bibliotheque.css le corrigeaient chacun pour soi, pas
+   l'éditeur), la croix d'une étiquette 28, un curseur 16. */
 @media (pointer: coarse) {
   .btn, .btn-petit, .puce, .champ { min-height: 44px; }
-  .seg > button { min-height: 40px; }
-}
-@media (max-width: 820px) {
-  .mode { margin-left: 0; width: 100%; }
+  .seg > button { min-height: 44px; min-width: 44px; }
+  .etiquette { min-height: 44px; padding-block: 0; }
+  .etiquette button { min-width: 44px; min-height: 44px; margin-right: -4px; }
+  input[type="range"] { min-height: 44px; }
 }
 @media print {
   .barre-haut, #toast, .infobulle { display: none !important; }
 }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+/* Moins de mouvement demandé (le réglage du téléphone) : ni animation ni transition, voiles compris. */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after, ::backdrop { transition: none !important; animation: none !important; } }

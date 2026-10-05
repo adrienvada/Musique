@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
   GRILLES, DECOMPTES, decompteRetenu, grilleRetenue, etatScene, chrono, pageRuban,
   fenetreHauteurs, barresRuban, htmlBarres, htmlLignes, arrondir,
+  latenceRetenue, latenceDesTapes, nonGardees, nouvellePrise, noterDebut, noterFin, noterPedale, fermerPrise, enCoursDe, brutesDeCapture, REGLAGE,
 } from "../app/idee-direct.js";
 import { ICONES } from "../app/icones.js";
 
@@ -151,8 +152,112 @@ test("arrondir : la même prise, trois grilles", () => {
   assert.deepEqual(arrondir(fine, 4, 16).map((n) => [n.d, n.l]), [[16, 4], [20, 4]]);
   // Ce qui a été joué avant le premier temps (pendant le décompte) ne s'écrit pas.
   assert.deepEqual(arrondir([{ h: 60, debut: 10, fin: 11 }], 2, 16), []);
+  // Des noires un peu détachées restent des noires, la dernière de la prise comprise.
+  const detachees = [16, 20, 24, 28].map((d, i) => ({ h: 60 + i, debut: d + 0.2, fin: d + 2.6 }));
+  assert.deepEqual(arrondir(detachees, 2, 16).map((n) => [n.d, n.l]), [[16, 4], [20, 4], [24, 4], [28, 4]]);
+  // Deux attaques de la même note dans le même pas de grille n'en font qu'une : « 2 notes gardées », pas 3.
+  assert.equal(arrondir([{ h: 60, debut: 16, fin: 16.6 }, { h: 60, debut: 16.8, fin: 17.6 }, { h: 60, debut: 18, fin: 19 }], 2, 16).length, 2);
 });
 
-test("les icônes du jeu en direct existent", () => {
-  for (const nom of ["rec", "stop", "ok", "annuler", "fermer"]) assert.ok(ICONES[nom], `icône ${nom}`);
+test("les icônes du jeu en direct et de la capture existent", () => {
+  for (const nom of ["rec", "stop", "ok", "annuler", "fermer", "onde", "taper"]) assert.ok(ICONES[nom], `icône ${nom}`);
+});
+
+// --- La latence, la pédale, la levée, la capture (audit du 04/10 : M6, M9, M11, M13) -------
+
+test("la latence retenue : 0 tant qu'on ne l'a pas réglée, bornée sinon", () => {
+  assert.equal(latenceRetenue(null), 0);
+  assert.equal(latenceRetenue(""), 0);
+  assert.equal(latenceRetenue("abc"), 0);
+  assert.equal(latenceRetenue("42"), 42);
+  assert.equal(latenceRetenue("-30"), -30);
+  assert.equal(latenceRetenue("5000"), 400);
+  assert.equal(latenceRetenue("-900"), -150);
+});
+
+test("régler la latence : la médiane des écarts au clic, sans les tapes égarées", () => {
+  const intervalle = 60 / REGLAGE.tempo; // 0,6 s
+  const clics = Array.from({ length: REGLAGE.clics }, (_, i) => 10 + i * intervalle);
+  // Sept tapes, une quarantaine de millisecondes après le clic ; une huitième égarée entre deux clics.
+  const ecarts = [0.035, 0.042, 0.038, 0.05, 0.041, 0.039, 0.044];
+  const tapes = ecarts.map((x, i) => clics[i + 2] + x);
+  tapes.push(clics[9] + intervalle / 2);
+  const r = latenceDesTapes(tapes, clics);
+  assert.equal(r.gardees, 7);
+  assert.equal(r.latence, 41);
+  // On anticipe le clic (habituel au doigt) : la latence est négative.
+  assert.equal(latenceDesTapes(clics.slice(2, 10).map((c) => c - 0.02), clics).latence, -20);
+  // Trop peu de tapes avec le clic : pas de réglage.
+  assert.equal(latenceDesTapes([clics[3] + 0.04, clics[4] + 0.04], clics), null);
+  assert.equal(latenceDesTapes([], [1]), null);
+});
+
+test("la pédale de maintien : une note relâchée dure jusqu'au lever de la pédale, ou jusqu'à la même note rejouée", () => {
+  const p = nouvellePrise();
+  noterDebut(p, 60, 90, 0);
+  noterPedale(p, true, 1);
+  noterFin(p, 60, 2);           // relâchée sous la pédale : elle tient
+  noterDebut(p, 64, 80, 3);
+  noterFin(p, 64, 4);
+  noterDebut(p, 60, 70, 5);     // le do rejoué : l'ancien s'arrête là
+  assert.deepEqual(p.notes, [{ h: 60, debut: 0, fin: 5, v: 90 }]);
+  assert.deepEqual(enCoursDe(p).map((x) => x.h).sort(), [60, 64]);
+  noterPedale(p, false, 8);     // la pédale se relève : le mi finit là ; le do, encore enfoncé, continue
+  assert.deepEqual(p.notes.map((n) => [n.h, n.debut, n.fin]), [[60, 0, 5], [64, 3, 8]]);
+  noterFin(p, 60, 9);
+  assert.deepEqual(p.notes.at(-1), { h: 60, debut: 5, fin: 9, v: 70 });
+  // Sans pédale, rien ne change : la note finit au relâchement.
+  const q = nouvellePrise();
+  noterDebut(q, 62, 90, 0);
+  noterFin(q, 62, 1.5);
+  assert.deepEqual(q.notes, [{ h: 62, debut: 0, fin: 1.5, v: 90 }]);
+  // L'arrêt ferme ce qui sonnait encore, touches et pédale.
+  const r = nouvellePrise();
+  noterPedale(r, true, 0);
+  noterDebut(r, 60, 90, 0); noterFin(r, 60, 1);
+  noterDebut(r, 67, 90, 2);
+  fermerPrise(r, 6);
+  assert.deepEqual(r.notes.map((n) => [n.h, n.fin]).sort((a, b) => a[0] - b[0]), [[60, 6], [67, 6]]);
+});
+
+test("la levée jouée pendant le décompte : on dit combien de notes ne sont pas gardées (le comportement ne change pas)", () => {
+  // Une prise à partir de la mesure 2 (pas 16) : deux croches avant le premier temps, puis la phrase.
+  const brutes = [
+    { h: 67, debut: 12, fin: 13.8 },
+    { h: 69, debut: 14, fin: 15.8 },
+    { h: 72, debut: 16.1, fin: 19.8 },
+  ];
+  assert.equal(nonGardees(brutes, 2, 16), 2);
+  assert.deepEqual(arrondir(brutes, 2, 16).map((n) => n.h), [72]);
+  // Une note commencée pendant le décompte mais tenue au-delà du premier temps est gardée (raccourcie).
+  assert.equal(nonGardees([{ h: 60, debut: 15, fin: 19 }], 2, 16), 0);
+  assert.equal(nonGardees([{ h: 60, debut: 16.2, fin: 19 }], 2, 16), 0);
+  // Deux attaques d'une même note, dans le même pas, n'en font qu'une (sequence.js) : aucune n'est perdue.
+  const doublee = [{ h: 60, debut: 15.4, fin: 18 }, { h: 60, debut: 15.8, fin: 19 }];
+  assert.equal(arrondir(doublee, 2, 16).length, 1);
+  assert.equal(nonGardees(doublee, 2, 16), 0);
+});
+
+test("arrondir en 6/8 : la dernière note tient jusqu'à la fin de son temps, la noire pointée", () => {
+  // Une noire pointée jouée un peu détachée (5 pas sur 6), seule note de la prise.
+  const derniere = [{ h: 67, debut: 0.1, fin: 4.6 }];
+  assert.deepEqual(arrondir(derniere, 2, 0, 6).map((n) => [n.d, n.l]), [[0, 6]]);
+  assert.deepEqual(arrondir(derniere, 2, 0, 4).map((n) => [n.d, n.l]), [[0, 4]], "à la noire, elle se réglait sur la noire");
+});
+
+test("la capture : la dernière phrase, calée sur le tempo à partir de la première note, ou dans la boucle qui tourne", () => {
+  // À 120 : un pas (une double croche) dure 125 ms.
+  const jouees = [
+    { h: 60, v: 90, debut: 10000, fin: 10230 },
+    { h: 62, v: 80, debut: 10260, fin: 10490 },
+    { h: 64, v: 85, debut: 10500, fin: 10990 },
+  ];
+  const libres = brutesDeCapture(jouees, { depart: 8, tempo: 120 });
+  assert.deepEqual(libres.map((n) => Math.round(n.debut * 100) / 100), [8, 10.08, 12]);
+  assert.deepEqual(arrondir(libres, 2, 8).map((n) => [n.d, n.l, n.h]), [[8, 2, 60], [10, 2, 62], [12, 4, 64]]);
+  // Par-dessus une boucle de deux mesures (0 à 32) : la phrase commencée au pas 30 retombe au début.
+  const dansBoucle = brutesDeCapture(jouees, { depart: 30, tempo: 120, boucle: [0, 32] });
+  assert.deepEqual(dansBoucle.map((n) => Math.round(n.debut * 100) / 100), [30, 0.08, 2]);
+  assert.ok(Math.abs(dansBoucle[2].fin - dansBoucle[2].debut - 490 / 125) < 1e-9, "la durée ne se replie pas");
+  assert.deepEqual(brutesDeCapture([], { depart: 0, tempo: 90 }), []);
 });

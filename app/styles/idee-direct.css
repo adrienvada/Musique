@@ -7,35 +7,35 @@
  * sur sa propre hauteur (cqh, unités de conteneur) : le chiffre et le ruban
  * grandissent avec la place, au téléphone comme à l'ordinateur. */
 
-/* Le bouton rouge du transport : plein pendant le jeu, avec son carré stop. Le
- * texte du système (blanc) manquerait de contraste sur le rouge clair du
- * sombre et du Studio : on prend le fond de l'écran, sombre là, clair en Papier clair. */
-#idee-enregistrer { touch-action: manipulation; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
-#idee-enregistrer[aria-pressed="true"] { color: var(--papier); }
+/* Le bouton rouge du transport : plein pendant le jeu, avec son carré stop, de la
+ * couleur --sur-rouge du système (le fond de l'écran : le blanc manquait de contraste
+ * sur le rouge clair du sombre et du Studio). Son appui long règle le décompte : ni
+ * menu ni loupe du navigateur par-dessus. */
+#idee-enregistrer { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 
 /* --- La scène -------------------------------------------------------------------- */
-.dir-scene { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 16px 10px; background: var(--papier); container-type: size; touch-action: none; user-select: none; -webkit-user-select: none; }
+.dir-scene { position: absolute; inset: 0; z-index: var(--z-scene); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 16px 10px; background: var(--papier); container-type: size; touch-action: none; user-select: none; -webkit-user-select: none; }
 .dir-scene > * { width: 100%; max-width: 640px; }
 
 .dir-haut { flex: none; display: flex; align-items: center; gap: 10px; min-height: 28px; }
-.dir-etat { display: inline-flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gris); }
+.dir-etat { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-13); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gris); }
 .dir-scene[data-phase="jeu"] .dir-etat { color: var(--rouge); }
 .dir-point { width: 12px; height: 12px; border-radius: 50%; background: var(--rouge); animation: clignote-direct 1s steps(2, start) infinite; }
 @keyframes clignote-direct { to { visibility: hidden; } }
-.dir-chrono { margin-left: auto; font-size: 1.3rem; line-height: 1; color: var(--encre); }
-.dir-compte { margin-left: auto; font-size: 0.85rem; color: var(--gris); }
+.dir-chrono { margin-left: auto; font-size: var(--t-20); line-height: 1; color: var(--encre); }
+.dir-compte { margin-left: auto; font-size: var(--t-14); color: var(--gris); }
 .dir-compte:empty { display: none; }
 
 /* Le centre : le chiffre du décompte, ou la mesure, et les points des temps */
 .dir-centre { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
-.dir-legende { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gris); }
+.dir-legende { font-size: var(--t-13); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gris); }
 /* Chiffres alignés sur la hauteur des capitales : les chiffres anciens de la police descendent sous la ligne (le 3, le 4, le 5…) et se logeraient mal dans leur aplat. */
 .dir-grand { font-family: var(--f-titre); line-height: 0.9; font-variant-numeric: lining-nums tabular-nums; text-align: center; }
 /* Le chiffre du décompte est le surligneur, comme le temps qu'on joue : un aplat jaune, le chiffre sombre
  * dessus. Du jaune seul sur le gris clair du Papier n'a pas le contraste (1,3 pour 1) ; l'aplat se lit
  * pareil dans les trois ambiances, et il a la masse qu'il faut pour se lire à bout de bras. */
-.dir-chiffre { align-self: center; width: auto; min-width: 1.15em; padding: 0.1em 0.28em 0.04em; border-radius: 0.2em; background: var(--surligneur); color: var(--sur-surligneur); font-size: 4.4rem; font-size: clamp(3.2rem, 29cqh, 8rem); }
-.dir-mesure { font-size: 4.6rem; font-size: clamp(3.4rem, 27cqh, 7.5rem); color: var(--encre); }
+.dir-chiffre { align-self: center; width: auto; min-width: 1.15em; padding: 0.1em 0.28em 0.04em; border-radius: 0.2em; background: var(--surligneur); color: var(--sur-surligneur); font-size: var(--t-72); font-size: clamp(3.2rem, 29cqh, 8rem); }
+.dir-mesure { font-size: var(--t-72); font-size: clamp(3.4rem, 27cqh, 7.5rem); color: var(--encre); }
 
 /* Les temps : le premier cerclé de rouge, ceux qui sont passés pleins, le courant plus gros */
 .dir-temps { display: flex; align-items: center; justify-content: center; gap: 18px; height: 30px; }
@@ -47,27 +47,27 @@
 .dir-temps i.premier.maintenant { background: var(--rouge); border-color: var(--rouge); }
 
 /* Les rubans : le temps de gauche à droite, une barre par note, la hauteur en travers */
-.dir-ruban { position: relative; overflow: hidden; height: 56px; border-radius: 12px; background: var(--creux); }
+.dir-ruban { position: relative; overflow: hidden; height: 56px; border-radius: var(--r-12); background: var(--creux); }
 .dir-ruban-direct { flex: none; height: 100px; height: clamp(60px, 24cqh, 112px); background: var(--feuille); border: 1px solid var(--trait); }
 .dir-lignes, .dir-notes { position: absolute; inset: 0; pointer-events: none; }
 .dir-temps-ligne { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--trait-fort); opacity: 0.6; }
 .dir-temps-ligne.barre { width: 2px; margin-left: -1px; background: var(--gris); opacity: 0.8; }
 .dir-pas { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--trait-fort); opacity: 0.32; }
-.dir-numero { position: absolute; top: 2px; padding-left: 5px; font-family: var(--f-code); font-size: 0.66rem; font-weight: 400; line-height: 1; color: var(--gris); }
-.dir-note { position: absolute; min-width: 4px; height: var(--rang); min-height: 4px; max-height: 9px; transform: translateY(-50%); border-radius: 3px; background: var(--stylo); }
+.dir-numero { position: absolute; top: 2px; padding-left: 5px; font-family: var(--f-code); font-size: var(--t-11); font-weight: 400; line-height: 1; color: var(--gris); }
+.dir-note { position: absolute; min-width: 4px; height: var(--rang); min-height: 4px; max-height: 9px; transform: translateY(-50%); border-radius: var(--r-4); background: var(--stylo); }
 .dir-note.coupee-avant { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .dir-note.coupee-apres { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 /* La prise brute, en creux, derrière l'arrondi : on voit ce que la grille a déplacé. */
 .dir-note.fantome { background: transparent; box-shadow: inset 0 0 0 1.5px var(--gris); }
-.dir-tete { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--rouge); box-shadow: 0 0 8px color-mix(in srgb, var(--rouge) 60%, transparent); pointer-events: none; }
+.dir-tete { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--rouge); box-shadow: var(--lueur-rouge); pointer-events: none; }
 
 /* Arrêter : un gros bouton, au bout du pouce ; pendant le décompte, un simple « Annuler » */
-.dir-arreter { flex: none; max-width: 420px; min-height: 56px; border-radius: 16px; padding: 0 22px; font-size: 1.12rem; font-weight: 600; gap: 10px; }
-.dir-scene[data-phase="jeu"] .dir-arreter { background: var(--rouge); border-color: var(--rouge); color: var(--papier); }
+.dir-arreter { flex: none; max-width: 420px; min-height: 56px; border-radius: var(--r-16); padding: 0 22px; font-size: var(--t-18); font-weight: 600; gap: 10px; }
+.dir-scene[data-phase="jeu"] .dir-arreter { background: var(--rouge); border-color: var(--rouge); color: var(--sur-rouge); }
 .dir-scene[data-phase="jeu"] .dir-arreter:hover { filter: brightness(1.06); border-color: var(--rouge); }
 
 /* Le cadre : l'écran entier, tant qu'on enregistre. Il ne prend aucun toucher. */
-.dir-cadre { position: fixed; inset: 0; z-index: 20; border: 4px solid var(--rouge); pointer-events: none; }
+.dir-cadre { position: fixed; inset: 0; z-index: var(--z-cadre); border: 4px solid var(--rouge); pointer-events: none; }
 
 /* Un conteneur ne se met pas en forme lui-même : l'espacement de la scène suit la hauteur de la fenêtre. */
 @media (min-height: 760px) { .dir-scene { gap: 8px; padding: 10px 16px 14px; } }
@@ -77,8 +77,8 @@
  * « Arrêter » restent toujours. */
 @container (max-height: 330px) {
   .dir-legende { display: none; }
-  .dir-chiffre { font-size: 3rem; }
-  .dir-mesure { font-size: 3.2rem; }
+  .dir-chiffre { font-size: var(--t-48); }
+  .dir-mesure { font-size: var(--t-48); }
   .dir-temps { height: 24px; }
   .dir-ruban-direct { height: 48px; }
   .dir-arreter { min-height: 52px; }
@@ -88,7 +88,7 @@
 
 /* --- La feuille de l'arrondi ------------------------------------------------------- */
 .feuille-arrondi[open] { gap: 12px; }
-.feuille-arrondi .feuille-tete h2 { font-size: 1.5rem; }
+.feuille-arrondi .feuille-tete h2 { font-size: var(--t-24); }
 /* Les deux rubans défilent ensemble si la prise est longue ; leurs titres restent à gauche. */
 .dir-defil { overflow-x: auto; overscroll-behavior-x: contain; margin: 0 -4px; padding: 0 4px; }
 .dir-plan { --pas: 16; display: flex; flex-direction: column; gap: 6px; width: max(100%, calc(var(--pas) * 5px)); }
@@ -97,5 +97,18 @@
 .dir-grilles { display: flex; }
 .dir-grilles > button { min-height: 44px; }
 .dir-actions { display: flex; gap: 10px; }
-.dir-actions .btn { flex: 1 1 0; min-height: 52px; font-size: 1rem; }
+.dir-actions .btn { flex: 1 1 0; min-height: 52px; font-size: var(--t-16); }
 .dir-actions .btn-plein { flex: 1.3 1 0; }
+/* M11 : les notes jouées pendant le décompte, qui ne sont pas gardées : dit sans alarmer. */
+.dir-perdues { color: var(--encre); }
+
+/* --- La capture après coup (M13) --------------------------------------------------- */
+/* Une pastille posée sur la grille, en bas à droite (au-dessus du pupitre) : elle n'apparaît
+ * qu'après deux notes jouées, et ne prend pas la place d'un bouton du transport, déjà plein au
+ * téléphone. Elle reste au-dessus des notes, sous la scène du jeu en direct (z-index 4). */
+.dir-capturer { position: absolute; right: 12px; bottom: 12px; z-index: var(--z-calque); min-height: 44px; padding: 0 16px; border-radius: var(--r-plein); border-color: var(--stylo); color: var(--stylo); background: var(--feuille); box-shadow: var(--ombre); font-weight: 600; }
+.dir-capturer:hover { background: var(--stylo-doux); }
+
+/* --- La latence : « tape avec le clic » (M6), dans la feuille Tempo ----------------- */
+/* Un grand pavé, au bout du doigt : on tape dessus en rythme, sans viser. */
+.latence-pad { width: 100%; min-height: 96px; border-radius: var(--r-16); font-size: var(--t-16); font-weight: 600; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }

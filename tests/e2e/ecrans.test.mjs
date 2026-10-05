@@ -1,0 +1,483 @@
+/**
+ * LES ÉCRANS ENTRE EUX, SUR LE SITE ASSEMBLÉ
+ *
+ * Ce que l'audit du code et celui de l'interface (04/10) ont reproduit au
+ * navigateur, et qui tient à la façon dont les écrans se passent la main
+ * (T3, T4, I6, I12, I13) : une seule façon de demander « Supprimer ? »,
+ * les touches qui restent aux fenêtres ouvertes, les enregistrements qui
+ * partent avant qu'on change de partition, l'écoute qui ne part pas sur un
+ * écran qu'on a quitté, les messages d'erreur en français.
+ */
+import { after, before, test } from "node:test";
+import assert from "node:assert/strict";
+import path from "node:path";
+import { servir } from "./serveur.mjs";
+import { ORDINATEUR, RACINE, TELEPHONE, attendreQue, contexte, importerLesExemples, lancer, octetsDu, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { demarrerFauxStockage } from "../faux-cloud.mjs";
+import { Bibliotheque } from "../../supabase/functions/portee-remarkable/bibliotheque.js";
+import { coffreMemoire } from "../../supabase/functions/portee-remarkable/coffre.js";
+import { repondreHttp } from "../../supabase/functions/portee-remarkable/http.js";
+import { objetsSupabase } from "../../supabase/functions/portee-remarkable/objets.js";
+import { CloudRemarkable } from "../../supabase/functions/portee-remarkable/remarkable.js";
+
+/**
+ * Un appareil relié à une bibliothèque commune : le vrai connecteur (http.js)
+ * sur le faux stockage des tests, à une adresse de la forme exacte que
+ * l'appli attend, assemblée ici (rien qui ressemble à un vrai secret dans le
+ * dépôt). L'adresse est collée d'avance : la synchronisation part au démarrage.
+ */
+async function appareilSynchronise(appareil = ORDINATEUR) {
+  const stockage = await demarrerFauxStockage();
+  const projet = ["essai", "ecrans"].join("").padEnd(20, "x");
+  const cle = ["cle", "d", "essai", "ecrans"].join("-").padEnd(32, "0");
+  const adresse = `https://${projet}.supabase.co/functions/v1/portee-remarkable/${cle}`;
+  const bibliotheque = new Bibliotheque(objetsSupabase(stockage.url, stockage.cle));
+  const tablette = new CloudRemarkable(coffreMemoire(null), { auth: "http://127.0.0.1:9", sync: "http://127.0.0.1:9" });
+  const ctx = await contexte(navigateur, {
+    appareil,
+    routes: [[(u) => u.hostname === `${projet}.supabase.co`, async (route) => {
+      const r = route.request();
+      const reponse = await repondreHttp(new Request(r.url(), { method: r.method(), headers: await r.allHeaders(), body: r.postData() ?? undefined }), {
+        cle, cloud: () => tablette, bibliotheque: () => bibliotheque, origines: [serveur.origine],
+      });
+      await route.fulfill({ status: reponse.status, headers: Object.fromEntries(reponse.headers), body: Buffer.from(await reponse.arrayBuffer()) });
+    }]],
+  });
+  await ctx.addInitScript((a) => { try { localStorage.setItem("portee:connecteur", a); } catch { /* sans stockage */ } }, adresse);
+  return { ctx, bibliotheque, fermer: async () => { await ctx.close(); await stockage.fermer(); } };
+}
+
+/** Les messages passagers, notés au fil de l'eau (un message peut en remplacer un autre avant qu'on le lise). */
+const noterLesMessages = (page) => page.evaluate(() => {
+  window.__messages = [];
+  const t = document.getElementById("toast");
+  new MutationObserver(() => { if (t.textContent) window.__messages.push(t.textContent); }).observe(t, { childList: true, characterData: true, subtree: true });
+});
+const messages = (page) => page.evaluate(() => window.__messages);
+const synchroniserMaintenant = (page) => page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+/** La partition `id` est dans la base de la page (la synchro l'a reçue). */
+const recue = (page, id) => attendreQue(page, (i) => new Promise((ok) => {
+  const r = indexedDB.open("portee");
+  r.onsuccess = () => { const q = r.result.transaction("partitions").objectStore("partitions").get(i); q.onsuccess = () => { ok(!!q.result); r.result.close(); }; };
+  r.onerror = () => ok(false);
+}), id);
+
+const MELODIE = path.join(RACINE, "tests/pages/2026-09-30-melodie-standard.pdf");
+
+/** Le message passager, dès qu'il correspond à `motif`. */
+async function messageQui(page, motif) {
+  await page.waitForFunction((m) => new RegExp(m).test(document.getElementById("toast").textContent), motif.source, { timeout: 20000 });
+  return page.textContent("#toast");
+}
+
+/** Les exceptions de la page (les erreurs gardées dans la console, elles, sont voulues ici). */
+const exceptions = (page) => page.erreurs.filter((e) => e.startsWith("[exception]"));
+
+let serveur, navigateur;
+before(async () => {
+  serveur = await servir({ dossier: siteAssemble() });
+  navigateur = await lancer();
+});
+after(async () => {
+  await navigateur?.close();
+  await serveur?.fermer();
+});
+
+/** Ouvre une partition lue depuis le carnet (son titre commence par `titre`). */
+async function ouvrirPartition(page, titre) {
+  await page.click(`#liste .ligne-carnet button[aria-label^="Ouvrir « ${titre}"]`);
+  await page.waitForSelector("#vue-atelier:not([hidden]) #gravure-atelier svg .abcjs-note", { state: "attached" });
+}
+
+/** Ce qui a le focus : son texte, ou son nom. */
+const focus = (page) => page.evaluate(() => {
+  const a = document.activeElement;
+  return a ? (a.textContent || a.getAttribute("aria-label") || a.id || a.tagName).trim() : null;
+});
+
+test("supprimer une page lue : la même question que depuis le carnet, « Annuler » d'abord, Échap la ferme", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await ouvrirPartition(page, "Essai melodie");
+    await page.click("#plus-atelier");
+    await page.click("#supprimer");
+    await page.waitForSelector("#dialogue[open]");
+    assert.match(await page.textContent("#dialogue h2"), /^Supprimer la partition « Essai melodie-standard » \?$/);
+    // Un Entrée de trop ne supprime rien : le focus est sur « Annuler ».
+    assert.equal(await focus(page), "Annuler");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#dialogue:not([open])", { state: "attached" });
+    assert.equal(await page.isVisible("#vue-atelier"), true, "toujours dans « Corriger »");
+    // Cette fois, oui.
+    await page.click("#plus-atelier");
+    await page.click("#supprimer");
+    await page.click('#dialogue button[value="oui"]');
+    await page.waitForSelector("#vue-biblio:not([hidden])");
+    await page.waitForFunction(() => document.querySelectorAll("#liste .ligne-carnet").length === 1);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("les exports passent tous par exports.js : MusicXML et ABC d'une page, tout en MIDI", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await ouvrirPartition(page, "Essai melodie");
+    await page.click("#onglet-lecteur");
+    await page.waitForSelector("#vue-lecteur:not([hidden]) #gravure-lecteur svg .abcjs-note");
+    const telecharger = async (ouvrir, bouton) => {
+      if (ouvrir) await page.click(ouvrir);
+      const [t] = await Promise.all([page.waitForEvent("download"), page.click(bouton)]);
+      return { nom: t.suggestedFilename(), octets: await octetsDu(t) };
+    };
+    const xml = await telecharger("#plus-lecteur", "#export-musicxml");
+    assert.equal(xml.nom, "Essai melodie-standard.musicxml");
+    assert.match(xml.octets.toString("utf8"), /<score-partwise/);
+    const abc = await telecharger("#plus-lecteur", "#export-abc");
+    assert.equal(abc.nom, "Essai melodie-standard.txt");
+    assert.match(abc.octets.toString("utf8"), /^X:/m);
+    await page.click("#vue-lecteur [data-retour]");
+    await page.click("#tab-reglages");
+    const tout = await telecharger(null, "#tout-midi");
+    assert.equal(tout.nom, "Portée - MIDI.zip");
+    assert.equal(tout.octets.subarray(0, 2).toString("latin1"), "PK");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("un PDF illisible, puis pdf.js qui ne vient pas : le message dit quoi faire, en français ; le réseau revenu, l'import remarche sans recharger (T4, I13)", async () => {
+  // Sans service worker : sa copie de pdf.js passerait par-dessus la panne.
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR, serviceWorkers: "block" });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    // Un fichier qui n'a de PDF que le nom.
+    await page.setInputFiles("#fichier", { name: "pas-un-pdf.pdf", mimeType: "application/pdf", buffer: Buffer.from("ceci n'est pas un PDF") });
+    const illisible = await messageQui(page, /^Impossible de lire « pas-un-pdf\.pdf »/);
+    assert.doesNotMatch(illisible, /Invalid|structure/i, illisible);
+    assert.match(illisible, /pas un PDF lisible.*Exporte la page à nouveau/, illisible);
+    // pdf.js ne vient pas (le réseau a manqué) ; c'est la première fois qu'on le demande.
+    const ctx2 = await contexte(navigateur, { appareil: ORDINATEUR, serviceWorkers: "block" });
+    try {
+      const page2 = await ouvrirPortee(ctx2, serveur.url);
+      serveur.etat.pannes.set("vendor/pdfjs/pdf.min.mjs", 503);
+      await page2.setInputFiles("#fichier", MELODIE);
+      const panne = await messageQui(page2, /^Impossible de lire « 2026-09-30-melodie-standard\.pdf »/);
+      assert.doesNotMatch(panne, /Failed|fetch|dynamically/i, panne);
+      assert.match(panne, /Portée n'a pas pu se charger.*réseau/, panne);
+      // Le réseau revient : le même import marche, sans recharger la page.
+      serveur.etat.pannes.delete("vendor/pdfjs/pdf.min.mjs");
+      await page2.setInputFiles("#fichier", MELODIE);
+      await page2.waitForSelector("#vue-atelier:not([hidden]) #gravure-atelier svg .abcjs-note", { state: "attached", timeout: 20000 });
+      assert.deepEqual(exceptions(page2), []);
+    } finally { await ctx2.close(); }
+    assert.deepEqual(exceptions(page), []);
+  } finally {
+    serveur.etat.pannes.clear();
+    await ctx.close();
+  }
+});
+
+test("une idée ouverte ne se dit « modifiée sur un autre appareil » que si elle l'a été (T4)", async () => {
+  const { ctx, bibliotheque, fermer } = await appareilSynchronise();
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.waitForFunction(() => /Synchronisé/.test(document.getElementById("mode").textContent), null, { timeout: 20000 });
+    await page.click("#nouvelle-idee");
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    for (const k of ["KeyA", "KeyS", "KeyD"]) await page.keyboard.press(k);
+    await page.waitForFunction(() => document.getElementById("idee-etat").textContent === "Enregistrée");
+    // L'idée rejoint la bibliothèque commune.
+    const debut = Date.now();
+    let fiche = null;
+    while (!fiche && Date.now() - debut < 15000) {
+      fiche = (await bibliotheque.changements()).partitions.find((f) => f.donnees?.type === "idee") || null;
+      if (!fiche) await new Promise((ok) => setTimeout(ok, 200));
+    }
+    assert.ok(fiche, "l'idée est partie");
+    await noterLesMessages(page);
+    // Un autre appareil ajoute une partition qui n'a rien à voir.
+    const maintenant = new Date().toISOString();
+    const autre = { type: "idee", titre: "Autre chose", statut: "idee", nbPages: 0, modele: null, tempo: 90, sequence: { version: 1, tempo: 90, mesure: [4, 4], tonalite: "C", accompagnement: "aucun", suivant: 2, accords: [], pistes: [{ nom: "Mélodie", cle: "sol", notes: [{ id: 1, d: 0, l: 4, h: 72 }] }] }, creeLe: maintenant };
+    assert.equal((await bibliotheque.ecrire({ id: "pautre", donnees: autre, pages: [], modifieLe: maintenant })).accepte, true);
+    await synchroniserMaintenant(page);
+    await recue(page, "pautre");
+    await page.waitForTimeout(400); // rafraichirOuverte a eu le temps de passer
+    assert.deepEqual((await messages(page)).filter((m) => /autre appareil/.test(m)), [], "rien n'a changé pour l'idée ouverte");
+    assert.equal(await page.locator("#idee-grille .g-note:not(.autre)").count(), 3);
+    // Cette fois, l'idée ouverte elle-même change ailleurs : elle se reprend, et le dit.
+    const plusTard = new Date(Date.now() + 1000).toISOString();
+    const seq = structuredClone(fiche.donnees.sequence);
+    seq.pistes[0].notes.push({ id: 99, d: 12, l: 4, h: 77 });
+    assert.equal((await bibliotheque.ecrire({ id: fiche.id, donnees: { ...fiche.donnees, sequence: seq }, pages: [], modifieLe: plusTard })).accepte, true);
+    await synchroniserMaintenant(page);
+    await page.waitForFunction(() => document.querySelectorAll("#idee-grille .g-note:not(.autre)").length === 4, null, { timeout: 15000 });
+    assert.equal((await messages(page)).filter((m) => /modifiée sur un autre appareil/.test(m)).length, 1);
+    await verifierPropre(page);
+  } finally { await fermer(); }
+});
+
+test("quatre notes, puis un rechargement tout de suite : l'idée est là (T4)", async (t) => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.click("#nouvelle-idee");
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    for (const k of ["KeyA", "KeyS", "KeyD", "KeyF"]) await page.keyboard.press(k);
+    // Bien avant les 0,7 s du premier enregistrement : sinon, cette machine est trop lente pour l'essai.
+    if ((await page.textContent("#idee-etat")) !== "Enregistrement…") { t.skip("le premier enregistrement est déjà passé"); return; }
+    await page.reload();
+    await page.waitForFunction(() => document.querySelectorAll("#liste .ligne-carnet").length === 1, null, { timeout: 10000 })
+      .catch(() => assert.fail("l'idée a été perdue au rechargement"));
+    await page.click("#liste .ligne-carnet .ligne-ouvrir");
+    await page.waitForFunction(() => document.querySelectorAll("#idee-grille .g-note:not(.autre)").length === 4);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+/** Les partitions de la base de la page : { id: { titre, abc, modifieLe } }. */
+const base = (page) => page.evaluate(() => new Promise((ok) => {
+  const r = indexedDB.open("portee");
+  r.onsuccess = () => {
+    const sortie = {};
+    const c = r.result.transaction("partitions").objectStore("partitions").openCursor();
+    c.onsuccess = () => {
+      const k = c.result;
+      if (!k) { r.result.close(); ok(sortie); return; }
+      sortie[k.key] = { titre: k.value.titre, abc: k.value.abc, modifieLe: k.value.modifieLe, tempo: k.value.tempo };
+      k.continue();
+    };
+  };
+}));
+
+/** Touche la `n`-ième note de la partition lue de « Corriger » (abcjs capte les clics : aux coordonnées). */
+async function toucherNote(page, n) {
+  await page.click('#vues-atelier [data-vue="lue"]');
+  const note = await page.locator("#gravure-atelier .abcjs-note").nth(n).boundingBox();
+  await page.mouse.click(note.x + note.width / 2, note.y + note.height / 2);
+  await page.waitForSelector("#outils-note:not([hidden])");
+}
+
+test("corriger une note puis ouvrir vite une autre partition : la correction reste à la sienne, l'autre ne bouge pas (T4)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    const avant = await base(page);
+    const id = (titre) => Object.keys(avant).find((k) => avant[k].titre.startsWith(titre));
+    const [a, b] = [id("Essai melodie"), id("Essai piano")];
+    await ouvrirPartition(page, "Essai melodie");
+    await toucherNote(page, 2);
+    await page.keyboard.press("ArrowUp");
+    // Moins de 0,8 s après la correction : retour, et l'autre partition.
+    await page.click("#vue-atelier [data-retour]");
+    await page.waitForSelector("#vue-biblio:not([hidden])");
+    await ouvrirPartition(page, "Essai piano");
+    await page.waitForTimeout(1500); // le temps d'une minuterie oubliée
+    const apres = await base(page);
+    assert.notEqual(apres[a].abc, avant[a].abc, "la correction de la mélodie est enregistrée");
+    assert.equal(apres[b].abc, avant[b].abc, "le piano n'a pas reçu l'ABC d'une autre");
+    assert.equal(apres[b].modifieLe, avant[b].modifieLe, "le piano n'a pas été réécrit sans geste");
+    // Le même chemin pour le tempo d'« Écouter » (sa minuterie attendait 0,6 s).
+    await page.click("#onglet-lecteur");
+    await page.waitForSelector("#vue-lecteur:not([hidden]) #gravure-lecteur svg .abcjs-note");
+    await page.locator("#tempo").fill("150");
+    await page.click("#vue-lecteur [data-retour]");
+    await page.waitForSelector("#vue-biblio:not([hidden])");
+    await ouvrirPartition(page, "Essai melodie");
+    await page.waitForTimeout(1200);
+    const ensuite = await base(page);
+    assert.equal(ensuite[b].tempo, 150, "le tempo réglé reste au piano");
+    assert.equal(ensuite[a].tempo, apres[a].tempo, "la mélodie garde le sien");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+/** Le piano se fait attendre (un réseau de téléphone) ; on compte les notes qui partent vraiment. */
+async function pianoLent(ctx, page) {
+  await page.route("**/piano/*.mp3", async (route) => { await new Promise((ok) => setTimeout(ok, 800)); await route.continue(); });
+  await page.evaluate(() => {
+    window.__departs = 0;
+    const depart = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...a) { window.__departs++; return depart.apply(this, a); };
+  });
+}
+const departs = (page) => page.evaluate(() => window.__departs);
+
+/** Une page neuve (le piano pas encore téléchargé), sur « Écouter » de la mélodie d'essai. */
+async function lecteurPianoLent() {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR, serviceWorkers: "block" });
+  const page = await ouvrirPortee(ctx, serveur.url);
+  await importerLesExemples(page);
+  await ouvrirPartition(page, "Essai melodie");
+  await page.click("#onglet-lecteur");
+  await page.waitForSelector("#vue-lecteur:not([hidden]) #gravure-lecteur svg .abcjs-note");
+  await pianoLent(ctx, page);
+  return { ctx, page };
+}
+
+test("« Écouter » pendant que le piano se charge : quitter l'écran, ou toucher deux fois, ne laisse rien jouer en douce (T4)", async () => {
+  // 1. Écouter, puis quitter l'écran aussitôt : la lecture ne part pas sur l'écran caché.
+  let { ctx, page } = await lecteurPianoLent();
+  try {
+    await page.click("#ecouter");
+    await page.click("#vue-lecteur [data-retour]");
+    await page.waitForSelector("#vue-biblio:not([hidden])");
+    await page.waitForTimeout(4000);
+    assert.equal(await departs(page), 0, "rien ne joue sur l'écran qu'on a quitté");
+  } finally { await ctx.close(); }
+  // 2. Deux touchers pendant le chargement : le second arrête le premier, rien ne joue.
+  ({ ctx, page } = await lecteurPianoLent());
+  try {
+    await page.click("#ecouter");
+    await page.click("#ecouter");
+    await page.waitForTimeout(4000);
+    assert.equal(await departs(page), 0, "deux touchers : aucune lecture");
+    assert.match(await page.textContent("#ecouter"), /Écouter/);
+    // 3. Un toucher : elle part ; « Arrêter » coupe tout.
+    await page.click("#ecouter");
+    await page.waitForFunction(() => /Arrêter/.test(document.getElementById("ecouter").textContent) && window.__departs > 0, null, { timeout: 30000 });
+    await page.click("#ecouter");
+    const n = await departs(page);
+    await page.waitForTimeout(1500);
+    assert.equal(await departs(page), n, "plus rien ne part après « Arrêter »");
+    assert.match(await page.textContent("#ecouter"), /Écouter/);
+  } finally { await ctx.close(); }
+});
+
+test("« précédent » dans « Corriger » : la note choisie se laisse d'abord, puis l'écran ; à l'accueil, un panneau ouvert se ferme (T3)", async () => {
+  const ctx = await contexte(navigateur, { appareil: TELEPHONE });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await ouvrirPartition(page, "Essai melodie");
+    await toucherNote(page, 2);
+    await page.goBack();
+    await page.waitForSelector("#outils-note", { state: "hidden" });
+    assert.equal(await page.isVisible("#vue-atelier"), true, "toujours dans « Corriger », sans note choisie");
+    await page.goBack();
+    await page.waitForSelector("#vue-biblio:not([hidden])");
+    // L'onglet Partitions et le panneau des modèles : le panneau, puis l'onglet, puis on reste à Portée.
+    await page.click("#tab-partitions");
+    await page.click("#ouvrir-modeles");
+    await page.waitForSelector("#panneau-modeles:not([hidden])");
+    await page.goBack();
+    await page.waitForSelector("#panneau-modeles", { state: "hidden" });
+    assert.equal(await page.getAttribute("#tab-partitions", "aria-selected"), "true");
+    await page.goBack();
+    await page.waitForFunction(() => document.getElementById("tab-carnet").getAttribute("aria-selected") === "true");
+    assert.equal(new URL(page.url()).pathname, "/Musique/");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("« Portée », en haut : le carnet, dessiné une seule fois (T3)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await page.click("#tab-partitions");
+    await page.evaluate(() => {
+      window.__dessins = 0;
+      new MutationObserver(() => { window.__dessins++; }).observe(document.getElementById("filtres-carnet"), { attributes: true, subtree: true });
+    });
+    await page.click("#aller-biblio");
+    await page.waitForFunction(() => document.getElementById("tab-carnet").getAttribute("aria-selected") === "true");
+    // Un dessin du carnet repose l'état de ses filtres : une seule salve de changements. (Ses
+    // lignes, elles, ne bougent plus quand rien n'a changé, I9 : on ne peut plus les compter.)
+    await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => window.__dessins), 1, "le carnet ne se dessine qu'une fois");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("une feuille ou une fenêtre ouverte garde les touches : rien ne traverse, Échap la ferme (I6)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    // « Corriger » : une note choisie, la feuille « ••• » ouverte par-dessus.
+    await ouvrirPartition(page, "Essai melodie");
+    await toucherNote(page, 2);
+    const abc0 = await page.inputValue("#abc");
+    const note0 = await page.textContent("#note-choisie");
+    await page.click("#plus-atelier");
+    await page.waitForSelector("#feuille-atelier[open]");
+    await page.keyboard.press("Delete");
+    await page.keyboard.press("ArrowUp");
+    assert.equal(await page.inputValue("#abc"), abc0, "Suppr et ↑ ne touchent pas la note derrière la feuille");
+    assert.equal(await page.textContent("#note-choisie"), note0);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#feuille-atelier:not([open])", { state: "attached" });
+    assert.equal(await page.isVisible("#outils-note"), true, "Échap ferme la feuille, la note reste choisie");
+    // L'éditeur : « Supprimer l'idée ? », la fenêtre de l'appli, par-dessus une note choisie.
+    await page.click("#vue-atelier [data-retour]");
+    await page.click("#nouvelle-idee");
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    for (const k of ["KeyA", "KeyS", "KeyD", "KeyF"]) await page.keyboard.press(k);
+    await page.keyboard.press("ArrowLeft");
+    await page.waitForFunction(() => document.getElementById("idee-nom-choix").textContent.trim() !== "");
+    const choisie = await page.textContent("#idee-nom-choix");
+    await page.click("#idee-plus");
+    await page.click('#idee-menu [data-menu="supprimer"]');
+    await page.waitForSelector("#dialogue[open]");
+    assert.equal(await focus(page), "Annuler");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Backspace");
+    assert.equal(await page.textContent("#idee-nom-choix"), choisie, "↑ ne monte pas la note derrière la fenêtre");
+    assert.equal(await page.locator("#idee-grille .g-note:not(.autre)").count(), 4, "Retour arrière ne l'efface pas");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#dialogue:not([open])", { state: "attached" });
+    assert.equal(await page.locator("#idee-grille .g-note:not(.autre)").count(), 4);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("une erreur que rien n'attrapait se dit, en français : supprimer quand la mémoire est pleine, une promesse rejetée (T4)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await noterLesMessages(page);
+    // Le stockage refuse d'effacer (la mémoire du navigateur est pleine).
+    await page.evaluate(() => { IDBObjectStore.prototype.delete = function () { throw new DOMException("Plus de place", "QuotaExceededError"); }; });
+    await page.click("#liste .ligne-carnet .plus");
+    await page.waitForSelector("#feuille-actions[open]");
+    await page.click("#feuille-liste .btn-danger");
+    await page.click('#dialogue button[value="oui"]');
+    await page.waitForFunction(() => window.__messages.some((m) => /n'a pas pu être supprimée/.test(m)));
+    const dit = (await messages(page)).find((m) => /n'a pas pu être supprimée/.test(m));
+    assert.match(dit, /la mémoire de ce navigateur est pleine/, dit);
+    assert.equal(await page.locator("#liste .ligne-carnet").count(), 2, "rien n'a disparu");
+    // Une promesse rejetée que personne n'attrape : le filet la dit, sans jargon.
+    await page.evaluate(() => { Promise.reject(new TypeError("Failed to fetch")); });
+    await page.waitForFunction(() => window.__messages.some((m) => /^Pas de connexion/.test(m)));
+    assert.deepEqual(exceptions(page), []);
+  } finally { await ctx.close(); }
+});
+
+test("AZERTY : « & » (la touche 1 sans Maj) donne la double croche dans « Corriger », comme dans l'éditeur (I12)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await ouvrirPartition(page, "Essai melodie");
+    await toucherNote(page, 2);
+    // Ce que donne un AZERTY : la touche du 1 (Digit1) sans Maj, c'est « & ».
+    const touche = (key, code, shiftKey = false) => page.evaluate((o) => {
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { ...o, bubbles: true, cancelable: true }));
+    }, { key, code, shiftKey });
+    await touche("&", "Digit1");
+    await page.waitForFunction(() => /double croche/.test(document.getElementById("note-choisie").textContent));
+    // Maj et « " » donnent « 3 » sur un AZERTY : la noire.
+    await touche("3", "Digit3", true);
+    await page.waitForFunction(() => /noire/.test(document.getElementById("note-choisie").textContent));
+    // Sur un QWERTY, Maj et 3, c'est « # » : le dièse, pas une durée.
+    await touche("#", "Digit3", true);
+    await page.waitForFunction(() => /♯|dièse/.test(document.getElementById("note-choisie").textContent));
+    assert.match(await page.textContent("#note-choisie"), /noire/);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});

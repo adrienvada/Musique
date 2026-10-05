@@ -1,8 +1,15 @@
 # Déploie le connecteur « Portée reMarkable » (fonction Supabase) dès que
-# son code change. Deux secrets du dépôt : SUPABASE_ACCESS_TOKEN (le jeton
-# d'accès Supabase) et PORTEE_CLE (la clé de l'adresse du connecteur). Le
-# dépôt est public, ses journaux aussi : la clé n'y apparaît jamais, et sans
-# elle le connecteur est verrouillé.
+# son code change. Deux secrets : SUPABASE_ACCESS_TOKEN (le jeton d'accès
+# Supabase) et PORTEE_CLE (la clé de l'adresse du connecteur). Le dépôt est
+# public, ses journaux aussi : la clé n'y apparaît jamais, et sans elle le
+# connecteur est verrouillé.
+#
+# Le jeton Supabase ouvre tous les projets d'Adrien : il n'est donné qu'à
+# l'étape « Déployer », pas à `npm ci` ni aux tests (une dépendance piégée
+# l'aurait lu). Le job tourne dans l'environnement « supabase » : une fois
+# les deux secrets déplacés dans cet environnement (Settings → Environments
+# → supabase), et la branche main seule autorisée, un workflow poussé sur
+# une autre branche ne peut plus les lire.
 name: Connecteur reMarkable
 
 on:
@@ -14,25 +21,42 @@ on:
       - ".github/workflows/connecteur.yml"
   workflow_dispatch:
 
+# Lire le dépôt, rien d'autre : le déploiement passe par le jeton Supabase.
+permissions:
+  contents: read
+
 concurrency: connecteur
 
 jobs:
   deployer:
     runs-on: ubuntu-latest
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      PORTEE_CLE: ${{ secrets.PORTEE_CLE }}
-      # Le projet du site (décision : Musique vit dans le projet du site).
-      SUPABASE_PROJET: ${{ vars.SUPABASE_PROJET || 'omekkqjinvppadsoinvj' }}
+    environment: supabase
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Actions épinglées par empreinte (une étiquette peut être déplacée) ;
+      # la version est en commentaire.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Le jeton GitHub ne reste pas dans .git/config pour les étapes suivantes.
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # Aucun script d'installation de dépendance ne s'exécute.
+      - run: npm ci --ignore-scripts
       - run: npm test
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+      # Le même typage que Supabase à la mise en ligne : une erreur s'arrête ici.
+      - run: deno check supabase/functions/portee-remarkable/index.ts
       - name: Déployer
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PORTEE_CLE: ${{ secrets.PORTEE_CLE }}
+          # Le projet du site (décision : Musique vit dans le projet du site).
+          SUPABASE_PROJET: ${{ vars.SUPABASE_PROJET || 'omekkqjinvppadsoinvj' }}
         run: |
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
             echo "::notice::Pas de secret SUPABASE_ACCESS_TOKEN : rien à déployer (docs/PROPOSITIONS.md, « Brancher la reMarkable »)."

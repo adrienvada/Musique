@@ -6,6 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { gammeDe, touchesDeGamme, fenetreOctaves, combien, LARGEUR_TOUCHE } from "../app/clavier.js";
+import { lireMessageMidi, instantMidi } from "../app/idee-clavier.js";
 import { TONALITES } from "../app/sequence.js";
 
 const noms = (t, bas = 60) => touchesDeGamme(t, bas).map((p) => p.nom).join(" ");
@@ -76,4 +77,31 @@ test("les touches blanches font au moins 44 px au doigt", () => {
   assert.equal(combien(936), 21); // trois octaves sur un ordinateur
   assert.equal(combien(200), 7); // jamais moins d'une octave
   assert.equal(combien(5000), 22);
+});
+
+// --- Le clavier MIDI (idee-clavier.js) : ce que disent ses messages, et quand -------------
+
+test("les messages MIDI : note jouée, relâchée (ou jouée à force nulle), pédale de maintien, sur tous les canaux", () => {
+  assert.deepEqual(lireMessageMidi([0x90, 60, 100]), { type: "debut", note: 60, force: 100 });
+  assert.deepEqual(lireMessageMidi([0x93, 64, 1]), { type: "debut", note: 64, force: 1 });
+  assert.deepEqual(lireMessageMidi([0x80, 60, 40]), { type: "fin", note: 60 });
+  assert.deepEqual(lireMessageMidi([0x90, 60, 0]), { type: "fin", note: 60 });
+  // CC64 : enfoncée à partir de 64 (une pédale progressive envoie tout l'intervalle).
+  assert.deepEqual(lireMessageMidi([0xb0, 64, 127]), { type: "pedale", bas: true });
+  assert.deepEqual(lireMessageMidi([0xb0, 64, 63]), { type: "pedale", bas: false });
+  assert.deepEqual(lireMessageMidi([0xb5, 64, 64]), { type: "pedale", bas: true });
+  // Le reste ne nous concerne pas : la molette, une autre commande, l'horloge MIDI.
+  assert.equal(lireMessageMidi([0xb0, 1, 90]), null);
+  assert.equal(lireMessageMidi([0xe0, 0, 64]), null);
+  assert.equal(lireMessageMidi([0xf8]), null);
+  assert.equal(lireMessageMidi(undefined), null);
+});
+
+test("l'instant d'un message MIDI : son horodatage s'il est plausible, sinon maintenant", () => {
+  // Traité 80 ms après coup (le fil principal occupé) : l'instant du message reste le bon.
+  assert.equal(instantMidi(1000, 1080), 1000);
+  assert.equal(instantMidi(0, 1080), 1080);
+  assert.equal(instantMidi(-5, 1080), 1080);
+  // Une autre horloge (plusieurs secondes d'écart) : on ne s'y fie pas.
+  assert.equal(instantMidi(1000, 9000), 9000);
 });

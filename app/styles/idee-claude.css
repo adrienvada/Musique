@@ -1,0 +1,91 @@
+/* L'ÉDITEUR D'IDÉE, DEMANDER À CLAUDE (idee-claude.js) : la feuille et ses
+ * étapes (que demander, la précision, Claude réfléchit, sa proposition
+ * vérifiée, un message), et l'entrée de la boîte à outils. Seulement dans la
+ * version claude.ai. La bande des accords et le rouleau des notes ont l'air
+ * de ceux de la feuille des accords (idee-accords.css) : le même creux, les
+ * accords en serif bleu, la mélodie en bleu. Rien que des jetons. */
+
+.feuille-claude[open] { gap: 12px; }
+.feuille-claude .feuille-tete h2 { min-width: 0; }
+.claude-sur { margin-top: -6px; }
+.claude-etape { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+/* ----- 1. Que demander : cinq grandes lignes, l'icône, le nom, sur quoi ----- */
+.claude-genres { gap: 6px; }
+.claude-genre { display: flex; align-items: center; gap: 14px; min-height: 60px; padding: 8px 16px; border: 1px solid transparent; border-radius: var(--r-12); background: var(--creux); color: var(--encre); text-align: left; cursor: pointer; }
+.claude-genre:hover { border-color: var(--trait-fort); }
+.claude-genre .ico { color: var(--stylo); }
+.claude-genre[disabled] { cursor: not-allowed; }
+.claude-genre[disabled]:hover { border-color: transparent; }
+.claude-genre[disabled] .ico, .claude-genre[disabled] .nom { color: var(--gris); }
+.claude-genre-texte { display: flex; flex-direction: column; min-width: 0; }
+.claude-genre .nom { font-weight: 600; font-size: var(--t-16); line-height: 1.3; }
+.claude-genre .aide { font-size: var(--t-14); color: var(--gris); line-height: 1.35; }
+
+/* ----- 2. La précision ----- */
+.claude-intentions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.claude-intention { min-height: 56px; white-space: normal; background: var(--creux); border-color: transparent; font-size: var(--t-16); }
+.claude-libre textarea { width: 100%; flex: none; min-height: 92px; resize: vertical; color: var(--encre); }
+.claude-libre .btn-plein { min-height: 50px; }
+
+/* ----- 3. Claude réfléchit : l'étincelle respire (immobile si l'appareil le demande) ----- */
+.claude-attente { align-items: center; text-align: center; padding: 10px 0 4px; }
+.claude-souffle { color: var(--stylo); animation: claude-souffle 1.8s ease-in-out infinite; }
+@keyframes claude-souffle { 50% { opacity: 0.35; transform: scale(0.86); } }
+.claude-reflechit { font-family: var(--f-titre); font-size: var(--t-20); }
+.claude-progres { color: var(--encre); }
+.claude-attente .btn { min-height: 48px; min-width: 160px; }
+
+/* ----- 4. La proposition ----- */
+.claude-resume { font-weight: 600; }
+.claude-pourquoi { padding: 8px 12px; border-left: 3px solid var(--stylo); border-radius: 0 var(--r-10) var(--r-10) 0; background: var(--stylo-doux); color: var(--encre); font-size: var(--t-15); line-height: 1.45; }
+.claude-legende { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: var(--t-13); }
+.claude-pastille { display: inline-block; width: 14px; height: 8px; border-radius: var(--r-4); margin-right: -2px; }
+.claude-pastille.claude-propose { background: var(--stylo); }
+.claude-pastille.claude-reste { background: var(--trait-fort); }
+.claude-pastille.claude-remplace { border: 1.5px dashed var(--gris); }
+.claude-pastille.claude-melodie { background: var(--stylo-doux); box-shadow: inset 0 0 0 1px var(--stylo); }
+
+/* La bande des accords : une case par mesure, qui défile au-delà de quatre */
+.claude-bande { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
+.claude-bande::-webkit-scrollbar { display: none; }
+.claude-mesure { flex: 0 0 calc((100% - 18px) / 4); min-width: 76px; display: flex; flex-direction: column; gap: 2px; padding: 6px 10px 8px; border-radius: var(--r-12); background: var(--creux); }
+.claude-mesure.joue { background: var(--surligneur-doux); box-shadow: 0 0 0 2px var(--surligneur); }
+.claude-num { font-size: var(--t-11); color: var(--gris); }
+.claude-accords { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.claude-accord { display: inline-flex; flex-direction: column; font-family: var(--f-titre); font-size: var(--t-20); line-height: 1.15; color: var(--stylo); white-space: nowrap; border-radius: var(--r-8); }
+.claude-accord.melodie { background: var(--stylo-doux); padding: 0 4px; margin: 0 -4px; }
+.claude-accord.rien { color: var(--gris); }
+.claude-accord .claude-temps { font-family: var(--f-code); font-size: var(--t-10); color: var(--gris); }
+.claude-avant { font-size: var(--t-12); color: var(--gris); line-height: 1.3; }
+.claude-styles { display: flex; flex-direction: column; gap: 6px; }
+.claude-styles .seg { display: flex; }
+.claude-styles .seg > button { min-height: 44px; padding: 0 8px; white-space: normal; line-height: 1.15; }
+
+/* Le rouleau des notes : les mesures qui changent, ce qui reste en gris, ce que Claude propose en bleu.
+   Des noms à part (claude-reste…) : .gardee et .neuve servent déjà au mode Chanter (idee-chant.css). */
+.claude-defil { overflow-x: auto; overscroll-behavior-x: contain; border-radius: var(--r-12); }
+.claude-rouleau { position: relative; height: 118px; border-radius: var(--r-12); background: var(--papier); border: 1px solid var(--trait); overflow: hidden; }
+.claude-zone { position: absolute; top: 0; bottom: 0; background: var(--stylo-doux); opacity: 0.55; }
+.claude-barre { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--trait-fort); }
+.claude-temps-trait { position: absolute; top: 16px; bottom: 0; width: 1px; background: var(--trait); }
+.claude-num-mesure { position: absolute; top: 2px; padding-left: 5px; font-size: var(--t-11); color: var(--gris); }
+.claude-note { position: absolute; border-radius: var(--r-trait); }
+.claude-note.claude-reste { background: var(--trait-fort); }
+.claude-note.claude-propose { background: var(--stylo); }
+.claude-note.claude-remplace { border: 1.5px dashed var(--gris); }
+.claude-tete { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--surligneur); box-shadow: var(--lueur); pointer-events: none; }
+
+/* Le titre et les étiquettes, à retoucher avant de garder */
+.claude-champs { display: flex; flex-direction: column; gap: 8px; }
+.claude-champ { display: flex; flex-direction: column; gap: 4px; font-size: var(--t-14); color: var(--gris); }
+.claude-champ .champ { width: 100%; flex: none; color: var(--encre); font-size: var(--t-16); }
+
+/* Écouter, une autre, garder ; ou, après un message, autoriser et réessayer */
+.claude-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.claude-actions .btn { flex: 1 1 0; min-height: 48px; min-width: 96px; }
+.claude-message-texte { font-weight: 500; line-height: 1.45; }
+
+/* L'entrée de la boîte à outils de la sélection (idee-selection.js) : sous les familles, toute la largeur */
+.boite-claude { width: 100%; min-height: 50px; justify-content: center; }
+.boite-claude .ico { color: var(--stylo); }

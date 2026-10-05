@@ -1,0 +1,445 @@
+{
+  "source": "https://smpldsnds.github.io/sfzinstruments-splendid-grand-piano/samples",
+  "licence": "Domaine public (échantillons Steinway publiés par AKAI, ~2000) — https://github.com/sfzinstruments/SplendidGrandPiano (README : « Public Domain samples by AKAI »)",
+  "preparation": "outils/echantillons-piano.mjs",
+  "base": "mf",
+  "couches": [
+    {
+      "nom": "mf",
+      "velocites": [
+        65,
+        100
+      ],
+      "echantillons": [
+        {
+          "midi": 23,
+          "fichier": "023-mf.mp3",
+          "gain": 1
+        },
+        {
+          "midi": 27,
+          "fichier": "027-mf.mp3",
+          "gain": 1.015
+        },
+        {
+          "midi": 29,
+          "fichier": "029-mf.mp3",
+          "gain": 0.929
+        },
+        {
+          "midi": 33,
+          "fichier": "033-mf.mp3",
+          "gain": 1.031
+        },
+        {
+          "midi": 35,
+          "fichier": "035-mf.mp3",
+          "gain": 1.186
+        },
+        {
+          "midi": 38,
+          "fichier": "038-mf.mp3",
+          "gain": 1
+        },
+        {
+          "midi": 41,
+          "fichier": "041-mf.mp3",
+          "gain": 0.99
+        },
+        {
+          "midi": 45,
+          "fichier": "045-mf.mp3",
+          "gain": 0.98
+        },
+        {
+          "midi": 48,
+          "fichier": "048-mf.mp3",
+          "gain": 1.11
+        },
+        {
+          "midi": 50,
+          "fichier": "050-mf.mp3",
+          "gain": 1.204
+        },
+        {
+          "midi": 53,
+          "fichier": "053-mf.mp3",
+          "gain": 0.956
+        },
+        {
+          "midi": 57,
+          "fichier": "057-mf.mp3",
+          "gain": 1.015
+        },
+        {
+          "midi": 60,
+          "fichier": "060-mf.mp3",
+          "gain": 0.925
+        },
+        {
+          "midi": 62,
+          "fichier": "062-mf.mp3",
+          "gain": 1.09
+        },
+        {
+          "midi": 65,
+          "fichier": "065-mf.mp3",
+          "gain": 0.74
+        },
+        {
+          "midi": 69,
+          "fichier": "069-mf.mp3",
+          "gain": 1.054
+        },
+        {
+          "midi": 72,
+          "fichier": "072-mf.mp3",
+          "gain": 0.736
+        },
+        {
+          "midi": 74,
+          "fichier": "074-mf.mp3",
+          "gain": 0.995
+        },
+        {
+          "midi": 77,
+          "fichier": "077-mf.mp3",
+          "gain": 1.155
+        },
+        {
+          "midi": 82,
+          "fichier": "082-mf.mp3",
+          "gain": 1.483
+        },
+        {
+          "midi": 83,
+          "fichier": "083-mf.mp3",
+          "gain": 0.754
+        },
+        {
+          "midi": 87,
+          "fichier": "087-mf.mp3",
+          "gain": 0.761
+        },
+        {
+          "midi": 90,
+          "fichier": "090-mf.mp3",
+          "gain": 0.961
+        },
+        {
+          "midi": 93,
+          "fichier": "093-mf.mp3",
+          "gain": 0.911
+        },
+        {
+          "midi": 96,
+          "fichier": "096-mf.mp3",
+          "gain": 1.372
+        },
+        {
+          "midi": 99,
+          "fichier": "099-mf.mp3",
+          "gain": 0.792
+        },
+        {
+          "midi": 102,
+          "fichier": "102-mf.mp3",
+          "gain": 1.144
+        },
+        {
+          "midi": 105,
+          "fichier": "105-mf.mp3",
+          "gain": 0.993
+        },
+        {
+          "midi": 108,
+          "fichier": "108-mf.mp3",
+          "gain": 1.01
+        }
+      ]
+    },
+    {
+      "nom": "pp",
+      "velocites": [
+        1,
+        64
+      ],
+      "echantillons": [
+        {
+          "midi": 23,
+          "fichier": "023-pp.mp3",
+          "gain": 0.988
+        },
+        {
+          "midi": 27,
+          "fichier": "027-pp.mp3",
+          "gain": 1.01
+        },
+        {
+          "midi": 29,
+          "fichier": "029-pp.mp3",
+          "gain": 0.81
+        },
+        {
+          "midi": 33,
+          "fichier": "033-pp.mp3",
+          "gain": 0.801
+        },
+        {
+          "midi": 35,
+          "fichier": "035-pp.mp3",
+          "gain": 1.068
+        },
+        {
+          "midi": 38,
+          "fichier": "038-pp.mp3",
+          "gain": 0.899
+        },
+        {
+          "midi": 41,
+          "fichier": "041-pp.mp3",
+          "gain": 0.961
+        },
+        {
+          "midi": 45,
+          "fichier": "045-pp.mp3",
+          "gain": 0.75
+        },
+        {
+          "midi": 48,
+          "fichier": "048-pp.mp3",
+          "gain": 0.842
+        },
+        {
+          "midi": 50,
+          "fichier": "050-pp.mp3",
+          "gain": 0.761
+        },
+        {
+          "midi": 53,
+          "fichier": "053-pp.mp3",
+          "gain": 0.876
+        },
+        {
+          "midi": 57,
+          "fichier": "057-pp.mp3",
+          "gain": 1.246
+        },
+        {
+          "midi": 60,
+          "fichier": "060-pp.mp3",
+          "gain": 0.949
+        },
+        {
+          "midi": 62,
+          "fichier": "062-pp.mp3",
+          "gain": 0.923
+        },
+        {
+          "midi": 65,
+          "fichier": "065-pp.mp3",
+          "gain": 0.615
+        },
+        {
+          "midi": 69,
+          "fichier": "069-pp.mp3",
+          "gain": 0.931
+        },
+        {
+          "midi": 72,
+          "fichier": "072-pp.mp3",
+          "gain": 0.815
+        },
+        {
+          "midi": 74,
+          "fichier": "074-pp.mp3",
+          "gain": 0.756
+        },
+        {
+          "midi": 77,
+          "fichier": "077-pp.mp3",
+          "gain": 0.829
+        },
+        {
+          "midi": 82,
+          "fichier": "082-pp.mp3",
+          "gain": 1.089
+        },
+        {
+          "midi": 83,
+          "fichier": "083-pp.mp3",
+          "gain": 0.73
+        },
+        {
+          "midi": 87,
+          "fichier": "087-pp.mp3",
+          "gain": 0.731
+        },
+        {
+          "midi": 90,
+          "fichier": "090-pp.mp3",
+          "gain": 1.111
+        },
+        {
+          "midi": 93,
+          "fichier": "093-pp.mp3",
+          "gain": 1.027
+        },
+        {
+          "midi": 96,
+          "fichier": "096-pp.mp3",
+          "gain": 1.179
+        },
+        {
+          "midi": 99,
+          "fichier": "099-pp.mp3",
+          "gain": 0.795
+        },
+        {
+          "midi": 102,
+          "fichier": "102-pp.mp3",
+          "gain": 1.216
+        },
+        {
+          "midi": 105,
+          "fichier": "105-pp.mp3",
+          "gain": 1.136
+        },
+        {
+          "midi": 108,
+          "fichier": "108-pp.mp3",
+          "gain": 1.038
+        }
+      ]
+    },
+    {
+      "nom": "ff",
+      "velocites": [
+        101,
+        127
+      ],
+      "echantillons": [
+        {
+          "midi": 23,
+          "fichier": "023-ff.mp3",
+          "gain": 1.082
+        },
+        {
+          "midi": 27,
+          "fichier": "027-ff.mp3",
+          "gain": 1.062
+        },
+        {
+          "midi": 29,
+          "fichier": "029-ff.mp3",
+          "gain": 0.907
+        },
+        {
+          "midi": 33,
+          "fichier": "033-ff.mp3",
+          "gain": 0.959
+        },
+        {
+          "midi": 35,
+          "fichier": "035-ff.mp3",
+          "gain": 1.278
+        },
+        {
+          "midi": 38,
+          "fichier": "038-ff.mp3",
+          "gain": 0.987
+        },
+        {
+          "midi": 41,
+          "fichier": "041-ff.mp3",
+          "gain": 1.061
+        },
+        {
+          "midi": 45,
+          "fichier": "045-ff.mp3",
+          "gain": 0.929
+        },
+        {
+          "midi": 48,
+          "fichier": "048-ff.mp3",
+          "gain": 1.23
+        },
+        {
+          "midi": 50,
+          "fichier": "050-ff.mp3",
+          "gain": 1.026
+        },
+        {
+          "midi": 53,
+          "fichier": "053-ff.mp3",
+          "gain": 1.031
+        },
+        {
+          "midi": 57,
+          "fichier": "057-ff.mp3",
+          "gain": 1.271
+        },
+        {
+          "midi": 60,
+          "fichier": "060-ff.mp3",
+          "gain": 0.984
+        },
+        {
+          "midi": 62,
+          "fichier": "062-ff.mp3",
+          "gain": 1.171
+        },
+        {
+          "midi": 65,
+          "fichier": "065-ff.mp3",
+          "gain": 0.764
+        },
+        {
+          "midi": 69,
+          "fichier": "069-ff.mp3",
+          "gain": 1.287
+        },
+        {
+          "midi": 72,
+          "fichier": "072-ff.mp3",
+          "gain": 0.764
+        },
+        {
+          "midi": 74,
+          "fichier": "074-ff.mp3",
+          "gain": 1.018
+        },
+        {
+          "midi": 77,
+          "fichier": "077-ff.mp3",
+          "gain": 1.044
+        },
+        {
+          "midi": 82,
+          "fichier": "082-ff.mp3",
+          "gain": 1.473
+        },
+        {
+          "midi": 83,
+          "fichier": "083-ff.mp3",
+          "gain": 0.774
+        },
+        {
+          "midi": 86,
+          "fichier": "086-ff.mp3",
+          "gain": 1.329
+        },
+        {
+          "midi": 89,
+          "fichier": "089-ff.mp3",
+          "gain": 0.76
+        },
+        {
+          "midi": 93,
+          "fichier": "093-ff.mp3",
+          "gain": 0.931
+        }
+      ]
+    }
+  ]
+}

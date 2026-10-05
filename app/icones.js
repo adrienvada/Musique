@@ -52,12 +52,13 @@ export const ICONES = {
   page: '<path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
   imprimer: '<path d="M7 9V3.5h10V9"/><rect x="3.5" y="9" width="17" height="8" rx="1.5"/><path d="M7 14h10v6.5H7z"/>',
   corbeille: '<path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/>',
+  // Les versions précédentes (D6) : une horloge qu'on remonte.
+  historique: '<path d="M4 12a8 8 0 1 0 2.35-5.65"/><path d="M4 4.5v4.2h4.2"/><path d="M12 8v4.3l2.8 1.7"/>',
   copier: '<rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V5.5A1.5 1.5 0 0 0 14 4H5.5A1.5 1.5 0 0 0 4 5.5V14a1.5 1.5 0 0 0 1.5 1.5h3"/>',
   crayon: '<path d="M4 20l4.2-1 10.6-10.6a2 2 0 0 0-2.8-2.8L5.4 16.2z"/><path d="M14.5 7l2.5 2.5"/>',
   etoile: '<path d="M12 3.8l2.5 5.1 5.6.8-4.05 3.95.95 5.6L12 16.6l-5 2.65.95-5.6L3.9 9.7l5.6-.8z"/>',
   "etoile-pleine": '<path d="M12 3.8l2.5 5.1 5.6.8-4.05 3.95.95 5.6L12 16.6l-5 2.65.95-5.6L3.9 9.7l5.6-.8z" fill="currentColor"/>',
   etiquette: '<path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.5 1.5 0 0 1 0 2.1l-6.2 6.2a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8" cy="8" r="1.4"/>',
-  info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><path d="M12 7.6v.1"/>',
   attention: '<path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5"/><path d="M12 17.2v.1"/>',
   poignee: '<circle cx="9" cy="6.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="17.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="17.5" r="1.3" fill="currentColor" stroke="none"/>',
   // Jouer et écrire
@@ -89,8 +90,18 @@ export const ICONES = {
   d16: '<ellipse cx="12" cy="13.5" rx="5.2" ry="3.6" transform="rotate(-20 12 13.5)"/>',
   point: '<ellipse cx="9.5" cy="17.5" rx="3.7" ry="2.6" transform="rotate(-20 9.5 17.5)" fill="currentColor"/><path d="M12.9 16.6V3.8"/><circle cx="18" cy="16.5" r="1.6" fill="currentColor" stroke="none"/>',
   silence: '<path d="M10 3.5l4 4.5-3.2 3.6 4.2 4.6c-2.4-1-4.8-.2-3.8 3.3"/>',
+  // Les altérations (les outils de « Corriger ») : elles s'écrivaient ♯ ♭ ♮ en caractères, que chaque
+  // police dessinait à sa façon. Les traits de travers plus épais, comme gravés.
+  diese: '<path d="M10 4.5V21M14 3v16.5"/><path d="M6.5 10.4l11-3M6.5 16.6l11-3" stroke-width="2.5"/>',
+  bemol: '<path d="M8 3v17.5"/><path d="M8 13.2c2.2-2 6.6-2.3 6.6.8 0 2.6-3.4 4.8-6.6 6.5" stroke-width="2.1"/>',
+  becarre: '<path d="M8.5 3v13.6M15.5 7.4V21"/><path d="M8.5 9.8l7-2.4M8.5 16.6l7-2.4" stroke-width="2.5"/>',
   // Choisir aussi la note suivante (la sélection s'étend vers la droite)
   etendre: '<path d="M3.5 12h7M7 8.5v7"/><path d="M14 6l6 6-6 6"/>',
+  // Demander à Claude (idee-claude.js) : une étincelle, le signe d'une proposition
+  // qu'on n'a pas écrite soi-même (pas le logo de Claude) ; et une bulle pour
+  // « Ce que tu veux », la demande dite en une phrase.
+  etincelle: '<path d="M10.5 3c.6 4.2 3.3 6.9 7.5 7.5-4.2.6-6.9 3.3-7.5 7.5-.6-4.2-3.3-6.9-7.5-7.5 4.2-.6 6.9-3.3 7.5-7.5z"/><path d="M18.5 15.5c.25 1.6 1.4 2.75 3 3-1.6.25-2.75 1.4-3 3-.25-1.6-1.4-2.75-3-3 1.6-.25 2.75-1.4 3-3z"/>',
+  bulle: '<path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 16h-8.5L6 19.5V16H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 5z"/><path d="M7.5 9h9M7.5 12h6"/>',
 };
 
 /** Une icône en SVG, prête pour innerHTML. taille : "" (22 px), "s" (18) ou "l" (28). */
@@ -98,13 +109,18 @@ export function ico(nom, taille = "") {
   return `<svg class="ico${taille ? " " + taille : ""}" aria-hidden="true" focusable="false"><use href="#i-${nom}"></use></svg>`;
 }
 
-/** Met le jeu d'icônes dans la page (une fois) : les <use href="#i-…"> le trouvent. */
+/**
+ * Le jeu d'icônes, en HTML : un <svg> caché de <symbol>. L'assembleur
+ * (outils/assembler-appli.mjs) l'écrit d'avance dans la page, pour que les
+ * icônes soient là dès le premier affichage, sans attendre les modules.
+ */
+export function jeuDIcones() {
+  const symboles = Object.entries(ICONES).map(([nom, dessin]) => `<symbol id="i-${nom}" viewBox="0 0 24 24">${dessin}</symbol>`).join("");
+  return `<svg id="icones-portee" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">${symboles}</svg>`;
+}
+
+/** Met le jeu d'icônes dans la page, s'il n'y est pas déjà : les <use href="#i-…"> le trouvent. */
 export function injecterIcones(doc = document) {
   if (doc.getElementById("icones-portee")) return;
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.id = "icones-portee";
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("style", "position:absolute;width:0;height:0;overflow:hidden");
-  svg.innerHTML = Object.entries(ICONES).map(([nom, dessin]) => `<symbol id="i-${nom}" viewBox="0 0 24 24">${dessin}</symbol>`).join("");
-  doc.body.prepend(svg);
+  doc.body.insertAdjacentHTML("afterbegin", jeuDIcones());
 }
