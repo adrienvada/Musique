@@ -12,21 +12,65 @@ import { entetesSupabase, MANQUE_CLE } from "./supabase.js";
 
 const COMPARTIMENT = "portee-remarkable";
 
+/**
+ * Les réglages du compartiment (S4), posés à sa création. Une taille
+ * maximale par objet : le stockage refuse lui-même ce qui la dépasse, même
+ * si une borne du code venait à manquer. 6 Mo : rien de plus gros n'entre
+ * par la porte du connecteur (TAILLE_MAX, http.js), et le plus gros objet
+ * rangé, les pages d'une partition, en fait 5 au plus (bibliotheque.js).
+ * Aucune liste de types (allowed_mime_types) : le coffre range le jeton en
+ * text/plain, la bibliothèque en JSON.
+ */
+export const REGLAGES_COMPARTIMENT = { public: false, file_size_limit: 6 * 1024 * 1024 };
+
+/** « Déjà là » : HTTP 409, ou 400 avec « 409 / Duplicate » dans la réponse (versions plus anciennes du stockage). */
+const dejaLa = (statut, texte) => statut === 409 || (statut === 400 && /"409"|Duplicate|already exists/i.test(texte));
+
 export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
   if (!url || !cle) throw new Error(MANQUE_CLE);
   const entetes = entetesSupabase(cle);
   const adresse = (chemin) => `${url}/storage/v1/object/${compartiment}/${chemin}`;
-  let compartimentPret = false;
+  let preparation = null;
+
+  /**
+   * Avant la première écriture du client (index.ts en garde un par
+   * démarrage) : une seule préparation, même pour deux écritures
+   * simultanées. Si le stockage ne répond pas, l'écriture suivante la refait.
+   */
+  function preparerCompartiment() {
+    preparation ??= creerCompartiment().catch((e) => { preparation = null; throw e; });
+    return preparation;
+  }
 
   async function creerCompartiment() {
-    if (compartimentPret) return;
     const r = await fetch(`${url}/storage/v1/bucket`, {
       method: "POST",
       headers: { ...entetes, "content-type": "application/json" },
-      body: JSON.stringify({ id: compartiment, name: compartiment, public: false }),
+      body: JSON.stringify({ id: compartiment, name: compartiment, ...REGLAGES_COMPARTIMENT }),
     });
-    await r.body?.cancel(); // 200, ou 400/409 s'il existe déjà
-    compartimentPret = true;
+    if (r.ok) { await r.body?.cancel(); return; }
+    // Déjà là : on lui redit ses réglages. Un autre refus (une clé
+    // refusée…) : l'écriture qui suit dira le sien.
+    if (dejaLa(r.status, await r.text().catch(() => ""))) await reglerCompartiment();
+  }
+
+  /**
+   * Redit ses réglages au compartiment qui existe déjà : c'est ce qui borne
+   * un compartiment créé avant la borne, et c'est sans effet sur les autres.
+   * Un échec n'empêche ni de lire ni d'écrire : on réessaiera au démarrage
+   * suivant.
+   */
+  async function reglerCompartiment() {
+    try {
+      const r = await fetch(`${url}/storage/v1/bucket/${compartiment}`, {
+        method: "PUT",
+        headers: { ...entetes, "content-type": "application/json" },
+        body: JSON.stringify(REGLAGES_COMPARTIMENT),
+      });
+      await r.body?.cancel();
+    } catch {
+      // Une coupure : la borne attendra le prochain démarrage.
+    }
   }
 
   /** Tout ce que le stockage range sous `dossier`, objets et sous-dossiers, page par page. */
@@ -59,7 +103,7 @@ export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
       throw new Error(`Le stockage Supabase refuse la lecture de ${chemin} (HTTP ${r.status}).`);
     },
     async ecrire(chemin, objet) {
-      await creerCompartiment();
+      await preparerCompartiment();
       const r = await fetch(adresse(chemin), {
         method: "POST",
         headers: { ...entetes, "content-type": "application/json", "x-upsert": "true" },
@@ -74,16 +118,14 @@ export function objetsSupabase(url, cle, compartiment = COMPARTIMENT) {
      * création à la fois : c'est le verrou de la bibliothèque (bibliotheque.js).
      */
     async creer(chemin, objet) {
-      await creerCompartiment();
+      await preparerCompartiment();
       const r = await fetch(adresse(chemin), {
         method: "POST",
         headers: { ...entetes, "content-type": "application/json" },
         body: JSON.stringify(objet),
       });
       if (r.ok) { await r.body?.cancel(); return true; }
-      const texte = await r.text().catch(() => "");
-      // Déjà là : HTTP 409, ou 400 avec « 409 / Duplicate » dans la réponse (versions plus anciennes du stockage).
-      if (r.status === 409 || (r.status === 400 && /"409"|Duplicate|already exists/i.test(texte))) return false;
+      if (dejaLa(r.status, await r.text().catch(() => ""))) return false;
       throw new Error(`Le stockage Supabase refuse de créer ${chemin} (HTTP ${r.status}).`);
     },
     async supprimer(chemin) {

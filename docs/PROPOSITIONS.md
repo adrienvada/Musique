@@ -1036,6 +1036,22 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     ailleurs, aucune erreur de console. Sans Playwright (en CI), l'essai se
     saute.
 
+**Compléments (04/10, pour les écrans)**
+
+- **Le compartiment a sa taille maximale (S4, `objets.js`).** 6 Mo par
+  objet, posés à la création du compartiment, qu'elle vienne de la
+  bibliothèque ou du coffre : le stockage refuse lui-même plus gros, même si
+  une borne du code venait à manquer. Ton compartiment existe déjà : il la
+  reçoit à la première écriture de chaque démarrage de la fonction (un
+  `PUT`, sans effet s'il l'a déjà). Rien à faire de ton côté.
+  - Un échec de cette mise à jour ne bloque ni lecture ni écriture : on
+    réessaie au démarrage suivant.
+  - 6 Mo, comme la porte (`http.js`) : rien de plus gros n'y entre, et les
+    pages d'une partition en font 5 au plus. Pas de liste de types : le
+    coffre range le jeton en `text/plain`.
+  - La bibliothèque et les suggestions partagent un seul client du stockage
+    (`index.ts`) : une mise à jour par démarrage, pas une par outil.
+
 ### Données et synchronisation (S6, D1 à D10)
 
 - **Chaque fiche est vérifiée et remise en forme (S6, `app/fiche.js`).**
