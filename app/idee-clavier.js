@@ -9,7 +9,9 @@
  *     la carte des octaves ;
  *   - le clavier de l'ordinateur, disposé comme dans Ableton (la rangée
  *     A S D F… pour les touches blanches, W E T Y U pour les noires, Z X
- *     pour l'octave), qui joue dans tous les modes ;
+ *     pour l'octave : des places, qui portent Q S D F…, Z E T Y U et W X sur
+ *     un AZERTY), qui joue dans tous les modes ; son aide montre les lettres
+ *     du clavier branché (I12) ;
  *   - un clavier MIDI (Chrome et Edge ; bouton #idee-midi dans la feuille
  *     Tempo), rebranché tout seul à l'ouverture s'il l'a déjà été, et sa
  *     pédale de maintien (CC64) : le piano tient les notes, le jeu en direct
@@ -70,6 +72,42 @@ export function instantMidi(timeStamp, maintenant = performance.now()) {
 
 const CLE_GAMME = "portee:clavier-gamme";
 const CLE_FACON = "portee:clavier-facon";
+
+// --- Les lettres de ton clavier (audit du 04/10, I12) ------------------------
+//
+// Les touches jouent par leur place (`code`), comme dans Ableton : sur le
+// clavier AZERTY d'Adrien, la place de A porte Q, celle de W porte Z, celle
+// de Z porte W. L'aide montrait les lettres d'un QWERTY (« A W S E D… Z X »)
+// alors qu'il fallait taper « Q Z S E D… W X ». Elle montre maintenant
+// celles du clavier branché : Chromium les donne (navigator.keyboard) ; sinon
+// (Safari, Firefox, la page dans claude.ai) on les apprend de la première
+// touche jouée qui les distingue (A, W, Z, Y…) ; d'ici là, une mention dit
+// les lettres d'un AZERTY.
+
+/** Ce qui change d'une disposition à l'autre, pour les touches que l'aide nomme ou qu'on joue. */
+const ECHANGES = {
+  qwerty: {},
+  azerty: { KeyA: "q", KeyQ: "a", KeyW: "z", KeyZ: "w", Semicolon: "m" },
+  qwertz: { KeyY: "z", KeyZ: "y" },
+};
+
+/** La lettre de la touche `code` dans une disposition (null : une touche qui n'est pas une lettre). */
+export function lettreSelon(disposition, code) {
+  return ECHANGES[disposition][code] || (/^Key[A-Z]$/.test(code) ? code.slice(3).toLowerCase() : null);
+}
+
+/**
+ * La disposition que disent les touches déjà jouées (`appris` : code →
+ * lettre), si une seule leur va ; sinon null (S, E, D sont les mêmes partout).
+ * @param {Map<string, string>} appris
+ */
+export function dispositionDe(appris) {
+  const possibles = Object.keys(ECHANGES).filter((d) => [...appris].every(([code, lettre]) => {
+    const attendue = lettreSelon(d, code);
+    return attendue === null || attendue === lettre;
+  }));
+  return possibles.length === 1 ? possibles[0] : null;
+}
 
 export function creerModeClavier(ctx) {
   const { e, $, toast } = ctx;
@@ -133,11 +171,48 @@ export function creerModeClavier(ctx) {
 
   // --- Le clavier de l'ordinateur --------------------------------------------
 
+  // --- L'aide : les lettres de ton clavier (I12, voir plus haut) ---------------
+
+  let carte = null; // ce que dit le navigateur (code → lettre), s'il le dit
+  const appris = new Map(); // code → lettre, appris des touches jouées
+  let disposition = null; // « azerty »… quand les touches jouées l'ont dit
+
+  /** Réécrit les lettres de l'aide avec celles de ce clavier ; la mention AZERTY part quand on les sait. */
+  function ecrireAide() {
+    const aide = $("idee-raccourcis");
+    if (!aide) return;
+    for (const k of aide.querySelectorAll("kbd[data-touche]")) {
+      const lettre = (carte && carte.get(k.dataset.touche)) || appris.get(k.dataset.touche) || (disposition && lettreSelon(disposition, k.dataset.touche));
+      if (lettre) k.textContent = lettre.toUpperCase();
+    }
+    $("idee-raccourcis-azerty").hidden = !!(carte || disposition);
+  }
+
+  /** La carte du clavier, chez Chromium (une page dans claude.ai ou Safari ne l'ont pas : on apprendra). */
+  async function lireCarte() {
+    try {
+      if (navigator.keyboard && navigator.keyboard.getLayoutMap) carte = await navigator.keyboard.getLayoutMap();
+    } catch { carte = null; /* refusée (un cadre), ou absente */ }
+    // Une carte vide ne dit rien du clavier : la mention reste, et les touches jouées apprendront.
+    if (carte && !carte.size) carte = null;
+    ecrireAide();
+  }
+
+  /** Une touche jouée dit sa lettre : de quoi deviner la disposition, sans rien demander. */
+  function apprendre(ev) {
+    if (carte || ev.key.length !== 1 || appris.get(ev.code) === ev.key.toLowerCase()) return;
+    appris.set(ev.code, ev.key.toLowerCase());
+    disposition = dispositionDe(appris);
+    ecrireAide();
+  }
+  lireCarte();
+
   // Les touches de l'ordinateur jouent à partir de cette octave ; ‹ ›, la carte, Z et X la changent
   // toutes les trois, et le clavier à l'écran la montre (avant, Z X bougeaient un clavier invisible).
   let octaveOrdi = 60;
   /** Les touches qui jouent, et Z X pour l'octave. Rend true si la touche a servi. */
   function toucheBas(ev) {
+    if (TOUCHES_ORDI[ev.code] !== undefined || ev.code === "KeyZ" || ev.code === "KeyX") apprendre(ev);
     if (TOUCHES_ORDI[ev.code] !== undefined) {
       if (!ev.repeat) ctx.enfoncer(octaveOrdi + TOUCHES_ORDI[ev.code], undefined, { quand: ev.timeStamp }); // touche tenue : rien de plus
       return true;
@@ -205,6 +280,8 @@ export function creerModeClavier(ctx) {
     /** Une idée s'ouvre : le clavier montre sa dernière note, le MIDI se rebranche. */
     ouvrir(notes) {
       lirePrefs();
+      // Un autre clavier a pu être branché entre-temps.
+      lireCarte();
       choixVu = "";
       const derniere = notes.length ? notes[notes.length - 1].h : 60;
       clavier.amener(derniere);

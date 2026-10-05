@@ -1,19 +1,49 @@
 {
+  "id": "/Musique/",
   "name": "Portée",
   "short_name": "Portée",
   "description": "Ton carnet d'idées musicales : note une mélodie au clavier ou en la chantant, écoute-la au piano, envoie-la en MIDI vers Ableton. Tes pages écrites sur la reMarkable y sont lues et corrigées.",
   "lang": "fr",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#EDEEEA",
   "theme_color": "#2F4BC2",
+  "categories": ["music"],
+  "launch_handler": { "client_mode": "focus-existing" },
   "shortcuts": [
-    { "name": "Nouvelle idée", "short_name": "Idée", "description": "Noter tout de suite une mélodie qui te vient", "url": "./?idee", "icons": [{ "src": "icones/icone-192.png", "sizes": "192x192" }] }
+    { "name": "Nouvelle idée", "short_name": "Idée", "description": "Noter tout de suite une mélodie qui te vient", "url": "./?idee", "icons": [{ "src": "icones/raccourci-idee.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Chanter", "short_name": "Chanter", "description": "Chanter les notes une à une : elles s'écrivent", "url": "./?chanter", "icons": [{ "src": "icones/raccourci-chanter.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Mémo", "short_name": "Mémo", "description": "Fredonner l'idée tout de suite ; tu l'écriras plus tard", "url": "./?memo", "icons": [{ "src": "icones/raccourci-memo.png", "sizes": "192x192", "type": "image/png" }] }
   ],
+  "file_handlers": [
+    {
+      "action": "./?ouvrir",
+      "accept": {
+        "application/pdf": [".pdf"],
+        "audio/midi": [".mid", ".midi"],
+        "application/json": [".json"]
+      }
+    }
+  ],
+  "share_target": {
+    "action": "./?partage",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [{ "name": "fichiers", "accept": ["application/pdf", ".pdf", "audio/midi", ".mid", ".midi"] }]
+    }
+  },
   "icons": [
-    { "src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icones/icone.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icones/icone-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icones/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "icones/captures/telephone-carnet.webp", "sizes": "780x1688", "type": "image/webp", "form_factor": "narrow", "label": "Le carnet : tes idées et tes pages lues, par date" },
+    { "src": "icones/captures/telephone-idee.webp", "sizes": "780x1688", "type": "image/webp", "form_factor": "narrow", "label": "Une idée : la grille, ses accords et le clavier" },
+    { "src": "icones/captures/ordinateur-corriger.webp", "sizes": "1280x800", "type": "image/webp", "form_factor": "wide", "label": "Corriger : ta page à côté de ce que Portée a lu" }
   ]
 }

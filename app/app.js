@@ -416,8 +416,10 @@ async function demarrer() {
   if (etat.stockage.surFermeture) etat.stockage.surFermeture(() => toast("Portée a été mise à jour dans un autre onglet : recharge cette page pour continuer.", 120000));
   // Le bouton « précédent » du téléphone recule dans l'appli au lieu de la quitter.
   creerHistorique({ racine: navigation.aLaRacine, reculer: navigation.reculer }).synchroniser();
-  // Raccourci de l'appli installée (« Nouvelle idée ») : on y va tout droit.
-  if (new URLSearchParams(location.search).has("idee")) ouvrirIdee(null);
+  // L'appli installée se lance par un raccourci (Nouvelle idée, Chanter, Mémo), un fichier ouvert
+  // d'un double clic ou partagé (I4 : accueil.js, import-pdf.js) : on y va tout droit.
+  accueil.raccourci(location.href);
+  lecture.recevoirLancements({ raccourci: (adresse) => accueil.raccourci(adresse), restaurer: (f) => sauvegardes.restaurer(f) });
   const surClaude = etat.stockage.mode === "claude";
   if (surClaude) {
     $("mode").textContent = "Enregistré sur claude.ai";

@@ -22,10 +22,49 @@
  * (audit du 04/10, T3). Un calque qui n'est pas un <dialog> se déclare dans
  * le `reculer` et l'`aLaRacine` de son écran ; les <dialog> ouverts se
  * ferment avant tout.
+ *
+ * S'ANNONCER (audit du 04/10, I11). L'onglet du navigateur dit l'écran et
+ * la partition (« Ma ballade · Corriger · Portée »), comme le titre de
+ * l'écran (son h1, caché à l'œil) ; le lecteur d'écran entend l'écran qui
+ * s'ouvre. Les messages passagers de l'écran qu'on quitte s'en vont.
  */
-import { $ } from "./ui.js";
+import { $, annoncer, retirerMessagesPasses, suivreMessages } from "./ui.js";
 
 const VUES = ["biblio", "atelier", "lecteur", "idee", "morceau"];
+
+/** Le nom de chaque écran (l'accueil prend celui de son onglet). */
+const NOMS = { atelier: "Corriger", lecteur: "Écouter et exporter", idee: "Idée", morceau: "Morceau" };
+
+/** Le titre de la partition montrée : chaque écran l'écrit dans sa page. */
+function titreDe(vue) {
+  if (vue === "atelier") return $("titre").value.trim();
+  if (vue === "lecteur") return $("titre-lecteur").textContent.trim();
+  if (vue === "idee") return $("idee-titre").value.trim();
+  if (vue === "morceau") return $("morceau-titre").value.trim();
+  return "";
+}
+
+/**
+ * Les flèches dans une rangée d'onglets (Clavier, Chanter, Accords ;
+ * Corriger, Écouter) : l'onglet d'à côté, comme dans l'accueil (le motif des
+ * onglets). Seulement si l'on y est venu au clavier (`auClavier`) : un
+ * onglet touché à la souris garde le focus, et ← → y choisissent toujours
+ * la note d'à côté. Rend true si la touche a servi.
+ */
+function flecheOnglet(e, auClavier) {
+  const onglet = e.target.closest && e.target.closest('[role="tab"]');
+  const rangee = onglet && onglet.closest('[role="tablist"]');
+  const sens = { ArrowRight: 1, ArrowLeft: -1, Home: "debut", End: "fin" }[e.key];
+  if (!rangee || sens === undefined || e.altKey || e.ctrlKey || e.metaKey || !auClavier) return false;
+  const onglets = [...rangee.querySelectorAll('[role="tab"]')].filter((t) => !t.hidden && !t.disabled);
+  const i = onglets.indexOf(onglet);
+  const cible = sens === "debut" ? onglets[0] : sens === "fin" ? onglets.at(-1) : onglets[(i + sens + onglets.length) % onglets.length];
+  if (!cible || cible === onglet) return true;
+  cible.click();
+  // Corriger ↔ Écouter : la rangée change d'écran avec lui ; le focus la suit.
+  cible.focus();
+  return true;
+}
 
 /**
  * @param deps {
@@ -44,6 +83,8 @@ export function creerNavigation(deps) {
 
   /** Montre un écran (et quitte celui d'avant, qui fait partir ses enregistrements). */
   function montrer(nouvelle) {
+    // Les messages de l'écran qu'on quitte : ils cachaient le haut du suivant.
+    if (vue !== nouvelle) retirerMessagesPasses();
     if (nouvelle === "biblio") pile = [];
     if (vue !== nouvelle) ecrans()[vue].fermer();
     deps.arreterLeSon();
@@ -69,7 +110,49 @@ export function creerNavigation(deps) {
     const ecran = ecrans()[nouvelle];
     if (ecran.afficher) ecran.afficher();
     window.scrollTo({ top: 0 });
+    // Le titre, une fois l'écran rempli : l'éditeur et le morceau écrivent le leur juste après.
+    queueMicrotask(() => titrer({ dire: true }));
   }
+
+  /**
+   * L'onglet du navigateur et le titre de l'écran (h1) disent où l'on est ;
+   * `dire` : le lecteur d'écran l'entend (un écran qui s'ouvre). Le même
+   * écran redessiné (une version reçue d'ailleurs, une suggestion gardée)
+   * ne se redit pas.
+   */
+  let dernierDit = "";
+  function titrer({ dire = false } = {}) {
+    let nom = NOMS[vue], quoi = "";
+    if (vue === "biblio") {
+      const onglet = $("onglets-accueil").querySelector('[aria-selected="true"] .libelle');
+      nom = onglet ? onglet.textContent.trim() : "Carnet";
+    } else quoi = titreDe(vue);
+    document.title = [quoi, nom, "Portée"].filter(Boolean).join(" · ");
+    const h1 = $(`titre-ecran-${vue}`);
+    if (h1) h1.textContent = quoi ? `${nom} « ${quoi} »` : nom;
+    const texte = quoi ? `${nom} : « ${quoi} »` : nom;
+    if (dire && texte !== dernierDit) annoncer(texte);
+    if (dire) dernierDit = texte;
+  }
+
+  // Le titre suit aussi ce qui change sans changer d'écran : l'onglet de l'accueil, la
+  // partition renommée ici (les champs de titre) ou ailleurs (#fil-titre, que l'appli
+  // réécrit pour l'idée : un titre proposé par Claude, une autre version reçue).
+  suivreMessages();
+  if (typeof MutationObserver === "function") {
+    const retitrer = () => titrer();
+    new MutationObserver(retitrer).observe($("onglets-accueil"), { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
+    new MutationObserver(retitrer).observe($("fil-titre"), { childList: true, characterData: true, subtree: true });
+  }
+  for (const id of ["titre", "idee-titre", "morceau-titre"]) $(id).addEventListener("change", () => titrer());
+  titrer();
+
+  // Comment le focus est arrivé où il est : au clavier (Tab), ou d'un toucher ou d'un clic.
+  // `:focus-visible` ne le dit pas : Chromium le passe à vrai dès qu'une touche est
+  // pressée, avant qu'on la lise (essayé).
+  let focusAuClavier = false;
+  document.addEventListener("pointerdown", () => { focusAuClavier = false; }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Tab") focusAuClavier = true; }, true);
 
   /** Retient l'écran qu'on quitte pour un autre (pas l'accueil), pour y revenir. */
   function retenir() {
@@ -112,6 +195,8 @@ export function creerNavigation(deps) {
     if (document.querySelector("dialog[open]")) return;
     const cible = e.target;
     if (cible.closest && cible.closest("input, textarea, select, [contenteditable]")) return;
+    // Une flèche sur un onglet est à la rangée d'onglets (l'accueil a déjà la sienne : defaultPrevented).
+    if (!e.defaultPrevented && flecheOnglet(e, focusAuClavier)) { e.preventDefault(); return; }
     const ecran = ecrans()[vue];
     if (ecran.toucheBas && ecran.toucheBas(e)) e.preventDefault();
   }

@@ -185,6 +185,8 @@ export function brancherSauvegarde({ stockage, partitions, dansClaude = () => fa
   $("garde-proteger").addEventListener("click", proteger);
   return {
     afficher,
+    /** Restaure une sauvegarde reçue autrement (ouverte d'un double clic avec l'appli installée, I4) : le même chemin. */
+    restaurer: restaurerFichier,
     /** Le rappel de sauvegarde (null : pas de rappel), pour l'état du haut. */
     rappel: () => (stockage() ? rappelSauvegarde({ derniere: lirePref(CLE_DERNIERE_SAUVEGARDE), plusAncienne: plusAncienne(), synchronisee: synchronisee(), surClaude: dansClaude() || stockage().mode === "claude" }) : null),
   };

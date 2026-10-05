@@ -43,6 +43,9 @@
  *
  * Le connecteur reMarkable (Supabase) n'est jamais mis en cache, ni rien
  * d'un autre domaine.
+ *
+ * Il reçoit aussi un fichier partagé vers l'appli installée (Android,
+ * `share_target`) : voir recevoirPartage, plus bas.
  */
 
 // Remplis par l'assembleur : sw.js n'existe que dans le site assemblé.
@@ -54,6 +57,8 @@ const PIANO_FICHIERS = ["__PIANO_FICHIERS__"];
 
 const CACHE = `portee-${VERSION}`;
 const CACHE_PIANO = `portee-piano-${PIANO}`;
+// Un fichier partagé vers Portée, le temps que la page le prenne (import-pdf.js, CACHE_PARTAGE).
+const CACHE_PARTAGE = "portee-partage";
 const ICI = new URL("./", self.location).href;
 const PAGE = ICI;
 // Le temps qu'on laisse au serveur avant de servir la copie.
@@ -100,8 +105,9 @@ self.addEventListener("activate", (e) => {
     // Le nouveau cache est complet (sinon on n'en serait pas là) : les
     // anciens peuvent partir. Seulement ceux de Portée : le domaine
     // (adrienvada.fr) sert d'autres sites, qui ont peut-être les leurs.
+    // Un fichier partagé qui attend la page n'est pas d'une version : il reste.
     for (const cle of await caches.keys()) {
-      if (cle.startsWith("portee-") && cle !== CACHE && cle !== CACHE_PIANO) await caches.delete(cle);
+      if (cle.startsWith("portee-") && cle !== CACHE && cle !== CACHE_PIANO && cle !== CACHE_PARTAGE) await caches.delete(cle);
     }
     await self.clients.claim();
     // Chaque page ouverte apprend quelle version est là : celle qui n'est
@@ -150,8 +156,34 @@ async function reseauOuCopie(requete, copie) {
   return r || reseau;
 }
 
+/**
+ * Un fichier partagé vers Portée (Android : l'appli reMarkable ou Fichiers →
+ * Partager → Portée ; audit du 04/10, I4). Le système l'envoie en POST à
+ * `./?partage` (share_target, manifeste) : un site statique ne saurait pas le
+ * recevoir. Le service worker le garde dans un cache à part, le temps que la
+ * page le prenne, puis la rouvre (303 : la même adresse, en GET) ; la page
+ * l'importe comme un PDF choisi (import-pdf.js). Il ne va nulle part ailleurs.
+ */
+async function recevoirPartage(requete) {
+  try {
+    const donnees = await requete.formData();
+    const cache = await caches.open(CACHE_PARTAGE);
+    let n = 0;
+    for (const f of donnees.getAll("fichiers")) {
+      if (typeof f === "string") continue;
+      const entetes = { "content-type": f.type || "application/octet-stream", "x-portee-nom": encodeURIComponent(f.name || "partage.pdf") };
+      await cache.put(new Request(`${ICI}partage/${Date.now()}-${n++}`), new Response(f, { headers: entetes }));
+    }
+  } catch { /* un envoi illisible : la page s'ouvre quand même, et le dit */ }
+  return Response.redirect(`${ICI}?partage`, 303);
+}
+
 self.addEventListener("fetch", (e) => {
   const req = e.request;
+  if (req.method === "POST" && req.url.startsWith(ICI) && new URL(req.url).searchParams.has("partage")) {
+    e.respondWith(recevoirPartage(req));
+    return;
+  }
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (!url.href.startsWith(ICI)) return; // le connecteur, un autre site : le réseau, sans copie

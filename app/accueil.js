@@ -20,13 +20,14 @@
  */
 import { dessinerApercu, dessinerApercuMorceau, dessinerApercuPage } from "./apercus.js";
 import { assembler, sourceDuMorceau } from "./morceau.js";
-import { indexerParPas, pasParMesure, pasParTemps } from "./sequence.js";
+import { indexerParPas, nouvelleSequence, pasParMesure, pasParTemps } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
 import { creerEcoute } from "./ecoute.js";
 import { libelleLecture } from "./atelier.js";
 import { expliquer } from "./erreurs.js";
+import { compteParSorte, sorteDe } from "./garde.js";
 import { ico } from "./icones.js";
-import { $, dateCourte, echapper, el, heure, pluriel } from "./ui.js";
+import { $, annoncer, dateCourte, echapper, el, formaterDate, heure, pluriel } from "./ui.js";
 import { ambianceStudio, lirePref, ecrirePref } from "./preferences.js";
 import { brancherFeuille, fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 import { estCopieDeConflit } from "./conflits.js";
@@ -57,8 +58,9 @@ function quand(iso, groupe) {
   if (!iso) return "";
   const d = new Date(iso);
   if (groupe === "Aujourd'hui" || groupe === "Hier") return heure(iso);
-  if (groupe === "Cette semaine") return `${d.toLocaleDateString("fr-FR", { weekday: "short" })} ${heure(iso)}`;
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  // Les formats faits une fois (ui.js) : un carnet d'un an en demandait des centaines par dessin (I9).
+  if (groupe === "Cette semaine") return `${formaterDate(d, { weekday: "short" })} ${heure(iso)}`;
+  return formaterDate(d, { day: "numeric", month: "short" });
 }
 
 /** « 1:57 » : la durée d'un morceau, d'après ses blocs et son tempo. */
@@ -106,6 +108,57 @@ function pastilleStatut(p) {
   return el("span", "pastille p-doute", restants ? `À relire · ${pluriel(restants, "doute")}` : "À relire");
 }
 
+/**
+ * Le nom d'une ligne ou d'une carte pour le lecteur d'écran : « Ouvrir « Ma
+ * ballade » », puis tout ce qu'elle montre (son état, sa date, ses
+ * étiquettes…). Avec « Ouvrir « titre » » seul, il perdait « À relire ·
+ * 14:03 » (audit du 04/10, I11). Il commence toujours par « Ouvrir
+ * « titre » » : la commande vocale et les essais s'y fient. « ♩ 90 » se lit
+ * « tempo 90 » : le signe se lit mal, ou pas du tout.
+ * @param {string} titre
+ * @param {Array<string | null | undefined | false>} parties
+ */
+export const nomDeLigne = (titre, parties) => [`Ouvrir « ${titre} »`, ...parties.filter(Boolean).map((t) => String(t).replace(/♩ ?/g, "tempo "))].join(", ");
+
+/** « 2 idées et 3 partitions », ou « Rien ne correspond » : ce qu'une recherche ou un filtre laisse voir. */
+export function compteVisible(liste) {
+  const sortes = { idee: 0, morceau: 0, partition: 0 };
+  for (const p of liste) sortes[sorteDe(p)]++;
+  return compteParSorte(sortes).texte || "Rien ne correspond";
+}
+
+/** Le titre de l'idée d'exemple. */
+export const TITRE_EXEMPLE = "Exemple : Au clair de la lune";
+
+/**
+ * L'idée d'exemple du carnet vide (audit du 04/10, I15) : « Au clair de la
+ * lune », douze mesures (la première phrase, la seconde, la première), avec
+ * ses accords (do, sol, ré mineur) joués basse et accords. De quoi découvrir
+ * la grille, la partition et les accords sans rien écrire. L'ouvrir la range
+ * dans le carnet, comme une idée tirée d'une phrase (l'éditeur l'enregistre
+ * tout de suite, par le même chemin) : elle s'efface comme une autre. Rien
+ * ne s'écrit tant qu'on ne l'ouvre pas.
+ */
+export function ideeExemple() {
+  const seq = nouvelleSequence({ tempo: 100, mesure: [4, 4], tonalite: "C" });
+  const N = 4, B = 8, R = 16; // la noire, la blanche, la ronde, en pas
+  const premiere = [[60, N], [60, N], [60, N], [62, N], [64, B], [62, B], [60, N], [64, N], [62, N], [62, N], [60, R]];
+  const seconde = [[62, N], [62, N], [62, N], [62, N], [57, B], [57, B], [62, N], [60, N], [59, N], [57, N], [55, R]];
+  let d = 0;
+  for (const [h, l] of [...premiere, ...seconde, ...premiere]) {
+    seq.pistes[0].notes.push({ id: seq.suivant++, d, l, h, v: 90 });
+    d += l;
+  }
+  // Un accord au début de chaque mesure (la règle les montre tous), et sol au milieu des mesures 2 et 3.
+  const accordsPremiere = [["C", 0], ["C", 16], ["G", 24], ["C", 32], ["G", 40], ["C", 48]];
+  const accordsSeconde = [["G", 0], ["Dm", 16], ["G", 32], ["G", 48]];
+  for (const [debut, accords] of [[0, accordsPremiere], [64, accordsSeconde], [128, accordsPremiere]]) {
+    for (const [nom, x] of accords) seq.accords.push({ d: debut + x, nom });
+  }
+  seq.accompagnement = "basse";
+  return seq;
+}
+
 /** Toutes les étiquettes de la bibliothèque, les plus employées d'abord (le carnet, l'éditeur d'idée). */
 export function toutesEtiquettes(partitions) {
   const compte = new Map();
@@ -148,6 +201,7 @@ export function creerAccueil(deps) {
   let actionsDe = null;       // l'id de la partition dont la feuille est ouverte
   let boutonEcoute = null;    // le « Écouter » de la feuille, tant qu'elle est ouverte
   let refocaliser = null;     // { id, classe } : où remettre le focus après avoir touché une étoile (la liste est redessinée)
+  let visibles = [];          // ce que l'onglet ouvert montre (après filtres et recherche), pour le dire
 
   const recherche = () => $("recherche").value.trim().toLowerCase();
   const surRecherche = (p) => { const q = recherche(); return !q || texteDe(p).includes(q); };
@@ -201,20 +255,53 @@ export function creerAccueil(deps) {
   function fermerRecherche() {
     $("recherche-zone").hidden = true;
     $("chercher").setAttribute("aria-expanded", "false");
+    clearTimeout(minuterieRecherche);
     if ($("recherche").value) { $("recherche").value = ""; afficher(); }
     $("chercher").focus();
   }
 
+  // Ce que la recherche trouve se dit quand on s'arrête de taper, en une phrase (I11) : le carnet
+  // ne se relit plus à chaque lettre. Assez tard pour ne pas couper la frappe.
+  let minuterieDire = null;
+  function direLeCompte({ attendre = 0 } = {}) {
+    clearTimeout(minuterieDire);
+    minuterieDire = setTimeout(() => annoncer(compteVisible(visibles)), attendre);
+  }
+
+  // La recherche se regroupe : on dessine 150 ms après la dernière lettre, pas à chaque
+  // lettre. Avec un an d'idées, chaque lettre tapée coûtait 0,6 à 0,9 s au téléphone, et
+  // la suivante attendait (audit du 04/10, I9).
+  let minuterieRecherche = null;
   function brancherRecherche() {
     $("chercher").addEventListener("click", () => ($("recherche-zone").hidden ? ouvrirRecherche() : fermerRecherche()));
     $("fermer-recherche").addEventListener("click", fermerRecherche);
-    $("recherche").addEventListener("input", afficher);
+    $("recherche").addEventListener("input", () => {
+      clearTimeout(minuterieRecherche);
+      minuterieRecherche = setTimeout(() => {
+        afficher();
+        if (recherche()) direLeCompte({ attendre: 650 });
+      }, 150);
+    });
     $("recherche").addEventListener("keydown", (e) => { if (e.key === "Escape") fermerRecherche(); });
   }
 
   // ---------------------------------------------------------------------------
   // Les vignettes
   // ---------------------------------------------------------------------------
+
+  // Le cadre réel des vignettes de page, par sorte de vignette (toutes celles d'une liste ont le
+  // même) : mesuré une fois, pas une fois par vignette. Chaque mesure forçait une mise en page
+  // de tout le carnet, entre deux vignettes dessinées (audit du 04/10, I9). Il change avec la fenêtre.
+  const cadres = new Map();
+  addEventListener("resize", () => cadres.clear());
+  function ratioDu(svg, classe) {
+    if (!cadres.has(classe)) {
+      const r = svg.getBoundingClientRect();
+      if (!r.width || !r.height) return null; // pas encore à l'écran : on mesurera la prochaine fois
+      cadres.set(classe, r.width / r.height);
+    }
+    return cadres.get(classe);
+  }
 
   /** La vignette d'une partition : ses notes en barres, la frise d'un morceau, ou sa page. */
   function apercuDe(p, classe, ratio) {
@@ -235,8 +322,7 @@ export function creerAccueil(deps) {
       // Le cadre réel de la vignette (il change d'un écran à l'autre) ; à défaut, celui qu'on attendait.
       // La calibration de la version sur laquelle la page a été écrite (L9) : jamais celle d'une autre.
       deps.calibration(p.modele, p.versionModele).then((cal) => {
-        const r = svg.getBoundingClientRect();
-        dessinerApercuPage(svg, cal, p.apercu, r.width && r.height ? r.width / r.height : ratio);
+        dessinerApercuPage(svg, cal, p.apercu, ratioDu(svg, classe) || ratio);
       }).catch(() => {});
     }
     return svg;
@@ -249,7 +335,12 @@ export function creerAccueil(deps) {
     b.setAttribute("aria-pressed", String(!!p.favori));
     b.setAttribute("aria-label", p.favori ? `Retirer « ${p.titre} » des favoris` : `Mettre « ${p.titre} » en favori`);
     b.innerHTML = ico(p.favori ? "etoile-pleine" : "etoile");
-    b.addEventListener("click", () => { refocaliser = { id: p.id, classe: "favori" }; basculerFavori(p); });
+    b.addEventListener("click", async () => {
+      refocaliser = { id: p.id, classe: "favori" };
+      await basculerFavori(p);
+      // Le carnet ne se relit plus en entier (I11) : une phrase dit ce qui a changé.
+      annoncer(p.favori ? `« ${p.titre} » n'est plus dans tes favoris.` : `« ${p.titre} » est dans tes favoris.`);
+    });
     return b;
   }
 
@@ -308,12 +399,22 @@ export function creerAccueil(deps) {
     return l;
   }
 
+  /** La même ligne d'aide, dite au lecteur d'écran (le micro et « # » ne se lisent pas). */
+  function partiesAide(p) {
+    const propositions = deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0;
+    return [
+      propositions ? (propositions > 1 ? `Claude propose ${propositions} choses` : "Claude propose") : "",
+      p.memo ? `mémo de ${p.memo.duree} s` : "",
+      (p.etiquettes || []).length ? `${(p.etiquettes || []).length > 1 ? "étiquettes" : "étiquette"} ${(p.etiquettes || []).join(", ")}` : "",
+      p.note ? (p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note) : "",
+    ];
+  }
+
   function creerLigne(p, groupe) {
     const ligne = el("article", "ligne-carnet");
     ligne.dataset.id = p.id;
     const ouvrir = el("button", "ligne-ouvrir");
     ouvrir.type = "button";
-    ouvrir.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
     ouvrir.addEventListener("click", () => ouvrirPartition(p));
 
     const texte = el("span", "ligne-texte");
@@ -329,17 +430,31 @@ export function creerAccueil(deps) {
       c.title = "Notée par Claude dans une conversation";
       meta.appendChild(c);
     }
-    const [genre, resume] = genreEtResume(p);
-    const date = groupe ? quand(p.modifieLe, groupe) : dateCourte(p.modifieLe);
-    // Avec « À relire » devant, le mot « Partition » n'apprend rien : la place sert à la date.
-    meta.appendChild(el("span", "ligne-quand", [meta.firstChild ? "" : genre, resume, date].filter(Boolean).join(" · ")));
+    meta.appendChild(el("span", "ligne-quand"));
     texte.appendChild(meta);
     const aide = ligneAide(p);
     if (aide) texte.appendChild(aide);
-
     ouvrir.append(apercuDe(p, "apercu", 56 / 46), texte);
     ligne.append(ouvrir, boutonFavori(p), boutonPlus(p));
+    dater(ligne, p, groupe);
     return ligne;
+  }
+
+  /**
+   * La date d'une ligne, et son nom qui la dit : sous son groupe (« 14:03 »
+   * sous « Aujourd'hui »), ou en entier pendant une recherche. C'est la seule
+   * chose qui change d'une ligne quand une recherche commence : on la refait
+   * sans refaire la ligne (I9 : la première lettre redessinait tout).
+   */
+  function dater(ligne, p, groupe) {
+    const meta = ligne.querySelector(".ligne-meta");
+    const [genre, resume] = genreEtResume(p);
+    const date = groupe ? quand(p.modifieLe, groupe) : dateCourte(p.modifieLe);
+    // Avec « À relire » devant, le mot « Partition » n'apprend rien : la place sert à la date.
+    const avecPastille = !meta.firstElementChild.classList.contains("ligne-quand");
+    meta.querySelector(".ligne-quand").textContent = [avecPastille ? "" : genre, resume, date].filter(Boolean).join(" · ");
+    const etats = [...meta.children].map((c) => (c.classList.contains("p-claude") ? "notée par Claude" : c.textContent));
+    ligne.querySelector(".ligne-ouvrir").setAttribute("aria-label", nomDeLigne(p.titre, etats.concat(ligne.querySelector(".ligne-aide") ? partiesAide(p) : [])));
   }
 
   function rendreFiltres() {
@@ -357,6 +472,34 @@ export function creerAccueil(deps) {
     }
   }
 
+  /**
+   * Les lignes déjà dessinées, par partition ({ cle, ligne }), et les titres
+   * des groupes de dates. Une ligne dont rien de ce qu'elle montre n'a changé
+   * est reprise telle quelle : toucher une étoile redessinait les 150 lignes
+   * d'un an de carnet, 0,7 s au téléphone, et chaque lettre de la recherche
+   * autant (audit du 04/10, I9). Ce qu'une ligne montre tient à sa fiche
+   * (dont la date change à chaque écriture, stockage.js), à ce que Claude
+   * propose et, pour un morceau, aux idées qu'il enchaîne (sa frise) ; son
+   * groupe de dates ne change que sa date (`dater`).
+   */
+  let lignes = new Map(), groupes = new Map();
+  function cleDeLigne(p, idees) {
+    const c = [p.modifieLe, deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0, p.titre, !!p.favori, p.statut || ""];
+    if (p.type === "morceau") for (const b of p.blocs || []) c.push(idees.get(b.idee)?.modifieLe || "");
+    return JSON.stringify(c);
+  }
+
+  /** Met les enfants de `conteneur` dans l'ordre de `voulus`, en ne bougeant que ce qui a changé. */
+  function ranger(conteneur, voulus) {
+    const gardes = new Set(voulus);
+    for (const n of [...conteneur.children]) if (!gardes.has(n)) n.remove();
+    let ici = conteneur.firstElementChild;
+    for (const n of voulus) {
+      if (n === ici) { ici = ici.nextElementSibling; continue; }
+      conteneur.insertBefore(n, ici);
+    }
+  }
+
   function rendreCarnet() {
     const vide = !!deps.stockage() && partitions().length === 0;
     // Pendant une recherche, les résultats prennent la place : la carte « Noter une idée » revient avec la liste complète.
@@ -365,21 +508,38 @@ export function creerAccueil(deps) {
     $("vide").hidden = !vide;
     $("filtres-carnet").hidden = !deps.stockage() || vide;
     rendreFiltres();
-    const liste = $("liste");
-    liste.textContent = "";
     const q = recherche();
-    const visibles = partitions().filter((p) => correspondFiltre(p) && surRecherche(p));
+    visibles = partitions().filter((p) => correspondFiltre(p) && surRecherche(p));
     $("aucun").hidden = !(partitions().length > 0 && visibles.length === 0);
+    const idees = deps.ideesParId();
+    const voulus = [], dessinees = new Map(), titres = new Map();
     let avant = null;
     for (const p of visibles) {
       // Sans recherche, le carnet se découpe par date (il est trié du plus récent au plus ancien).
       const per = q ? null : periode(p.modifieLe);
       if (per && per !== avant) {
-        liste.appendChild(el("p", "surtitre groupe-date", per));
+        const titre = groupes.get(per) || el("p", "surtitre groupe-date", per);
+        titres.set(per, titre);
+        voulus.push(titre);
         avant = per;
       }
-      liste.appendChild(creerLigne(p, per));
+      const cle = cleDeLigne(p, idees);
+      const deja = lignes.get(p.id);
+      let ligne;
+      if (deja && deja.cle === cle) {
+        ligne = deja.ligne;
+        // La même ligne sous un autre groupe (minuit est passé, une recherche commence) : sa date seule.
+        if (deja.groupe !== per) dater(ligne, p, per);
+      } else ligne = creerLigne(p, per);
+      dessinees.set(p.id, { cle, ligne, groupe: per });
+      voulus.push(ligne);
     }
+    // Les lignes qu'une recherche ou un filtre cache restent prêtes : elles reviennent sans se refaire.
+    const presentes = new Set(partitions().map((p) => p.id));
+    for (const [id, l] of lignes) if (!dessinees.has(id) && presentes.has(id)) dessinees.set(id, l);
+    lignes = dessinees;
+    groupes = titres;
+    ranger($("liste"), voulus);
   }
 
   // ---------------------------------------------------------------------------
@@ -394,7 +554,7 @@ export function creerAccueil(deps) {
       ? `${pluriel(pages.length, "page écrite", "pages écrites")} à la main${aRelire ? ` · ${aRelire} à relire` : ""}`
       : "Les pages écrites à la main sur ta tablette apparaîtront ici.";
     $("filtres-pages").hidden = pages.length === 0;
-    const visibles = pages.filter((p) => (etat.filtrePages === "tout" || p.statut === etat.filtrePages) && surRecherche(p));
+    visibles = pages.filter((p) => (etat.filtrePages === "tout" || p.statut === etat.filtrePages) && surRecherche(p));
     const liste = $("liste-partitions");
     liste.textContent = "";
     const aucune = $("aucune-partition");
@@ -405,12 +565,13 @@ export function creerAccueil(deps) {
       carte.dataset.id = p.id;
       const ouvrir = el("button", "carte-ouvrir");
       ouvrir.type = "button";
-      ouvrir.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
       ouvrir.addEventListener("click", () => ouvrirPartition(p));
       const corps = el("span", "carte-corps");
-      corps.append(el("span", "titre", p.titre), pastilleStatut(p), el("span", "meta", [nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ")));
+      const statut = pastilleStatut(p), meta = [nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ");
+      corps.append(el("span", "titre", p.titre), statut, el("span", "meta", meta));
       const propositions = deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0;
       if (propositions) corps.appendChild(marqueClaude(propositions));
+      ouvrir.setAttribute("aria-label", nomDeLigne(p.titre, [statut.textContent, meta, propositions ? (propositions > 1 ? `Claude propose ${propositions} choses` : "Claude propose") : ""]));
       ouvrir.append(apercuDe(p, "apercu-grand", 2), corps);
       carte.append(ouvrir, boutonPlus(p));
       liste.appendChild(carte);
@@ -426,7 +587,7 @@ export function creerAccueil(deps) {
     $("resume-morceaux").textContent = morceaux.length
       ? pluriel(morceaux.length, "morceau", "morceaux")
       : "Des idées mises bout à bout : une intro, un couplet, un refrain…";
-    const visibles = morceaux.filter(surRecherche);
+    visibles = morceaux.filter(surRecherche);
     const liste = $("liste-morceaux");
     liste.textContent = "";
     const aucun = $("aucun-morceau");
@@ -438,12 +599,13 @@ export function creerAccueil(deps) {
       carte.dataset.id = p.id;
       const ouvrir = el("button", "carte-ouvrir");
       ouvrir.type = "button";
-      ouvrir.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
       ouvrir.addEventListener("click", () => deps.ouvrir(p.id));
       const tete = el("span", "carte-tete");
-      tete.append(el("span", "titre", p.titre), el("span", "mono duree", dureeMorceau(p, idees)));
+      const duree = dureeMorceau(p, idees);
+      tete.append(el("span", "titre", p.titre), el("span", "mono duree", duree));
       const parties = partiesDuMorceau(p);
       ouvrir.append(tete, apercuDe(p, "frise"), el("span", "parties", parties || "Aucune partie pour l'instant"));
+      ouvrir.setAttribute("aria-label", nomDeLigne(p.titre, [duree && `durée ${duree}`, parties || "aucune partie pour l'instant"]));
       carte.append(ouvrir, boutonPlus(p));
       liste.appendChild(carte);
     }
@@ -663,18 +825,21 @@ export function creerAccueil(deps) {
   // Fredonner tout de suite : une idée neuve, le mémo qui enregistre déjà.
   $("nouveau-memo").addEventListener("click", () => deps.ouvrirIdee(null, { memo: true }));
   $("vide-idee").addEventListener("click", () => deps.ouvrirIdee(null, { mode: "clavier" }));
+  // Le carnet vide propose une idée toute faite, à écouter et à retoucher (I15).
+  $("exemple-idee").addEventListener("click", () => deps.ouvrirIdee(null, { seq: ideeExemple(), titre: TITRE_EXEMPLE, mode: "clavier" }));
   $("nouveau-morceau").addEventListener("click", () => deps.ouvrirMorceau(null));
 
   // Les filtres : un seul à la fois, plus une étiquette.
+  // Un filtre touché : ce qui reste se dit (I11), puisque la liste ne se relit plus.
   $("filtres-carnet").addEventListener("click", (e) => {
     const f = e.target.closest("[data-filtre]");
-    if (f) { etat.filtre = f.dataset.filtre; afficher(); return; }
+    if (f) { etat.filtre = f.dataset.filtre; afficher(); direLeCompte(); return; }
     const t = e.target.closest("[data-etiquette]");
-    if (t) { etat.etiquette = etat.etiquette === t.dataset.etiquette ? null : t.dataset.etiquette; afficher(); }
+    if (t) { etat.etiquette = etat.etiquette === t.dataset.etiquette ? null : t.dataset.etiquette; afficher(); direLeCompte(); }
   });
   $("filtres-pages").addEventListener("click", (e) => {
     const f = e.target.closest("[data-filtre-page]");
-    if (f) { etat.filtrePages = f.dataset.filtrePage; afficher(); }
+    if (f) { etat.filtrePages = f.dataset.filtrePage; afficher(); direLeCompte(); }
   });
 
   // L'état de la synchronisation mène aux réglages : à la section dont il parle.
@@ -683,9 +848,24 @@ export function creerAccueil(deps) {
     ($(ev.currentTarget.dataset.vers || "rg-synchro") || $("rg-synchro")).scrollIntoView({ block: "start" });
   });
 
+  /**
+   * Un raccourci de l'appli installée (« Nouvelle idée », « Chanter »,
+   * « Mémo », manifeste) : l'adresse dit quoi ouvrir (./?idee, ./?chanter,
+   * ./?memo), comme les trois tuiles (I4). Rend true s'il a ouvert quelque chose.
+   */
+  function raccourci(adresse) {
+    let q;
+    try { q = new URL(adresse, location.href).searchParams; } catch { return false; }
+    if (q.has("chanter")) deps.ouvrirIdee(null, { mode: "chanter" });
+    else if (q.has("memo")) deps.ouvrirIdee(null, { memo: true });
+    else if (q.has("idee")) deps.ouvrirIdee(null);
+    else return false;
+    return true;
+  }
+
   choisirOnglet(etat.onglet);
   return {
-    afficher, choisirOnglet, montrerSynchro,
+    afficher, choisirOnglet, montrerSynchro, raccourci,
     /** L'onglet ouvert : carnet, partitions, morceaux ou reglages. */
     get onglet() { return etat.onglet; },
     /**

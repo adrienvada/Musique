@@ -75,16 +75,22 @@ export function creerGrille(conteneur, rappels) {
   let dernierToucher = { id: null, t: 0 };
 
   conteneur.classList.add("grille-notes");
+  // La zone qui défile se prend au clavier (Tab), comme toute zone qui défile : sinon on ne la
+  // faisait défiler qu'au doigt ou à la souris (audit du 04/10, I11). Les flèches y restent celles
+  // de l'éditeur (choisir, monter) : Page haut et bas, Début et Fin la font défiler.
   conteneur.innerHTML = `
     <div class="g-coin"></div>
     <div class="g-regle"><div class="g-regle-dedans"></div></div>
     <div class="g-touches"><div class="g-touches-dedans"></div></div>
-    <div class="g-defil"><div class="g-plan"><svg class="g-fond" aria-hidden="true"></svg><div class="g-notes"></div><div class="g-curseur"></div><div class="g-lecture" hidden></div></div></div>
+    <div class="g-defil" tabindex="0" role="group" aria-label="La grille des notes : le temps de gauche à droite, la hauteur de bas en haut"><div class="g-plan"><div class="g-etire" style="position:absolute;inset:0;transform-origin:0 0"><svg class="g-fond" aria-hidden="true"></svg><div class="g-notes"></div><div class="g-curseur"></div><div class="g-lecture" hidden></div></div></div></div>
     <p class="g-invite" hidden>Joue sur le clavier, chante, ou touche la grille pour poser une note.</p>`;
   const regle = conteneur.querySelector(".g-regle-dedans");
   const touches = conteneur.querySelector(".g-touches-dedans");
   const defil = conteneur.querySelector(".g-defil");
   const plan = conteneur.querySelector(".g-plan");
+  // Ce qui s'étire pendant un pincement (voir plus bas) : tout le dessin du plan, dans le même
+  // cadre que lui. Le plan, lui, garde sa taille : c'est elle qui fait défiler.
+  const etire = conteneur.querySelector(".g-etire");
   const fond = conteneur.querySelector(".g-fond");
   const calque = conteneur.querySelector(".g-notes");
   const curseur = conteneur.querySelector(".g-curseur");
@@ -405,15 +411,43 @@ export function creerGrille(conteneur, rappels) {
   // (le temps) et en hauteur (les rangées), et suit leur milieu (on peut
   // déplacer la vue en pinçant). La grille garde son défilement à un doigt
   // (touch-action) ; seul le mouvement à deux doigts est pris ici.
+  //
+  // Pendant le geste, rien ne se redessine : le dessin s'étire (une
+  // transformation, que la carte graphique fait seule), la règle et les
+  // touches de gauche avec lui, et le vrai dessin vient quand les doigts se
+  // lèvent. Redessinée à chaque image (le fond, la règle, les touches, deux
+  // cents notes), la grille d'une longue idée sautait des images au
+  // téléphone : 117 ms par image (audit du 04/10, I9). C'est l'enveloppe du
+  // dessin qui s'étire, pas le plan : étiré, le plan changerait la zone qui
+  // défile, et le navigateur rognerait la position en dézoomant.
   let imagePince = null;
   const ecarts = (a, b) => ({ dx: Math.abs(a.clientX - b.clientX), dy: Math.abs(a.clientY - b.clientY) });
   defil.addEventListener("touchstart", (e) => {
     if (e.touches.length !== 2) return;
     const [a, b] = e.touches;
     const p = point((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
-    pince = { ...ecarts(a, b), px, rang, pas: p.pas, rangs: p.rangs };
+    pince = { ...ecarts(a, b), px, rang, pas: p.pas, rangs: p.rangs, gauche: defil.scrollLeft, haut: defil.scrollTop, voulu: null };
     abandonner();
+    // Pas de `will-change` : sur un dessin de cette taille (64 mesures, des dizaines de milliers de
+    // pixels), il coûtait 105 ms par image au téléphone ; sans lui, 2 images sautées sur 115 (mesuré).
   }, { passive: true });
+
+  /** Le dessin étiré comme il le sera : ce qui était sous le milieu des doigts y reste. */
+  function etirer(f, x, y) {
+    const nouveauPx = borne(pince.px * f.temps, PX_MIN, PX_MAX);
+    const nouveauRang = borne(pince.rang * f.hauteur, RANG_MIN, RANG_MAX);
+    const sx = nouveauPx / pince.px, sy = nouveauRang / pince.rang;
+    // Le point (pas, rangs) est en (pas · px, rangs · rang) dans le dessin d'avant : étiré, il revient sous (x, y).
+    const tx = x + pince.gauche - sx * pince.pas * pince.px;
+    const ty = y + pince.haut - sy * pince.rangs * pince.rang;
+    etire.style.transform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
+    regle.style.transformOrigin = "0 0";
+    regle.style.transform = `translateX(${tx - pince.gauche}px) scaleX(${sx})`;
+    touches.style.transformOrigin = "0 0";
+    touches.style.transform = `translateY(${ty - pince.haut}px) scaleY(${sy})`;
+    pince.voulu = { px: nouveauPx, rang: nouveauRang, x, y };
+  }
+
   defil.addEventListener("touchmove", (e) => {
     if (!pince || e.touches.length !== 2) return;
     if (e.cancelable) e.preventDefault();
@@ -424,10 +458,24 @@ export function creerGrille(conteneur, rappels) {
     imagePince = requestAnimationFrame(() => {
       if (!pince) return;
       const r = defil.getBoundingClientRect();
-      zoomA(pince.px * f.temps, pince.rang * f.hauteur, { pas: pince.pas, rangs: pince.rangs, x: cx - r.left, y: cy - r.top });
+      etirer(f, cx - r.left, cy - r.top);
     });
   }, { passive: false });
-  const finPince = (e) => { if (e.touches.length < 2) pince = null; };
+
+  /** Les doigts se lèvent : le vrai dessin, au zoom atteint, à la place du dessin étiré (dans la même image). */
+  function finirPince() {
+    const p = pince;
+    pince = null;
+    cancelAnimationFrame(imagePince);
+    etire.style.transform = "";
+    for (const x of [regle, touches]) x.style.transformOrigin = "";
+    if (p && p.voulu) zoomA(p.voulu.px, p.voulu.rang, { pas: p.pas, rangs: p.rangs, x: p.voulu.x, y: p.voulu.y });
+    // La règle et les touches suivent le défilement, même s'il n'a pas bougé (aucun « scroll » ne viendrait).
+    regle.style.transform = `translateX(${-defil.scrollLeft}px)`;
+    touches.style.transform = `translateY(${-defil.scrollTop}px)`;
+    if (rappels.defile) rappels.defile();
+  }
+  const finPince = (e) => { if (pince && e.touches.length < 2) finirPince(); };
   defil.addEventListener("touchend", finPince);
   defil.addEventListener("touchcancel", finPince);
 
@@ -473,7 +521,7 @@ export function creerGrille(conteneur, rappels) {
       rangee = document.createElement("div");
       rangee.className = "g-cible";
       rangee.hidden = true;
-      plan.insertBefore(rangee, calque);
+      etire.insertBefore(rangee, calque);
     }
 
     /** Allume la rangée de la note h (et sa touche) ; null l'éteint. */

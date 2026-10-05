@@ -29,7 +29,7 @@ import {
 import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 import { ecrirePref, lirePref } from "./preferences.js";
 import { explication } from "./erreurs.js";
-import { $, couleurDuJeton as couleur, dateRelative, el, pluriel, toast } from "./ui.js";
+import { $, couleurDuJeton as couleur, dateRelative, el, gravureSansTabulation, pluriel, toast } from "./ui.js";
 
 /**
  * Les durées au clavier : 1 double croche… 5 ronde (en croches). Par la place
@@ -274,6 +274,8 @@ export function creerEcranAtelier(deps) {
       clickListener: surClicNote, dragging: true, selectTypes: ["note"],
       selectionColor: couleur("--stylo", "#2B48B0"), dragColor: couleur("--stylo", "#2B48B0"),
     });
+    // ← → choisissent la note et elle se dit (#note-choisie) : pas deux cents arrêts de tabulation sans nom (I11).
+    gravureSansTabulation(zone, "La partition lue");
     surligner();
     // Un ABC que abcjs ne comprend pas (tapé à la main) : on le dit en français, sans jargon ; son détail va dans la console.
     const e = $("etat-abc");
