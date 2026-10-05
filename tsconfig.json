@@ -44,6 +44,7 @@
     "app/edition.js",
     "app/doutes.js",
     "app/claude-idee.js",
+    "app/claude-doute.js",
     "app/zip.js",
     "app/ui.js",
     "supabase/functions/portee-remarkable/abc.js",

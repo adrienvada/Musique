@@ -2048,6 +2048,26 @@ garde.
     l'importerait l'y entraînerait. La mesure en pas et le nom des notes
     sont recopiés ; un test les compare à `sequence.js` sur les 24
     tonalités et les 88 touches.
+- **Sur un doute (H1, `app/claude-doute.js`).** `messageDoute`,
+  `validerAvis`, `avisPossible`, `OPTIONS_AVIS`.
+  - Ce qui part : la mesure en ABC (avec son chiffrage et son armure), ce
+    que le lecteur a compris (les têtes de gauche à droite et leur hauteur,
+    ce qui est sûr, ce qu'il a mesuré en interlignes), puis la question de
+    `poser` et ses réponses, exactement celles qu'Adrien voit, numérotées
+    de 1, avec ce que chacune fait.
+  - Le message dit que la hauteur vient de la position et qu'il ne faut pas
+    la contester : les modèles situent et comptent mal dans une image, le
+    lecteur, lui, mesure. Une phrase explique l'image quand l'écran en joint
+    une (le passage recadré, têtes numérotées dans le même ordre).
+  - L'exemple du JSON montre des emplacements, pas des valeurs : un « 1 »
+    d'exemple tirerait l'avis vers la première réponse.
+  - Ce qui revient : un numéro de la liste ou null (« je ne sais pas »,
+    un avis qu'on montre comme tel), une confiance de 0 à 1, une phrase.
+    Rien d'autre n'est accepté. `rang` est compté de 0, comme le rang d'un
+    doute au connecteur.
+  - Claude conseille, il ne corrige pas : c'est le toucher d'Adrien qui
+    applique le geste de la réponse, comme toujours. Une question à moins
+    de deux réponses fermées ne part pas : il n'y a rien à trancher.
 
 ## La refonte visuelle : le plan (02/10)
 
