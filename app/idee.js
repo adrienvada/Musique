@@ -32,7 +32,9 @@
  *   idee-tempo.js     la feuille Tempo et mesure (et les pistes) ;
  *   idee-partition.js la partition gravée par abcjs (et sa mise en page) ;
  *   idee-enregistrement.js  les enregistrements dans la bibliothèque ;
- *   idee-ecoute.js    écouter, la boucle, le métronome.
+ *   idee-ecoute.js    écouter, la boucle, le métronome ;
+ *   idee-claude.js    « Demander à Claude » (la version claude.ai) : il lit
+ *                     l'état, et n'écrit que par remplacerIdee et changerTitre.
  *
  * L'idée vit en notes (sequence.js) ; la partition n'en est qu'une
  * traduction. Ce module ne parle à l'appli que par les dépendances qu'on
@@ -54,6 +56,7 @@ import { creerTempo, defauts } from "./idee-tempo.js";
 import { creerPartition } from "./idee-partition.js";
 import { creerEnregistrementIdee } from "./idee-enregistrement.js";
 import { creerEcouteIdee } from "./idee-ecoute.js";
+import { creerClaude } from "./idee-claude.js";
 
 const CLE_MODE = "portee:mode-idee";
 const MODES = ["clavier", "chanter", "accords"];
@@ -137,6 +140,8 @@ export function creerEditeurIdee(deps) {
     boiteSelection, grille,
     // La boîte à outils de la sélection (idee-selection.js) cache le pupitre : elle a son propre « Annuler ».
     annuler: () => revenir(e.annuler, e.refaire),
+    // … et « Demander à Claude » sur les notes choisies (idee-claude.js, créé plus bas).
+    demanderAClaude: (options) => claude.ouvrir(options),
   };
   // Ce que ces modules n'ont qu'à lire, ils le lisent en lecture seule : une
   // écriture y lève une erreur, au lieu de changer l'idée sans passer par le
@@ -198,6 +203,8 @@ export function creerEditeurIdee(deps) {
     $("idee-etat").textContent = "";
     for (const f of feuilles) fermerFeuille(f);
     accords.fermer();
+    // Une demande à Claude pour l'idée d'avant ne vaut pas pour celle-ci.
+    claude.fermer();
     direct.ouvrir();
     afficherAffichage();
     // Un mémo vocal prend le micro : on l'ouvre au clavier, pas au chant.
@@ -219,6 +226,7 @@ export function creerEditeurIdee(deps) {
     chant.fermer();
     selection.fermer();
     accords.fermer();
+    claude.fermer();
     for (const f of feuilles) fermerFeuille(f);
     carnet.fermer();
     for (const h of [...tenues.keys()]) relever(h);
@@ -451,6 +459,43 @@ export function creerEditeurIdee(deps) {
     planifierSauvegarde, sauverMaintenant: () => ecritures.vider(), choisirMode,
   });
 
+  // --- Demander à Claude (idee-claude.js), dans la version claude.ai ------------------
+  //
+  // Il lit l'état en lecture seule, et n'écrit que par ces deux méthodes : le
+  // lot architecture a fermé l'état exprès, on ne le rouvre pas pour lui.
+
+  /**
+   * Ce qu'Adrien garde de ce que Claude propose : toute la séquence, d'un
+   * coup, par `modifier` (un seul « Annuler » la défait). `choisir` : les
+   * notes à choisir ensuite (une variation des notes choisies) ; sinon la
+   * sélection garde ce qui existe encore. `curseurALaFin` : après une suite,
+   * on continue d'écrire au bout.
+   */
+  function remplacerIdee(seq, { choisir = null, curseurALaFin = false } = {}) {
+    modifier(() => {
+      e.seq = sq.cloner(seq);
+      if (!e.seq.pistes[e.piste]) e.piste = 0;
+      const restent = new Set(notesPiste().map((n) => n.id));
+      e.selection = new Set((choisir || [...e.selection]).filter((id) => restent.has(id)));
+      if (curseurALaFin) e.curseur = sq.finSequence(e.seq);
+    });
+  }
+
+  /** Le titre et les étiquettes proposés, retouchés par Adrien : comme s'il les avait écrits (hors d'« Annuler », comme eux). */
+  function changerTitre(titre, etiquettes) {
+    e.titre = titre || titreDuJour();
+    e.etiquettes = [...etiquettes];
+    $("idee-titre").value = e.titre;
+    if (deps.titreChange) deps.titreChange(e.titre);
+    carnet.afficher();
+    planifierSauvegarde(0);
+  }
+
+  const claude = creerClaude({
+    e: lecture, $, transport, toast, avantSon: ecoute.avantSon, apresSon: ecoute.apresSon,
+    etiquettes: deps.etiquettes, remplacerIdee, changerTitre,
+  });
+
   // --- Affichage ------------------------------------------------------------------
 
   /**
@@ -540,6 +585,9 @@ export function creerEditeurIdee(deps) {
     fermerFeuille($("idee-menu"));
     if (b.dataset.menu === "infos") { carnet.afficher(); ouvrirFeuille($("idee-infos")); return; }
     if (b.dataset.menu === "reglages") { ouvrirFeuille($("idee-reglages")); return; }
+    // Une feuille de l'éditeur, comme les deux d'avant : elle a besoin de l'idée telle qu'elle est
+    // à l'écran (sa sélection), et « Ce que tu veux » sert aussi sur une idée encore vide.
+    if (b.dataset.menu === "claude") { claude.ouvrir(); return; }
     await sauverMaintenant();
     const p = ecritures.fiche();
     if (!p) { toast("L'idée est vide : joue au moins une note."); return; }
