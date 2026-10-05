@@ -22,11 +22,17 @@
    huit fois 44 px ne tiennent plus sur une ligne : deux rangées de quatre. */
 @media (max-width: 389px) { .idee-durees { gap: 0; margin-inline: -4px; } }
 @media (max-width: 359px) { .idee-durees { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-inline: 0; } }
+/* Le texte agrandi : le nom sous l'icône ne tient plus (« do… », « cr… »), la durée se réduit à son
+   icône. Son nom reste son title (la bulle de l'appui long, le lecteur d'écran). La place se compte
+   en em, par durée : un peu moins de trois de large pour son nom (une ligne de huit, ou de quatre). */
+.idee-durees { container: durees / inline-size; }
+@media (min-width: 360px) { @container durees (max-width: 21.5em) { .duree span { display: none; } } }
+@media (max-width: 359px) { @container durees (max-width: 10.5em) { .duree span { display: none; } } }
 
 /* Le clavier à l'écran : un piano reste un piano, sans éblouir en sombre. */
 #idee-clavier { flex: 1 1 auto; min-height: 0; }
 /* Le bleu de la gamme (--gamme-blanche, --gamme-noire) vient du système. */
-.clavier { display: flex; flex-direction: column; gap: 4px; height: 100%; }
+.clavier { display: flex; flex-direction: column; gap: 4px; height: 100%; container: clavier / inline-size; }
 .idee-pupitre.avec-selection .clavier-barre { display: none; }
 
 /* La barre : Piano / Gamme, puis ‹ la carte des octaves › */
@@ -46,6 +52,13 @@
 @media (max-width: 359px) {
   .carte-do { display: none; }
   .clavier-barre .clavier-facon > button { padding: 0 7px; font-size: var(--t-13); }
+}
+/* Le texte agrandi : Piano | Gamme prend toute la barre, et la carte des octaves, écrasée, se
+   chevauchait. La barre passe sur deux rangées : Piano | Gamme, puis ‹ la carte ›. */
+@container clavier (max-width: 17em) {
+  .clavier-barre { flex-wrap: wrap; height: auto; row-gap: 4px; }
+  .clavier-barre .clavier-facon { flex: 1 1 100%; }
+  .clavier-barre .clavier-facon > button { flex: 1 1 0; }
 }
 
 /* Le piano */

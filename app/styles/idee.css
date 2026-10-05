@@ -80,6 +80,11 @@ body.plein .vue-idee { height: 100%; }
 .idee-transport .btn.rond[disabled] { opacity: 0.3; }
 .idee-modes { display: flex; }
 .idee-modes > button { min-height: 44px; }
+/* Le texte agrandi : les trois modes n'ont plus la place de leur nom (il débordait sur le voisin),
+   ils se réduisent à leur icône ; leur nom reste celui de l'onglet, et sa bulle à l'appui long. La
+   place se compte en em : elle suit la taille du texte (audit du 04/10, I10). */
+.idee-modes { container: modes / inline-size; }
+@container modes (max-width: 16em) { .idee-modes > button { font-size: 0; gap: 0; } }
 /* Moins de 390 px : le pupitre serre ses marges pour que les huit durées gardent
    44 px de large (8 × 44 = 352 px). En dessous de 360, elles passent sur deux
    rangées (idee-clavier.css), et le pupitre grandit d'autant. */
@@ -186,4 +191,21 @@ body.plein .vue-idee { height: 100%; }
 }
 @media (min-width: 821px) {
   .idee-titre { font-size: var(--t-20); }
+}
+
+/* Couché (moins de 500 px de haut : un téléphone en paysage, une fenêtre basse) :
+   la grille à gauche, le pupitre à droite, chacun sur toute la hauteur. L'un sous
+   l'autre, ils demandaient 507 px pour les 390 d'un téléphone couché, et il ne
+   restait que 80 px de grille (audit du 04/10, I10). Le pupitre garde la largeur
+   des huit durées de 44 px ; son mode prend la hauteur qui reste, et il défile
+   s'il en manque (un bandeau de suggestions au-dessus). L'encoche de l'écran,
+   qui passe sur le côté, est laissée libre par le <body> (systeme.css). */
+@media (orientation: landscape) and (max-height: 500px) {
+  .vue-idee {
+    display: grid; grid-template-columns: minmax(0, 1fr) clamp(392px, 46%, 480px); grid-template-rows: auto auto minmax(0, 1fr);
+    --pupitre-mode: max(176px, calc(100dvh - var(--barre) - env(safe-area-inset-top, 0px) - 140px));
+  }
+  .vue-idee > .idee-barre-haut, .vue-idee > .bandeau-claude { grid-column: 1 / -1; }
+  .vue-idee > .idee-surface { grid-column: 1; grid-row: 3; min-height: 0; }
+  .vue-idee > .idee-pupitre { grid-column: 2; grid-row: 3; min-height: 0; overflow-y: auto; overscroll-behavior: contain; border-top: 0; border-left: 1px solid var(--trait); }
 }

@@ -90,7 +90,7 @@ textarea.abc { font-family: var(--f-code); font-size: var(--t-14); line-height: 
 /* ---------------------------------------------------------------------- */
 /* Le panneau du bas (dock)                                               */
 /* ---------------------------------------------------------------------- */
-.dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-dock); display: flex; flex-direction: column; gap: 10px; max-height: 74dvh; overflow: auto; overscroll-behavior: contain; padding: 6px 16px calc(14px + env(safe-area-inset-bottom, 0px)); background: var(--feuille); border-top: 1px solid var(--trait-fort); border-radius: var(--r-22) var(--r-22) 0 0; box-shadow: var(--ombre); }
+.dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-dock); display: flex; flex-direction: column; gap: 10px; max-height: 74dvh; overflow: auto; overscroll-behavior: contain; padding: 6px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: var(--feuille); border-top: 1px solid var(--trait-fort); border-radius: var(--r-22) var(--r-22) 0 0; box-shadow: var(--ombre); }
 .dock > * { width: 100%; max-width: 1208px; margin-inline: auto; }
 .dock-tete { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .dock-gauche { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
@@ -219,6 +219,21 @@ textarea.abc { font-family: var(--f-code); font-size: var(--t-14); line-height: 
 /* Assez large pour mettre ta page et la partition lue côte à côte. */
 @media (min-width: 900px) {
   .zones[data-vue="deux"] { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 20px; }
+}
+
+/* Couché (moins de 500 px de haut), le panneau des doutes passe à droite, sur toute la
+   hauteur, comme le pupitre de l'éditeur : en bas, il prenait les trois quarts de
+   l'écran, et ta page ne se voyait plus (audit du 04/10, I10). Le doute s'y lit sur
+   une colonne. Le transport d'« Écouter », bas, reste en bas. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .vue-atelier { padding-bottom: 24px; padding-right: calc(min(400px, 46vw) - 16px + env(safe-area-inset-right, 0px)); }
+  /* La barre n'a que la place de la colonne de gauche : Corriger | Écouter repasse dessous, comme au téléphone. */
+  .vue-atelier .barre-ecran { margin-right: 0; flex-wrap: wrap; }
+  .vue-atelier .barre-ecran .onglets { order: 5; flex: 1 0 calc(100% - 4px); margin: 4px 0 0 4px; }
+  #dock-atelier { top: 0; left: auto; width: calc(min(400px, 46vw) + env(safe-area-inset-right, 0px)); max-height: none; padding-top: calc(6px + env(safe-area-inset-top, 0px)); padding-right: calc(16px + env(safe-area-inset-right, 0px)); border-radius: 0; border-top: 0; border-left: 1px solid var(--trait-fort); }
+  #dock-atelier .doute-carte { display: flex; align-items: stretch; }
+  #dock-atelier .doute-carte .loupe { height: 96px; }
+  #dock-atelier .doute-carte .reponse { max-width: none; }
 }
 
 @media print {

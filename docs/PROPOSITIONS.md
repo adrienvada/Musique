@@ -2907,6 +2907,38 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     barre du navigateur). L'essai de la boîte à outils qui laisse la place à
     Claude (`claude-idee.test.mjs`) attend maintenant qu'elle soit
     redescendue.
+- **À 320 px, plus rien ne défile de côté (I10).** L'onglet Morceaux
+  débordait de 22 px : son bouton passe sous le titre quand il n'a plus la
+  place (le titre a une base de 10 em, le bouton ne descend que s'il le
+  faut). L'éditeur débordait de 8 px : ses rangées serrent leurs marges sous
+  390 px (voir I1). Un bouton ou un segment trop long pour sa place passe à
+  la ligne au lieu de sortir de l'écran (le système ne les tient plus sur
+  une ligne de force).
+- **Couché, l'éditeur tient dans l'écran (I10).** Sous 500 px de haut (un
+  téléphone en paysage, une fenêtre basse), la grille est à gauche et le
+  pupitre à droite, chacun sur toute la hauteur : la grille a 334 px au lieu
+  de 80, et le pupitre garde la largeur des huit durées de 44 px. Dans
+  « Corriger », le panneau des doutes passe à droite de la même façon (en
+  bas, il prenait les trois quarts de l'écran et cachait ta page), et la
+  barre de l'écran repasse sur deux lignes, sans quoi le titre disparaissait.
+  Le transport d'« Écouter », bas, reste en bas. L'encoche, qui passe alors
+  sur le côté, est laissée libre (le `<body>` et les panneaux fixés).
+- **Le texte agrandi (200 %) ne se chevauche plus (I10).** Le corps et toutes
+  les tailles sont en rem (I2) : ils suivent la taille de texte du
+  navigateur, le corps compris (15 px fixes avant). Ce qui n'a plus la place
+  de son nom se réduit à son icône, nom accessible et bulle gardés : les trois
+  modes (ils débordaient l'un sur l'autre), les durées (« do… », « cr… »),
+  « Tous les accords ». La barre Piano | Gamme passe sur deux rangées (la
+  carte des octaves, écrasée, se chevauchait). Le nom des onglets du bas
+  grandit tant qu'il tient dans sa case. La place se compte en em (requêtes
+  de conteneur) : elle suit la taille du texte, pas seulement celle de
+  l'écran.
+  - Mesures (scripts de l'audit, téléphone 390 px, police à 32 px) :
+    l'éditeur faisait 481 px de large et 1 039 de haut pour 390 × 844 ; il
+    tient dans l'écran. À 200 % et à 320 px, aucun des écrans du tour ne
+    déborde.
+  - Essai : `tests/e2e/formats.test.mjs` (320 px, 200 %, couché) ; il échoue
+    sur l'appli d'avant (« l'éditeur demande 507 px pour 390 »).
 
 <!-- lot interface -->
 

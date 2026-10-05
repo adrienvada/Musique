@@ -127,7 +127,9 @@
 /* Les bases */
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { background: var(--papier); color: var(--encre); font-family: var(--f-texte); font-size: var(--t-15); line-height: 1.55; margin: 0; -webkit-font-smoothing: antialiased; }
+body { background: var(--papier); color: var(--encre); font-family: var(--f-texte); font-size: var(--t-15); line-height: 1.55; margin: 0; -webkit-font-smoothing: antialiased; padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px); }
+/* (Le téléphone couché : son encoche passe sur le côté, et la page, posée jusqu'au bord de
+   l'écran (viewport-fit=cover), passait dessous. Les panneaux fixés font de même.) */
 h1, h2, h3 { font-family: var(--f-titre); font-weight: 400; margin: 0; line-height: 1.2; text-wrap: balance; }
 p { margin: 0; }
 button, input, textarea, select { font: inherit; color: inherit; }
@@ -167,7 +169,10 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 
 /* Les boutons. Une action principale par écran (.btn-plein) ; le reste
    discret. Au doigt, rien ne fait moins de 44 px. */
-.btn { min-height: 40px; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); padding: 0 14px; border-radius: var(--r-10); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: var(--t-15); font-weight: 500; white-space: nowrap; text-decoration: none; }
+.btn { min-height: 40px; border: 1px solid var(--trait-fort); background: var(--feuille); color: var(--encre); padding: 0 14px; border-radius: var(--r-10); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: var(--t-15); font-weight: 500; line-height: 1.2; text-wrap: balance; text-decoration: none; }
+/* Un libellé trop long pour la place (320 px, le texte agrandi) passe à la ligne : en nowrap, il
+   sortait de l'écran (« Importer de ma reMarkable », « Revenir à la lecture de Portée », audit du
+   04/10, I10). Un bouton ne passe à la ligne que s'il manque de place : sinon, rien ne change. */
 .btn:hover { border-color: var(--encre); }
 .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 .btn[disabled]:hover { border-color: var(--trait-fort); }
@@ -194,7 +199,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 
 /* Commutateur à segments : un seul choix parmi deux à quatre. */
 .seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: calc(var(--r-10) + 3px); background: var(--creux); }
-.seg > button { flex: 1 1 0; min-height: 36px; border: 0; background: transparent; border-radius: var(--r-10); padding: 0 14px; color: var(--gris); font-weight: 500; font-size: var(--t-15); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.seg > button { flex: 1 1 0; min-height: 36px; border: 0; background: transparent; border-radius: var(--r-10); padding: 0 14px; color: var(--gris); font-weight: 500; font-size: var(--t-15); line-height: 1.2; text-wrap: balance; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .seg > button[aria-selected="true"], .seg > button[aria-pressed="true"] { background: var(--feuille); color: var(--encre); box-shadow: var(--ombre-douce); }
 
 /* Interrupteur : un <button role="switch" aria-checked> qui contient

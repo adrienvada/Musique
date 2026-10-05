@@ -115,9 +115,12 @@
 @media (max-width: 380px) {
   .accords-style .nom { font-size: var(--t-12); }
 }
-/* 320 px : « Tous les accords » se réduit à son icône (44 px, son nom reste celui
-   du bouton, et sa bulle à l'appui long) : avec ‹ et ›, il débordait. */
-@media (max-width: 359px) {
-  .accords-mesure { min-width: 5em; }
+/* Trop étroit (320 px, ou le texte agrandi) : « Tous les accords » se réduit à son icône (44 px,
+   son nom reste celui du bouton, et sa bulle à l'appui long) ; avec ‹ et ›, il débordait. La
+   place se compte en em : elle suit la taille du texte. Le nom de la mesure garde sa largeur
+   (les flèches ne sautent pas de « Mesure 9 » à « Mesure 10 »), sauf s'il n'y en a plus. */
+.accords-ou-pupitre { container: accords-rang / inline-size; }
+@container accords-rang (max-width: 22em) {
+  .accords-mesure { min-width: min(5em, calc(100% - 140px)); }
   .accords-lien { font-size: 0; gap: 0; min-width: 44px; padding: 0; }
 }
