@@ -95,7 +95,9 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 /* Replié : seule la tête reste, et la page se voit en entier. */
 .dock.replie .doutes, .dock.replie .dock-manuel { display: none; }
 .note-choisie { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pas { display: flex; align-items: center; }
+/* Beaucoup de doutes : les points passent à la ligne (au téléphone, dix-sept points passaient sous « Annuler »). */
+.dock-tete .dock-gauche { flex-wrap: wrap; row-gap: 0; }
+.pas { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; }
 .pas-doute { width: 24px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
 .pas-doute::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--trait-fort); }
 .pas-doute.fait::before { background: var(--ok); }
@@ -111,6 +113,10 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 .doute-question { font-size: 1.3rem; }
 .doute-detail { margin: 0; font-size: 0.9rem; color: var(--gris); }
 .doute-etat { display: flex; align-items: center; gap: 8px; }
+/* L'avis de Claude sur un doute : marqué comme le sien, à côté de la question, jamais à la place de ta réponse. */
+.avis-claude { margin-top: 6px; padding: 6px 10px; border-left: 3px solid var(--stylo); border-radius: 0 10px 10px 0; background: var(--stylo-doux); display: flex; flex-direction: column; gap: 2px; }
+.avis-claude .surtitre { color: var(--stylo); }
+.avis-claude p { font-size: 0.9rem; color: var(--encre); }
 .reponses { display: flex; flex-wrap: wrap; gap: 10px; }
 .reponse { flex: 1 1 130px; min-height: 56px; padding: 6px 12px; border: 1.5px solid var(--trait-fort); border-radius: 14px; background: var(--feuille); color: var(--encre); font-size: 1rem; font-weight: 600; line-height: 1.2; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
 .reponse:hover { border-color: var(--stylo); }

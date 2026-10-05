@@ -11,9 +11,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { servir } from "./serveur.mjs";
-import { ORDINATEUR, RACINE, contexte, dossierTemporaire, lancer, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { ORDINATEUR, RACINE, TELEPHONE, contexte, dossierTemporaire, importerLesExemples, lancer, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
 import { lireFichier } from "../../outils/lire.mjs";
 import { compacter } from "../../app/fiche.js";
+import { preparerDoutes } from "../../app/doutes.js";
 
 const MELODIE = path.join(RACINE, "tests/pages/2026-09-30-melodie-standard.pdf");
 
@@ -125,3 +126,164 @@ test("une page lue par l'ancien lecteur, jamais touchée, est relue à l'ouvertu
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });
+
+/** Le doute ouvert : son titre, ses réponses fermées, et l'état de chaque point d'avancement (réglé ou pas). */
+const etatDuPanneau = (page) => page.evaluate(() => ({
+  titre: document.getElementById("dock-titre").textContent,
+  question: document.querySelector("#doutes .doute-question")?.textContent || null,
+  reponses: [...document.querySelectorAll("#doutes .reponses .reponse[data-reponse]")].map((b) => b.textContent.trim()),
+  faits: [...document.querySelectorAll("#pas-doutes .pas-doute")].map((b) => b.classList.contains("fait")),
+}));
+
+test("L13 · L15 · « Croche » fausse une mesure : son doute vient aussitôt, sa proposition règle aussi l'autre doute, et « Annuler » défait tout", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await ouvrirPartition(page, "Essai melodie");
+    const abc0 = await page.inputValue("#abc");
+    const n = melodie.doutes.length;
+    let etat = await etatDuPanneau(page);
+    assert.deepEqual([etat.titre, etat.question, etat.reponses], [`Doute 1 sur ${n}`, "Croche ou noire ?", ["Noire", "Croche"]]);
+    // Le crochet en deux morceaux est un crochet : la mesure tombe à 11 croches, et le dit tout de suite.
+    await page.click('#doutes .reponse[data-reponse="croche"]');
+    await page.waitForFunction((k) => document.getElementById("dock-titre").textContent === `Doute ${k} sur ${k}`, n + 1);
+    etat = await etatDuPanneau(page);
+    assert.equal(etat.question, "Il manque une croche");
+    assert.deepEqual(etat.reponses, ["8ᵉ note en noire", "Ajouter un silence", "Allonger la dernière note"]);
+    assert.deepEqual(etat.faits.slice(0, 2), [true, false]);
+    // La proposition complète la mesure, et règle avec elle le doute de la ligature de « GG » (le 2ᵉ).
+    await page.click('#doutes .reponse[data-reponse="proposition-1"]');
+    await page.waitForFunction(() => /\|: c2 c edc g2 GG2 G \|/.test(document.getElementById("abc").value));
+    etat = await etatDuPanneau(page);
+    assert.deepEqual([etat.faits[0], etat.faits[1], etat.faits[n]], [true, true, true]);
+    // « Annuler » : la proposition, puis « Croche » ; le doute ajouté par le recompte part avec.
+    await page.click("#annuler");
+    await page.waitForFunction(() => !/GG2/.test(document.getElementById("abc").value));
+    assert.deepEqual((await etatDuPanneau(page)).faits.slice(0, 2), [true, false]);
+    await page.click("#annuler");
+    await page.waitForFunction((abc) => document.getElementById("abc").value === abc, abc0);
+    etat = await etatDuPanneau(page);
+    assert.deepEqual([etat.titre, etat.faits.length, etat.faits.some(Boolean)], [`Doute 1 sur ${n}`, n, false]);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("H3 · l'avis que Claude a rangé depuis une conversation se lit dans la carte du doute, comme du texte ; I13 · le mode avancé se plaint en français", async () => {
+  const doutes = preparerDoutes(melodie.doutes).map((d, k) => (k === 0 ? { ...d, avis: { auteur: "claude", texte: "<img src=x>Plutôt une croche : le crochet est net." } } : d));
+  const date = new Date().toISOString();
+  const fichier = sauvegarde("avis", [{
+    id: "pavis", pages: [compacter(melodie.pages[0].traits)],
+    donnees: { titre: "Avis", modele: "melodie-standard", versionModele: 1, versionLecteur: 2, abc: melodie.abc, abcLu: melodie.abc, doutes, statut: "a-relire", nbPages: 1, creeLe: date, modifieLe: date },
+  }]);
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await restaurer(page, fichier, 1);
+    await ouvrirPartition(page, "Avis");
+    const avis = await page.evaluate(() => {
+      const b = document.querySelector("#doutes .avis-claude");
+      return b && { etiquette: b.querySelector(".surtitre").textContent, texte: b.querySelector("p").textContent, images: b.querySelectorAll("img").length };
+    });
+    assert.deepEqual(avis, { etiquette: "Claude", texte: "<img src=x>Plutôt une croche : le crochet est net.", images: 0 });
+    // L'avis ne s'applique pas : le doute reste ouvert, la réponse reste à toucher.
+    assert.equal(await page.locator("#pas-doutes .pas-doute.fait").count(), 0);
+    // Le mode avancé : un caractère que la gravure ne connaît pas se dit en français.
+    await page.click("#plus-atelier");
+    await page.click("#voir-abc");
+    await page.fill("#abc", (await page.inputValue("#abc")).replace(/\|/, "| h"));
+    await page.waitForFunction(() => /Texte ABC à revoir/.test(document.getElementById("etat-abc").textContent));
+    const etat = await page.textContent("#etat-abc");
+    assert.match(etat, /^Texte ABC à revoir Ligne \d+, \d+ᵉ caractère \(« h »\) : un caractère que la gravure ne connaît pas, ignoré\.( Et \d+ autres endroits\.)?$/, etat);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+// ------------------------------------------------------------------------
+// Chaque genre de doute a sa carte
+// ------------------------------------------------------------------------
+
+/**
+ * Une page fabriquée où le lecteur aurait levé un doute de chaque genre (et
+ * de chaque variante) : la forme exacte que rend lirePartition, sur un ABC
+ * fait main. Ses traits sont ceux de la mélodie (la loupe a de quoi montrer).
+ */
+function tousLesDoutes() {
+  const abc = ["X:1", "T:Tous les doutes", "M:4/4", "L:1/8", "K:G", "C2 D2 E2 | G2 A2 B2 c2 | d2 e2 f2 g2 | abc d2 e2 f2 |", "a2 g2 f2 e2 | ded c2 B2 A2 |"].join("\n") + "\n";
+  const place = (motif, n = 0) => { let k = -1; for (let i = 0; i <= n; i++) k = abc.indexOf(motif, k + 1); assert.ok(k >= 0, motif); return { debut: k, fin: k + motif.length }; };
+  const l1 = abc.indexOf("C2 D2"), l2 = abc.indexOf("a2 g2");
+  const ligne1 = { debut: l1, fin: abc.indexOf("\n", l1) }, ligne2 = { debut: l2, fin: abc.indexOf("\n", l2) };
+  const L = melodie.cal.systemes[0].portees[0].lignes;
+  let x = 200;
+  const doute = (id, message, extra) => ({ id, page: 1, portee: 0, boite: { x0: (x += 60), y0: L[0] - 12, x1: x + 40, y1: L[4] + 12 }, message, ...extra });
+  const doutes = [
+    doute("d1", "Petit trait au bout de la hampe : un crochet ?", { type: "crochet", cible: place("D2"), alternative: { croches: 1 } }),
+    doute("d2", "Ligne 1, 1ʳᵉ mesure : 6 croches au lieu de 8.", { type: "mesure", cible: { debut: place("C2").debut, fin: place("E2").fin }, ligne: 1, rang: 1, trouve: 6, attendu: 8 }),
+    doute("d3", "Tête pleine sans hampe : lue comme une noire.", { type: "sans-hampe", cible: place("G2") }),
+    doute("d4", "Tête vide sans hampe, loin de la portée : lue comme une ronde.", { type: "sans-hampe", cible: place("A2") }),
+    doute("d5", "Un petit signe au-dessus de trois notes liées : un triolet ?", { type: "triolet", cible: place("ded"), traits: [40] }),
+    doute("d6", "La ligature s'arrête juste avant la queue de cette note : lue liée.", { type: "ligature", lue: "liee", cible: { debut: place("abc").debut + 1, fin: place("abc").debut + 2 }, alternative: { croches: 2 }, ecart: 0.47 }),
+    doute("d7", "Tête entre deux places : lue si, presque la.", { type: "hauteur", cible: place("B2"), alternative: { note: 0, pas: -1 }, ecart: 0.43 }),
+    doute("d8", "Un point un peu loin de sa note : pas compté.", { type: "point", lue: "sans", cible: place("c2"), alternative: { croches: 3 } }),
+    doute("d9", "Une tête de justesse : ce gribouillis est peut-être un trait.", { type: "tete", cible: place("e2"), alternative: { supprimer: true } }),
+    doute("d10", "Un trait droit sans tête : une note manque peut-être ici.", { type: "tete-manquante", cible: place("f2") }),
+    doute("d11", "Signe non reconnu.", { type: "signe", traits: [41], cibleSuivante: place("g2"), ciblePrecedente: place("f2") }),
+    doute("d12", "Armure de 1 bémol et 2 dièses : lue en D.", { type: "armure", variante: "melee", cle: "D", autres: ["F", "C"], bemols: 1, dieses: 2, cibleLigne: ligne1 }),
+    doute("d13", "Un dièse juste devant la première note.", { type: "armure", variante: "premiere-note", lue: "alteration", alteration: "^", cle: "G", autreCle: "D", cible: place("a2"), cibleLigne: ligne2 }),
+    doute("d14", "Pas d'armure en début de ligne : celle de la ligne précédente (G) est reprise.", { type: "armure", cle: "G", autres: ["C"], cibleLigne: ligne2 }),
+    doute("d15", "Chiffrage lu 4/4, contredit par les mesures.", { type: "chiffrage", variante: "contredit", m: "4/4", lu: true, appuis: 1, total: 4, autres: ["3/4", "6/8"], chiffres: [{ traits: [17], haut: true }, { traits: [18], haut: false }], cibleLigne: { debut: ligne1.debut, fin: ligne2.fin } }),
+    doute("d16", "Chiffrage écrit, sans mesure complète pour le vérifier.", { type: "chiffrage" }),
+    doute("d17", "Quelque chose d'étrange ici.", { type: "autre" }),
+  ];
+  return { abc, doutes: preparerDoutes(doutes) };
+}
+
+for (const [nom, appareil] of [["au téléphone", TELEPHONE], ["à l'ordinateur", ORDINATEUR]]) {
+  test(`chaque genre de doute a sa carte, sa loupe et ses réponses fermées, qui s'appliquent et s'annulent (${nom})`, async () => {
+    const { abc, doutes } = tousLesDoutes();
+    const date = new Date().toISOString();
+    const fichier = sauvegarde(`tous-${appareil.isMobile ? "telephone" : "ordinateur"}`, [{
+      id: "ptous", pages: [compacter(melodie.pages[0].traits)],
+      donnees: { titre: "Tous les doutes", modele: "melodie-standard", versionModele: 1, versionLecteur: 2, abc, abcLu: abc, doutes, statut: "a-relire", nbPages: 1, creeLe: date, modifieLe: date },
+    }]);
+    const ctx = await contexte(navigateur, { appareil });
+    try {
+      const page = await ouvrirPortee(ctx, serveur.url);
+      await restaurer(page, fichier, 1);
+      await ouvrirPartition(page, "Tous les doutes");
+      const vues = [];
+      for (let i = 0; i < doutes.length; i++) {
+        await page.click(`#pas-doutes .pas-doute:nth-child(${i + 1})`);
+        await page.waitForFunction((k) => document.getElementById("dock-titre").textContent.startsWith(`Doute ${k} sur`), i + 1);
+        const carte = await page.evaluate(() => {
+          const svg = document.querySelector("#doutes .loupe svg");
+          const reponses = [...document.querySelectorAll("#doutes .reponses .reponse[data-reponse]")];
+          return {
+            question: document.querySelector("#doutes .doute-question").textContent,
+            reponses: reponses.map((b) => b.textContent.trim()),
+            loupe: !!(svg && svg.getAttribute("viewBox") && svg.querySelector(".encre polyline")),
+            petites: reponses.filter((b) => b.getBoundingClientRect().height < 44).length,
+            deborde: document.documentElement.scrollWidth > window.innerWidth,
+          };
+        });
+        vues.push(carte.question);
+        assert.ok(carte.reponses.length >= 1, `${carte.question} : aucune réponse fermée`);
+        assert.ok(carte.loupe, `${carte.question} : pas de loupe`);
+        assert.equal(carte.petites, 0, `${carte.question} : une réponse fait moins de 44 px`);
+        assert.equal(carte.deborde, false, `${carte.question} : la page déborde`);
+        // La dernière réponse (souvent celle qui change la note) : le doute est réglé ; « Annuler » le rouvre et rend l'ABC.
+        await page.locator("#doutes .reponses .reponse[data-reponse]").last().click();
+        await page.waitForFunction((k) => document.querySelector(`#pas-doutes .pas-doute:nth-child(${k})`).classList.contains("fait"), i + 1);
+        await page.click("#annuler");
+        await page.waitForFunction((k) => !document.querySelector(`#pas-doutes .pas-doute:nth-child(${k})`).classList.contains("fait"), i + 1);
+        assert.equal(await page.inputValue("#abc"), abc, carte.question);
+      }
+      assert.deepEqual(vues, [
+        "Croche ou noire ?", "Il manque 2 croches", "Est-ce une noire ?", "Est-ce une ronde ?", "Un triolet ?", "Croche liée ou noire ?",
+        "Si ou la ?", "Pointée ou pas ?", "Une note ou un trait ?", "Il manque une note ?", "Un signe que je ne reconnais pas",
+        "Bémols ou dièses ?", "Armure ou altération ?", "Même armure qu'avant ?", "Le chiffrage est-il bon ?", "Le chiffrage est-il bon ?", "À vérifier",
+      ]);
+      await verifierPropre(page);
+    } finally { await ctx.close(); }
+  });
+}

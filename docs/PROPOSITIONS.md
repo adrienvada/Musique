@@ -2363,6 +2363,51 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   liste des modèles, qui doit suivre `modeles/`) et
   `tests/e2e/atelier.test.mjs` (un PDF au sujet faux, sans sujet, en v2 ;
   une page v1 relue, une page corrigée gardée).
+- **Les mesures se recomptent après chaque geste (L13, branché).** Après
+  une réponse ou une correction, `recalculerDoutes` relit les mesures de
+  l'ABC d'aujourd'hui : si la réponse en fausse une (« Croche » au doute du
+  crochet de ta mélodie : 11 croches), son doute vient aussitôt, avec ses
+  propositions (« 8ᵉ note en noire »). Une proposition règle aussi les
+  doutes qu'elle tranche (`regle`, L15), en un seul « Annuler ».
+  - Le doute répondu est réglé avant le recompte : sinon, il proposait la
+    lecture qu'on venait justement de choisir.
+  - Dans le mode avancé, le recompte se fait en quittant le champ, pas à
+    chaque touche : une note à moitié tapée aurait laissé un doute de trop
+    (le recompte en ajoute, il n'en retire jamais).
+- **« Annuler » remet tous les doutes comme ils étaient.** Il ne gardait que
+  leur état et leur note visée : un geste d'armure décalait aussi la ligne
+  qu'un autre doute vise, et les propositions d'une mesure, qu'« Annuler »
+  ne remettait pas en place (la réponse suivante pouvait réécrire la
+  mauvaise ligne) ; les doutes ajoutés par le recompte restaient. Il en
+  garde maintenant une copie entière. « Revenir à la lecture de Portée »
+  rouvre aussi les doutes de la lecture, chacun à sa place, sans ceux du
+  recompte.
+- **Chaque genre de doute a sa carte**, vérifié au navigateur, au téléphone
+  et à l'ordinateur : les dix-sept genres et variantes de `poser` (crochet,
+  mesure, noire et ronde sans hampe, triolet, ligature, hauteur, point,
+  tête, tête manquante, signe, les trois armures, les deux chiffrages,
+  autre), chacun avec sa loupe et ses réponses fermées (44 px au moins), qui
+  s'appliquent puis s'annulent. Trouvé en chemin : avec beaucoup de doutes,
+  les points d'avancement passaient sous « Annuler » au téléphone ; ils
+  vont maintenant à la ligne.
+- **La note touchée sonne à sa place** (`hauteursMidiA`) : avec l'armure et
+  les altérations écrites plus tôt dans la mesure (le second fa de
+  « ^F2 F2 » sonnait naturel).
+- **L'avis que Claude a rangé depuis une conversation** (H3, `avis.texte`)
+  se lit dans la carte de son doute, marqué « Claude », comme du texte ; il
+  ne s'applique jamais seul, le doute reste ouvert.
+- **Le texte d'une réponse est échappé (S1)** : une proposition de mesure ou
+  un chiffrage viennent de la fiche, qui peut arriver d'une sauvegarde ou
+  de la synchro.
+- **Le mode avancé se plaint en français (I13)** : « Ligne 6, 18ᵉ caractère
+  (« h ») : un caractère que la gravure ne connaît pas, ignoré. » au lieu de
+  « Music Line:7:18: Unknown character ignored… » (défaut signalé par le lot
+  architecture). La ligne est celle que tu vois (la gravure en ajoute une
+  en tête) ; le détail d'abcjs reste dans la console.
+- Essais : `tests/atelier.test.mjs` (l'avertissement) ;
+  `tests/e2e/atelier.test.mjs` (« Croche », le recompte, la proposition et
+  deux « Annuler » ; chaque genre de doute, au téléphone et à l'ordinateur ;
+  l'avis rangé et le mode avancé).
 
 ### Écrans des données (D6, D7, D9, H3)
 

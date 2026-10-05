@@ -19,9 +19,9 @@
 import { lirePartition, VERSION_LECTEUR } from "./lecteur/partition.js";
 import { dessinerPage } from "./manuscrit.js";
 import * as ed from "./edition.js";
-import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, preparerDoutes, suivre } from "./doutes.js";
+import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, preparerDoutes, recalculerDoutes, suivre } from "./doutes.js";
 import {
-  afficherVueAtelier, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes,
+  afficherVueAtelier, avertissementAbc, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes,
   pastilleBarre, placerOnglets, PREFIXE_GRAVURE, pourGravure, suivreDock, tempoInitial,
 } from "./atelier.js";
 import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
@@ -60,6 +60,7 @@ export function creerEcranAtelier(deps) {
     abcPrecedent: "",   // l'ABC avant la dernière saisie : de quoi suivre les doutes pendant qu'on tape
   };
   let objet = null;     // la partition lue, gravée par abcjs
+  let dernierAvertissement = null; // le dernier reproche d'abcjs, dit une fois dans la console
   let minuterieGravure = null, minuterieEclat = null;
   let renduDoutes = 0;
   let dockEnOutils = false, dockReplie = false;
@@ -198,11 +199,15 @@ export function creerEcranAtelier(deps) {
       selectionColor: couleur("--stylo", "#2B48B0"), dragColor: couleur("--stylo", "#2B48B0"),
     });
     surligner();
-    // Un ABC que abcjs ne comprend pas (tapé à la main) : on le dit, sans jargon.
+    // Un ABC que abcjs ne comprend pas (tapé à la main) : on le dit en français, sans jargon ; son détail va dans la console.
     const e = $("etat-abc");
     e.textContent = "";
     const avert = (objet && objet.warnings) || [];
-    if (avert.length) e.append(el("span", "pastille p-doute", "Texte ABC à revoir"), " " + avert[0].replace(/<[^>]+>/g, ""));
+    if (avert.length) {
+      if (avert[0] !== dernierAvertissement) console.warn("Ce qu'abcjs reproche au texte ABC :", avert);
+      e.append(el("span", "pastille p-doute", "Texte ABC à revoir"), " " + avertissementAbc(avert[0], avert.length - 1));
+    }
+    dernierAvertissement = avert[0] || null;
   }
 
   // ------------------------------------------------------------------------
@@ -292,10 +297,14 @@ export function creerEcranAtelier(deps) {
     bs.setAttribute("aria-label", silence ? "Changer en note" : "Changer en silence");
   }
 
-  /** Fait entendre la note choisie (ou l'accord), brièvement. */
+  /**
+   * Fait entendre la note choisie (ou l'accord), brièvement, telle qu'elle
+   * sonne à sa place : l'armure, et les altérations écrites plus tôt dans la
+   * mesure (le second fa de « ^F2 F2 » sonnait naturel, audit du 04/10, L19).
+   */
   function entendre(j) {
     if (!j || j.type === "silence") return;
-    const hauteurs = ed.hauteursMidi(j, ed.armureA(a.abc, j.debut));
+    const hauteurs = ed.hauteursMidiA(a.abc, j);
     piano.pret().then(() => hauteurs.forEach((h) => piano.note(h, 0.7, 80))).catch(() => {});
   }
 
@@ -305,17 +314,49 @@ export function creerEcranAtelier(deps) {
   }
 
   /**
+   * Les mesures de l'ABC d'aujourd'hui, recomptées (L13) : après la bonne
+   * réponse à un doute, une mesure pouvait tomber à 11 croches sans que rien
+   * ne le dise. Les doutes qu'il faut en plus s'ajoutent à la fin ; rend leurs
+   * rangs.
+   */
+  function recalculer() {
+    const x = p();
+    if (!x) return [];
+    const avant = doutesDe().length;
+    const apres = recalculerDoutes(doutesDe(), a.abc);
+    if (apres.length === avant) return [];
+    x.doutes = apres;
+    return apres.map((_, k) => k).slice(avant);
+  }
+
+  /** Une réponse qui complète une mesure (L15) règle aussi les doutes qu'elle tranche (`regle`, leurs numéros). */
+  function reglerAussi(i, regle, reponse) {
+    if (!regle || !regle.length) return;
+    doutesDe().forEach((d, k) => {
+      if (k !== i && !d.leve && d.id !== undefined && regle.includes(d.id)) { d.leve = true; d.reponse = reponse; }
+    });
+  }
+
+  /**
    * Applique un geste : mémorise l'état d'avant, regrave, enregistre. Les doutes
    * suivent le texte qui bouge ; une réponse à un doute (`doute`) le règle dans
-   * le même geste, pour qu'« Annuler » défasse les deux.
+   * le même geste, avec ceux qu'elle tranche aussi (`regle`), pour
+   * qu'« Annuler » défasse le tout. Puis les mesures se recomptent (L13) : si
+   * la réponse en fausse une, son doute vient aussitôt.
    */
-  function appliquer(res, { entendre: jouer = false, doute = null, reponse = "", selectionner = true } = {}) {
+  function appliquer(res, { entendre: jouer = false, doute = null, reponse = "", regle = [], selectionner = true } = {}) {
     if (!res) return;
     deps.arreterEcoute();
     memoriser(a.abc);
     poserAbc(res.abc);
     suivre(doutesDe(), res.modif);
-    if (doute !== null) marquer(doute, true, reponse);
+    // Réglés d'abord : le recompte ne propose que les autres lectures des doutes encore ouverts.
+    if (doute !== null) {
+      reglerAussi(doute, regle, reponse);
+      marquer(doute, true, reponse);
+    }
+    const nouveaux = recalculer();
+    if (doute !== null && nouveaux.length) a.douteActif = nouveaux[0];
     a.selection = !selectionner ? null : res.fin > res.debut ? res.debut : prochaineNote(res.abc, res.debut);
     graver();
     majOutils();
@@ -327,13 +368,16 @@ export function creerEcranAtelier(deps) {
     if (jouer) entendre(jetonChoisi());
   }
 
-  /** L'état d'avant chaque geste, pour « Annuler » : l'ABC, et où en étaient les doutes. */
+  /**
+   * L'état d'avant chaque geste, pour « Annuler » : l'ABC, et les doutes tels
+   * qu'ils étaient, entiers. Avant, seuls leur état et leur note visée étaient
+   * gardés : un geste d'armure décalait aussi la ligne que vise un autre doute
+   * (`viseLigne`), et les propositions d'une mesure, qu'« Annuler » ne
+   * remettait pas en place ; et les doutes ajoutés par le recompte des
+   * mesures (L13) restaient.
+   */
   function memoriser(abc = a.abc) {
-    a.historique.push({
-      abc,
-      doutes: doutesDe().map((d) => ({ leve: !!d.leve, reponse: d.reponse, vise: d.vise ? { ...d.vise } : null })),
-      actif: a.douteActif,
-    });
+    a.historique.push({ abc, doutes: structuredClone(doutesDe()), actif: a.douteActif });
     if (a.historique.length > 200) a.historique.shift();
     $("annuler").disabled = false;
   }
@@ -343,12 +387,7 @@ export function creerEcranAtelier(deps) {
     if (avant === undefined) return;
     deps.arreterEcoute();
     poserAbc(avant.abc);
-    doutesDe().forEach((d, k) => {
-      const s = avant.doutes[k];
-      if (!s) return;
-      d.leve = s.leve; d.vise = s.vise;
-      if (s.reponse) d.reponse = s.reponse; else delete d.reponse;
-    });
+    if (p()) p().doutes = avant.doutes;
     // Défaire un geste pendant « Je corrige moi-même » n'en sort pas, tant que le doute reste ouvert.
     if (a.manuel !== null && doutesDe()[a.manuel] && !doutesDe()[a.manuel].leve) a.douteActif = a.manuel;
     else { a.manuel = null; a.douteActif = avant.actif; }
@@ -492,8 +531,15 @@ export function creerEcranAtelier(deps) {
   function repondre(i, r) {
     const res = r.geste ? r.geste(a.abc) : null;
     if (r.geste && !res) { toast("Cette réponse ne s'applique plus : corrige la note toi-même."); afficherDoutes(); return; }
-    if (res) appliquer(res, { doute: i, reponse: r.texte, selectionner: false });
-    else { memoriser(); marquer(i, true, r.texte); a.selection = null; page.changer({ doutes: p().doutes }); redessinerManuscrit(); afficherDoutes(); majOutils(); }
+    if (res) appliquer(res, { doute: i, reponse: r.texte, regle: r.regle, selectionner: false });
+    else {
+      memoriser();
+      reglerAussi(i, r.regle, r.texte);
+      marquer(i, true, r.texte);
+      a.selection = null;
+      page.changer({ doutes: p().doutes });
+      redessinerManuscrit(); afficherDoutes(); majOutils();
+    }
     dockReplie = false;
     toast(r.fait, 2400);
   }
@@ -564,15 +610,27 @@ export function creerEcranAtelier(deps) {
     planifierSauvegarde();
   });
   $("abc").addEventListener("blur", () => { avantSaisie = null; });
+  // La saisie finie (le champ quitté) : les mesures se recomptent (L13). Pas à
+  // chaque touche : une note à moitié tapée ferait un doute de plus, qui resterait.
+  $("abc").addEventListener("change", () => {
+    if (!recalculer().length) return;
+    afficherDoutes();
+    planifierSauvegarde();
+  });
   $("relire").addEventListener("click", () => {
     const x = p();
     memoriser(a.abc);
     poserAbc(x.abcLu);
-    // L'ABC redevient celui de la lecture : chaque doute retrouve la place que la lecture lui avait donnée.
-    for (const d of doutesDe()) d.vise = d.cible ? { ...d.cible } : null;
+    // L'ABC redevient celui de la lecture : ses doutes aussi, ouverts, chacun à
+    // la place que la lecture lui avait donnée (ses autres visées comprises) ;
+    // ceux du recompte des mesures n'ont plus d'objet. « Annuler » défait le tout.
+    if (x.doutes) x.doutes = preparerDoutes(x.doutes.filter((d) => d.origine !== "recalcul").map(({ reponse: _r, ...d }) => d));
+    a.douteActif = -1;
+    a.manuel = null;
     a.selection = null;
     graver();
     majOutils();
+    redessinerManuscrit();
     afficherDoutes();
     page.changer({ abc: x.abcLu, ...(x.doutes ? { doutes: x.doutes } : {}) });
   });
