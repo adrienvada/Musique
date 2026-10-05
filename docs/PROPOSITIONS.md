@@ -2079,8 +2079,10 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
   - Secours : l'export PDF depuis la tablette, déposé dans l'appli.
 - **Lire** : le papier calibré est le moteur principal (décision du 30/09).
     Les trois pistes étudiées sont gardées ci-dessous pour mémoire.
-  - **Gemini** (vision), *écarté le 30/09*. Un test public de septembre 2026 sur du manuscrit
-    conclut que les hauteurs se lisent, pas le rythme.
+  - **Gemini** (vision), *écarté le 30/09*. Un test public de septembre 2026
+    conclut que les hauteurs se lisent, pas le rythme. La veille de l'audit
+    (04/10) l'a retrouvé : il portait sur de l'imprimé de 1852, pas sur du
+    manuscrit.
     ⚠ Les conditions de l'API réservent l'usage aux fins professionnelles et,
     pour les utilisateurs de l'EEE, aux offres payantes. En gratuit, Google
     réutilise les contenus envoyés.
@@ -2091,8 +2093,11 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
   - **Papier calibré** : l'outil génère un PDF de portées aux positions
     connues. On écrit dessus, et la hauteur de chaque note se calcule à partir
     des coordonnées des traits. Le rythme se lit aux formes (têtes, hampes,
-    ligatures). Silences et altérations passent par un classifieur entraîné
-    sur [HOMUS](https://grfia.dlsi.ua.es/homus/).
+    ligatures). Silences et altérations passaient par la forme des traits ;
+    un classifieur entraîné sur [HOMUS](https://grfia.dlsi.ua.es/homus/)
+    était prévu. *Remplacé le 04/10 (L16)* : HOMUS n'indique pas ses
+    conditions d'usage, et le reconnaisseur apprend plutôt sur ton écriture
+    (une page d'étalonnage, puis tes corrections).
   - Écartés : Audiveris, oemer, homr, LEGATO, tous entraînés sur de l'imprimé.
   - Retenu : le papier calibré lit hauteurs et rythmes à partir des traits.
     JAZZMUS peut servir de second avis sur les mélodies ; leurs désaccords
