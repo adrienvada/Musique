@@ -14,12 +14,13 @@
  *     jusqu'à ce que ça sonne juste ;
  *   - tout s'annule, tout s'enregistre tout seul (et se synchronise).
  *
- * Ce module tient le cœur : l'état (e), annuler et refaire, la sauvegarde,
- * le dessin (grille.js ou la partition d'abcjs), le transport (écouter,
- * boucle, métronome), la barre du haut, la feuille •••, et le choix du mode
- * du pupitre. Le reste vit dans des modules qui
- * reçoivent un contexte explicite (ctx, plus bas) et ne partagent rien
- * d'autre :
+ * Ce module tient le cœur : l'état (e), qu'il est seul à écrire avec les
+ * modules qui changent l'idée, annuler et refaire, le dessin (grille.js ou
+ * idee-partition.js), le transport (écouter, boucle, métronome), la barre
+ * du haut, la feuille •••, et le choix du mode du pupitre. Le reste vit
+ * dans des modules qui reçoivent un contexte explicite (ctx, plus bas) et
+ * ne partagent rien d'autre ; ceux qui n'ont qu'à lire l'état le reçoivent
+ * en lecture seule (le clavier, le chant, la partition) :
  *   idee-clavier.js   le mode Clavier (durées, clavier à l'écran, de
  *                     l'ordinateur, MIDI) ;
  *   idee-chant.js     le mode Chanter (micro, accordeur) ;
@@ -28,7 +29,9 @@
  *                     sélection, les transformations, le menu en cercle ;
  *   idee-direct.js    le jeu en direct (décompte, enregistrement, recalage) ;
  *   idee-carnet.js    la feuille Carnet (note, étiquettes, favori, mémo vocal) ;
- *   idee-tempo.js     la feuille Tempo et mesure (et les pistes).
+ *   idee-tempo.js     la feuille Tempo et mesure (et les pistes) ;
+ *   idee-partition.js la partition gravée par abcjs (et sa mise en page) ;
+ *   idee-enregistrement.js  les enregistrements dans la bibliothèque.
  *
  * L'idée vit en notes (sequence.js) ; la partition n'en est qu'une
  * traduction. Ce module ne parle à l'appli que par les dépendances qu'on
@@ -40,8 +43,7 @@ import { voixCompletes } from "./harmonie.js";
 import { creerGrille } from "./grille.js";
 import { ico } from "./icones.js";
 import { $, dateCourte } from "./ui.js";
-import { creerEnregistreur } from "./enregistreur.js";
-import { cause, explication } from "./erreurs.js";
+import { expliquer } from "./erreurs.js";
 import { egal } from "./fiche.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { creerModeClavier } from "./idee-clavier.js";
@@ -51,6 +53,8 @@ import { creerSelection } from "./idee-selection.js";
 import { creerDirect } from "./idee-direct.js";
 import { creerCarnet } from "./idee-carnet.js";
 import { creerTempo, defauts } from "./idee-tempo.js";
+import { creerPartition } from "./idee-partition.js";
+import { creerEnregistrementIdee } from "./idee-enregistrement.js";
 
 const CLE_MODE = "portee:mode-idee";
 const MODES = ["clavier", "chanter", "accords"];
@@ -81,7 +85,6 @@ export function creerEditeurIdee(deps) {
     version: 0,
     enregistrement: null, // le jeu en direct en cours (idee-direct.js seul l'écrit)
     accordEnCours: null,
-    jetons: [], elements: new Map(),
     ouverte: false,
     // L'idée ouverte, pour ses enregistrements : son identifiant, si elle est déjà dans
     // la bibliothèque (`cree`), et la dernière version qu'elle y sait (`derniere`), d'où
@@ -89,8 +92,11 @@ export function creerEditeurIdee(deps) {
     session: { id: null, creeLe: null, cree: false, derniere: null },
   };
   const tenues = new Map(); // hauteur → note qui sonne (piano)
-  // Les enregistrements de l'idée, un instant après le dernier geste (enregistreur.js).
-  const ecritures = creerEnregistreur({ ecrire: (s, x) => ecrire(s, x), secours: (s, x) => secours(s, x), delai: 700, fondre: (_avant, apres) => apres });
+  // Les enregistrements de l'idée, un instant après le dernier geste (idee-enregistrement.js).
+  const ecritures = creerEnregistrementIdee({
+    e, stockage: deps.stockage, nouvelId: deps.nouvelId, toast,
+    etat: (texte) => { $("idee-etat").textContent = texte; },
+  });
 
   // --- La grille ---------------------------------------------------------------
 
@@ -126,8 +132,13 @@ export function creerEditeurIdee(deps) {
     // La boîte à outils de la sélection (idee-selection.js) cache le pupitre : elle a son propre « Annuler ».
     annuler: () => revenir(e.annuler, e.refaire),
   };
-  const clavierMode = creerModeClavier(ctx);
-  const chant = creerChant(ctx);
+  // Ce que ces modules n'ont qu'à lire, ils le lisent en lecture seule : une
+  // écriture y lève une erreur, au lieu de changer l'idée sans passer par le
+  // cœur (ni « Annuler », ni enregistrement). Audit du 04/10, T3.
+  const refuser = (_e, cle) => { throw new TypeError(`L'état de l'éditeur ne s'écrit que dans idee.js (${String(cle)}).`); };
+  const lecture = new Proxy(e, { set: refuser, deleteProperty: refuser, defineProperty: refuser });
+  const clavierMode = creerModeClavier({ ...ctx, e: lecture });
+  const chant = creerChant({ ...ctx, e: lecture });
   const accords = creerAccords(ctx);
   const selection = creerSelection(ctx);
   const direct = creerDirect(ctx);
@@ -136,6 +147,11 @@ export function creerEditeurIdee(deps) {
   const tempo = creerTempo({
     e, $, toast, grille, modifier, rafraichir,
     notesPiste: () => notesPiste(), amener: (h) => clavierMode.amener(h),
+  });
+  // La partition gravée (idee-partition.js) : ce qu'un toucher veut dire, c'est le cœur qui le décide.
+  const partition = creerPartition({
+    e: lecture, $, transport, abcjs: deps.abcjs, rafraichir,
+    surClic: surClicPartition, apresGravure: () => selection.placer(),
   });
   const feuilles = ["idee-reglages", "idee-menu", "idee-infos"].map((id) => brancherFeuille($(id)));
   for (const f of feuilles) f.addEventListener("click", (ev) => { if (ev.target.closest("[data-fermer]")) fermerFeuille(f); });
@@ -169,7 +185,7 @@ export function creerEditeurIdee(deps) {
     e.annuler = []; e.refaire = [];
     e.version++;
     // Une autre idée : sa partition se grave tout de suite, avec sa propre mise en page.
-    gravee = null; miseEnPage = null;
+    partition.oublier();
     // Une idée née d'une partition (« continuer en idée ») s'enregistre tout de suite.
     if (!p && seq) planifierSauvegarde(0);
     $("idee-titre").value = e.titre;
@@ -282,77 +298,8 @@ export function creerEditeurIdee(deps) {
     planifierSauvegarde();
   }
 
-  /**
-   * Enregistre un instant après le dernier geste (enregistreur.js) : ce qui
-   * part est la copie de l'idée prise maintenant, pour l'idée de maintenant.
-   */
-  function planifierSauvegarde(delai = 700) {
-    $("idee-etat").textContent = "Enregistrement…";
-    ecritures.planifier(e.session, instantane(), delai);
-  }
-
-  /** Ce que l'idée montre, copié (les gestes qui suivent ne le changent plus). */
-  const instantane = () => ({ titre: e.titre, seq: sq.cloner(e.seq), note: e.note, etiquettes: [...e.etiquettes], favori: e.favori, memo: e.memo });
-
-  // Une idée sans note, sans accord, sans mot ni mémo ne s'enregistre pas.
-  const vide = (x) => x.seq.pistes.every((p) => !p.notes.length) && !(x.seq.accords || []).length && !x.memo && !x.note && !x.etiquettes.length;
-
-  /** La fiche d'une idée, telle que le stockage la garde (l'ABC est écrit d'après ses notes). */
-  function donneesDe(x) {
-    const { abc } = sq.ecrireAbc(x.seq, { voix: voixCompletes(x.seq), titre: x.titre });
-    return {
-      type: "idee", titre: x.titre, sequence: x.seq, abc, statut: "idee", nbPages: 0, modele: null, tempo: x.seq.tempo,
-      note: x.note, etiquettes: x.etiquettes, favori: x.favori, memo: x.memo,
-    };
-  }
-  const donnees = () => donneesDe(instantane());
-
-  /**
-   * Écrit une copie de l'idée (`x`) dans son idée (`s`, la session de
-   * l'ouverture où on l'a prise) : la créer à la première note, sinon la
-   * modifier en disant d'où l'on part (S8).
-   */
-  /** Une idée neuve reçoit son identifiant : à sa première écriture, ou pour la copie de secours. */
-  function nommer(s, maintenant) {
-    if (s.id) return;
-    s.id = deps.nouvelId();
-    s.creeLe = maintenant;
-    if (s === e.session) { e.id = s.id; e.creeLe = maintenant; }
-  }
-
-  /** La copie de secours, quand la page se ferme avant l'écriture (enregistreur.js). */
-  function secours(s, x) {
-    if (!s.cree && vide(x)) return null;
-    const maintenant = new Date().toISOString();
-    nommer(s, maintenant);
-    return { id: s.id, creer: !s.cree, donnees: { ...donneesDe(x), creeLe: s.creeLe, modifieLe: maintenant } };
-  }
-
-  async function ecrire(s, x) {
-    const stockage = deps.stockage();
-    if (!stockage) return;
-    const ici = () => s === e.session && e.ouverte;
-    const maintenant = new Date().toISOString();
-    try {
-      if (!s.cree) {
-        if (vide(x)) { if (ici()) $("idee-etat").textContent = ""; return; } // une idée vide ne s'enregistre pas
-        nommer(s, maintenant);
-        const fiche = { ...donneesDe(x), creeLe: s.creeLe, modifieLe: maintenant };
-        // Écrite, elle devient la dernière version connue (les écritures se suivent : `s` n'a pas bougé).
-        await stockage.creer(s.id, fiche, []).then(() => { s.cree = true; s.derniere = fiche; });
-      } else {
-        const fiche = { ...donneesDe(x), modifieLe: maintenant };
-        await stockage.modifier(s.id, fiche, { depuis: s.derniere }).then(() => { s.derniere = fiche; });
-      }
-      if (ici()) $("idee-etat").textContent = "Enregistrée";
-    } catch (err) {
-      console.error(err);
-      if (s !== e.session) return;
-      $("idee-etat").textContent = "Non enregistrée : " + cause(err);
-      // L'état ne se voit plus dans la barre : une erreur se dit tout haut.
-      if (e.ouverte) toast(`L'idée n'a pas pu être enregistrée : ${explication(err)}`, 8000);
-    }
-  }
+  /** Enregistre un instant après le dernier geste (idee-enregistrement.js). */
+  function planifierSauvegarde(delai) { ecritures.planifier(delai); }
 
   // --- Jouer une note, écrire -----------------------------------------------------
 
@@ -480,16 +427,15 @@ export function creerEditeurIdee(deps) {
   /** Le cadre des notes choisies à l'écran, et la zone visible (pour la pilule). */
   function boiteSelection() {
     if (!e.selection.size || !e.ouverte) return null;
-    if (e.affichage === "grille") return grille.boite([...e.selection]);
-    const zone = $("idee-partition");
-    const els = [...zone.querySelectorAll(".choisie")];
-    if (!els.length) return null;
-    const rs = els.map((x) => x.getBoundingClientRect()).filter((r) => r.width || r.height);
-    if (!rs.length) return null;
-    return {
-      boite: { left: Math.min(...rs.map((r) => r.left)), right: Math.max(...rs.map((r) => r.right)), top: Math.min(...rs.map((r) => r.top)), bottom: Math.max(...rs.map((r) => r.bottom)) },
-      zone: zone.getBoundingClientRect(),
-    };
+    return e.affichage === "grille" ? grille.boite([...e.selection]) : partition.boite();
+  }
+
+  /** On a touché la partition : une note se choisit, un silence y place le curseur. */
+  function surClicPartition(j) {
+    if (j.voix >= e.seq.pistes.length) { toast("L'accompagnement suit les accords : touche un accord, dans la grille, pour le changer."); return; }
+    if (j.voix !== e.piste) e.piste = j.voix;
+    if (j.silence) { e.selection.clear(); e.curseur = j.a; rafraichir(); return; }
+    choisir(j.ids);
   }
 
   // --- Écouter, boucle, métronome ---------------------------------------------
@@ -552,27 +498,19 @@ export function creerEditeurIdee(deps) {
         // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
         titre: e.titre, relancer: () => { if (e.ouverte && !transport.actif) jouer(); },
         surPosition: suivreLecture,
-        surFin: () => { majJouer(false); suivreLecture(null); apresSon(); apresLecture(); },
+        surFin: () => { majJouer(false); suivreLecture(null); apresSon(); partition.apresLecture(); },
       });
     } catch (err) {
       majJouer(false);
       apresSon();
-      toast(err.message || "Le piano n'a pas pu se charger.");
+      toast(expliquer(err, "Le piano n'a pas pu se charger."));
     }
   }
 
-  let dernierJeton = null;
   /** Suit la lecture : la tête dans la grille, ou la note jouée sur la partition. */
   function suivreLecture(pas) {
     if (e.affichage === "grille") grille.lecture(pas);
-    else {
-      const j = pas === null ? null : e.jetons.find((x) => x.voix === e.piste && x.couche === 0 && pas >= x.a && pas < x.a + x.l);
-      if (j !== dernierJeton) {
-        for (const el of (dernierJeton && e.elements.get(dernierJeton)) || []) el.classList.remove("joue");
-        for (const el of (j && e.elements.get(j)) || []) el.classList.add("joue");
-        dernierJeton = j;
-      }
-    }
+    else partition.suivre(pas);
     direct.suivre(pas);
   }
 
@@ -613,53 +551,8 @@ export function creerEditeurIdee(deps) {
         boucle: e.boucle ? etendueBoucle() : null, pas: Math.min(dureeCourante(), sq.pasParTemps(e.seq)),
         mesureChoisie: e.mesureChoisie, accordsVisibles: true,
       });
-    } else planifierGravure();
+    } else partition.planifier();
     selection.placer();
-  }
-
-  // La gravure se regroupe (audit du 04/10, M2, et audit de l'interface).
-  // abcjs regrave toute la partition : de 10 à 40 ms pour une idée courte au
-  // téléphone, plus de 400 ms pour 64 mesures, et jusqu'à trois gravures par
-  // changement (six sur grand écran) pour ajuster la mise en page.
-  //   - Pendant la lecture : une gravure toutes les 300 ms au plus, d'un seul
-  //     passage, avec la mise en page d'avant ; sinon le transport manquait
-  //     des notes. L'arrêt regrave en entier.
-  //   - En écrivant : 150 ms après la dernière note, d'un seul passage tant
-  //     que le nombre de mesures ne change pas ; dix notes tapées vite ne
-  //     coûtent qu'une gravure.
-  //   - Choisir une note ne regrave plus rien : seules ses couleurs changent.
-  const GRAVURE_EN_LECTURE = 300, GRAVURE_EN_ECRIVANT = 150;
-  let gravureFaite = 0, gravureAttendue = null, gravureRapide = false;
-  let gravee = null; // { id, version, largeur, hauteur, mesures } : ce que montre la gravure en place
-  const tailleGravure = () => ({ largeur: $("idee-gravure").clientWidth || 600, hauteur: Math.max(160, ($("idee-partition").clientHeight || 400) - 36) });
-  function planifierGravure() {
-    const zone = $("idee-gravure");
-    const { largeur, hauteur } = tailleGravure();
-    const fraiche = gravee && gravee.id === e.id && gravee.version === e.version && gravee.largeur === largeur && gravee.hauteur === hauteur && zone.querySelector("svg");
-    clearTimeout(gravureAttendue);
-    gravureAttendue = null;
-    if (fraiche) { marquerChoisies(); return; }
-    if (!gravee || gravee.id !== e.id) { graverPartition(); return; } // la première gravure de cette idée : tout de suite
-    const lecture = transport.actif;
-    const attente = lecture ? gravureFaite + GRAVURE_EN_LECTURE - performance.now() : GRAVURE_EN_ECRIVANT;
-    const graverMaintenant = () => {
-      gravureAttendue = null;
-      if (!e.ouverte || e.affichage !== "partition") return;
-      gravureFaite = performance.now();
-      const memes = gravee && gravee.mesures === sq.nbMesures(e.seq);
-      if (transport.actif) gravureRapide = true;
-      graverPartition({ unPassage: transport.actif || memes });
-      selection.placer();
-    };
-    if (attente <= 0) graverMaintenant();
-    else gravureAttendue = setTimeout(graverMaintenant, attente);
-  }
-  /** La lecture s'arrête : la partition gravée d'un seul passage retrouve sa mise en page ajustée. */
-  function apresLecture() {
-    if (!gravureRapide || !e.ouverte || e.affichage !== "partition") return;
-    gravureRapide = false;
-    gravee = null;
-    rafraichir();
   }
 
   function majCommandes() {
@@ -691,112 +584,6 @@ export function creerEditeurIdee(deps) {
     }
   }
 
-  // --- La partition (gravée par abcjs) ----------------------------------------------
-
-  let miseEnPage = null; // { largeur, parLigne, largeurPortee } : celle de la dernière gravure ajustée
-  /** @param o { unPassage : pendant la lecture, une seule gravure, avec la mise en page d'avant (M2) } */
-  function graverPartition({ unPassage = false } = {}) {
-    const lib = deps.abcjs();
-    const zone = $("idee-gravure");
-    if (!lib) { zone.textContent = "La partition n'a pas pu se charger (connexion ?). La grille marche sans."; return; }
-    const { largeur, hauteur } = tailleGravure();
-    const toutes = voixCompletes(e.seq);
-    const couleur = getComputedStyle(document.body).getPropertyValue("--stylo").trim() || "#2B48B0";
-    // La gravure remplit la place de la grille. Au téléphone, deux mesures
-    // par ligne, assez grandes pour se lire et se toucher au doigt ; une
-    // idée courte en prend moins par ligne, ou se grave plus grand, plutôt
-    // que de laisser un grand vide sous la portée. Bornes : la portée
-    // agrandie deux fois au plus au téléphone (1,6 fois sur un grand écran),
-    // et assez de place par mesure pour que les notes ne se touchent pas.
-    const mesures = sq.nbMesures(e.seq);
-    const agrandiMax = largeur < 700 ? 2 : 1.6;
-    const etroite = largeur / agrandiMax; // la portée la plus étroite permise
-    let parLigne = Math.max(1, Math.min(6, Math.floor(largeur / 170)));
-    let largeurPortee = parLigne * 200, h = 0, objet = null, jetons = [];
-    const reprise = unPassage && miseEnPage && miseEnPage.largeur === largeur;
-    if (reprise) ({ parLigne, largeurPortee } = miseEnPage);
-    const graver = () => {
-      const ecrit = sq.ecrireAbc(e.seq, { voix: toutes, mesuresParLigne: parLigne });
-      jetons = ecrit.jetons;
-      [objet] = lib.renderAbc(zone, ecrit.abc, {
-        responsive: "resize", add_classes: true, paddingtop: 6, paddingbottom: 6, paddingleft: 0, paddingright: 0,
-        staffwidth: largeurPortee,
-        clickListener: surClicPartition, selectTypes: ["note"], selectionColor: couleur,
-      });
-      h = zone.getBoundingClientRect().height;
-    };
-    graver();
-    // Pas plus de 420 px par mesure : sur un grand écran, une ligne de plus
-    // pour remplir la hauteur étalerait les notes d'un bord à l'autre.
-    const moinsParLigne = Math.max(1, Math.floor(largeur / 420));
-    while (!reprise && parLigne > moinsParLigne && h < hauteur * 0.6) {
-      // La hauteur qu'aurait la gravure avec une mesure de moins par ligne.
-      const autre = Math.max((parLigne - 1) * 200, etroite);
-      const ensuite = h * (largeurPortee / autre) * (Math.ceil(mesures / (parLigne - 1)) / Math.ceil(mesures / parLigne));
-      if (ensuite > hauteur) break;
-      parLigne--;
-      largeurPortee = autre;
-      graver();
-    }
-    if (!reprise && h < hauteur * 0.6) {
-      // Encore de la place : les mêmes lignes, gravées plus grand.
-      const voulue = Math.max(parLigne * 130, etroite, (largeurPortee * h) / (hauteur * 0.85));
-      if (voulue < largeurPortee - 10) { largeurPortee = Math.round(voulue); graver(); }
-    }
-    if (!reprise) miseEnPage = { largeur, parLigne, largeurPortee };
-    e.jetons = jetons;
-    e.elements = new Map();
-    dernierJeton = null;
-    for (const ligne of (objet && objet.lines) || []) {
-      for (const portee of ligne.staff || []) {
-        for (const voix of portee.voices || []) {
-          for (const el of voix) {
-            if (el.el_type !== "note" || !el.abselem) continue;
-            const j = sq.jetonA(jetons, el.startChar);
-            if (j) e.elements.set(j, (el.abselem.elemset || []).filter(Boolean));
-          }
-        }
-      }
-    }
-    gravee = { id: e.id, version: e.version, largeur, hauteur, mesures };
-    marquerChoisies();
-  }
-
-  /** Les notes choisies en couleur sur la gravure en place, et le curseur : sans rien regraver. */
-  function marquerChoisies() {
-    for (const [j, els] of e.elements) {
-      const oui = j.voix === e.piste && j.ids.some((id) => e.selection.has(id));
-      els.forEach((x) => x.classList.toggle("choisie", oui));
-    }
-    placerCaret();
-  }
-
-  function surClicPartition(abcelem) {
-    const j = sq.jetonA(e.jetons, abcelem.startChar);
-    if (!j) return;
-    if (j.voix >= e.seq.pistes.length) { toast("L'accompagnement suit les accords : touche un accord, dans la grille, pour le changer."); return; }
-    if (j.voix !== e.piste) e.piste = j.voix;
-    if (j.silence) { e.selection.clear(); e.curseur = j.a; rafraichir(); return; }
-    choisir(j.ids);
-  }
-
-  /** Le curseur sur la partition : un trait avant la note où le clavier écrira. */
-  function placerCaret() {
-    const caret = $("idee-caret");
-    const zone = $("idee-partition");
-    const candidats = e.jetons.filter((j) => j.voix === e.piste && j.couche === 0);
-    let j = candidats.find((x) => x.a >= e.curseur);
-    let apres = false;
-    if (!j) { j = candidats[candidats.length - 1]; apres = true; }
-    const els = j && e.elements.get(j);
-    caret.hidden = !els || !els.length || e.selection.size > 0;
-    if (caret.hidden) return;
-    const r = els[0].getBoundingClientRect(), z = zone.getBoundingClientRect();
-    caret.style.left = `${(apres ? r.right + 6 : r.left - 4) - z.left + zone.scrollLeft}px`;
-    caret.style.top = `${r.top - z.top + zone.scrollTop - 18}px`;
-    caret.style.height = `${Math.max(40, r.height + 36)}px`;
-  }
-
   // --- La barre du haut ---------------------------------------------------------
 
   $("idee-titre").addEventListener("change", () => {
@@ -825,13 +612,13 @@ export function creerEditeurIdee(deps) {
     if (b.dataset.menu === "infos") { carnet.afficher(); ouvrirFeuille($("idee-infos")); return; }
     if (b.dataset.menu === "reglages") { ouvrirFeuille($("idee-reglages")); return; }
     await sauverMaintenant();
-    const p = partitionCourante();
+    const p = ecritures.fiche();
     if (!p) { toast("L'idée est vide : joue au moins une note."); return; }
     deps.menu(b.dataset.menu, p);
   });
   $("idee-partager").addEventListener("click", async () => {
     await sauverMaintenant();
-    const p = partitionCourante();
+    const p = ecritures.fiche();
     if (!p) { toast("L'idée est vide : joue au moins une note."); return; }
     deps.partager(p);
   });
@@ -855,11 +642,6 @@ export function creerEditeurIdee(deps) {
   $("idee-partition").addEventListener("scroll", () => selection.placer());
 
   const sauverMaintenant = () => ecritures.vider();
-
-  function partitionCourante() {
-    if (!e.id) return null;
-    return { id: e.id, ...donnees(), creeLe: e.creeLe };
-  }
 
   // --- Le clavier de l'ordinateur -----------------------------------------------------
 
@@ -913,17 +695,13 @@ export function creerEditeurIdee(deps) {
     return false;
   }
 
+  // Ce dont l'appli se sert, rien de plus (T3) : l'état (`etat: e`), `modifier`,
+  // `choisir` et les touches du piano en sortaient, et rien ne s'en servait.
+  // Un module qui en aurait besoin le demandera ici, en lecture seule si
+  // lire lui suffit.
   return {
-    ouvrir, fermer, recharger, occupe, reculer, toucheBas, toucheHaut, enfoncer, relever,
-    transformer: (nom) => selection.transformer(nom),
-    choisirMode,
+    ouvrir, fermer, recharger, occupe, reculer, toucheBas, toucheHaut,
+    /** L'idée ouverte (null : une nouvelle, pas encore enregistrée). */
     get id() { return e.id; },
-    get seq() { return e.seq; },
-    get selection() { return e.selection; },
-    get ouverte() { return e.ouverte; },
-    get curseur() { return e.curseur; },
-    get mode() { return e.mode; },
-    modifier, rafraichir, choisir,
-    etat: e,
   };
 }

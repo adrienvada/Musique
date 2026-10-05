@@ -2153,6 +2153,33 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     les réglages par défaut des idées suivantes (`defauts`). Le tempo qu'on
     règle encore (`tempo.enAttente`) empêche toujours de recharger l'idée
     sous les doigts.
+  - `app/idee-partition.js` : la gravure, ses jetons et ses éléments (qui
+    étaient dans l'état, `e.jetons` et `e.elements`, alors qu'elle seule
+    les lit), la note jouée, le curseur. Ce que veut dire un toucher sur la
+    partition, c'est le cœur qui le décide (`surClic`). La mise en page
+    (combien de mesures par ligne, quelle largeur de portée) est une
+    fonction sans DOM, `mettreEnPage`, à qui l'on passe la gravure : les
+    essais lui en passent une fausse (`tests/idee-partition.test.mjs`).
+  - `app/idee-enregistrement.js` : les enregistrements de l'idée (vide,
+    elle ne laisse rien ; la première note la crée ; la suite la modifie
+    depuis la dernière version connue, S8 ; la copie de secours). Sans
+    DOM, essayé sous Node avec un faux stockage
+    (`tests/idee-enregistrement.test.mjs`) : c'est là que se perdaient les
+    idées (T4).
+  - **Le clavier, le chant et la partition lisent l'état en lecture
+    seule** (un `Proxy` qui lève une erreur à l'écriture) : ils ne
+    l'écrivaient pas, mais rien ne les en empêchait. Les modules qui
+    changent l'idée (accords, sélection, jeu en direct, carnet, tempo)
+    gardent l'état entier.
+  - **L'éditeur ne montre plus à l'appli que ce qu'elle emploie** :
+    `ouvrir`, `fermer`, `recharger`, `occupe`, `reculer`, `toucheBas`,
+    `toucheHaut` et `id`. L'état entier (`etat`), `modifier`, `choisir`,
+    les touches du piano et les accesseurs en sortaient, et rien ne s'en
+    servait. Le lot « Claude dans l'éditeur » (H2) ajoutera ce qu'il lui
+    faut, en lecture seule si lire lui suffit.
+  - `idee.js` : 1 094 lignes avant, ≈700 après. Le reste est le cœur :
+    l'état, annuler et refaire, jouer une note, écouter, la barre du haut,
+    le choix du mode, et le contexte des modules.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 
