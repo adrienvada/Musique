@@ -151,6 +151,23 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   appui long porte `data-sans-infobulle`. Tout texte inséré en HTML passe
   par `echapper` (`app/ui.js`) : une fiche peut venir de la synchro, d'une
   sauvegarde ou de Claude.
+  - Ce qui change se dit par `annoncer` (`ui.js`), en une phrase : jamais
+    `aria-live` sur une liste entière. Chaque écran a un `h1` caché
+    (`#titre-ecran-<vue>`) que `navigation.js` remplit, et `document.title`
+    suit l'écran. Toute gravure abcjs avec `clickListener` passe par
+    `gravureSansTabulation`.
+  - Carnet : une ligne est reprise telle quelle si `cleDeLigne` ne change
+    pas ; toute donnée affichée qui ne vient pas de la fiche (le compte des
+    suggestions) entre dans la clé. Pas de `will-change` sur la grille
+    (mesuré : 105 ms par image). Un `[role=button]` de moins de 44 px est
+    une exception actée et commentée (les touches du piano).
+- **Appli installable (`app/manifest.webmanifest`)** : son `id`
+  (`/Musique/`) se lit depuis l'origine, pas depuis le manifeste : ne
+  jamais le changer, ce serait une autre appli. Icônes et captures se
+  refont par `outils/images-appli.mjs` ; les raccourcis correspondent à
+  `accueil.raccourci`. Un fichier reçu (`launchQueue`, partage) passe par
+  `recevoir` (`import-pdf.js`), et le cache `portee-partage` ne s'efface
+  jamais à l'activation du service worker.
 - **Architecture (`app/`)** : `app.js` ne fait que composer. Chaque écran
   est une fabrique qui branche ses écouteurs une fois et s'inscrit dans le
   registre (`creerRegistre`, `navigation.js`) avec `fermer`, `reculer`
@@ -254,6 +271,12 @@ npm run lire -- tests/pages/2026-09-30-melodie-standard.pdf --svg   # image de c
 Ici, Chromium est déjà installé (`PLAYWRIGHT_BROWSERS_PATH`) ; ailleurs :
 `npx playwright install chromium`. La CI (job `verifier` de `site.yml`) lance
 tout cela, plus `deno check`, sur chaque PR.
+
+Pièges des essais dans Chromium : `:focus-visible` ne distingue pas le
+clavier de la souris dans un gestionnaire de touche ; sans écran, la carte
+du clavier (`getLayoutMap`) est vide ; l'installabilité se vérifie avec
+`launchPersistentContext` et `channel: "chromium"` ; la `launchQueue` se
+remplace par `Object.defineProperty`, pas par une affectation.
 
 L'image de contrôle colore chaque trait selon ce que le lecteur en a compris.
 C'est le premier réflexe quand une lecture est fausse.

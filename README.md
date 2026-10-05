@@ -11,16 +11,30 @@ l'appli » du navigateur) et marche hors ligne dès la première visite. Une ver
 sur claude.ai : https://claude.ai/artifact/NwXEpHs69MYngQMiiay1rj (bibliothèque
 enregistrée sur ton compte claude.ai).
 
+**Installée** (Chrome ou Edge), un appui long sur son icône propose
+Nouvelle idée, Chanter ou Mémo. Sur Android, depuis l'appli reMarkable ou
+Fichiers, « Partager → Portée » importe le PDF et l'ouvre dans Corriger. À
+l'ordinateur, ouvre un PDF, un `.mid` ou une sauvegarde `.json` avec Portée
+(double clic, ou « Ouvrir avec ») ; si Portée est déjà ouverte, le fichier
+arrive dans la même fenêtre. Au lecteur d'écran, chaque écran a un titre,
+une étoile ou une recherche se dit en une phrase, et les touches du piano
+disent leur note.
+
 ## Noter une idée
 
 1. **Carnet → « Noter une idée »** : *Jouer* (le clavier), *Chanter* ou
-   *Mémo* (un mémo vocal tout de suite, tu l'écriras plus tard). Sur
-   Android, aussi par un appui long sur l'icône de l'appli installée.
+   *Mémo* (un mémo vocal tout de suite, tu l'écriras plus tard). Aussi par
+   un appui long sur l'icône de l'appli installée. Carnet vide ? « Ouvrir
+   une idée d'exemple » (Au clair de la lune, avec ses accords) et
+   « Essayer avec les pages d'essai » sont en haut ; l'exemple ne s'écrit
+   qu'une fois ouvert, et se supprime par « ••• ».
 2. **Joue** sur le clavier du pupitre : chaque touche écrit une note de la
    durée choisie, à la suite. La gamme de l'idée est marquée sur les
    touches ; le mode *Gamme* n'en garde que les huit notes, en grosses
    touches, pour ne jamais faire de fausse note. Sur l'ordinateur, le
-   clavier joue comme dans Ableton (A W S E D F…, Z X pour l'octave), et un
+   clavier joue comme dans Ableton (sur ton AZERTY : Q Z S E D F…, W X pour
+   l'octave ; l'aide de la feuille Tempo montre les lettres de ton
+   clavier), et un
    clavier MIDI branché aussi (Chrome, Edge).
 3. Ou **chante** (mode *Chanter*) : ta voix se dessine sur la grille, et
    une note tenue un instant s'écrit. Ou **joue en direct** (le bouton
@@ -51,7 +65,7 @@ d'idées bout à bout (intro, couplet, refrain…), vus en frise ; un
 **carnet** (note, étiquettes, favoris, mémo vocal).
 
 Une phrase retravaillée dans Ableton revient dans Portée : dépose son `.mid`
-sur l'accueil (ou choisis-le avec « Importer un PDF »), il devient une idée
+sur l'accueil (ou choisis-le avec « Importer un PDF ou un MIDI »), il devient une idée
 (quatre pistes au plus, sans la batterie, notes recalées à la double
 croche). Un morceau s'exporte aussi en MusicXML (« ••• » du morceau), chaque
 bloc avec sa mesure et sa tonalité.
