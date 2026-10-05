@@ -333,4 +333,5 @@ dialog:not([open]), dialog:not([open])::backdrop { pointer-events: none; }
 @media print {
   .barre-haut, #toast, .infobulle { display: none !important; }
 }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+/* Moins de mouvement demandé (le réglage du téléphone) : ni animation ni transition, voiles compris. */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after, ::backdrop { transition: none !important; animation: none !important; } }

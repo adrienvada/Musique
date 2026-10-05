@@ -2774,14 +2774,19 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 - **Rien sous 44 px au doigt, et l'essai le garde (I1).** L'essai des 44 px
   (`tests/e2e/interface.test.mjs`) était « à faire » ; il passe, à 390 et à
-  320 px, et à 360 et 375 à la main (`PORTEE_E2E_LARGEURS=360,375`). Son
+  320 px et couché (844 × 390), et à 360 et 375 à la main
+  (`PORTEE_E2E_FORMATS=360,375`). Couché, les onglets de l'accueil passent
+  dans la barre du haut, où ils faisaient 40 px au doigt : 44 maintenant. Son
   tour passe maintenant aussi par ce que la troisième vague a ajouté : une
   note choisie dans « Corriger » (‹ ›, les outils, le zoom), la version
   claude.ai (« Demander à Claude » étape par étape, le second avis sur un
   doute, l'entrée de la boîte à outils) et la bibliothèque commune (le
   bandeau des suggestions dans l'idée et dans « Corriger », les versions
-  précédentes, la corbeille). Il relevait 104 cibles trop petites sur ce
-  tour (114 en comptant la carte des octaves) ; il n'en relève plus.
+  précédentes, la corbeille), et les panneaux des modèles et de la
+  reMarkable. Il relevait 104 cibles trop petites sur ce tour, en portrait
+  (114 en comptant la carte des octaves) ; il n'en relève plus. Les trois
+  parcours d'un format (le site, claude.ai, la bibliothèque commune) se font
+  en même temps : l'essai prend 26 s pour ses trois formats.
   - Trois causes dans `systeme.css` : un bouton rond rétrécissait dans une
     rangée trop étroite (il ne rétrécit plus, c'est le texte d'à côté qui
     cède) ; les segments faisaient 40 px au doigt (44 maintenant, et
@@ -2817,7 +2822,9 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     cible ; toucher le libellé ne fait que lui donner le focus) et les
     touches du piano (un vrai clavier : noires étroites, et au moins une
     octave, donc des blanches de 42 px à 320 px ; elles deviennent des
-    boutons pour le lecteur d'écran avec l'autre moitié du lot). Les rangées
+    boutons pour le lecteur d'écran avec l'autre moitié du lot), et un lien
+    au milieu d'une phrase (« glisse-le sur my.remarkable.com » : il a la
+    hauteur de sa ligne, WCAG 2.5.8 l'excepte). Les rangées
     de la grille (zoomables) et les notes gravées (le zoom de « Corriger »)
     restent actées, sans entrer dans le compte.
 - **Trois contrastes sous le seuil, corrigés dans les jetons (I1).** Le vert
@@ -2893,7 +2900,7 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     suite (l'éditeur se mesure et prend les couleurs du Studio juste après).
     Un fondu seulement : rien ne bouge sous le doigt.
   - **Moins de mouvement demandé** (le réglage du téléphone) : ni animation,
-    ni transition, ni défilement doux. Quatre défilements glissaient malgré
+    ni transition (le fondu des voiles compris), ni défilement doux. Quatre défilements glissaient malgré
     lui (« Corriger » vers la partition lue et le mode avancé, les panneaux
     de la tablette et des modèles) : ils passent par `defilement()`
     (`app/mouvement.js`, sans DOM, vérifié par les types), comme celui du
@@ -2927,6 +2934,9 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   « Corriger », le panneau des doutes passe à droite de la même façon (en
   bas, il prenait les trois quarts de l'écran et cachait ta page), et la
   barre de l'écran repasse sur deux lignes, sans quoi le titre disparaissait.
+  Les outils de la note y comptent sur la largeur du panneau, pas sur celle
+  de l'écran : sur un petit téléphone couché (667 × 375), il n'a que 306 px,
+  et ils passent à cinq par rangée pour garder 44 px.
   Le transport d'« Écouter », bas, reste en bas. L'encoche, qui passe alors
   sur le côté, est laissée libre (le `<body>` et les panneaux fixés).
 - **Le texte agrandi (200 %) ne se chevauche plus (I10).** Le corps et toutes

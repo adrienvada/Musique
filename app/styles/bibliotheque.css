@@ -21,6 +21,8 @@
 .onglets-accueil [role="tab"]:hover { background: var(--creux); }
 .onglets-accueil [role="tab"][aria-selected="true"] { background: var(--stylo-doux); color: var(--stylo); }
 .onglets-accueil .bulle { display: flex; align-items: center; justify-content: center; }
+/* Dans la barre du haut (821 px et plus) au doigt : une tablette, un téléphone couché. 44 px, comme le reste. */
+@media (min-width: 821px) and (pointer: coarse) { .onglets-accueil [role="tab"] { min-height: 44px; } }
 
 @media (max-width: 820px) {
   /* Fixée en bas, sous le pouce ; l'onglet actif est une bulle de la couleur du stylo. */

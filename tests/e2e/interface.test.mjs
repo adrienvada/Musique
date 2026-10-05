@@ -5,7 +5,7 @@
  * deux règles de CLAUDE.md : tout bouton à icône a un nom (aria-label ou
  * title : le lecteur d'écran le dit, l'appui long l'affiche), et rien ne
  * fait moins de 44 px au doigt, à 390 px de large (le téléphone d'Adrien)
- * comme à 320 (le plus petit qu'on rencontre encore).
+ * comme à 320 (le plus petit qu'on rencontre encore), et couché (844 × 390).
  *
  * Le tour passe partout où l'on touche : l'accueil et ses quatre onglets,
  * une idée (ses modes, une note choisie, ses feuilles), un morceau, une page
@@ -96,6 +96,12 @@ const EXCEPTIONS = [
     pourquoi: "libellé d'un champ de 44 px : le champ est la cible",
     correspond: (c) => c.tag === "label" && c.controle && c.controle.largeur >= 44 && c.controle.hauteur >= 44,
   },
+  {
+    // Un lien au milieu d'une phrase (« glisse-le sur my.remarkable.com ») : il a la hauteur de la
+    // ligne de texte ; le grossir écarterait les lignes du paragraphe (WCAG 2.5.8, « dans le texte »).
+    pourquoi: "lien dans une phrase",
+    correspond: (c) => c.tag === "a" && c.dansLeTexte,
+  },
 ];
 
 /** Les cibles visibles de moins de `min` px de large ou de haut, hors exceptions actées. */
@@ -116,6 +122,8 @@ const petitesCibles = async (page, min = 44) => {
           texte: `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}${el.classList.length ? "." + [...el.classList].slice(0, 2).join(".") : ""} « ${nom} » ${Math.round(r.width)}×${Math.round(r.height)}`,
           tag: el.tagName.toLowerCase(), classes: [...el.classList], parent: { largeur: p.width, hauteur: p.height },
           controle: c ? { largeur: c.width, hauteur: c.height } : null,
+          // Un lien posé dans un paragraphe, entre des mots (pas un bouton déguisé en lien).
+          dansLeTexte: el.tagName === "A" && el.parentElement.tagName === "P" && el.parentElement.textContent.trim().length > el.textContent.trim().length + 20,
         });
       }
     }
@@ -181,6 +189,14 @@ async function parcourir(page, releve, { cliquer = (sel) => page.click(sel) } = 
   await feuille("#liste .ligne-carnet .plus", "feuille-actions", "Feuille · ••• d'une ligne du carnet");
   await cliquer("#tab-partitions");
   await releve("Partitions");
+  await cliquer("#ouvrir-modeles");
+  await page.waitForSelector("#panneau-modeles:not([hidden]) .modele .btn");
+  await releve("Partitions · les modèles");
+  await cliquer("#fermer-modeles");
+  await cliquer("#ouvrir-remarkable");
+  await page.waitForSelector("#panneau-remarkable:not([hidden])");
+  await releve("Partitions · Ma reMarkable");
+  await cliquer("#fermer-rm");
   await cliquer("#tab-morceaux");
   await releve("Morceaux");
   await cliquer("#nouveau-morceau");
@@ -376,24 +392,25 @@ async function parcourirCommun(page, releve, commun, { cliquer = (sel) => page.c
 }
 
 /**
- * Le tour complet, à une largeur donnée : le site, la version claude.ai, la
- * bibliothèque commune. `releve(page, nom)` est appelé à chaque étape ;
+ * Le tour complet, à un format donné (« 390 », ou « 844x390 ») : le site, la
+ * version claude.ai, la bibliothèque commune, chacun dans son navigateur
+ * vierge, les trois en même temps (ils ne partagent rien, et l'essai va trois
+ * fois plus vite). `releve(page, nom)` est appelé à chaque étape ;
  * `parLeCode` : les clics passent par le code (à 320 px, une cible peut
  * déborder de l'écran : c'est ce qu'on mesure).
  */
-async function tour(releve, { largeur = 390, parLeCode = false } = {}) {
-  const appareil = { ...TELEPHONE, viewport: { width: largeur, height: 844 } };
-  // Le site.
-  {
+async function tour(releve, { format = "390", parLeCode = false } = {}) {
+  const [largeur, hauteur = 844] = format.split("x").map(Number);
+  const appareil = { ...TELEPHONE, viewport: { width: largeur, height: hauteur } };
+  const site = async () => {
     const ctx = await contexte(navigateur, { appareil });
     try {
       const page = await ouvrirPortee(ctx, serveur.url);
       await parcourir(page, (nom) => releve(page, nom), { cliquer: cliqueur(page, parLeCode) });
       await verifierPropre(page);
     } finally { await ctx.close(); }
-  }
-  // La version claude.ai.
-  {
+  };
+  const claude = async () => {
     const ctx = await contexte(navigateur, { appareil });
     try {
       await installerFauxClaude(ctx, { appelerOutil: async () => ({ erreur: { code: "server_not_found", message: "aucun connecteur dans cet essai" } }) });
@@ -404,44 +421,47 @@ async function tour(releve, { largeur = 390, parLeCode = false } = {}) {
       await parcourirClaude(page, (nom) => releve(page, nom), { cliquer: cliqueur(page, parLeCode) });
       await verifierPropre(page);
     } finally { await ctx.close(); }
-  }
-  // La bibliothèque commune.
-  const commun = await bibliothequeCommune();
-  try {
-    const ctx = await commun.appareil(appareil);
-    const page = await ouvrirPortee(ctx, serveur.url);
-    await parcourirCommun(page, (nom) => releve(page, nom), commun, { cliquer: cliqueur(page, parLeCode) });
-    await verifierPropre(page);
-  } finally { await commun.fermer(); }
+  };
+  const bibliotheque = async () => {
+    const commun = await bibliothequeCommune();
+    try {
+      const ctx = await commun.appareil(appareil);
+      const page = await ouvrirPortee(ctx, serveur.url);
+      await parcourirCommun(page, (nom) => releve(page, nom), commun, { cliquer: cliqueur(page, parLeCode) });
+      await verifierPropre(page);
+    } finally { await commun.fermer(); }
+  };
+  await Promise.all([site(), claude(), bibliotheque()]);
 }
 
-// Les largeurs essayées : le téléphone d'Adrien, puis le plus petit. D'autres à la main :
-// PORTEE_E2E_LARGEURS=360,375 npm run e2e (chacune refait le tour complet).
-const LARGEURS = process.env.PORTEE_E2E_LARGEURS ? process.env.PORTEE_E2E_LARGEURS.split(",").map(Number) : [390, 320];
+// Les formats essayés, au doigt : le téléphone d'Adrien, le plus petit, puis le téléphone couché
+// (la barre d'onglets y passe en haut, l'éditeur et « Corriger » sur deux colonnes). D'autres à la
+// main : PORTEE_E2E_FORMATS=360,375,667x375 npm run e2e (chacun refait le tour complet).
+const FORMATS = (process.env.PORTEE_E2E_FORMATS || "390,320,844x390").split(",");
 
 // Une cible trop petite, et les écrans où on la trouve (elle revient souvent d'un écran à l'autre).
 const petites = new Map();
-const noter = async (page, ecran, largeur) => {
-  for (const c of await petitesCibles(page)) petites.set(`${largeur} px : ${c}`, [...(petites.get(`${largeur} px : ${c}`) || []), ecran]);
+const noter = async (page, ecran, format) => {
+  for (const c of await petitesCibles(page)) petites.set(`${format} : ${c}`, [...(petites.get(`${format} : ${c}`) || []), ecran]);
 };
-const faites = new Set(); // les largeurs déjà parcourues (le premier essai fait la première)
+const faits = new Set(); // les formats déjà parcourus (le premier essai fait le premier)
 
 test("tout bouton à icône a un nom (aria-label ou title)", async () => {
   // Le même tour sert aussi à l'essai suivant (les cibles à cette largeur) : un tour de moins.
   const sansNom = [];
   await tour(async (page, ecran) => {
     for (const b of await iconesSansNom(page)) sansNom.push(`${ecran} : ${b}`);
-    await noter(page, ecran, LARGEURS[0]);
-  }, { largeur: LARGEURS[0], parLeCode: true });
-  faites.add(LARGEURS[0]);
+    await noter(page, ecran, FORMATS[0]);
+  }, { format: FORMATS[0], parLeCode: true });
+  faits.add(FORMATS[0]);
   assert.deepEqual(sansNom, []);
 });
 
-test("rien ne fait moins de 44 px au doigt, à 390 et à 320 px de large", async () => {
-  for (const largeur of LARGEURS) {
-    if (faites.has(largeur)) continue;
-    await tour((page, ecran) => noter(page, ecran, largeur), { largeur, parLeCode: true });
-    faites.add(largeur);
+test("rien ne fait moins de 44 px au doigt, à 390 et à 320 px de large, et couché", async () => {
+  for (const format of FORMATS) {
+    if (faits.has(format)) continue;
+    await tour((page, ecran) => noter(page, ecran, format), { format, parLeCode: true });
+    faits.add(format);
   }
   const liste = [...petites].map(([c, ecrans]) => `${c} (${ecrans[0]}${ecrans.length > 1 ? ` et ${ecrans.length - 1} autres écrans` : ""})`);
   assert.deepEqual(liste, [], `${liste.length} cibles de moins de 44 px`);

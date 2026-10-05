@@ -166,13 +166,16 @@ textarea.abc { font-family: var(--f-code); font-size: var(--t-14); line-height: 
 .outils-note { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .outils-note .separe { display: none; }
 .outil { min-width: 0; min-height: 48px; padding: 0; }
-/* Moins de 390 px : le panneau serre ses marges et ses écarts, sept outils de
-   44 px tiennent encore sur une rangée jusqu'à 360 px ; plus étroit, cinq. */
+/* Le panneau serre ses marges et ses écarts sous 390 px. Sept outils de 44 px tiennent tant que
+   le panneau a 332 px de large (sept fois 44, et six écarts) ; plus étroit (320 px, ou le panneau
+   de droite d'un petit téléphone couché), ils passent à cinq par rangée. C'est la largeur du
+   panneau qui compte, pas celle de l'écran. */
 @media (max-width: 389px) {
   .dock { padding-left: 12px; padding-right: 12px; }
   .outils-note { gap: 4px; }
 }
-@media (max-width: 359px) { .outils-note { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+#dock-atelier { container: dock / inline-size; }
+@container dock (max-width: 331px) { .outils-note { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; } }
 
 /* La feuille « ••• » */
 .liste-actions { display: flex; flex-direction: column; gap: 8px; }
@@ -202,6 +205,8 @@ textarea.abc { font-family: var(--f-code); font-size: var(--t-14); line-height: 
   .barre-ecran { flex-wrap: nowrap; padding-left: 12px; }
   .barre-ecran .barre-titre { order: 1; }
   .barre-ecran .onglets { order: 2; flex: 0 0 auto; margin: 0 8px; }
+  /* Dans la barre, chacun la largeur de son nom : partagée en deux, « Écouter et exporter » passait à la ligne. */
+  .barre-ecran .onglets > button { flex: 1 1 auto; }
   .barre-ecran #statut-atelier, .barre-ecran #statut-lecteur { order: 3; }
   .barre-ecran #plus-atelier, .barre-ecran #plus-lecteur { order: 4; }
   .doute-carte { display: grid; grid-template-columns: minmax(280px, 400px) minmax(0, 1fr); grid-template-areas: "loupe texte" "loupe reponses" "loupe aide"; column-gap: 28px; row-gap: 10px; align-items: start; grid-template-rows: auto auto 1fr; }
@@ -230,6 +235,7 @@ textarea.abc { font-family: var(--f-code); font-size: var(--t-14); line-height: 
   /* La barre n'a que la place de la colonne de gauche : Corriger | Écouter repasse dessous, comme au téléphone. */
   .vue-atelier .barre-ecran { margin-right: 0; flex-wrap: wrap; }
   .vue-atelier .barre-ecran .onglets { order: 5; flex: 1 0 calc(100% - 4px); margin: 4px 0 0 4px; }
+  .vue-atelier .barre-ecran .onglets > button { flex: 1 1 0; }
   #dock-atelier { top: 0; left: auto; width: calc(min(400px, 46vw) + env(safe-area-inset-right, 0px)); max-height: none; padding-top: calc(6px + env(safe-area-inset-top, 0px)); padding-right: calc(16px + env(safe-area-inset-right, 0px)); border-radius: 0; border-top: 0; border-left: 1px solid var(--trait-fort); }
   #dock-atelier .doute-carte { display: flex; align-items: stretch; }
   #dock-atelier .doute-carte .loupe { height: 96px; }

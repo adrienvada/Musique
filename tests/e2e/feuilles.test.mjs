@@ -117,6 +117,7 @@ test("moins de mouvement demandé : ni fondu, ni feuille qui glisse ; la barre d
     await page.click("#liste .ligne-carnet .plus");
     await page.waitForSelector("#feuille-actions[open]");
     assert.equal(await page.$eval("#feuille-actions", (d) => getComputedStyle(d).transitionDuration.split(",")[0].trim()), "0s");
+    assert.equal(await page.$eval("#feuille-actions", (d) => getComputedStyle(d, "::backdrop").transitionDuration.split(",")[0].trim()), "0s", "le voile ne se fond pas non plus");
     await page.keyboard.press("Escape");
     // L'éditeur, en Studio : la barre du navigateur prend la couleur de sa barre du haut.
     await page.click("#liste .ligne-carnet .ligne-ouvrir");
