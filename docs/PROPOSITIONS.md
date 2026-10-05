@@ -2143,6 +2143,12 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - Essai : « une erreur que rien n'attrapait se dit, en français »
     (`tests/e2e/ecrans.test.mjs`) : supprimer quand la mémoire est pleine,
     puis une promesse rejetée.
+- **`idee.js` se découpe aussi (T3) : 1 094 lignes avant le lot.** Ses
+  feuilles partent dans des modules qui reçoivent leur contexte, comme ceux
+  du pupitre :
+  - `app/idee-carnet.js` : la feuille Carnet (note, étiquettes, favori,
+    mémo vocal). Le mémo s'arrête et se tait par `carnet.fermer()`, que
+    l'éditeur appelle en se fermant.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

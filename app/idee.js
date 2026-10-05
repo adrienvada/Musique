@@ -16,8 +16,8 @@
  *
  * Ce module tient le cœur : l'état (e), annuler et refaire, la sauvegarde,
  * le dessin (grille.js ou la partition d'abcjs), le transport (écouter,
- * boucle, métronome), la barre du haut, les feuilles Tempo, ••• et Carnet,
- * et le choix du mode du pupitre. Le reste vit dans des modules qui
+ * boucle, métronome), la barre du haut, les feuilles Tempo et •••, et le
+ * choix du mode du pupitre. Le reste vit dans des modules qui
  * reçoivent un contexte explicite (ctx, plus bas) et ne partagent rien
  * d'autre :
  *   idee-clavier.js   le mode Clavier (durées, clavier à l'écran, de
@@ -26,7 +26,8 @@
  *   idee-accords.js   le mode Accords et la feuille des accords ;
  *   idee-selection.js la pilule, la boîte à outils, la rangée de
  *                     sélection, les transformations, le menu en cercle ;
- *   idee-direct.js    le jeu en direct (décompte, enregistrement, recalage).
+ *   idee-direct.js    le jeu en direct (décompte, enregistrement, recalage) ;
+ *   idee-carnet.js    la feuille Carnet (note, étiquettes, favori, mémo vocal).
  *
  * L'idée vit en notes (sequence.js) ; la partition n'en est qu'une
  * traduction. Ce module ne parle à l'appli que par les dépendances qu'on
@@ -38,18 +39,17 @@ import { voixCompletes, transposerIdee, STYLES } from "./harmonie.js";
 import { creerGrille } from "./grille.js";
 import { ico } from "./icones.js";
 import { $, dateCourte, echapper } from "./ui.js";
-import { confirmer } from "./dialogue.js";
 import { creerEnregistreur } from "./enregistreur.js";
 import { cause, explication } from "./erreurs.js";
 import { egal } from "./fiche.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { creerModeClavier } from "./idee-clavier.js";
-import { creerChant, messageMicro } from "./idee-chant.js";
+import { creerChant } from "./idee-chant.js";
 import { creerAccords } from "./idee-accords.js";
 import { creerSelection } from "./idee-selection.js";
 import { creerDirect } from "./idee-direct.js";
+import { creerCarnet } from "./idee-carnet.js";
 import { tempoDesTapes } from "./transport.js";
-import { sessionAudio, garderEveille, laisserDormir } from "./eveil.js";
 
 const MESURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8", "2/2"];
 const CLE_DEFAUTS = "portee:idee-defauts";
@@ -188,8 +188,8 @@ export function creerEditeurIdee(deps) {
     // Un mémo vocal prend le micro : on l'ouvre au clavier, pas au chant.
     choisirMode(MODES.includes(mode) ? mode : memo ? "clavier" : lirePref(CLE_MODE));
     rafraichir();
-    afficherInfos();
-    if (memo) { ouvrirFeuille($("idee-infos")); memoEnregistrer(); }
+    carnet.afficher();
+    if (memo) { ouvrirFeuille($("idee-infos")); carnet.enregistrerMemo(); }
     requestAnimationFrame(() => grille.centrer());
     clavierMode.ouvrir(e.seq.pistes[0].notes);
   }
@@ -205,8 +205,7 @@ export function creerEditeurIdee(deps) {
     selection.fermer();
     accords.fermer();
     for (const f of feuilles) fermerFeuille(f);
-    if (enregistreur) enregistreur.stop();
-    if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; }
+    carnet.fermer();
     for (const h of [...tenues.keys()]) relever(h);
     // Une pédale restée enfoncée ne doit pas tenir les notes des autres écrans.
     piano.pedale(false);
@@ -228,7 +227,7 @@ export function creerEditeurIdee(deps) {
     e.titre = p.titre;
     e.seq = sq.cloner(p.sequence);
     e.note = p.note || ""; e.etiquettes = p.etiquettes || []; e.favori = !!p.favori; e.memo = p.memo || null;
-    afficherInfos();
+    carnet.afficher();
     e.selection = new Set([...e.selection].filter((id) => e.seq.pistes[e.piste]?.notes.some((n) => n.id === id)));
     if (!e.seq.pistes[e.piste]) e.piste = 0;
     e.version++;
@@ -584,132 +583,11 @@ export function creerEditeurIdee(deps) {
     direct.suivre(pas);
   }
 
-  // --- Le carnet : note, étiquettes, favori, mémo vocal ---------------------------
+  // --- Le carnet : note, étiquettes, favori, mémo vocal (idee-carnet.js) ----------
 
-  function afficherInfos() {
-    $("info-note").value = e.note;
-    $("info-favori").setAttribute("aria-pressed", String(e.favori));
-    $("info-favori").innerHTML = `${ico(e.favori ? "etoile-pleine" : "etoile", "s")}Favori`;
-    $("info-favori").setAttribute("aria-label", e.favori ? "Favori (toucher pour retirer)" : "Mettre en favori");
-    const zone = $("info-etiquettes");
-    zone.textContent = "";
-    for (const t of e.etiquettes) {
-      const span = document.createElement("span");
-      span.className = "etiquette";
-      span.textContent = t;
-      const x = document.createElement("button");
-      x.type = "button"; x.innerHTML = ico("fermer", "s"); x.setAttribute("aria-label", `Retirer l'étiquette ${t}`);
-      x.addEventListener("click", () => { e.etiquettes = e.etiquettes.filter((y) => y !== t); afficherInfos(); planifierSauvegarde(0); });
-      span.appendChild(x);
-      zone.appendChild(span);
-    }
-    const connues = deps.etiquettes ? deps.etiquettes().filter((t) => !e.etiquettes.includes(t)) : [];
-    $("info-etiquettes-connues").innerHTML = connues.map((t) => `<option value="${echapper(t)}">`).join("");
-    $("memo-ecouter").hidden = $("memo-effacer").hidden = !e.memo || !!enregistreur;
-    if (!enregistreur) {
-      $("memo-enregistrer-texte").textContent = e.memo ? "Refaire le mémo" : "Enregistrer un mémo";
-      $("memo-etat").textContent = e.memo ? `${e.memo.duree} s` : "";
-    }
-  }
-
-  let enregistreur = null, lecteurMemo = null;
-
-  const enBase64 = (blob) => new Promise((ok, ko) => {
-    const r = new FileReader();
-    r.onload = () => ok(String(r.result).split(",")[1] || "");
-    r.onerror = () => ko(r.error);
-    r.readAsDataURL(blob);
-  });
-  const depuisBase64 = (memo) => {
-    const octets = Uint8Array.from(atob(memo.base64), (c) => c.charCodeAt(0));
-    return new Blob([octets], { type: memo.type || "audio/mp4" });
-  };
-
-  async function memoEnregistrer() {
-    if (enregistreur) { enregistreur.stop(); return; }
-    if (!window.MediaRecorder || !navigator.mediaDevices) { toast("Ce navigateur ne sait pas enregistrer de son."); return; }
-    transport.arreter();
-    // Le mémo prend le micro : l'accordeur le rend (il reprendra en revenant au mode Chanter).
-    if (e.modeOuvert && e.mode === "chanter") choisirMode("clavier");
-    let flux;
-    // Sur l'iPhone, le micro demande une session « enregistrer et jouer », rendue à « jouer » à la fin :
-    // sans quoi le piano obéirait de nouveau au bouton silencieux (eveil.js, M8).
-    sessionAudio("play-and-record");
-    try {
-      flux = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (err) {
-      sessionAudio("playback");
-      toast(messageMicro(err), 9000);
-      return;
-    }
-    // Le format que lisent tous les appareils d'abord (Safari enregistre en MP4).
-    const type = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find((t) => MediaRecorder.isTypeSupported(t));
-    const rec = new MediaRecorder(flux, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 });
-    const bouts = [];
-    const debut = Date.now();
-    rec.ondataavailable = (ev) => { if (ev.data && ev.data.size) bouts.push(ev.data); };
-    const montre = setInterval(() => {
-      const s = Math.round((Date.now() - debut) / 1000);
-      $("memo-etat").textContent = `0:${String(s).padStart(2, "0")} / 1:00`;
-      if (s >= 60) rec.stop();
-    }, 250);
-    rec.onstop = async () => {
-      clearInterval(montre);
-      for (const piste of flux.getTracks()) piste.stop();
-      sessionAudio("playback");
-      laisserDormir("memo");
-      enregistreur = null;
-      $("memo-enregistrer").setAttribute("aria-pressed", "false");
-      const blob = new Blob(bouts, { type: rec.mimeType || type || "audio/webm" });
-      const duree = Math.max(1, Math.round((Date.now() - debut) / 1000));
-      if (!blob.size) { afficherInfos(); return; }
-      await garderMemo({ type: blob.type, base64: await enBase64(blob), duree });
-      toast("Mémo gardé avec l'idée.");
-    };
-    rec.start(1000);
-    // Une minute sans toucher l'écran : il s'éteindrait en plein mémo, et l'iPhone couperait le micro.
-    garderEveille("memo");
-    enregistreur = rec;
-    $("memo-enregistrer").setAttribute("aria-pressed", "true");
-    $("memo-enregistrer-texte").textContent = "Arrêter le mémo";
-    $("memo-ecouter").hidden = $("memo-effacer").hidden = true;
-  }
-
-  /** Garde le mémo (ou l'efface, avec null) : la fiche d'abord, puis le son. */
-  async function garderMemo(memo) {
-    e.memo = memo ? { duree: memo.duree, type: memo.type } : null;
-    planifierSauvegarde(0);
-    await ecritures.vider();
-    if (e.id) await deps.stockage().ecrireMemo(e.id, memo).catch((err) => toast(`Le mémo n'a pas pu être gardé : ${explication(err)}`));
-    afficherInfos();
-  }
-
-  const boutonMemo = (lit) => { $("memo-ecouter").innerHTML = `${ico(lit ? "stop" : "lire", "s")}<span>${lit ? "Arrêter" : "Écouter"}</span>`; };
-  async function memoEcouter() {
-    if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; boutonMemo(false); return; }
-    const memo = e.id ? await deps.stockage().lireMemo(e.id).catch(() => null) : null;
-    if (!memo) { toast("Le son de ce mémo n'est pas encore arrivé sur cet appareil (synchronisation)."); return; }
-    lecteurMemo = new Audio(URL.createObjectURL(depuisBase64(memo)));
-    boutonMemo(true);
-    lecteurMemo.onended = () => { lecteurMemo = null; boutonMemo(false); };
-    lecteurMemo.play().catch(() => { lecteurMemo = null; boutonMemo(false); toast("Ce navigateur ne sait pas lire ce mémo."); });
-  }
-
-  $("info-fermer").addEventListener("click", () => fermerFeuille($("idee-infos")));
-  $("info-favori").addEventListener("click", () => { e.favori = !e.favori; afficherInfos(); planifierSauvegarde(0); });
-  $("info-note").addEventListener("input", () => { e.note = $("info-note").value; planifierSauvegarde(); });
-  $("info-etiquette-form").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const t = $("info-etiquette").value.trim().toLowerCase();
-    if (t && !e.etiquettes.includes(t)) { e.etiquettes = [...e.etiquettes, t]; planifierSauvegarde(0); }
-    $("info-etiquette").value = "";
-    afficherInfos();
-  });
-  $("memo-enregistrer").addEventListener("click", memoEnregistrer);
-  $("memo-ecouter").addEventListener("click", memoEcouter);
-  // La même question que partout ailleurs (dialogue.js), dans l'ambiance de l'appli.
-  $("memo-effacer").addEventListener("click", async () => {
-    if (await confirmer({ titre: "Effacer le mémo vocal ?", texte: "Son enregistrement part avec lui. C'est définitif.", oui: "Effacer" })) garderMemo(null);
+  const carnet = creerCarnet({
+    e, $, toast, transport, etiquettes: deps.etiquettes, stockage: deps.stockage,
+    planifierSauvegarde, sauverMaintenant: () => ecritures.vider(), choisirMode,
   });
 
   // --- Affichage ------------------------------------------------------------------
@@ -960,7 +838,7 @@ export function creerEditeurIdee(deps) {
     const b = ev.target.closest("[data-menu]");
     if (!b) return;
     fermerFeuille($("idee-menu"));
-    if (b.dataset.menu === "infos") { afficherInfos(); ouvrirFeuille($("idee-infos")); return; }
+    if (b.dataset.menu === "infos") { carnet.afficher(); ouvrirFeuille($("idee-infos")); return; }
     if (b.dataset.menu === "reglages") { ouvrirFeuille($("idee-reglages")); return; }
     await sauverMaintenant();
     const p = partitionCourante();
