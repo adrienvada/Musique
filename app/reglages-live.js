@@ -10,9 +10,8 @@ import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { ico } from "./icones.js";
 import { SortieMidi, sortieMidiPossible } from "./sortie-midi.js";
 import { creerDossierMidi, dossierMidiPossible, baseAppareil } from "./dossier-midi.js";
-
-const $ = (id) => document.getElementById(id);
-const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
+import { $, pluriel } from "./ui.js";
+import { explication, expliquer } from "./erreurs.js";
 
 /**
  * @param o {
@@ -67,7 +66,7 @@ function brancherSortie(transport, toast) {
       b.innerHTML = `${ico(id === choisi ? "ok" : id ? "clavier" : "fermer", "s")}<span></span>`;
       b.lastChild.textContent = nom;
       b.addEventListener("click", async () => {
-        try { await sortie.choisir(id); } catch (e) { toast(e.message || "Ce port MIDI n'a pas pu s'ouvrir."); }
+        try { await sortie.choisir(id); } catch (e) { toast(expliquer(e, "Ce port MIDI n'a pas pu s'ouvrir.")); }
         fermerFeuille(feuille);
       });
       liste.appendChild(b);
@@ -103,7 +102,7 @@ function brancherDossier(fabriquer, toast) {
   };
   const dossier = creerDossierMidi({ base: baseAppareil(), fabriquer, surEtat: montrer });
   $("dossier-midi").addEventListener("click", async () => {
-    try { await dossier.choisir(); } catch (e) { toast("Ce dossier n'a pas pu être choisi : " + (e.message || e)); }
+    try { await dossier.choisir(); } catch (e) { toast(`Ce dossier n'a pas pu être choisi : ${explication(e)}`); }
   });
   $("dossier-midi-autoriser").addEventListener("click", async () => {
     if (!(await dossier.autoriser())) toast("Sans ta permission, Portée ne peut pas écrire dans ce dossier.");

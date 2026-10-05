@@ -207,6 +207,24 @@ test("une idée qui ne s'écrit pas n'empêche pas les autres, et le problème s
   assert.equal(await d2.choisir(), false);
 });
 
+test("ce qui empêche d'écrire se dit en français, pas dans les mots du navigateur (I13)", async (t) => {
+  const cas = [
+    [erreur("QuotaExceededError"), /^Le disque est plein : fais de la place/],
+    [erreur("NotFoundError"), /^Ce dossier n'est plus là/],
+    [new Error("The state had changed since it was read from disk."), /^Une erreur inattendue/],
+  ];
+  for (const [panne, attendu] of cas) {
+    const etats = [];
+    const dossier = new FauxDossier("Live");
+    const essaiFichier = t.mock.method(FauxDossier.prototype, "getFileHandle", async () => { throw panne; });
+    const d = creerDossierMidi({ base: fausseBase(), fabriquer, choisirDossier: async () => dossier, surEtat: (e) => etats.push(e), attente: 10 });
+    d.surListe([idee("a", "Refrain", "1")]);
+    await d.choisir();
+    essaiFichier.mock.restore();
+    assert.match(etats.at(-1).dernier.erreur, attendu, panne.message);
+  }
+});
+
 test("la base de l'appareil : à part de la bibliothèque, un magasin, lire, écrire, effacer", async () => {
   const base = baseAppareil();
   assert.equal(await base.lire("dossier-midi"), undefined);

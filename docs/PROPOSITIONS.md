@@ -1983,7 +1983,336 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Architecture (T3 à T5)
 
-<!-- lot architecture -->
+- **Les petits outils de l'interface sont à un seul endroit (`app/ui.js`,
+  T3).** `$` était redéfini dans six fichiers, `pluriel` dans quatre, et une
+  vingtaine de pluriels étaient écrits sur place (`note${n > 1 ? "s" : ""}`).
+  `ui.js` a maintenant `$`, `el`, `pluriel` et `accorde` (« 3 notes
+  jouées »), les dates dites court (`dateCourte`, `dateRelative`, `heure`)
+  et le message passager (`toast`). Les textes n'ont pas changé.
+  - Pourquoi `ui.js` touche la page par `globalThis` : il est vérifié par
+    `npm run types` sans le DOM, et importé par les tests sous Node.
+- **Une seule façon de demander « Supprimer ? » (`app/dialogue.js`).** Il y
+  en avait trois : la fenêtre de l'appli depuis le carnet, un bandeau sous
+  la barre dans « Corriger » et « Écouter », et `window.confirm` pour effacer
+  le mémo vocal (celle du navigateur ne suit pas l'ambiance, et une page
+  intégrée à claude.ai peut ne pas avoir le droit de l'ouvrir : la réponse
+  y était « non », sans rien montrer). Toutes passent par la fenêtre de
+  l'appli ; les bandeaux `#confirmer` et `#confirmer-lecteur` sont retirés.
+  - **Le focus va sur « Annuler » (I6).** `showModal()` le donnait au
+    premier bouton, « Supprimer » : un Entrée de trop supprimait.
+  - Essai : `tests/e2e/ecrans.test.mjs` (« supprimer une page lue »).
+- **Les exports vivent dans `app/exports.js` (T3).** MIDI, MusicXML, ABC,
+  « Tout en MIDI » et le partage du téléphone, avec une seule gestion des
+  erreurs : chaque export avait la sienne, et « Tout en MIDI » fabriquait
+  ses fichiers hors de la sienne (une partition illisible y devenait une
+  erreur sans message). Le MIDI d'une idée (`midiDeLIdee`) passe de
+  l'éditeur d'idée à `midi.js`, à côté de celui d'une page lue : les
+  exports et le dossier des .mid n'importent plus tout l'éditeur pour lui.
+- **Les erreurs se disent en français, avec quoi faire (`app/erreurs.js`,
+  I13).** « Failed to fetch », « Invalid PDF structure », « Failed to fetch
+  dynamically imported module… » ou « QuotaExceededError » s'affichaient
+  tels quels. `expliquer(err)` reconnaît le réseau coupé, le PDF illisible
+  (ou protégé), le module qui ne se charge pas, la mémoire pleine et le
+  connecteur qui se tait, et dit en une phrase ce qui s'est passé puis quoi
+  faire ; le détail reste dans la console. Un message que Portée écrit
+  déjà en français passe tel quel. Essais : `tests/erreurs.test.mjs`.
+  - Toutes les erreurs montrées passent par lui : l'ouverture de la
+    bibliothèque, son écoute, le piano (l'éditeur, les accords, le jeu en
+    direct), le micro (`messageMicro`), le port MIDI et le dossier des
+    .mid (un dossier plein, déplacé ou supprimé a sa phrase à lui), la
+    restauration d'une sauvegarde (la mémoire pleine). Essais : « ce qui
+    empêche d'ouvrir le micro… » (`tests/micro.test.mjs`) et « ce qui
+    empêche d'écrire… » (`tests/dossier-midi.test.mjs`).
+  - Piège : un message de Portée se reconnaît comme français à ses
+    accents ou à ses petits mots (le, la, pas, est…). Un message sans l'un
+    ni l'autre (« fiche illisible ») passerait pour une erreur inconnue :
+    écris-les en phrases.
+- **Les vignettes sont dans `app/apercus.js` (T3).** Celle d'une idée
+  vivait dans l'éditeur, celle d'un morceau dans l'écran Morceau, celle
+  d'une page dans l'accueil : l'accueil importait tout l'éditeur d'idée pour
+  dessiner des petits traits. Ce que la vignette d'une page garde de ses
+  traits à l'import (`apercuTraits`) les rejoint, avec son essai.
+- **La tablette et l'import ont leurs modules (T3).** `app/tablette.js`
+  tient le panneau « Ma reMarkable », ses lignes dans les Réglages,
+  l'adresse du connecteur (que la synchronisation emprunte) et les modèles
+  à télécharger ; `app/import-pdf.js` lit un PDF ou un .mid et range la
+  partition, pour lui comme pour la tablette (`enregistrerLecture`). Une
+  page lue range ses doutes par `preparerDoutes`, la fonction que les
+  essais du lecteur vérifient : l'appli en avait sa propre variante.
+  - **pdf.js revient sans recharger (T4).** Après un échec du réseau,
+    l'appli gardait la promesse ratée, et Chromium garde de toute façon
+    l'échec d'un `import()` attaché à son adresse jusqu'au rechargement
+    (essayé) : l'import de PDF échouait jusque-là, même le réseau revenu.
+    La promesse ratée s'oublie, et l'essai suivant demande pdf.js à une
+    autre adresse (`?essai=1`).
+  - Le connecteur appelé du site lance de vraies `Error`, avec leur pile
+    et leur cause, et toujours le `code` que l'appli lit (T4) ; c'étaient
+    des objets bruts.
+  - Essai : `tests/e2e/ecrans.test.mjs` (« un PDF illisible, puis pdf.js
+    qui ne vient pas ») : le message dit quoi faire, en français, et le
+    même import marche une fois le réseau revenu.
+- **La synchronisation vue de l'appli a son module
+  (`app/synchronisation-ui.js`, T3),** et un seul endroit reprend la
+  partition ouverte quand elle change ailleurs (`rafraichirOuverte`).
+  - **Plus de faux « modifiée sur un autre appareil » (T4).** L'idée et le
+    morceau se rechargeaient dès que la synchro recevait quoi que ce soit,
+    même une autre partition, et le disaient. Chaque écran compare
+    maintenant ce qu'il montre (le titre, les notes, les blocs…) avec la
+    version reçue : rien n'a changé pour lui, rien ne bouge et rien ne se
+    dit. Et il ne recharge jamais pendant qu'une écriture attend ou part
+    (avant, seule la minuterie comptait : la version d'avant pouvait
+    remplacer à l'écran la note qu'on venait d'écrire).
+  - **Un autre onglet qui change la partition ouverte la fait reprendre
+    ici (S8, seconde moitié),** par `surAutreOnglet`. L'éditeur d'idée et
+    le morceau disent au stockage d'où ils partent (`depuis`, la dernière
+    version qu'ils savent dans la base) : si elle a changé entre-temps, les
+    deux se fusionnent au lieu que l'une écrase l'autre. Cette version de
+    départ est rangée avec l'ouverture (`session.derniere`), pas avec
+    l'écran : une écriture en retard pour l'idée d'avant part avec la
+    sienne.
+  - Essai : « une idée ouverte ne se dit modifiée que si elle l'a été »
+    (`tests/e2e/ecrans.test.mjs`), avec le vrai connecteur sur le faux
+    stockage des tests.
+- **Un enregistrement différé commun (`app/enregistreur.js`, T3, T4).** Il
+  y en avait trois (« Corriger », l'éditeur d'idée, le morceau). Celui-ci
+  fixe ce qu'il écrira au moment où on le planifie : la cible (la partition
+  de ce moment-là) et une copie de son contenu. Une autre cible fait
+  d'abord partir ce qui attendait ; les écritures se suivent. L'éditeur
+  d'idée, le morceau et « Corriger » (`page-ouverte.js`) s'en servent ;
+  avant, une écriture en attente
+  au moment d'ouvrir une autre idée (« Idée tirée d'une phrase ») lisait
+  l'idée suivante, et pouvait en créer une seconde.
+  - **Une idée rechargée tout de suite n'est plus perdue (T4).** Le premier
+    enregistrement attend 0,7 s, et rien n'écrivait quand la page se
+    fermait. Tous les enregistreurs se vident quand la page passe en
+    arrière-plan (`visibilitychange`), se recharge ou se ferme
+    (`beforeunload`, `pagehide`). Ni l'un ni l'autre ne demande quoi que ce
+    soit à Adrien.
+  - **Et une copie de secours, pour quand la page n'a pas le temps.**
+    Vider ne suffit pas : à `pagehide`, Chromium abandonne la transaction
+    IndexedDB avec la page (essayé : l'idée était perdue à chaque fois), et
+    à `beforeunload` elle se perdait encore une fois sur six quand la
+    machine était chargée. Ce qui attend ou s'écrit encore part donc aussi
+    dans `localStorage` (`portee:secours`), qui s'écrit d'un coup, sans rien
+    attendre ; au démarrage suivant, `reprendreSecours` le remet dans la
+    bibliothèque si l'écriture n'a pas fini (une version aussi récente ou
+    plus gagne ; une partition supprimée depuis ne revient pas), puis
+    l'efface. Si la page vit encore une fois tout écrit (une fermeture
+    annulée), la copie s'efface aussitôt.
+  - Essais : `tests/enregistreur.test.mjs`, et « quatre notes, puis un
+    rechargement tout de suite » dans `tests/e2e/ecrans.test.mjs`.
+- **« Corriger » et « Écouter » sont des fabriques, comme l'éditeur d'idée
+  (`app/ecran-atelier.js`, `app/ecran-lecteur.js`, T3).** Leur état vivait
+  à trois endroits : `etat`, des variables de module, et la page (l'ABC en
+  cours se lisait dans le champ du mode avancé, « enregistrement en
+  attente » dans le texte « … »). Chaque écran a maintenant le sien ; la
+  page lue ouverte (sa fiche, ses traits, ses enregistrements) est
+  partagée par les deux (`app/page-ouverte.js`). Ce qu'ils ont en commun
+  pour faire entendre la page (la gravure, le tempo, l'écoute) est dans
+  `atelier.js`.
+  - **Une correction n'est plus perdue, ni écrite sur une autre partition
+    (T4).** La minuterie de « Corriger » (800 ms) lisait la partition
+    ouverte et le champ ABC au moment où elle partait : revenir à la
+    bibliothèque et ouvrir une autre page dans ce délai perdait la
+    correction et réécrivait l'autre page (reproduit par l'audit). Le tempo
+    d'« Écouter » (600 ms) faisait pareil. Un changement vaut tout de suite
+    pour la fiche en mémoire et part un instant après, avec la copie prise
+    au moment du geste ; quitter l'écran ou ouvrir une autre page fait
+    partir ce qui attendait. La relecture des cibles des doutes (une page
+    lue avant le 02/10) écrit aussi dans sa page, plus dans celle qui
+    s'est ouverte entre-temps.
+  - **Une seule écoute à la fois, avec le jeton de l'écran Morceau
+    (`app/ecoute.js`, T4).** Il sert maintenant à « Corriger », à
+    « Écouter », au morceau et aux cartes de la bibliothèque (qui notaient
+    leur bouton sur le transport, `transport.carte`). Le transport tient le
+    même jeton de son côté depuis le lot son : l'écoute lancée puis quittée
+    pendant que le piano se charge ne partait déjà plus (l'essai de l'audit
+    passe sur la base). L'essai de bout en bout le garde.
+  - Deux ouvertures rapprochées n'affichent que la dernière (elles
+    portaient chacune la fiche lue avant d'attendre ses traits).
+  - Essais : « corriger une note puis ouvrir vite une autre partition »
+    (la correction, puis le tempo) et « Écouter pendant que le piano se
+    charge » (`tests/e2e/ecrans.test.mjs`), `tests/ecoute.test.mjs`.
+- **Un registre des écrans pour « précédent » (T3).** `reculer()` cliquait
+  les boutons des autres écrans (`#fermer-rm`, `#idee-enregistrer`, la
+  croix du menu en cercle…) et `aLaRacine()` lisait leur page. Chaque écran
+  dit maintenant lui-même comment on le quitte (`fermer`), s'il a encore un
+  pas à défaire (`reculer` → vrai : une note choisie, le jeu en direct, le
+  menu en cercle, la recherche, un panneau de la tablette, un autre onglet
+  que le carnet) et, pour l'accueil, s'il est à sa racine.
+  `navigation.js` ferme d'abord le `<dialog>` ouvert, puis interroge
+  l'écran, puis revient à l'écran d'avant ; `historique.js` n'a pas changé (il demande toujours
+  `racine()` et `reculer()` à l'appli).
+  - **« Précédent » laisse d'abord la note choisie dans « Corriger »,**
+    comme il le faisait déjà dans l'éditeur d'idée.
+  - L'accueil garde son état à lui (l'onglet, les filtres) : il l'écrivait
+    dans celui de l'appli. Il dit son onglet (`accueil.onglet`).
+  - **Le bouton « Portée » n'a plus qu'un gestionnaire** : app.js et
+    l'accueil en avaient chacun un, et le carnet se dessinait deux fois.
+  - Essais : « précédent dans Corriger » et « Portée, en haut »
+    (`tests/e2e/ecrans.test.mjs`).
+- **`app.js` ne fait plus que composer (T3) : 2 125 lignes avant le lot,
+  ≈380 après.** Il crée les écrans et les modules, les relie (ouvrir une
+  partition dans son écran) et tient le registre des écrans. Ce qui
+  restait part chez qui s'en sert :
+  - `app/gestes.js` : les gestes sur une partition entière (supprimer la
+    page ouverte, dupliquer, ajouter à un morceau, le menu « ••• » de
+    l'éditeur), chacun avec son message d'échec ;
+  - les raccourcis passent par le registre : chaque écran y déclare
+    `toucheBas` (et l'éditeur `toucheHaut`), et `navigation.js` garde
+    pour tous la règle des fenêtres et des champs de texte (I6) ;
+  - `app/navigation.js` : montrer un écran, la pile des écrans d'où l'on
+    vient, et le bouton « précédent » (il interroge le registre des
+    écrans) ;
+  - l'accueil reprend l'écoute depuis une carte, le résumé d'une idée, le
+    nom d'un modèle, la pastille d'une carte et la liste des étiquettes
+    (`toutesEtiquettes`, que l'éditeur d'idée emprunte) ;
+  - `app/sauvegarde-ui.js` : la sauvegarde dans un fichier et la
+    restauration (`bilanRestauration`, désormais essayée) ;
+  - `app/mises-a-jour.js` : l'appli installable, le service worker et la
+    proposition de recharger après une mise en ligne.
+- **Les touches restent à la fenêtre ou à la feuille ouverte (I6).** Avec
+  une note choisie et « ••• » ouvert, Suppr effaçait la note derrière et ↑
+  la montait ; dans l'éditeur, avec « Supprimer l'idée ? » ou « Ajouter à
+  un morceau » ouverte, ↑ montait la note et Retour arrière l'effaçait, et
+  Échap ne fermait jamais la fenêtre (l'éditeur la prenait pour lui, il ne
+  regardait que ses propres feuilles). Les raccourcis s'arrêtent dès qu'un
+  `<dialog>` est ouvert, où qu'il soit, et Échap est laissé au navigateur,
+  qui le ferme. Le focus va sur « Annuler » (voir plus haut).
+- **AZERTY : les durées de « Corriger » marchent (I12).** Elles se lisaient
+  par le caractère (`key`) : « 1 » sans Maj donne « & » sur le clavier
+  d'Adrien, et rien ne se passait, alors que l'éditeur, qui lit la touche
+  (`code`), réagissait. Les durées se lisent maintenant par la touche (sans
+  Maj), ou par le chiffre tapé (avec Maj, ou au pavé numérique). Avec Maj,
+  la place ne compte plus : sur un QWERTY, Maj et 3 donnent « # », le
+  dièse. Les lettres restent celles de la touche (`key`) : b pour bémol, n,
+  z pour le silence ; la touche marquée Z d'un AZERTY est à la place du W
+  d'un QWERTY.
+  - Essais : « une feuille ou une fenêtre ouverte garde les touches » et
+    « AZERTY » (`tests/e2e/ecrans.test.mjs`).
+- **Les erreurs asynchrones ont un filet (T4).** Rien n'écoutait
+  `unhandledrejection`, et plusieurs gestes attendaient le stockage sans
+  `try` : supprimer (depuis le carnet, l'éditeur, « Corriger » ou le
+  morceau), dupliquer, ajouter à un morceau, et l'affichage de « Corriger »
+  (sa page, ses doutes). Un échec y passait sans un mot. Chacun dit
+  maintenant ce qui s'est passé (erreurs.js) ; ce qu'aucun geste n'attrape
+  se dit dans un message passager (`installerFilet`), et son détail reste
+  dans la console. Les erreurs qu'on lance sont de vraies `Error`, avec
+  leur cause (`erreur(code, message, { cause })`).
+  - Essai : « une erreur que rien n'attrapait se dit, en français »
+    (`tests/e2e/ecrans.test.mjs`) : supprimer quand la mémoire est pleine,
+    puis une promesse rejetée.
+- **`idee.js` se découpe aussi (T3) : 1 094 lignes avant le lot.** Ses
+  feuilles partent dans des modules qui reçoivent leur contexte, comme ceux
+  du pupitre :
+  - `app/idee-carnet.js` : la feuille Carnet (note, étiquettes, favori,
+    mémo vocal). Le mémo s'arrête et se tait par `carnet.fermer()`, que
+    l'éditeur appelle en se fermant.
+  - `app/idee-tempo.js` : la feuille Tempo et mesure, avec les pistes et
+    les réglages par défaut des idées suivantes (`defauts`). Le tempo qu'on
+    règle encore (`tempo.enAttente`) empêche toujours de recharger l'idée
+    sous les doigts.
+  - `app/idee-partition.js` : la gravure, ses jetons et ses éléments (qui
+    étaient dans l'état, `e.jetons` et `e.elements`, alors qu'elle seule
+    les lit), la note jouée, le curseur. Ce que veut dire un toucher sur la
+    partition, c'est le cœur qui le décide (`surClic`). La mise en page
+    (combien de mesures par ligne, quelle largeur de portée) est une
+    fonction sans DOM, `mettreEnPage`, à qui l'on passe la gravure : les
+    essais lui en passent une fausse (`tests/idee-partition.test.mjs`).
+  - `app/idee-enregistrement.js` : les enregistrements de l'idée (vide,
+    elle ne laisse rien ; la première note la crée ; la suite la modifie
+    depuis la dernière version connue, S8 ; la copie de secours). Sans
+    DOM, essayé sous Node avec un faux stockage
+    (`tests/idee-enregistrement.test.mjs`) : c'est là que se perdaient les
+    idées (T4).
+  - **Le clavier, le chant et la partition lisent l'état en lecture
+    seule** (un `Proxy` qui lève une erreur à l'écriture) : ils ne
+    l'écrivaient pas, mais rien ne les en empêchait. Les modules qui
+    changent l'idée (accords, sélection, jeu en direct, carnet, tempo)
+    gardent l'état entier.
+  - **L'éditeur ne montre plus à l'appli que ce qu'elle emploie** :
+    `ouvrir`, `fermer`, `recharger`, `occupe`, `reculer`, `toucheBas`,
+    `toucheHaut` et `id`. L'état entier (`etat`), `modifier`, `choisir`,
+    les touches du piano et les accesseurs en sortaient, et rien ne s'en
+    servait. Le lot « Claude dans l'éditeur » (H2) ajoutera ce qu'il lui
+    faut, en lecture seule si lire lui suffit.
+  - `app/idee-ecoute.js` : écouter, la boucle, le métronome, la tête de
+    lecture. Les modules du pupitre en empruntent la source (le jeu en
+    direct) et la pause du micro (les accords) par le contexte.
+  - `idee.js` : 1 094 lignes avant, ≈620 après. Le reste est le cœur :
+    l'état, annuler et refaire, jouer une note, la barre du haut, le choix
+    du mode, et le contexte des modules.
+- **Les types couvrent la musique, la fiche, la synchro et tout le
+  connecteur (T2).** `sequence`, `accords`, `harmonie`, `midi`,
+  `musicxml`, `morceau`, `fiche`, `synchro`, `idee-enregistrement`,
+  `conversation`, `mcp` et `http` sont vérifiés par `npm run types`. Ils
+  attendaient des JSDoc écrites en prose (`@param options { tempo, … }`,
+  que TypeScript lit comme un type : le type s'écrit d'abord, `{Object}`,
+  la prose ensuite), une note dont la vélocité est facultative (`poser`),
+  un `surEtat` sans argument, une union de fiches que la vérification ne
+  savait pas trier (`in` le lui dit).
+  - `compacter` et `decompacter` (les traits d'une page) vivent dans
+    `fiche.js`, sans DOM : la synchro les prenait dans `stockage.js`, qui
+    touche à la page, et ne pouvait pas être vérifiée. `stockage.js` les
+    donne encore, pour ceux qui les y prennent.
+  - `stockage.js` reste hors des types, comme les écrans : il touche à
+    `localStorage` et à `matchMedia`.
+- **Lint** : plus d'avertissement dans `app.js`, `connecteur.js` et
+  `idee.js` (les écritures après un `await` venaient des bogues T4-a et
+  T4-b ; les objets lancés sont devenus des `Error` avec leur cause).
+  L'exception `no-control-regex` de `eslint.config.js` pour
+  `conversation.js` devient une directive sur la seule ligne qui en a
+  besoin, avec son pourquoi. Restent cinq avertissements hors du lot :
+  `objets.js` (connecteur) et quatre dans les essais de la synchro.
+- **La palette sombre n'est plus écrite qu'une fois (T5).** Chaque jeton
+  de `systeme.css` dit sa couleur claire puis sa couleur sombre,
+  `light-dark(clair, sombre)`, et la racine suit le réglage du téléphone
+  (`color-scheme: light dark`). Le contrat de claude.ai ne change pas :
+  `data-theme="light"` ou `"dark"` sur la racine l'emporte (il fixe
+  `color-scheme`). La palette sombre était écrite deux fois mot pour mot
+  (pour le réglage du téléphone, puis pour `data-theme`), et
+  `morceau.css` refaisait les deux pour une couleur. Le Studio garde sa
+  palette à lui.
+  - Vérifié écran par écran (bibliothèque, Corriger, éditeur, menu,
+    fenêtre, morceau ; téléphone et ordinateur ; clair, sombre, et
+    `data-theme` forcé dans les deux sens) : chaque jeton calcule la même
+    couleur qu'avant, et les images sont les mêmes au pixel près, sauf
+    l'anticrénelage de quelques icônes en clair (moins de 50 sur 255).
+  - `light-dark()` ne choisit que des couleurs : l'ombre (`--ombre`), plus
+    grande en sombre, s'écrit en deux ombres dont celle de l'autre
+    ambiance est transparente.
+  - Piège : la valeur brute d'un jeton n'est plus une couleur
+    (`getPropertyValue("--stylo")` rend `light-dark(…)`). Pour colorer
+    soi-même (abcjs et la note choisie), `couleurDuJeton("--stylo")`
+    (ui.js) la fait résoudre par le navigateur.
+  - Il faut Safari 17.5, Chrome 123 ou Firefox 120 (2024) ; un navigateur
+    plus ancien perdrait toutes les couleurs.
+- **Les notes rangées par pas, à un seul endroit (T5).** Ce que lit le
+  transport (`notesA(pas)` et la fin) se calculait cinq fois : l'éditeur,
+  les cartes de la bibliothèque, la feuille des accords, le morceau et les
+  pages lues. `indexerParPas(notes)` (sequence.js, avec son essai) le fait
+  pour tous, avec `Map.groupBy`.
+  - `findLast` remplace les `[...x].reverse().find(…)` (accords, sélection,
+    MIDI, séquence). `sq.cloner` reste un aller-retour en JSON plutôt que
+    `structuredClone` : une séquence doit rester du JSON, et la copie le
+    garantit ; `structuredClone` sert là où l'on copiait des blocs ou un
+    changement (le morceau, « Corriger »).
+  - Les écouteurs : mesuré dans Chromium, ouvrir et fermer dix fois
+    l'idée, sa feuille Tempo, « Corriger », « Écouter », la feuille d'une
+    carte et les onglets ne laisse ni écouteur ni nœud de plus (avant le
+    lot non plus). Les écrans sont des fabriques qui branchent leurs
+    écouteurs une fois pour toutes ; le seul écouteur posé puis retiré à
+    chaque geste, le glissé du menu en cercle, passe par un
+    `AbortController` (un `abort()` le retire, quelle que soit la façon
+    dont le menu se ferme). Un écran qu'on recréerait ferait de même.
+- **Code mort retiré**, chaque cas vérifié (ni la page, ni le code, ni
+  les essais ne s'en servaient) : la classe `.transport` de l'atelier
+  (l'écoute a son dock, `.dock-transport`), la classe `.mode` (l'état de
+  la bibliothèque est passé dans Réglages, `#mode`, hors de l'éditeur),
+  l'élément `#etat-son` du lecteur, l'icône `info`, la constante
+  `PAS_PAR_NOIRE` de sequence.js. Le double gestionnaire du bouton
+  « Portée » est parti avec le registre des écrans, et l'import d'une page
+  passe par `preparerDoutes` (voir plus haut).
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 
@@ -2419,10 +2748,10 @@ ou supprimer la fonction dans Supabase.
   dans `dist/` (sauf le piano, à part, et les licences) : un fichier que
   l'appli demande doit donc sortir de l'assembleur, sinon il manque hors
   ligne. Les fichiers tiers (pdf.js, abcjs, polices) portent la version de
-  leur paquet, que l'assembleur met dans leur adresse (`app.js`, la page,
-  `polices.css`) : il cherche pdf.js sous la forme
-  `"./vendor/pdfjs/pdf.min.mjs"` dans `app.js`, et s'arrête s'il ne la
-  trouve plus.
+  leur paquet, que l'assembleur met dans leur adresse (`import-pdf.js`, la
+  page, `polices.css`) : il cherche pdf.js sous la forme
+  `"./vendor/pdfjs/pdf.min.mjs"` dans `import-pdf.js` (dans `app.js`
+  jusqu'au 05/10), et s'arrête s'il ne la trouve plus.
 
 - **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, disponible
   partout seulement depuis le 14/02/2026 (Chrome 145, Firefox 144,

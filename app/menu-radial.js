@@ -99,13 +99,20 @@ export function creerMenuRadial({ actions, familles = {}, surChoix, surFermer = 
     }
   }
 
+  // Les écouteurs du glissé (appui long → glisser → lâcher), posés à l'ouverture
+  // et retirés d'un seul geste, quelle que soit la façon dont le menu se ferme (T5).
+  let glisse = null;
+  function finirGlisse() {
+    if (glisse) glisse.abort();
+    glisse = null;
+  }
+
   function fermer() {
     const etait = !fond.hidden;
     fond.hidden = true;
     survole = null;
     gestes.forEach((g) => g.classList.remove("survole"));
-    window.removeEventListener("pointermove", suivre);
-    window.removeEventListener("pointerup", lacher);
+    finirGlisse();
     if (etait) surFermer();
   }
 
@@ -119,8 +126,7 @@ export function creerMenuRadial({ actions, familles = {}, surChoix, surFermer = 
   }
 
   function lacher() {
-    window.removeEventListener("pointermove", suivre);
-    window.removeEventListener("pointerup", lacher);
+    finirGlisse();
     if (survole) { const id = survole.dataset.geste; fermer(); surChoix(id); }
   }
 
@@ -140,8 +146,10 @@ export function creerMenuRadial({ actions, familles = {}, surChoix, surFermer = 
       fond.hidden = false;
       ouvertA = performance.now();
       if (glisser) {
-        window.addEventListener("pointermove", suivre);
-        window.addEventListener("pointerup", lacher);
+        finirGlisse();
+        glisse = new AbortController();
+        window.addEventListener("pointermove", suivre, { signal: glisse.signal });
+        window.addEventListener("pointerup", lacher, { signal: glisse.signal });
       }
     },
     fermer,

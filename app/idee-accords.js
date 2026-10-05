@@ -34,15 +34,16 @@
  *   avantSon(), apresSon().
  * Rend : { entrer(), sortir(), maj(), ouvrirFeuille(m, pas), fermer() }.
  */
-import { pasParMesure, pasParTemps, nbMesures, nomTonalite, lireTonalite } from "./sequence.js";
+import { indexerParPas, pasParMesure, pasParTemps, nbMesures, nomTonalite, lireTonalite } from "./sequence.js";
 import {
   roueDeLaTonalite, suitesProbables, accordsDeLaMelodie, notesDeLAccord, appliquerCouleur, couleurDe, COULEURS,
   degreDeLAccord, harmoniser, accompagnement, voixCompletes, motifAccompagnement, STYLES,
   lireAccord, nomRacine, joliAccord, QUALITES,
 } from "./harmonie.js";
 import { ico } from "./icones.js";
-import { echapper } from "./ui.js";
+import { accorde, echapper, pluriel } from "./ui.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
+import { expliquer } from "./erreurs.js";
 
 /** Les six accords du pupitre : ceux de la roue, sans l'accord diminué (qui sonne rarement seul). */
 export function accordsDuPupitre(tonalite) {
@@ -98,7 +99,7 @@ export function creerAccords(ctx) {
       mesure, m,
       fin: Math.min((m + 1) * mesure, suivant ? suivant.d : Infinity),
       actuel: tous.find((a) => a.d === d) || null,
-      avant: [...tous].reverse().find((a) => a.d < d) || null,
+      avant: tous.findLast((a) => a.d < d) || null,
     };
   }
 
@@ -280,7 +281,7 @@ export function creerAccords(ctx) {
     zone.innerHTML = html + `<i class="apercu-tete" id="accords-tete" hidden></i>`;
     placerTete();
     const style = STYLES.find((s) => s.id === (e.seq.accompagnement || "aucun"));
-    zone.setAttribute("aria-label", `Mesure ${m + 1} : ${melodie.length} note${melodie.length > 1 ? "s" : ""} de mélodie, ${acc.length} d'accompagnement (${style ? style.nom.toLowerCase() : "sans"})`);
+    zone.setAttribute("aria-label", `Mesure ${m + 1} : ${pluriel(melodie.length, "note")} de mélodie, ${acc.length} d'accompagnement (${style ? style.nom.toLowerCase() : "sans"})`);
   }
 
   /** La tête de lecture de l'aperçu, pendant « Écouter la mesure ». */
@@ -414,15 +415,8 @@ export function creerAccords(ctx) {
     if (ecoute) { arreterEcoute(); return; }
     const mesure = pasParMesure(e.seq);
     const debut = Math.floor(ouverte.d / mesure) * mesure, fin = debut + mesure;
-    const parPas = new Map();
-    for (const v of voixCompletes(e.seq)) {
-      for (const n of v.notes) {
-        if (n.d < debut || n.d >= fin) continue;
-        if (!parPas.has(n.d)) parPas.set(n.d, []);
-        parPas.get(n.d).push(n);
-      }
-    }
-    if (!parPas.size) {
+    const { notesA, vide } = indexerParPas(voixCompletes(e.seq).flatMap((v) => v.notes).filter((n) => n.d >= debut && n.d < fin));
+    if (vide) {
       dire((e.seq.accompagnement || "aucun") === "aucun" && (e.seq.accords || []).length
         ? "Sans accompagnement, on n'entend plus que ta mélodie : ici, elle est vide."
         : "Rien à écouter ici : pose un accord, ou écris une mélodie.");
@@ -434,12 +428,12 @@ export function creerAccords(ctx) {
     majEcoute();
     try {
       await ctx.transport.jouer(
-        () => ({ tempo: e.seq.tempo, mesure, temps: pasParTemps(e.seq), fin, notesA: (p) => parPas.get(p) || [] }),
+        () => ({ tempo: e.seq.tempo, mesure, temps: pasParTemps(e.seq), fin, notesA }),
         { depuis: debut, surFin, surPosition: (pas) => { tete = pas; placerTete(); } },
       );
     } catch (err) {
       surFin();
-      dire(err.message || "Le piano n'a pas pu se charger.");
+      dire(expliquer(err, "Le piano n'a pas pu se charger."));
     }
   }
 
@@ -504,10 +498,10 @@ export function creerAccords(ctx) {
       if (!e.seq.accompagnement || e.seq.accompagnement === "aucun") e.seq.accompagnement = "plaque";
     });
     suivreCouleur(autour(ouverte.d).actuel);
-    const n = e.seq.accords.length, s = n > 1 ? "s" : "";
+    const n = e.seq.accords.length, proposes = `${pluriel(n, "accord")} ${accorde(n, "proposé")}`;
     dire(avait
-      ? `${n} accord${s} proposé${s} d'après ta mélodie, à la place de ceux d'avant (« Annuler » les rend).`
-      : `${n} accord${s} proposé${s} d'après ta mélodie. Écoute, puis change ceux qui ne te plaisent pas.`, 9000);
+      ? `${proposes} d'après ta mélodie, à la place de ceux d'avant (« Annuler » les rend).`
+      : `${proposes} d'après ta mélodie. Écoute, puis change ceux qui ne te plaisent pas.`, 9000);
   });
 
   return {

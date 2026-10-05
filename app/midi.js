@@ -26,7 +26,7 @@
  * en paramètre.
  */
 import { lirePage, lireTonalite, nouvelleSequence, pasParTemps, quantifier } from "./sequence.js";
-import { tonaliteTransposee } from "./harmonie.js";
+import { tonaliteTransposee, voixCompletes } from "./harmonie.js";
 
 const PPQ = 480; // tics par noire ; un pas (double croche) = 120 tics
 const TICS_PAR_PAS = PPQ / 4;
@@ -74,7 +74,7 @@ const metaArmure = (quintes, mineur) => meta(0x59, [(quintes + 256) & 0xff, mine
  */
 function finALaBarre(derniere, mesure, changements) {
   const sections = [{ d: 0, mesure }, ...changements.filter((c) => c.mesure !== undefined)].sort((a, b) => a.d - b.d);
-  const s = [...sections].reverse().find((x) => x.d <= derniere) || sections[0];
+  const s = sections.findLast((x) => x.d <= derniere) || sections[0];
   if (!s.mesure || derniere <= s.d) return derniere;
   const longueur = (s.mesure[0] * 16) / s.mesure[1];
   return s.d + Math.ceil((derniere - s.d) / longueur - 1e-9) * longueur;
@@ -102,7 +102,7 @@ function sansChevauchement(notes) {
 
 /**
  * @param voix  [{ nom, notes: [{ d, l, h, v }] }] (d, l en pas, fractionnaires permis)
- * @param options { tempo, mesure: [n, d] (null : mesure libre), quintes, mineur, titre,
+ * @param {Object} options  { tempo, mesure: [n, d] (null : mesure libre), quintes, mineur, titre,
  *                  transposition, changements: [{ d, mesure?, quintes?, mineur? }] (en cours
  *                  de route, en pas), fin (pas ; par défaut, la barre après la dernière note) }
  * @returns Uint8Array
@@ -154,6 +154,17 @@ function chiffrageDeLevee(pas, mesure) {
     if (Math.abs(num - Math.round(num)) < 1e-9 && num >= 1) return [Math.round(num), den];
   }
   return null;
+}
+
+/**
+ * Le MIDI d'une idée : ses pistes et son accompagnement, à son tempo, dans
+ * sa mesure et sa tonalité. (Il était dans l'éditeur d'idée, que les
+ * exports et le dossier des .mid importaient tout entier pour lui.)
+ */
+export function midiDeLIdee(p, { transposition = 0 } = {}) {
+  const seq = p.sequence;
+  const k = lireTonalite(seq.tonalite);
+  return fichierMidi(voixCompletes(seq), { tempo: seq.tempo, mesure: seq.mesure, quintes: k.quintes, mineur: k.mineur, titre: p.titre, transposition });
 }
 
 /**

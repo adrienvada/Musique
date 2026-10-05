@@ -28,6 +28,7 @@
  */
 import { Micro } from "./micro.js";
 import { nomNote } from "./sequence.js";
+import { expliquer } from "./erreurs.js";
 
 const SILENCE_MAX = 30000;
 // Un trou d'une mesure ou deux (une consonne, un vibrato) ne vide pas l'écran :
@@ -43,7 +44,7 @@ export function messageMicro(err) {
   if (nom === "NotAllowedError" || nom === "SecurityError") return "Portée n'a pas accès au micro : autorise-le dans les réglages du navigateur. (Dans la page claude.ai, il n'y a pas droit : ouvre Portée sur adrienvada.fr/Musique.)";
   if (nom === "NotFoundError" || nom === "OverconstrainedError") return "Aucun micro trouvé sur cet appareil.";
   if (nom === "NotReadableError") return "Le micro est déjà pris par une autre appli.";
-  return (err && err.message) || "Le micro n'a pas pu s'ouvrir.";
+  return expliquer(err, "Le micro n'a pas pu s'ouvrir.");
 }
 
 /** Ce que dit l'aiguille : juste à dix centièmes de demi-ton près. */

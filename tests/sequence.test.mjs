@@ -316,3 +316,16 @@ test("l'arrondi : la dernière note se prolonge comme les autres, une double att
   for (const n of repetee) sq.poser(seq, 0, n);
   assert.equal(seq.pistes[0].notes.length, repetee.length);
 });
+
+test("les notes rangées par pas, comme le transport les lit, et leur fin", () => {
+  const notes = [{ d: 0, l: 4, h: 60 }, { d: 4, l: 2, h: 62 }, { d: 0, l: 8, h: 48 }];
+  const { notesA, fin, vide } = sq.indexerParPas(notes);
+  // Un accord : les notes du même pas, dans l'ordre où elles venaient.
+  assert.deepEqual(notesA(0).map((n) => n.h), [60, 48]);
+  assert.deepEqual(notesA(4).map((n) => n.h), [62]);
+  assert.deepEqual(notesA(2), []);
+  assert.equal(fin, 8, "la fin de la plus longue, pas de la dernière commencée");
+  assert.equal(vide, false);
+  const rien = sq.indexerParPas([]);
+  assert.deepEqual([rien.fin, rien.vide, rien.notesA(0)], [0, true, []]);
+});

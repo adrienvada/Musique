@@ -8,7 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { detecterHauteur, midiDe, Micro, tailleFenetre } from "../app/micro.js";
-import { positionAiguille, creerFiltreSauts } from "../app/idee-chant.js";
+import { positionAiguille, creerFiltreSauts, messageMicro } from "../app/idee-chant.js";
 import { raisonsEveil } from "../app/eveil.js";
 
 const SR = 48000;
@@ -255,4 +255,13 @@ test("le trait de la voix ignore un saut d'octave isolé, mais suit un vrai chan
   // Le silence remet le filtre à zéro : la première note d'après se trace sans condition.
   assert.equal(filtre(null), null);
   assert.equal(filtre(55), 55);
+});
+
+test("ce qui empêche d'ouvrir le micro se dit en français, jamais dans les mots du navigateur (I13)", () => {
+  const panne = (name, message = name) => Object.assign(new Error(message), { name });
+  assert.match(messageMicro(panne("NotAllowedError")), /^Portée n'a pas accès au micro/);
+  assert.equal(messageMicro(panne("NotFoundError")), "Aucun micro trouvé sur cet appareil.");
+  // Avant, le message anglais du navigateur s'affichait tel quel.
+  assert.equal(messageMicro(panne("AbortError", "Starting audio input failed")), "Le micro n'a pas pu s'ouvrir.");
+  assert.equal(messageMicro(null), "Le micro n'a pas pu s'ouvrir.");
 });

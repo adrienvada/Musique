@@ -18,26 +18,21 @@
  * faut à l'appli (ouvrir une partition, écouter, exporter, importer…) lui est
  * passé en dépendances, comme pour l'éditeur d'idée et l'écran du morceau.
  */
-import { dessinerApercu } from "./idee.js";
-import { dessinerApercuMorceau } from "./vue-morceau.js";
-import { dessinerPage } from "./manuscrit.js";
-import { assembler } from "./morceau.js";
+import { dessinerApercu, dessinerApercuMorceau, dessinerApercuPage } from "./apercus.js";
+import { assembler, sourceDuMorceau } from "./morceau.js";
+import { indexerParPas, pasParMesure, pasParTemps } from "./sequence.js";
+import { voixCompletes } from "./harmonie.js";
+import { creerEcoute } from "./ecoute.js";
+import { libelleLecture } from "./atelier.js";
+import { expliquer } from "./erreurs.js";
 import { ico } from "./icones.js";
-import { echapper } from "./ui.js";
+import { $, dateCourte, echapper, el, heure, pluriel } from "./ui.js";
 import { ambianceStudio, lirePref, ecrirePref } from "./preferences.js";
 import { brancherFeuille, fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 
-const $ = (id) => document.getElementById(id);
 const NS = "http://www.w3.org/2000/svg";
 export const ONGLETS = ["carnet", "partitions", "morceaux", "reglages"];
 const CLE_ONGLET = "portee:onglet";
-
-const el = (tag, classe = "", texte = null) => {
-  const e = document.createElement(tag);
-  if (classe) e.className = classe;
-  if (texte !== null) e.textContent = texte;
-  return e;
-};
 
 /** Ce que la recherche regarde : le titre, les étiquettes, la note. */
 const texteDe = (p) => [p.titre, ...(p.etiquettes || []), p.note || ""].join(" ").toLowerCase();
@@ -60,9 +55,8 @@ function periode(iso) {
 function quand(iso, groupe) {
   if (!iso) return "";
   const d = new Date(iso);
-  const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  if (groupe === "Aujourd'hui" || groupe === "Hier") return heure;
-  if (groupe === "Cette semaine") return `${d.toLocaleDateString("fr-FR", { weekday: "short" })} ${heure}`;
+  if (groupe === "Aujourd'hui" || groupe === "Hier") return heure(iso);
+  if (groupe === "Cette semaine") return `${d.toLocaleDateString("fr-FR", { weekday: "short" })} ${heure(iso)}`;
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
@@ -79,38 +73,66 @@ function partiesDuMorceau(p) {
   return (p.blocs || []).map((b) => (b.fois > 1 ? `${b.nom} ×${b.fois}` : b.nom)).filter(Boolean).join(" · ");
 }
 
-/**
- * L'aperçu d'une page écrite à la main : le début de la première portée, plus
- * grand que nature plutôt que toute la page en poussière. Le dessin de la page
- * (manuscrit.js) cadre sur toute la largeur ; on recadre ici sur le format de
- * la vignette, à gauche (la clé, les premières notes).
- */
-function dessinerApercuPage(svg, cal, traits, ratio) {
-  dessinerPage(svg, cal, traits, { compact: true, limite: 9 * cal.interligne });
-  const [x, y, , h] = svg.getAttribute("viewBox").split(" ").map(Number);
-  svg.setAttribute("viewBox", `${x} ${y} ${Math.round(h * ratio)} ${Math.round(h)}`);
-  svg.setAttribute("preserveAspectRatio", "xMinYMid slice");
+/** « 12 notes · ♩ 90 » : ce qu'on sait d'une idée sans l'ouvrir. */
+function resumeIdee(seq) {
+  if (!seq) return "";
+  const notes = seq.pistes.reduce((n, p) => n + p.notes.length, 0);
+  return `${pluriel(notes, "note")} · ♩ ${seq.tempo}`;
+}
+
+/** Le nom du modèle de papier d'une page (« Piano, large »). */
+function nomModele(m) {
+  return { "melodie-large": "Mélodie, large", "melodie-standard": "Mélodie", "piano-large": "Piano, large", "piano-standard": "Piano" }[m] || m || "";
+}
+
+/** La pastille d'une carte : le genre (idée, morceau), ou l'état d'une page lue. */
+function pastilleStatut(p) {
+  const restants = (p.doutes || []).filter((d) => !d.leve).length;
+  if (p.type === "idee") return el("span", "pastille p-idee", "Idée");
+  if (p.type === "morceau") return el("span", "pastille p-morceau", "Morceau");
+  if (p.statut === "prete") return el("span", "pastille p-ok", "Prête");
+  return el("span", "pastille p-doute", restants ? `À relire · ${pluriel(restants, "doute")}` : "À relire");
+}
+
+/** Toutes les étiquettes de la bibliothèque, les plus employées d'abord (le carnet, l'éditeur d'idée). */
+export function toutesEtiquettes(partitions) {
+  const compte = new Map();
+  // Une fiche abîmée (des étiquettes qui ne sont pas une liste) vidait tout le
+  // carnet (audit, S6) : le stockage les remet en forme, et ceci ne casse plus.
+  for (const p of partitions) {
+    for (const t of Array.isArray(p.etiquettes) ? p.etiquettes : []) if (typeof t === "string" && t) compte.set(t, (compte.get(t) || 0) + 1);
+  }
+  return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
 }
 
 /**
  * @param deps {
- *   etat, ouvrir(id, vue), ouvrirIdee(p, options), ouvrirMorceau(p),
- *   ecouter(p, bouton), enLecture(bouton), arreter(), partagerMidi(p), exporterMidi(p),
+ *   stockage() → le stockage ouvert, partitions() → la bibliothèque,
+ *   panneaux { reculer(), aLaRacine() } (ceux de la tablette, dans l'onglet Partitions),
+ *   transport (pour écouter depuis une carte),
+ *   ouvrir(id, vue), ouvrirIdee(p, options), ouvrirMorceau(p),
+ *   partagerMidi(p), exporterMidi(p),
  *   supprimer(p) (demande confirmation, puis supprime),
- *   calibration(modele), ideesParId(), etiquettes(), importer(fichiers),
- *   dateCourte(iso), resumeIdee(seq), nomModele(m), pastilleStatut(p), toast(texte)
+ *   calibration(modele), ideesParId(), importer(fichiers), toast(texte)
  * }
  */
 export function creerAccueil(deps) {
-  const { etat, toast } = deps;
+  const { toast } = deps;
+  // L'état de l'accueil est à lui (avant, il l'écrivait dans celui de l'appli, audit du 04/10, T3).
+  const etat = {
+    onglet: ONGLETS.includes(lirePref(CLE_ONGLET)) ? lirePref(CLE_ONGLET) : "carnet",
+    filtre: "tout",       // filtre du carnet : tout, idee, partition, morceau, favori
+    etiquette: null,      // filtre par étiquette (carnet)
+    filtrePages: "tout",  // filtre de l'onglet Partitions : tout, a-relire, prete
+  };
+  const partitions = () => deps.partitions();
+  // Les cartes ont leur écoute (ecoute.js) : la clé est le bouton touché, le même bouton arrête.
+  const ecoute = creerEcoute(deps.transport);
   const onglets = [...document.querySelectorAll("#onglets-accueil [role='tab']")];
   const feuille = $("feuille-actions");
   let actionsDe = null;       // l'id de la partition dont la feuille est ouverte
   let boutonEcoute = null;    // le « Écouter » de la feuille, tant qu'elle est ouverte
   let refocaliser = null;     // { id, classe } : où remettre le focus après avoir touché une étoile (la liste est redessinée)
-
-  etat.onglet = ONGLETS.includes(lirePref(CLE_ONGLET)) ? lirePref(CLE_ONGLET) : "carnet";
-  etat.filtrePages = "tout";
 
   const recherche = () => $("recherche").value.trim().toLowerCase();
   const surRecherche = (p) => { const q = recherche(); return !q || texteDe(p).includes(q); };
@@ -119,7 +141,8 @@ export function creerAccueil(deps) {
   // Les onglets
   // ---------------------------------------------------------------------------
 
-  function choisirOnglet(nom, { focus = false } = {}) {
+  /** Un onglet de l'accueil ; `dessiner: false` quand l'écran sera dessiné juste après (montrer). */
+  function choisirOnglet(nom, { focus = false, dessiner = true } = {}) {
     if (!ONGLETS.includes(nom)) nom = "carnet";
     etat.onglet = nom;
     ecrirePref(CLE_ONGLET, nom);
@@ -132,6 +155,7 @@ export function creerAccueil(deps) {
     for (const n of ONGLETS) $(`onglet-${n}`).hidden = n !== nom;
     // La recherche ne sert pas dans les réglages (la feuille de style la masque).
     document.querySelector(".barre-haut").dataset.onglet = nom;
+    if (!dessiner) return;
     afficher();
     window.scrollTo({ top: 0 });
   }
@@ -146,8 +170,6 @@ export function creerAccueil(deps) {
       e.preventDefault();
       choisirOnglet(ONGLETS[(cible + ONGLETS.length) % ONGLETS.length], { focus: true });
     });
-    // « Portée », en haut : le carnet.
-    $("aller-biblio").addEventListener("click", () => choisirOnglet("carnet"));
   }
 
   // ---------------------------------------------------------------------------
@@ -226,7 +248,7 @@ export function creerAccueil(deps) {
     return b;
   }
 
-  const basculerFavori = (p) => etat.stockage.modifier(p.id, { favori: !p.favori, modifieLe: new Date().toISOString() });
+  const basculerFavori = (p) => deps.stockage().modifier(p.id, { favori: !p.favori, modifieLe: new Date().toISOString() });
   const ouvrirPartition = (p) => deps.ouvrir(p.id, p.statut === "prete" ? "lecteur" : "atelier");
 
   // ---------------------------------------------------------------------------
@@ -245,9 +267,9 @@ export function creerAccueil(deps) {
 
   /** Ce qui précède la date : le genre, puis ce qu'on sait de la pièce. */
   function genreEtResume(p) {
-    if (p.type === "idee") return ["Idée", deps.resumeIdee(p.sequence)];
+    if (p.type === "idee") return ["Idée", resumeIdee(p.sequence)];
     if (p.type === "morceau") return ["Morceau", (p.blocs || []).map((b) => b.nom).join(", ")];
-    return [p.statut === "prete" ? "Partition prête" : "Partition", deps.nomModele(p.modele)];
+    return [p.statut === "prete" ? "Partition prête" : "Partition", nomModele(p.modele)];
   }
 
   /** Mémo, étiquettes, note en abrégé : une seule ligne, discrète. */
@@ -274,7 +296,7 @@ export function creerAccueil(deps) {
     // « À relire » : le seul état qui demande quelque chose ; une idée n'en a pas.
     if (!p.type && p.statut !== "prete") meta.appendChild(el("span", "pastille p-doute", "À relire"));
     const [genre, resume] = genreEtResume(p);
-    const date = groupe ? quand(p.modifieLe, groupe) : deps.dateCourte(p.modifieLe);
+    const date = groupe ? quand(p.modifieLe, groupe) : dateCourte(p.modifieLe);
     // Avec « À relire » devant, le mot « Partition » n'apprend rien : la place sert à la date.
     meta.appendChild(el("span", "ligne-quand", [meta.firstChild ? "" : genre, resume, date].filter(Boolean).join(" · ")));
     texte.appendChild(meta);
@@ -288,7 +310,7 @@ export function creerAccueil(deps) {
 
   function rendreFiltres() {
     for (const b of document.querySelectorAll("#filtres-carnet [data-filtre]")) b.setAttribute("aria-pressed", String(b.dataset.filtre === etat.filtre));
-    const toutes = deps.etiquettes();
+    const toutes = toutesEtiquettes(partitions());
     if (etat.etiquette && !toutes.includes(etat.etiquette)) etat.etiquette = null;
     const zone = $("filtres-etiquettes");
     zone.textContent = "";
@@ -302,18 +324,18 @@ export function creerAccueil(deps) {
   }
 
   function rendreCarnet() {
-    const vide = !!etat.stockage && etat.partitions.length === 0;
+    const vide = !!deps.stockage() && partitions().length === 0;
     // Pendant une recherche, les résultats prennent la place : la carte « Noter une idée » revient avec la liste complète.
     $("capture").hidden = !!recherche();
     // Tant que la bibliothèque s'ouvre, rien : l'accueil des premières fois ne doit pas clignoter.
     $("vide").hidden = !vide;
-    $("filtres-carnet").hidden = !etat.stockage || vide;
+    $("filtres-carnet").hidden = !deps.stockage() || vide;
     rendreFiltres();
     const liste = $("liste");
     liste.textContent = "";
     const q = recherche();
-    const visibles = etat.partitions.filter((p) => correspondFiltre(p) && surRecherche(p));
-    $("aucun").hidden = !(etat.partitions.length > 0 && visibles.length === 0);
+    const visibles = partitions().filter((p) => correspondFiltre(p) && surRecherche(p));
+    $("aucun").hidden = !(partitions().length > 0 && visibles.length === 0);
     let avant = null;
     for (const p of visibles) {
       // Sans recherche, le carnet se découpe par date (il est trié du plus récent au plus ancien).
@@ -332,10 +354,10 @@ export function creerAccueil(deps) {
 
   function rendrePartitions() {
     for (const b of document.querySelectorAll("#filtres-pages [data-filtre-page]")) b.setAttribute("aria-pressed", String(b.dataset.filtrePage === etat.filtrePages));
-    const pages = etat.partitions.filter((p) => !p.type);
+    const pages = partitions().filter((p) => !p.type);
     const aRelire = pages.filter((p) => p.statut !== "prete").length;
     $("resume-partitions").textContent = pages.length
-      ? `${pages.length} page${pages.length > 1 ? "s" : ""} écrite${pages.length > 1 ? "s" : ""} à la main${aRelire ? ` · ${aRelire} à relire` : ""}`
+      ? `${pluriel(pages.length, "page écrite", "pages écrites")} à la main${aRelire ? ` · ${aRelire} à relire` : ""}`
       : "Les pages écrites à la main sur ta tablette apparaîtront ici.";
     $("filtres-pages").hidden = pages.length === 0;
     const visibles = pages.filter((p) => (etat.filtrePages === "tout" || p.statut === etat.filtrePages) && surRecherche(p));
@@ -352,7 +374,7 @@ export function creerAccueil(deps) {
       ouvrir.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
       ouvrir.addEventListener("click", () => ouvrirPartition(p));
       const corps = el("span", "carte-corps");
-      corps.append(el("span", "titre", p.titre), deps.pastilleStatut(p), el("span", "meta", [deps.nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ")));
+      corps.append(el("span", "titre", p.titre), pastilleStatut(p), el("span", "meta", [nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ")));
       ouvrir.append(apercuDe(p, "apercu-grand", 2), corps);
       carte.append(ouvrir, boutonPlus(p));
       liste.appendChild(carte);
@@ -364,9 +386,9 @@ export function creerAccueil(deps) {
   // ---------------------------------------------------------------------------
 
   function rendreMorceaux() {
-    const morceaux = etat.partitions.filter((p) => p.type === "morceau");
+    const morceaux = partitions().filter((p) => p.type === "morceau");
     $("resume-morceaux").textContent = morceaux.length
-      ? `${morceaux.length} morceau${morceaux.length > 1 ? "x" : ""}`
+      ? pluriel(morceaux.length, "morceau", "morceaux")
       : "Des idées mises bout à bout : une intro, un couplet, un refrain…";
     const visibles = morceaux.filter(surRecherche);
     const liste = $("liste-morceaux");
@@ -392,6 +414,35 @@ export function creerAccueil(deps) {
   }
 
   // ---------------------------------------------------------------------------
+  // Écouter depuis une carte, sans l'ouvrir
+  // ---------------------------------------------------------------------------
+
+  /** Écoute une idée (ou un morceau) depuis sa carte. Le même bouton arrête. */
+  async function ecouter(p, bouton) {
+    if (ecoute.cle === bouton) { ecoute.arreter(); return; }
+    let source;
+    if (p.type === "morceau") source = sourceDuMorceau(assembler(p, deps.ideesParId()));
+    else {
+      const seq = p.sequence;
+      const { notesA, fin } = indexerParPas(voixCompletes(seq).flatMap((v) => v.notes));
+      source = () => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA });
+    }
+    const libelle = bouton.innerHTML;
+    const lecture = ecoute.jouer(bouton, source, {
+      // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
+      titre: p.titre || (p.type === "morceau" ? "Morceau" : "Idée"), relancer: () => { if (ecoute.cle === null) bouton.click(); },
+      surArret: () => { bouton.innerHTML = libelle; },
+    });
+    libelleLecture(bouton, true);
+    try {
+      await lecture;
+    } catch (e) {
+      console.error(e);
+      toast(expliquer(e, "Le piano n'a pas pu se charger."));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // La feuille d'actions (« ••• »)
   // ---------------------------------------------------------------------------
 
@@ -401,7 +452,7 @@ export function creerAccueil(deps) {
     $("feuille-titre").textContent = p.titre;
     const [genre, resume] = genreEtResume(p);
     const duree = p.type === "morceau" ? dureeMorceau(p, deps.ideesParId()) : "";
-    $("feuille-sous").textContent = [genre, resume, duree, deps.dateCourte(p.modifieLe)].filter(Boolean).join(" · ");
+    $("feuille-sous").textContent = [genre, resume, duree, dateCourte(p.modifieLe)].filter(Boolean).join(" · ");
     const liste = $("feuille-liste");
     liste.textContent = "";
     const ajouter = (icone, texte, agir, { plein = false, danger = false } = {}) => {
@@ -417,7 +468,7 @@ export function creerAccueil(deps) {
     if (p.type === "idee" || p.type === "morceau") {
       ajouter("carnet", "Ouvrir", puis(() => deps.ouvrir(p.id)), { plein: true });
       // L'écoute reste dans la feuille : « Arrêter » est là, sous le doigt ; fermer la feuille coupe le son.
-      boutonEcoute = ajouter("lire", "Écouter", (b) => deps.ecouter(p, b));
+      boutonEcoute = ajouter("lire", "Écouter", (b) => ecouter(p, b));
       ajouter("partager", "Envoyer le MIDI", puis(() => deps.partagerMidi(p)));
     } else {
       ajouter("crayon", "Corriger", puis(() => deps.ouvrir(p.id, "atelier")), { plein: p.statut !== "prete" });
@@ -434,7 +485,7 @@ export function creerAccueil(deps) {
   function brancherFeuilleActions() {
     brancherFeuille(feuille, {
       surFermer: () => {
-        if (boutonEcoute && deps.enLecture(boutonEcoute)) deps.arreter();
+        if (boutonEcoute && ecoute.cle === boutonEcoute) ecoute.arreter();
         actionsDe = null;
         boutonEcoute = null;
       },
@@ -526,9 +577,9 @@ export function creerAccueil(deps) {
     else if (etat.onglet === "partitions") rendrePartitions();
     else if (etat.onglet === "morceaux") rendreMorceaux();
     // Sans partition, rien à exporter ni à sauvegarder (restaurer reste là).
-    $("tout-midi").hidden = $("sauvegarder").hidden = etat.partitions.length === 0;
+    $("tout-midi").hidden = $("sauvegarder").hidden = partitions().length === 0;
     // La feuille ouverte sur une partition qui vient de disparaître (une autre fenêtre l'a supprimée) se ferme.
-    if (actionsDe && feuille.open && !etat.partitions.some((p) => p.id === actionsDe)) fermerFeuille(feuille);
+    if (actionsDe && feuille.open && !partitions().some((p) => p.id === actionsDe)) fermerFeuille(feuille);
     if (refocaliser) {
       const { id, classe } = refocaliser;
       refocaliser = null;
@@ -573,5 +624,22 @@ export function creerAccueil(deps) {
   $("etat-synchro").addEventListener("click", () => { choisirOnglet("reglages"); $("rg-synchro").scrollIntoView({ block: "start" }); });
 
   choisirOnglet(etat.onglet);
-  return { afficher, choisirOnglet, montrerSynchro };
+  return {
+    afficher, choisirOnglet, montrerSynchro,
+    /** L'onglet ouvert : carnet, partitions, morceaux ou reglages. */
+    get onglet() { return etat.onglet; },
+    /**
+     * « Précédent » dans l'accueil, du plus proche au plus lointain : la
+     * recherche, un panneau de la tablette, puis le carnet. Rend true s'il a
+     * reculé d'un pas ; au carnet, rien ne reste à défaire.
+     */
+    reculer() {
+      if (!$("recherche-zone").hidden) { fermerRecherche(); return true; }
+      if (deps.panneaux.reculer()) return true;
+      if (etat.onglet !== "carnet") { choisirOnglet("carnet"); return true; }
+      return false;
+    },
+    /** Le carnet, sans recherche ni panneau ouvert : la racine de l'appli. */
+    aLaRacine: () => etat.onglet === "carnet" && $("recherche-zone").hidden && deps.panneaux.aLaRacine(),
+  };
 }

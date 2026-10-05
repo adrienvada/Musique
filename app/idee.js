@@ -14,19 +14,25 @@
  *     jusqu'à ce que ça sonne juste ;
  *   - tout s'annule, tout s'enregistre tout seul (et se synchronise).
  *
- * Ce module tient le cœur : l'état (e), annuler et refaire, la sauvegarde,
- * le dessin (grille.js ou la partition d'abcjs), le transport (écouter,
- * boucle, métronome), la barre du haut, les feuilles Tempo, ••• et Carnet,
- * et le choix du mode du pupitre. Le reste vit dans des modules qui
- * reçoivent un contexte explicite (ctx, plus bas) et ne partagent rien
- * d'autre :
+ * Ce module tient le cœur : l'état (e), qu'il est seul à écrire avec les
+ * modules qui changent l'idée, annuler et refaire, le dessin (grille.js ou
+ * idee-partition.js), la barre du haut, la feuille •••, et le choix du
+ * mode du pupitre. Le reste vit
+ * dans des modules qui reçoivent un contexte explicite (ctx, plus bas) et
+ * ne partagent rien d'autre ; ceux qui n'ont qu'à lire l'état le reçoivent
+ * en lecture seule (le clavier, le chant, la partition) :
  *   idee-clavier.js   le mode Clavier (durées, clavier à l'écran, de
  *                     l'ordinateur, MIDI) ;
  *   idee-chant.js     le mode Chanter (micro, accordeur) ;
  *   idee-accords.js   le mode Accords et la feuille des accords ;
  *   idee-selection.js la pilule, la boîte à outils, la rangée de
  *                     sélection, les transformations, le menu en cercle ;
- *   idee-direct.js    le jeu en direct (décompte, enregistrement, recalage).
+ *   idee-direct.js    le jeu en direct (décompte, enregistrement, recalage) ;
+ *   idee-carnet.js    la feuille Carnet (note, étiquettes, favori, mémo vocal) ;
+ *   idee-tempo.js     la feuille Tempo et mesure (et les pistes) ;
+ *   idee-partition.js la partition gravée par abcjs (et sa mise en page) ;
+ *   idee-enregistrement.js  les enregistrements dans la bibliothèque ;
+ *   idee-ecoute.js    écouter, la boucle, le métronome.
  *
  * L'idée vit en notes (sequence.js) ; la partition n'en est qu'une
  * traduction. Ce module ne parle à l'appli que par les dépendances qu'on
@@ -34,53 +40,27 @@
  */
 import { lirePref, ecrirePref } from "./preferences.js";
 import * as sq from "./sequence.js";
-import { fichierMidi } from "./midi.js";
-import { voixCompletes, transposerIdee, STYLES } from "./harmonie.js";
 import { creerGrille } from "./grille.js";
-import { ico } from "./icones.js";
-import { echapper } from "./ui.js";
+import { $, dateCourte } from "./ui.js";
+import { egal } from "./fiche.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { creerModeClavier } from "./idee-clavier.js";
-import { creerChant, messageMicro } from "./idee-chant.js";
+import { creerChant } from "./idee-chant.js";
 import { creerAccords } from "./idee-accords.js";
 import { creerSelection } from "./idee-selection.js";
 import { creerDirect } from "./idee-direct.js";
-import { tempoDesTapes } from "./transport.js";
-import { sessionAudio, garderEveille, laisserDormir } from "./eveil.js";
+import { creerCarnet } from "./idee-carnet.js";
+import { creerTempo, defauts } from "./idee-tempo.js";
+import { creerPartition } from "./idee-partition.js";
+import { creerEnregistrementIdee } from "./idee-enregistrement.js";
+import { creerEcouteIdee } from "./idee-ecoute.js";
 
-const $ = (id) => document.getElementById(id);
-const MESURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8", "2/2"];
-const CLE_DEFAUTS = "portee:idee-defauts";
 const CLE_MODE = "portee:mode-idee";
 const MODES = ["clavier", "chanter", "accords"];
+// Ce que l'éditeur montre d'une idée : une version d'ailleurs qui ne change rien de cela ne se recharge pas.
+const CHAMPS_MONTRES = ["titre", "sequence", "note", "etiquettes", "favori", "memo"];
 
-/** Une vignette de l'idée : ses notes en petits traits (pour la bibliothèque). */
-export function dessinerApercu(svg, seq) {
-  const notes = (seq && seq.pistes || []).flatMap((p) => p.notes);
-  svg.setAttribute("viewBox", "0 0 240 120");
-  svg.setAttribute("preserveAspectRatio", "none");
-  if (!notes.length) { svg.innerHTML = ""; return; }
-  const fin = Math.max(sq.pasParMesure(seq) * 2, ...notes.map((n) => n.d + n.l));
-  const bas = Math.min(...notes.map((n) => n.h)) - 2, haut = Math.max(...notes.map((n) => n.h)) + 2;
-  const ex = 228 / fin, ey = 104 / Math.max(12, haut - bas);
-  svg.innerHTML = notes.map((n) => `<rect class="apercu-note" x="${6 + n.d * ex}" y="${8 + (haut - n.h) * ey - 2}" width="${Math.max(2, n.l * ex - 1)}" height="4" rx="2"/>`).join("");
-}
-
-/** Le MIDI d'une idée (pistes, accompagnement compris). */
-export function midiDeLIdee(p, { transposition = 0 } = {}) {
-  const seq = p.sequence;
-  const k = sq.lireTonalite(seq.tonalite);
-  return fichierMidi(voixCompletes(seq), { tempo: seq.tempo, mesure: seq.mesure, quintes: k.quintes, mineur: k.mineur, titre: p.titre, transposition });
-}
-
-const titreDuJour = () => {
-  const d = new Date();
-  return `Idée du ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}, ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
-};
-
-function defauts() {
-  try { return { tempo: 90, mesure: [4, 4], tonalite: "C", ...JSON.parse(lirePref(CLE_DEFAUTS) || "{}") }; } catch { return { tempo: 90, mesure: [4, 4], tonalite: "C" }; }
-}
+const titreDuJour = () => `Idée du ${dateCourte(new Date().toISOString())}`;
 
 /**
  * @param deps {
@@ -104,13 +84,18 @@ export function creerEditeurIdee(deps) {
     version: 0,
     enregistrement: null, // le jeu en direct en cours (idee-direct.js seul l'écrit)
     accordEnCours: null,
-    jetons: [], elements: new Map(),
-    sauvegarde: Promise.resolve(), minuterie: null, ouverte: false,
+    ouverte: false,
+    // L'idée ouverte, pour ses enregistrements : son identifiant, si elle est déjà dans
+    // la bibliothèque (`cree`), et la dernière version qu'elle y sait (`derniere`), d'où
+    // part la fusion si un autre onglet ou la synchro l'a changée entre-temps (S8).
+    session: { id: null, creeLe: null, cree: false, derniere: null },
   };
   const tenues = new Map(); // hauteur → note qui sonne (piano)
-  // Le tempo se règle par petits pas (−, +, le curseur) : on l'affiche tout
-  // de suite, on ne l'écrit qu'une fois le geste fini (un seul « Annuler »).
-  let tempoEnAttente = null, minuterieTempo = null;
+  // Les enregistrements de l'idée, un instant après le dernier geste (idee-enregistrement.js).
+  const ecritures = creerEnregistrementIdee({
+    e, stockage: deps.stockage, nouvelId: deps.nouvelId, toast,
+    etat: (texte) => { $("idee-etat").textContent = texte; },
+  });
 
   // --- La grille ---------------------------------------------------------------
 
@@ -131,6 +116,13 @@ export function creerEditeurIdee(deps) {
     defile: () => selection.placer(),
   });
 
+  // Écouter, la boucle, le métronome (idee-ecoute.js) : les modules du pupitre en
+  // empruntent la source et la pause du micro ; elle, les modules créés plus bas.
+  const ecoute = creerEcouteIdee({
+    e, $, transport, toast, grille, rafraichir, choisies: () => choisies(),
+    chant: () => chant, direct: () => direct, partition: () => partition,
+  });
+
   // --- Le contexte des modules ---------------------------------------------------
   //
   // Tout ce qu'un module du pupitre peut lire ou faire passe par ici : pas
@@ -141,21 +133,32 @@ export function creerEditeurIdee(deps) {
     modifier, rafraichir, entendre, enfoncer, relever, pedale,
     dureeCourante: () => dureeCourante(), choisirDuree, basculerPointee, silence, effacer,
     choisir, notesPiste: () => notesPiste(), choisies: () => choisies(),
-    source, suivreLecture, avantSon, apresSon, choisirMode,
+    source: ecoute.source, suivreLecture: ecoute.suivre, avantSon: ecoute.avantSon, apresSon: ecoute.apresSon, choisirMode,
     boiteSelection, grille,
     // La boîte à outils de la sélection (idee-selection.js) cache le pupitre : elle a son propre « Annuler ».
     annuler: () => revenir(e.annuler, e.refaire),
   };
-  const clavierMode = creerModeClavier(ctx);
-  const chant = creerChant(ctx);
+  // Ce que ces modules n'ont qu'à lire, ils le lisent en lecture seule : une
+  // écriture y lève une erreur, au lieu de changer l'idée sans passer par le
+  // cœur (ni « Annuler », ni enregistrement). Audit du 04/10, T3.
+  const refuser = (_e, cle) => { throw new TypeError(`L'état de l'éditeur ne s'écrit que dans idee.js (${String(cle)}).`); };
+  const lecture = new Proxy(e, { set: refuser, deleteProperty: refuser, defineProperty: refuser });
+  const clavierMode = creerModeClavier({ ...ctx, e: lecture });
+  const chant = creerChant({ ...ctx, e: lecture });
   const accords = creerAccords(ctx);
   const selection = creerSelection(ctx);
   const direct = creerDirect(ctx);
   const modes = { clavier: clavierMode, chanter: chant, accords };
-
-  $("idee-mesure").innerHTML = MESURES.map((m) => `<option value="${m}">${m}</option>`).join("");
-  $("idee-tonalite").innerHTML = sq.TONALITES.map((t) => `<option value="${t}">${sq.nomTonalite(t)}</option>`).join("");
-  $("idee-accomp").innerHTML = STYLES.map((s) => `<option value="${s.id}">${s.nom}</option>`).join("");
+  // La feuille Tempo et mesure (idee-tempo.js) ; le clavier à l'écran suit la piste choisie.
+  const tempo = creerTempo({
+    e, $, toast, grille, modifier, rafraichir,
+    notesPiste: () => notesPiste(), amener: (h) => clavierMode.amener(h),
+  });
+  // La partition gravée (idee-partition.js) : ce qu'un toucher veut dire, c'est le cœur qui le décide.
+  const partition = creerPartition({
+    e: lecture, $, transport, abcjs: deps.abcjs, rafraichir,
+    surClic: surClicPartition, apresGravure: () => selection.placer(),
+  });
   const feuilles = ["idee-reglages", "idee-menu", "idee-infos"].map((id) => brancherFeuille($(id)));
   for (const f of feuilles) f.addEventListener("click", (ev) => { if (ev.target.closest("[data-fermer]")) fermerFeuille(f); });
 
@@ -169,7 +172,10 @@ export function creerEditeurIdee(deps) {
    *   ("clavier", "chanter" ou "accords" ; sinon le dernier employé) }
    */
   function ouvrir(p = null, { seq = null, titre = null, memo = false, mode = null } = {}) {
+    // Ce qui attendait pour l'idée d'avant part d'abord, avec son contenu à elle.
+    ecritures.vider();
     e.ouverte = true;
+    e.session = { id: p ? p.id : null, creeLe: p ? p.creeLe : null, cree: !!p, derniere: p };
     e.id = p ? p.id : null;
     e.creeLe = p ? p.creeLe : null;
     e.titre = p ? p.titre : titre || titreDuJour();
@@ -185,7 +191,7 @@ export function creerEditeurIdee(deps) {
     e.annuler = []; e.refaire = [];
     e.version++;
     // Une autre idée : sa partition se grave tout de suite, avec sa propre mise en page.
-    gravee = null; miseEnPage = null;
+    partition.oublier();
     // Une idée née d'une partition (« continuer en idée ») s'enregistre tout de suite.
     if (!p && seq) planifierSauvegarde(0);
     $("idee-titre").value = e.titre;
@@ -197,8 +203,8 @@ export function creerEditeurIdee(deps) {
     // Un mémo vocal prend le micro : on l'ouvre au clavier, pas au chant.
     choisirMode(MODES.includes(mode) ? mode : memo ? "clavier" : lirePref(CLE_MODE));
     rafraichir();
-    afficherInfos();
-    if (memo) { ouvrirFeuille($("idee-infos")); memoEnregistrer(); }
+    carnet.afficher();
+    if (memo) { ouvrirFeuille($("idee-infos")); carnet.enregistrerMemo(); }
     requestAnimationFrame(() => grille.centrer());
     clavierMode.ouvrir(e.seq.pistes[0].notes);
   }
@@ -214,22 +220,29 @@ export function creerEditeurIdee(deps) {
     selection.fermer();
     accords.fermer();
     for (const f of feuilles) fermerFeuille(f);
-    if (enregistreur) enregistreur.stop();
-    if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; }
+    carnet.fermer();
     for (const h of [...tenues.keys()]) relever(h);
     // Une pédale restée enfoncée ne doit pas tenir les notes des autres écrans.
     piano.pedale(false);
-    if (e.minuterie) { clearTimeout(e.minuterie); e.minuterie = null; sauver(); }
-    await e.sauvegarde;
+    await ecritures.vider();
   }
 
-  /** L'idée a changé sur un autre appareil : on la reprend, sauf modification en cours ici. */
+  /** Une écriture attend ou part, le tempo se règle, ou le jeu en direct tourne : on ne recharge pas sous les doigts. */
+  const occupe = () => ecritures.occupe || tempo.enAttente || !!e.enregistrement;
+
+  /**
+   * L'idée a changé ailleurs (un autre appareil, un autre onglet) : on la
+   * reprend, sauf modification en cours ici. Rien de ce qu'elle montre n'a
+   * changé : rien à faire, et rien à dire (T4).
+   */
   function recharger(p) {
-    if (!e.ouverte || p.id !== e.id || e.minuterie || e.enregistrement) return false;
+    if (!e.ouverte || p.id !== e.id || occupe()) return false;
+    if (CHAMPS_MONTRES.every((c) => egal(p[c], e.session.derniere && e.session.derniere[c]))) return false;
+    e.session.derniere = p;
     e.titre = p.titre;
     e.seq = sq.cloner(p.sequence);
     e.note = p.note || ""; e.etiquettes = p.etiquettes || []; e.favori = !!p.favori; e.memo = p.memo || null;
-    afficherInfos();
+    carnet.afficher();
     e.selection = new Set([...e.selection].filter((id) => e.seq.pistes[e.piste]?.notes.some((n) => n.id === id)));
     if (!e.seq.pistes[e.piste]) e.piste = 0;
     e.version++;
@@ -291,49 +304,8 @@ export function creerEditeurIdee(deps) {
     planifierSauvegarde();
   }
 
-  function planifierSauvegarde(delai = 700) {
-    clearTimeout(e.minuterie);
-    $("idee-etat").textContent = "Enregistrement…";
-    e.minuterie = setTimeout(() => { e.minuterie = null; sauver(); }, delai);
-  }
-
-  // Une idée sans note, sans accord, sans mot ni mémo ne s'enregistre pas.
-  const vide = () => e.seq.pistes.every((p) => !p.notes.length) && !(e.seq.accords || []).length && !e.memo && !e.note && !e.etiquettes.length;
-
-  function donnees() {
-    const { abc } = sq.ecrireAbc(e.seq, { voix: voixCompletes(e.seq), titre: e.titre });
-    return {
-      type: "idee", titre: e.titre, sequence: sq.cloner(e.seq), abc, statut: "idee", nbPages: 0, modele: null, tempo: e.seq.tempo,
-      note: e.note, etiquettes: e.etiquettes, favori: e.favori, memo: e.memo,
-    };
-  }
-
-  /** Enregistre (les écritures se suivent, jamais deux à la fois). */
-  function sauver() {
-    e.sauvegarde = e.sauvegarde.then(async () => {
-      const stockage = deps.stockage();
-      if (!stockage) return;
-      const maintenant = new Date().toISOString();
-      try {
-        if (!e.id) {
-          if (vide()) { $("idee-etat").textContent = ""; return; } // une idée vide ne s'enregistre pas
-          e.id = deps.nouvelId();
-          e.creeLe = maintenant;
-          await stockage.creer(e.id, { ...donnees(), creeLe: maintenant, modifieLe: maintenant }, []);
-        } else {
-          await stockage.modifier(e.id, { ...donnees(), modifieLe: maintenant });
-        }
-        if (e.ouverte) $("idee-etat").textContent = "Enregistrée";
-      } catch (err) {
-        console.error(err);
-        const texte = "Non enregistrée : " + (err.message || err.code || "erreur");
-        $("idee-etat").textContent = texte;
-        // L'état ne se voit plus dans la barre : une erreur se dit tout haut.
-        if (e.ouverte) toast(`L'idée n'a pas pu être enregistrée (${err.message || err.code || "erreur"}).`, 8000);
-      }
-    });
-    return e.sauvegarde;
-  }
+  /** Enregistre un instant après le dernier geste (idee-enregistrement.js). */
+  function planifierSauvegarde(delai) { ecritures.planifier(delai); }
 
   // --- Jouer une note, écrire -----------------------------------------------------
 
@@ -461,226 +433,23 @@ export function creerEditeurIdee(deps) {
   /** Le cadre des notes choisies à l'écran, et la zone visible (pour la pilule). */
   function boiteSelection() {
     if (!e.selection.size || !e.ouverte) return null;
-    if (e.affichage === "grille") return grille.boite([...e.selection]);
-    const zone = $("idee-partition");
-    const els = [...zone.querySelectorAll(".choisie")];
-    if (!els.length) return null;
-    const rs = els.map((x) => x.getBoundingClientRect()).filter((r) => r.width || r.height);
-    if (!rs.length) return null;
-    return {
-      boite: { left: Math.min(...rs.map((r) => r.left)), right: Math.max(...rs.map((r) => r.right)), top: Math.min(...rs.map((r) => r.top)), bottom: Math.max(...rs.map((r) => r.bottom)) },
-      zone: zone.getBoundingClientRect(),
-    };
+    return e.affichage === "grille" ? grille.boite([...e.selection]) : partition.boite();
   }
 
-  // --- Écouter, boucle, métronome ---------------------------------------------
-
-  let cache = { version: -1 };
-  /** Ce que le transport joue : toutes les voix (accompagnement compris), indexées par pas. */
-  function source() {
-    if (cache.version !== e.version) {
-      const parPas = new Map();
-      let fin = 0;
-      for (const v of voixCompletes(e.seq)) {
-        for (const n of v.notes) {
-          if (!parPas.has(n.d)) parPas.set(n.d, []);
-          parPas.get(n.d).push(n);
-          fin = Math.max(fin, n.d + n.l);
-        }
-      }
-      cache = { version: e.version, parPas, fin };
-    }
-    return { tempo: e.seq.tempo, mesure: sq.pasParMesure(e.seq), temps: sq.pasParTemps(e.seq), fin: cache.fin, notesA: (p) => cache.parPas.get(p) || [] };
+  /** On a touché la partition : une note se choisit, un silence y place le curseur. */
+  function surClicPartition(j) {
+    if (j.voix >= e.seq.pistes.length) { toast("L'accompagnement suit les accords : touche un accord, dans la grille, pour le changer."); return; }
+    if (j.voix !== e.piste) e.piste = j.voix;
+    if (j.silence) { e.selection.clear(); e.curseur = j.a; rafraichir(); return; }
+    choisir(j.ids);
   }
 
-  /** La boucle : les mesures de la sélection, sinon toute l'idée. */
-  function etendueBoucle() {
-    const mesure = sq.pasParMesure(e.seq);
-    const sel = choisies();
-    if (sel.length) {
-      const [a, b] = sq.etendue(sel);
-      return [Math.floor(a / mesure) * mesure, Math.ceil(b / mesure) * mesure];
-    }
-    return [0, sq.nbMesures(e.seq) * mesure];
-  }
+  // --- Le carnet : note, étiquettes, favori, mémo vocal (idee-carnet.js) ----------
 
-  // Le micro et le piano ne marchent pas ensemble (le piano repasserait dans
-  // le micro) : le micro se tait tant que le piano joue, puis reprend.
-  function avantSon() { chant.pause(); }
-  function apresSon() { chant.reprendre(); }
-
-  function majJouer(enCours) {
-    const b = $("idee-jouer");
-    b.innerHTML = ico(enCours ? "pause" : "lire");
-    b.setAttribute("aria-label", enCours ? "Arrêter l'écoute" : "Écouter");
-    b.setAttribute("aria-pressed", String(enCours));
-  }
-
-  async function jouer() {
-    if (transport.actif) { transport.arreter(); return; }
-    if (e.enregistrement) return;
-    avantSon();
-    const s = source();
-    const boucle = e.boucle ? etendueBoucle() : null;
-    let depuis = 0;
-    if (boucle) depuis = boucle[0];
-    else if (e.selection.size) depuis = Math.min(...choisies().map((n) => n.d));
-    else if (e.curseur > 0 && e.curseur < s.fin) depuis = e.curseur;
-    majJouer(true);
-    try {
-      await transport.jouer(source, {
-        depuis, boucle, metronome: e.metronome,
-        // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
-        titre: e.titre, relancer: () => { if (e.ouverte && !transport.actif) jouer(); },
-        surPosition: suivreLecture,
-        surFin: () => { majJouer(false); suivreLecture(null); apresSon(); apresLecture(); },
-      });
-    } catch (err) {
-      majJouer(false);
-      apresSon();
-      toast(err.message || "Le piano n'a pas pu se charger.");
-    }
-  }
-
-  let dernierJeton = null;
-  /** Suit la lecture : la tête dans la grille, ou la note jouée sur la partition. */
-  function suivreLecture(pas) {
-    if (e.affichage === "grille") grille.lecture(pas);
-    else {
-      const j = pas === null ? null : e.jetons.find((x) => x.voix === e.piste && x.couche === 0 && pas >= x.a && pas < x.a + x.l);
-      if (j !== dernierJeton) {
-        for (const el of (dernierJeton && e.elements.get(dernierJeton)) || []) el.classList.remove("joue");
-        for (const el of (j && e.elements.get(j)) || []) el.classList.add("joue");
-        dernierJeton = j;
-      }
-    }
-    direct.suivre(pas);
-  }
-
-  // --- Le carnet : note, étiquettes, favori, mémo vocal ---------------------------
-
-  function afficherInfos() {
-    $("info-note").value = e.note;
-    $("info-favori").setAttribute("aria-pressed", String(e.favori));
-    $("info-favori").innerHTML = `${ico(e.favori ? "etoile-pleine" : "etoile", "s")}Favori`;
-    $("info-favori").setAttribute("aria-label", e.favori ? "Favori (toucher pour retirer)" : "Mettre en favori");
-    const zone = $("info-etiquettes");
-    zone.textContent = "";
-    for (const t of e.etiquettes) {
-      const span = document.createElement("span");
-      span.className = "etiquette";
-      span.textContent = t;
-      const x = document.createElement("button");
-      x.type = "button"; x.innerHTML = ico("fermer", "s"); x.setAttribute("aria-label", `Retirer l'étiquette ${t}`);
-      x.addEventListener("click", () => { e.etiquettes = e.etiquettes.filter((y) => y !== t); afficherInfos(); planifierSauvegarde(0); });
-      span.appendChild(x);
-      zone.appendChild(span);
-    }
-    const connues = deps.etiquettes ? deps.etiquettes().filter((t) => !e.etiquettes.includes(t)) : [];
-    $("info-etiquettes-connues").innerHTML = connues.map((t) => `<option value="${echapper(t)}">`).join("");
-    $("memo-ecouter").hidden = $("memo-effacer").hidden = !e.memo || !!enregistreur;
-    if (!enregistreur) {
-      $("memo-enregistrer-texte").textContent = e.memo ? "Refaire le mémo" : "Enregistrer un mémo";
-      $("memo-etat").textContent = e.memo ? `${e.memo.duree} s` : "";
-    }
-  }
-
-  let enregistreur = null, lecteurMemo = null;
-
-  const enBase64 = (blob) => new Promise((ok, ko) => {
-    const r = new FileReader();
-    r.onload = () => ok(String(r.result).split(",")[1] || "");
-    r.onerror = () => ko(r.error);
-    r.readAsDataURL(blob);
+  const carnet = creerCarnet({
+    e, $, toast, transport, etiquettes: deps.etiquettes, stockage: deps.stockage,
+    planifierSauvegarde, sauverMaintenant: () => ecritures.vider(), choisirMode,
   });
-  const depuisBase64 = (memo) => {
-    const octets = Uint8Array.from(atob(memo.base64), (c) => c.charCodeAt(0));
-    return new Blob([octets], { type: memo.type || "audio/mp4" });
-  };
-
-  async function memoEnregistrer() {
-    if (enregistreur) { enregistreur.stop(); return; }
-    if (!window.MediaRecorder || !navigator.mediaDevices) { toast("Ce navigateur ne sait pas enregistrer de son."); return; }
-    transport.arreter();
-    // Le mémo prend le micro : l'accordeur le rend (il reprendra en revenant au mode Chanter).
-    if (e.modeOuvert && e.mode === "chanter") choisirMode("clavier");
-    let flux;
-    // Sur l'iPhone, le micro demande une session « enregistrer et jouer », rendue à « jouer » à la fin :
-    // sans quoi le piano obéirait de nouveau au bouton silencieux (eveil.js, M8).
-    sessionAudio("play-and-record");
-    try {
-      flux = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (err) {
-      sessionAudio("playback");
-      toast(messageMicro(err), 9000);
-      return;
-    }
-    // Le format que lisent tous les appareils d'abord (Safari enregistre en MP4).
-    const type = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find((t) => MediaRecorder.isTypeSupported(t));
-    const rec = new MediaRecorder(flux, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 });
-    const bouts = [];
-    const debut = Date.now();
-    rec.ondataavailable = (ev) => { if (ev.data && ev.data.size) bouts.push(ev.data); };
-    const montre = setInterval(() => {
-      const s = Math.round((Date.now() - debut) / 1000);
-      $("memo-etat").textContent = `0:${String(s).padStart(2, "0")} / 1:00`;
-      if (s >= 60) rec.stop();
-    }, 250);
-    rec.onstop = async () => {
-      clearInterval(montre);
-      for (const piste of flux.getTracks()) piste.stop();
-      sessionAudio("playback");
-      laisserDormir("memo");
-      enregistreur = null;
-      $("memo-enregistrer").setAttribute("aria-pressed", "false");
-      const blob = new Blob(bouts, { type: rec.mimeType || type || "audio/webm" });
-      const duree = Math.max(1, Math.round((Date.now() - debut) / 1000));
-      if (!blob.size) { afficherInfos(); return; }
-      await garderMemo({ type: blob.type, base64: await enBase64(blob), duree });
-      toast("Mémo gardé avec l'idée.");
-    };
-    rec.start(1000);
-    // Une minute sans toucher l'écran : il s'éteindrait en plein mémo, et l'iPhone couperait le micro.
-    garderEveille("memo");
-    enregistreur = rec;
-    $("memo-enregistrer").setAttribute("aria-pressed", "true");
-    $("memo-enregistrer-texte").textContent = "Arrêter le mémo";
-    $("memo-ecouter").hidden = $("memo-effacer").hidden = true;
-  }
-
-  /** Garde le mémo (ou l'efface, avec null) : la fiche d'abord, puis le son. */
-  async function garderMemo(memo) {
-    e.memo = memo ? { duree: memo.duree, type: memo.type } : null;
-    clearTimeout(e.minuterie); e.minuterie = null;
-    await sauver();
-    if (e.id) await deps.stockage().ecrireMemo(e.id, memo).catch((err) => toast("Le mémo n'a pas pu être gardé : " + (err.message || err)));
-    afficherInfos();
-  }
-
-  const boutonMemo = (lit) => { $("memo-ecouter").innerHTML = `${ico(lit ? "stop" : "lire", "s")}<span>${lit ? "Arrêter" : "Écouter"}</span>`; };
-  async function memoEcouter() {
-    if (lecteurMemo) { lecteurMemo.pause(); lecteurMemo = null; boutonMemo(false); return; }
-    const memo = e.id ? await deps.stockage().lireMemo(e.id).catch(() => null) : null;
-    if (!memo) { toast("Le son de ce mémo n'est pas encore arrivé sur cet appareil (synchronisation)."); return; }
-    lecteurMemo = new Audio(URL.createObjectURL(depuisBase64(memo)));
-    boutonMemo(true);
-    lecteurMemo.onended = () => { lecteurMemo = null; boutonMemo(false); };
-    lecteurMemo.play().catch(() => { lecteurMemo = null; boutonMemo(false); toast("Ce navigateur ne sait pas lire ce mémo."); });
-  }
-
-  $("info-fermer").addEventListener("click", () => fermerFeuille($("idee-infos")));
-  $("info-favori").addEventListener("click", () => { e.favori = !e.favori; afficherInfos(); planifierSauvegarde(0); });
-  $("info-note").addEventListener("input", () => { e.note = $("info-note").value; planifierSauvegarde(); });
-  $("info-etiquette-form").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const t = $("info-etiquette").value.trim().toLowerCase();
-    if (t && !e.etiquettes.includes(t)) { e.etiquettes = [...e.etiquettes, t]; planifierSauvegarde(0); }
-    $("info-etiquette").value = "";
-    afficherInfos();
-  });
-  $("memo-enregistrer").addEventListener("click", memoEnregistrer);
-  $("memo-ecouter").addEventListener("click", memoEcouter);
-  $("memo-effacer").addEventListener("click", () => { if (window.confirm("Effacer le mémo vocal ?")) garderMemo(null); });
 
   // --- Affichage ------------------------------------------------------------------
 
@@ -709,56 +478,11 @@ export function creerEditeurIdee(deps) {
         seq: e.seq, piste: e.piste, selection: e.selection, curseur: e.curseur,
         // Avec une note choisie, le clavier la change : le curseur n'écrit plus, on le cache.
         curseurVisible: !e.selection.size,
-        boucle: e.boucle ? etendueBoucle() : null, pas: Math.min(dureeCourante(), sq.pasParTemps(e.seq)),
+        boucle: e.boucle ? ecoute.etendueBoucle() : null, pas: Math.min(dureeCourante(), sq.pasParTemps(e.seq)),
         mesureChoisie: e.mesureChoisie, accordsVisibles: true,
       });
-    } else planifierGravure();
+    } else partition.planifier();
     selection.placer();
-  }
-
-  // La gravure se regroupe (audit du 04/10, M2, et audit de l'interface).
-  // abcjs regrave toute la partition : de 10 à 40 ms pour une idée courte au
-  // téléphone, plus de 400 ms pour 64 mesures, et jusqu'à trois gravures par
-  // changement (six sur grand écran) pour ajuster la mise en page.
-  //   - Pendant la lecture : une gravure toutes les 300 ms au plus, d'un seul
-  //     passage, avec la mise en page d'avant ; sinon le transport manquait
-  //     des notes. L'arrêt regrave en entier.
-  //   - En écrivant : 150 ms après la dernière note, d'un seul passage tant
-  //     que le nombre de mesures ne change pas ; dix notes tapées vite ne
-  //     coûtent qu'une gravure.
-  //   - Choisir une note ne regrave plus rien : seules ses couleurs changent.
-  const GRAVURE_EN_LECTURE = 300, GRAVURE_EN_ECRIVANT = 150;
-  let gravureFaite = 0, gravureAttendue = null, gravureRapide = false;
-  let gravee = null; // { id, version, largeur, hauteur, mesures } : ce que montre la gravure en place
-  const tailleGravure = () => ({ largeur: $("idee-gravure").clientWidth || 600, hauteur: Math.max(160, ($("idee-partition").clientHeight || 400) - 36) });
-  function planifierGravure() {
-    const zone = $("idee-gravure");
-    const { largeur, hauteur } = tailleGravure();
-    const fraiche = gravee && gravee.id === e.id && gravee.version === e.version && gravee.largeur === largeur && gravee.hauteur === hauteur && zone.querySelector("svg");
-    clearTimeout(gravureAttendue);
-    gravureAttendue = null;
-    if (fraiche) { marquerChoisies(); return; }
-    if (!gravee || gravee.id !== e.id) { graverPartition(); return; } // la première gravure de cette idée : tout de suite
-    const lecture = transport.actif;
-    const attente = lecture ? gravureFaite + GRAVURE_EN_LECTURE - performance.now() : GRAVURE_EN_ECRIVANT;
-    const graverMaintenant = () => {
-      gravureAttendue = null;
-      if (!e.ouverte || e.affichage !== "partition") return;
-      gravureFaite = performance.now();
-      const memes = gravee && gravee.mesures === sq.nbMesures(e.seq);
-      if (transport.actif) gravureRapide = true;
-      graverPartition({ unPassage: transport.actif || memes });
-      selection.placer();
-    };
-    if (attente <= 0) graverMaintenant();
-    else gravureAttendue = setTimeout(graverMaintenant, attente);
-  }
-  /** La lecture s'arrête : la partition gravée d'un seul passage retrouve sa mise en page ajustée. */
-  function apresLecture() {
-    if (!gravureRapide || !e.ouverte || e.affichage !== "partition") return;
-    gravureRapide = false;
-    gravee = null;
-    rafraichir();
   }
 
   function majCommandes() {
@@ -767,24 +491,14 @@ export function creerEditeurIdee(deps) {
     const dit = `Tempo ${k.tempo}, mesure ${k.mesure.join("/")}, ${sq.nomTonalite(k.tonalite)} : changer`;
     $("idee-reglages-bouton").title = dit;
     $("idee-reglages-bouton").setAttribute("aria-label", dit);
-    if (tempoEnAttente === null) { $("idee-tempo").value = k.tempo; $("idee-tempo-val").textContent = k.tempo; }
-    const mesure = k.mesure.join("/");
-    $("idee-mesure").value = mesure;
-    $("idee-mesures").querySelectorAll("[data-mesure]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mesure === mesure)));
-    $("idee-tonalite").value = k.tonalite;
-    $("idee-accomp").value = k.accompagnement || "aucun";
-    $("idee-boucle").setAttribute("aria-pressed", String(e.boucle));
-    $("idee-metronome").setAttribute("aria-pressed", String(e.metronome));
+    tempo.maj();
+    ecoute.maj();
     $("idee-annuler").disabled = !e.annuler.length || !!e.enregistrement;
     $("idee-refaire").disabled = !e.refaire.length || !!e.enregistrement;
     // Les pistes : une puce dans la barre (dès qu'il y en a deux), le choix dans la feuille Tempo.
-    const plusieurs = k.pistes.length > 1;
-    $("idee-piste-puce").hidden = !plusieurs;
+    $("idee-piste-puce").hidden = k.pistes.length < 2;
     $("idee-piste-puce").textContent = k.pistes[e.piste].nom;
     $("idee-piste-puce").setAttribute("aria-label", `Piste : ${k.pistes[e.piste].nom} (toucher pour changer)`);
-    $("idee-pistes").hidden = !plusieurs;
-    $("idee-pistes").innerHTML = plusieurs ? k.pistes.map((p, i) => `<button data-piste="${i}" aria-pressed="${i === e.piste}">${echapper(p.nom)}</button>`).join("") : "";
-    $("idee-basse").hidden = plusieurs;
     // Une note choisie : la rangée de la sélection se glisse au-dessus du
     // mode, qui se resserre ; le pupitre garde sa hauteur, la grille ne bouge pas.
     $("idee-pupitre").classList.toggle("avec-selection", e.selection.size > 0);
@@ -797,112 +511,6 @@ export function creerEditeurIdee(deps) {
       const sel = choisies();
       $("idee-mode").textContent = sel.length ? "Le clavier change la note choisie" : "";
     }
-  }
-
-  // --- La partition (gravée par abcjs) ----------------------------------------------
-
-  let miseEnPage = null; // { largeur, parLigne, largeurPortee } : celle de la dernière gravure ajustée
-  /** @param o { unPassage : pendant la lecture, une seule gravure, avec la mise en page d'avant (M2) } */
-  function graverPartition({ unPassage = false } = {}) {
-    const lib = deps.abcjs();
-    const zone = $("idee-gravure");
-    if (!lib) { zone.textContent = "La partition n'a pas pu se charger (connexion ?). La grille marche sans."; return; }
-    const { largeur, hauteur } = tailleGravure();
-    const toutes = voixCompletes(e.seq);
-    const couleur = getComputedStyle(document.body).getPropertyValue("--stylo").trim() || "#2B48B0";
-    // La gravure remplit la place de la grille. Au téléphone, deux mesures
-    // par ligne, assez grandes pour se lire et se toucher au doigt ; une
-    // idée courte en prend moins par ligne, ou se grave plus grand, plutôt
-    // que de laisser un grand vide sous la portée. Bornes : la portée
-    // agrandie deux fois au plus au téléphone (1,6 fois sur un grand écran),
-    // et assez de place par mesure pour que les notes ne se touchent pas.
-    const mesures = sq.nbMesures(e.seq);
-    const agrandiMax = largeur < 700 ? 2 : 1.6;
-    const etroite = largeur / agrandiMax; // la portée la plus étroite permise
-    let parLigne = Math.max(1, Math.min(6, Math.floor(largeur / 170)));
-    let largeurPortee = parLigne * 200, h = 0, objet = null, jetons = [];
-    const reprise = unPassage && miseEnPage && miseEnPage.largeur === largeur;
-    if (reprise) ({ parLigne, largeurPortee } = miseEnPage);
-    const graver = () => {
-      const ecrit = sq.ecrireAbc(e.seq, { voix: toutes, mesuresParLigne: parLigne });
-      jetons = ecrit.jetons;
-      [objet] = lib.renderAbc(zone, ecrit.abc, {
-        responsive: "resize", add_classes: true, paddingtop: 6, paddingbottom: 6, paddingleft: 0, paddingright: 0,
-        staffwidth: largeurPortee,
-        clickListener: surClicPartition, selectTypes: ["note"], selectionColor: couleur,
-      });
-      h = zone.getBoundingClientRect().height;
-    };
-    graver();
-    // Pas plus de 420 px par mesure : sur un grand écran, une ligne de plus
-    // pour remplir la hauteur étalerait les notes d'un bord à l'autre.
-    const moinsParLigne = Math.max(1, Math.floor(largeur / 420));
-    while (!reprise && parLigne > moinsParLigne && h < hauteur * 0.6) {
-      // La hauteur qu'aurait la gravure avec une mesure de moins par ligne.
-      const autre = Math.max((parLigne - 1) * 200, etroite);
-      const ensuite = h * (largeurPortee / autre) * (Math.ceil(mesures / (parLigne - 1)) / Math.ceil(mesures / parLigne));
-      if (ensuite > hauteur) break;
-      parLigne--;
-      largeurPortee = autre;
-      graver();
-    }
-    if (!reprise && h < hauteur * 0.6) {
-      // Encore de la place : les mêmes lignes, gravées plus grand.
-      const voulue = Math.max(parLigne * 130, etroite, (largeurPortee * h) / (hauteur * 0.85));
-      if (voulue < largeurPortee - 10) { largeurPortee = Math.round(voulue); graver(); }
-    }
-    if (!reprise) miseEnPage = { largeur, parLigne, largeurPortee };
-    e.jetons = jetons;
-    e.elements = new Map();
-    dernierJeton = null;
-    for (const ligne of (objet && objet.lines) || []) {
-      for (const portee of ligne.staff || []) {
-        for (const voix of portee.voices || []) {
-          for (const el of voix) {
-            if (el.el_type !== "note" || !el.abselem) continue;
-            const j = sq.jetonA(jetons, el.startChar);
-            if (j) e.elements.set(j, (el.abselem.elemset || []).filter(Boolean));
-          }
-        }
-      }
-    }
-    gravee = { id: e.id, version: e.version, largeur, hauteur, mesures };
-    marquerChoisies();
-  }
-
-  /** Les notes choisies en couleur sur la gravure en place, et le curseur : sans rien regraver. */
-  function marquerChoisies() {
-    for (const [j, els] of e.elements) {
-      const oui = j.voix === e.piste && j.ids.some((id) => e.selection.has(id));
-      els.forEach((x) => x.classList.toggle("choisie", oui));
-    }
-    placerCaret();
-  }
-
-  function surClicPartition(abcelem) {
-    const j = sq.jetonA(e.jetons, abcelem.startChar);
-    if (!j) return;
-    if (j.voix >= e.seq.pistes.length) { toast("L'accompagnement suit les accords : touche un accord, dans la grille, pour le changer."); return; }
-    if (j.voix !== e.piste) e.piste = j.voix;
-    if (j.silence) { e.selection.clear(); e.curseur = j.a; rafraichir(); return; }
-    choisir(j.ids);
-  }
-
-  /** Le curseur sur la partition : un trait avant la note où le clavier écrira. */
-  function placerCaret() {
-    const caret = $("idee-caret");
-    const zone = $("idee-partition");
-    const candidats = e.jetons.filter((j) => j.voix === e.piste && j.couche === 0);
-    let j = candidats.find((x) => x.a >= e.curseur);
-    let apres = false;
-    if (!j) { j = candidats[candidats.length - 1]; apres = true; }
-    const els = j && e.elements.get(j);
-    caret.hidden = !els || !els.length || e.selection.size > 0;
-    if (caret.hidden) return;
-    const r = els[0].getBoundingClientRect(), z = zone.getBoundingClientRect();
-    caret.style.left = `${(apres ? r.right + 6 : r.left - 4) - z.left + zone.scrollLeft}px`;
-    caret.style.top = `${r.top - z.top + zone.scrollTop - 18}px`;
-    caret.style.height = `${Math.max(40, r.height + 36)}px`;
   }
 
   // --- La barre du haut ---------------------------------------------------------
@@ -925,128 +533,42 @@ export function creerEditeurIdee(deps) {
   });
   $("idee-reglages-bouton").addEventListener("click", () => ouvrirFeuille($("idee-reglages")));
   $("idee-plus").addEventListener("click", () => ouvrirFeuille($("idee-menu")));
-  $("idee-piste-puce").addEventListener("click", () => changerPiste((e.piste + 1) % e.seq.pistes.length));
+  $("idee-piste-puce").addEventListener("click", () => tempo.changerPiste((e.piste + 1) % e.seq.pistes.length));
   $("idee-menu").addEventListener("click", async (ev) => {
     const b = ev.target.closest("[data-menu]");
     if (!b) return;
     fermerFeuille($("idee-menu"));
-    if (b.dataset.menu === "infos") { afficherInfos(); ouvrirFeuille($("idee-infos")); return; }
+    if (b.dataset.menu === "infos") { carnet.afficher(); ouvrirFeuille($("idee-infos")); return; }
     if (b.dataset.menu === "reglages") { ouvrirFeuille($("idee-reglages")); return; }
     await sauverMaintenant();
-    const p = partitionCourante();
+    const p = ecritures.fiche();
     if (!p) { toast("L'idée est vide : joue au moins une note."); return; }
     deps.menu(b.dataset.menu, p);
   });
   $("idee-partager").addEventListener("click", async () => {
     await sauverMaintenant();
-    const p = partitionCourante();
+    const p = ecritures.fiche();
     if (!p) { toast("L'idée est vide : joue au moins une note."); return; }
     deps.partager(p);
   });
 
-  // --- La feuille Tempo et mesure ---------------------------------------------------
+  // --- Annuler, refaire, la place qui change -----------------------------------------
 
-  const reglage = (f) => { modifier(f); memoriserDefauts(); };
-  function changerTempo(t) {
-    t = Math.max(40, Math.min(240, Math.round(t)));
-    tempoEnAttente = t;
-    $("idee-tempo-val").textContent = t;
-    $("idee-tempo").value = t;
-    clearTimeout(minuterieTempo);
-    minuterieTempo = setTimeout(() => {
-      const v = tempoEnAttente;
-      tempoEnAttente = null;
-      if (v !== e.seq.tempo) reglage(() => { e.seq.tempo = v; });
-    }, 350);
-  }
-  const tempoAffiche = () => (tempoEnAttente ?? e.seq.tempo);
-  $("idee-tempo").addEventListener("input", () => changerTempo(Number($("idee-tempo").value)));
-  $("idee-tempo-moins").addEventListener("click", () => changerTempo(tempoAffiche() - 1));
-  $("idee-tempo-plus").addEventListener("click", () => changerTempo(tempoAffiche() + 1));
-  const tapes = [];
-  $("idee-taper").addEventListener("click", () => {
-    const t = performance.now();
-    if (tapes.length && t - tapes[tapes.length - 1] > 2000) tapes.length = 0;
-    tapes.push(t);
-    if (tapes.length > 6) tapes.shift();
-    if (tapes.length < 3) { $("idee-taper-texte").textContent = "Encore…"; return; }
-    $("idee-taper-texte").textContent = "Taper le tempo";
-    const ecarts = tapes.slice(1).map((x, i) => x - tapes[i]);
-    // On tape les temps de la mesure, ceux que bat le métronome (la noire pointée en 6/8, la blanche
-    // en 2/2) ; l'idée garde des noires par minute (M12). Avant, en 12/8, le métronome battait aux
-    // deux tiers de ce qu'on avait tapé.
-    changerTempo(tempoDesTapes(ecarts, sq.pasParTemps(e.seq)));
-  });
-  const changerMesure = (m) => reglage(() => { e.seq.mesure = m.split("/").map(Number); });
-  $("idee-mesure").addEventListener("change", () => changerMesure($("idee-mesure").value));
-  $("idee-mesures").addEventListener("click", (ev) => { const b = ev.target.closest("[data-mesure]"); if (b) changerMesure(b.dataset.mesure); });
-  $("idee-tonalite").addEventListener("change", () => reglage(() => { e.seq.tonalite = $("idee-tonalite").value; }));
-  $("idee-transp-moins").addEventListener("click", () => modifier(() => transposerIdee(e.seq, -1)));
-  $("idee-transp-plus").addEventListener("click", () => modifier(() => transposerIdee(e.seq, 1)));
-  $("idee-accomp").addEventListener("change", () => modifier(() => { e.seq.accompagnement = $("idee-accomp").value; }));
-  $("idee-reglages").querySelector(".idee-zoom").addEventListener("click", (ev) => {
-    const b = ev.target.closest("[data-zoom]");
-    if (b) grille.zoom(Number(b.dataset.facteur), b.dataset.zoom);
-  });
-
-  // Les pistes
-  function changerPiste(i) {
-    e.piste = i;
-    e.selection.clear();
-    e.curseur = Math.max(0, ...notesPiste().map((n) => n.d + n.l));
-    clavierMode.amener(notesPiste().length ? notesPiste()[notesPiste().length - 1].h : (e.seq.pistes[i].cle === "fa" ? 36 : 60));
-    rafraichir();
-  }
-  $("idee-basse").addEventListener("click", () => {
-    modifier(() => { e.seq.pistes.push({ nom: "Basse", cle: "fa", notes: [] }); e.piste = e.seq.pistes.length - 1; e.selection.clear(); e.curseur = 0; });
-    clavierMode.amener(36);
-    fermerFeuille($("idee-reglages"));
-    toast("Piste de basse : ce que tu joues va maintenant dans la basse. Touche « Basse », en haut, pour revenir à la mélodie.", 6000);
-  });
-  $("idee-pistes").addEventListener("click", (ev) => {
-    const b = ev.target.closest("[data-piste]");
-    if (b) changerPiste(Number(b.dataset.piste));
-  });
-
-  // --- Le transport -------------------------------------------------------------
-
-  $("idee-jouer").addEventListener("click", jouer);
-  $("idee-boucle").addEventListener("click", () => {
-    e.boucle = !e.boucle;
-    transport.regler({ boucle: e.boucle ? etendueBoucle() : null });
-    rafraichir();
-  });
-  $("idee-metronome").addEventListener("click", () => {
-    e.metronome = !e.metronome;
-    transport.regler({ metronome: e.metronome });
-    rafraichir();
-  });
   $("idee-annuler").addEventListener("click", () => revenir(e.annuler, e.refaire));
   $("idee-refaire").addEventListener("click", () => revenir(e.refaire, e.annuler));
   new ResizeObserver(() => { if (e.ouverte) rafraichir(); }).observe($("idee-surface"));
   $("idee-partition").addEventListener("scroll", () => selection.placer());
 
-  function memoriserDefauts() {
-    ecrirePref(CLE_DEFAUTS, JSON.stringify({ tempo: e.seq.tempo, mesure: e.seq.mesure, tonalite: e.seq.tonalite }));
-  }
-
-  async function sauverMaintenant() {
-    if (e.minuterie) { clearTimeout(e.minuterie); e.minuterie = null; sauver(); }
-    await e.sauvegarde;
-  }
-
-  function partitionCourante() {
-    if (!e.id) return null;
-    return { id: e.id, ...donnees(), creeLe: e.creeLe };
-  }
+  const sauverMaintenant = () => ecritures.vider();
 
   // --- Le clavier de l'ordinateur -----------------------------------------------------
 
   /** Rend true si la touche a servi. */
   function toucheBas(ev) {
     if (!e.ouverte) return false;
-    // Une feuille ouverte, ou le menu en cercle : les touches sont à eux.
-    if (document.querySelector("#vue-idee dialog[open]") || selection.menuOuvert) return false;
+    // Une feuille ou une fenêtre ouverte (celle de l'appli aussi, « Supprimer l'idée ? »),
+    // ou le menu en cercle : les touches sont à eux, Échap les ferme (I6).
+    if (document.querySelector("dialog[open]") || selection.menuOuvert) return false;
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z") { revenir(ev.shiftKey ? e.refaire : e.annuler, ev.shiftKey ? e.annuler : e.refaire); return true; }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y") { revenir(e.refaire, e.annuler); return true; }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "a") { selection.tout(); return true; }
@@ -1054,7 +576,7 @@ export function creerEditeurIdee(deps) {
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
     if (clavierMode.toucheBas(ev)) return true;
     const actions = {
-      Space: jouer,
+      Space: ecoute.jouer,
       KeyR: direct.basculer,
       // Capturer la dernière phrase jouée, avec son rythme (M13, comme dans Live).
       KeyC: direct.capturer,
@@ -1078,17 +600,26 @@ export function creerEditeurIdee(deps) {
     return clavierMode.toucheHaut(ev);
   }
 
+  /**
+   * « Précédent » dans l'éditeur, avant de quitter l'écran : le menu en
+   * cercle se ferme, le jeu en direct s'arrête (la feuille de l'arrondi
+   * s'ouvre), puis les notes choisies se laissent. Rend true s'il a reculé
+   * d'un pas. (Avant, app.js cliquait ces boutons-là lui-même.)
+   */
+  function reculer() {
+    if (selection.menuOuvert) { selection.fermerMenu(); return true; }
+    if (e.enregistrement && e.enregistrement.phase !== "arrondi") { direct.arreter(); return true; }
+    if (choisies().length) { selection.aucune(); return true; }
+    return false;
+  }
+
+  // Ce dont l'appli se sert, rien de plus (T3) : l'état (`etat: e`), `modifier`,
+  // `choisir` et les touches du piano en sortaient, et rien ne s'en servait.
+  // Un module qui en aurait besoin le demandera ici, en lecture seule si
+  // lire lui suffit.
   return {
-    ouvrir, fermer, recharger, toucheBas, toucheHaut, enfoncer, relever,
-    transformer: (nom) => selection.transformer(nom),
-    choisirMode,
+    ouvrir, fermer, recharger, occupe, reculer, toucheBas, toucheHaut,
+    /** L'idée ouverte (null : une nouvelle, pas encore enregistrée). */
     get id() { return e.id; },
-    get seq() { return e.seq; },
-    get selection() { return e.selection; },
-    get ouverte() { return e.ouverte; },
-    get curseur() { return e.curseur; },
-    get mode() { return e.mode; },
-    modifier, rafraichir, choisir,
-    etat: e,
   };
 }

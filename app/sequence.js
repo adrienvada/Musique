@@ -21,7 +21,6 @@
 import { dureeABC } from "./edition.js";
 import { epellationsDeLAccord } from "./accords.js";
 
-export const PAS_PAR_NOIRE = 4;
 const LETTRES = "CDEFGAB";
 const NATUREL = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 const NOMS = { C: "do", D: "ré", E: "mi", F: "fa", G: "sol", A: "la", B: "si" };
@@ -38,6 +37,9 @@ export function nouvelleSequence({ tempo = 90, mesure = [4, 4], tonalite = "C" }
   return { version: 1, tempo, mesure: [...mesure], tonalite, pistes: [{ nom: "Mélodie", notes: [] }], accords: [], accompagnement: "aucun", suivant: 1 };
 }
 
+// Un aller-retour en JSON plutôt que structuredClone : une séquence doit
+// rester du JSON (la bibliothèque commune ne garde que lui), et la copie le
+// garantit (T5).
 export const cloner = (seq) => JSON.parse(JSON.stringify(seq));
 export const pasParMesure = (seq) => (seq.mesure[0] * 16) / seq.mesure[1];
 
@@ -46,6 +48,22 @@ export function pasParTemps(seq) {
   const [n, d] = seq.mesure;
   if (d === 8 && n % 3 === 0 && n > 3) return 6;
   return 16 / d;
+}
+
+/**
+ * Les notes rangées par pas de début, comme le transport les lit
+ * (`notesA(pas)`, transport.js), et la fin : le pas après la dernière.
+ * L'éditeur, les cartes de la bibliothèque, la feuille des accords, le
+ * morceau et les pages lues le faisaient chacun chez eux, cinq fois (audit
+ * du 04/10, T5).
+ * @template {{ d: number, l: number }} N
+ * @param {N[]} notes
+ * @returns {{ notesA: (pas: number) => N[], fin: number, vide: boolean }}
+ */
+export function indexerParPas(notes) {
+  const parPas = Map.groupBy(notes, (n) => n.d);
+  const fin = notes.reduce((f, n) => Math.max(f, n.d + n.l), 0);
+  return { notesA: (pas) => parPas.get(pas) || [], fin, vide: notes.length === 0 };
 }
 
 /** Où finit la dernière note (ou le dernier accord), en pas. */
@@ -298,7 +316,7 @@ function lesMesures(sections, total) {
  * sections. Après une levée, les mesures se comptent depuis la première barre.
  */
 function finDesMesures(sections, derniere) {
-  const s = [...sections].reverse().find((x) => x.d <= Math.max(0, derniere - 1)) || sections[0];
+  const s = sections.findLast((x) => x.d <= Math.max(0, derniere - 1)) || sections[0];
   const longueur = (s.mesure[0] * 16) / s.mesure[1];
   const ancre = s.barre > s.d && s.barre - s.d < longueur ? s.barre : s.d;
   if (derniere <= ancre) return ancre;
@@ -517,7 +535,7 @@ const dureeEcrite = (e, triolet) => (e.el_type === "note" && e.duration ? e.dura
  * dans une idée : tout est décalé pour que la première barre de la page
  * tombe sur une barre.
  *
- * @returns { voix: [{ notes: [{ d, l, h, v }] }] (les voix qui jouent),
+ * @returns {Object}  { voix: [{ notes: [{ d, l, h, v }] }] (les voix qui jouent),
  *   tempo, sections: [{ d, barre, mesure (null : mesure libre, « M:none »),
  *   tonalite }] } : une section par changement de tonalité ou de mesure en
  *   cours de page (« [K:Eb][M:12/8] »), qui commence en `d` et a sa première
@@ -681,7 +699,12 @@ export function inserer(seq, p, pos, hauteurs, l) {
   return ids;
 }
 
-/** Ajoute une note posée librement (grille, enregistrement) : rien ne bouge. */
+/**
+ * Ajoute une note posée librement (grille, enregistrement) : rien ne bouge.
+ * @param {any} seq
+ * @param {number} p  la piste
+ * @param {{ d: number, l: number, h: number, v?: number }} note  `v` : la vélocité (le jeu en direct)
+ */
 export function poser(seq, p, { d, l, h, v }) {
   const piste = seq.pistes[p];
   h = borner(h);

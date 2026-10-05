@@ -22,13 +22,9 @@ svg .surlignage rect.leve { fill: none; stroke: var(--ok); stroke-dasharray: 6 4
 .gravure { color: var(--encre); min-height: 120px; }
 .gravure .abcjs-note.joue, .gravure .abcjs-note.joue * { fill: var(--stylo); color: var(--stylo); }
 .etat { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.transport { position: sticky; bottom: env(safe-area-inset-bottom, 0px); background: var(--feuille); border: 1px solid var(--trait-fort); border-radius: 12px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
-.transport label { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--gris); }
-.transport input[type="range"] { width: 140px; accent-color: var(--stylo); }
 .val { font-family: var(--f-code); font-size: 0.88rem; color: var(--encre); min-width: 4ch; font-variant-numeric: tabular-nums; }
 .bascule { display: inline-flex; gap: 6px; align-items: center; font-size: 0.88rem; min-height: 44px; }
 .bascule input { accent-color: var(--stylo); width: 20px; height: 20px; }
-.confirmer { border: 1px solid var(--danger); border-radius: 10px; padding: 12px; background: var(--feuille); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 kbd { font-family: var(--f-code); font-size: 0.78rem; border: 1px solid var(--trait-fort); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--feuille); }
 
 /* ---------------------------------------------------------------------- */
@@ -155,7 +151,7 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 /* Écouter et exporter                                                    */
 /* ---------------------------------------------------------------------- */
 /* Une partition de dix lignes de large n'a rien de lisible : on la tient à la largeur d'une page. */
-.vue-lecteur > .exports, .vue-lecteur > .gravure-cadre, .vue-lecteur > .aide-export, .vue-lecteur > .confirmer { width: 100%; max-width: 980px; margin-inline: auto; }
+.vue-lecteur > .exports, .vue-lecteur > .gravure-cadre, .vue-lecteur > .aide-export { width: 100%; max-width: 980px; margin-inline: auto; }
 .exports { display: flex; flex-wrap: wrap; gap: 8px; }
 /* Le MIDI d'abord : c'est ce qu'on vient chercher ici. Le bleu plein reste à « Écouter ». */
 .exports .btn:first-child { border-color: var(--stylo); color: var(--stylo); }
@@ -195,7 +191,7 @@ textarea.abc { font-family: var(--f-code); font-size: 0.88rem; line-height: 1.55
 
 @media print {
   body { background: #fff; }
-  .barre-haut, .barre-ecran, .dock, .transport, .confirmer, dialog, .exports, #toast, #meta-lecteur, .aide-export, #vue-biblio, #vue-atelier, #vue-morceau, #vue-idee { display: none !important; }
+  .barre-haut, .barre-ecran, .dock, dialog, .exports, #toast, #meta-lecteur, .aide-export, #vue-biblio, #vue-atelier, #vue-morceau, #vue-idee { display: none !important; }
   main { padding: 0; }
   #vue-lecteur { padding: 0; }
   /* Seule la partition sort, en noir sur blanc quel que soit le thème de l'écran. */

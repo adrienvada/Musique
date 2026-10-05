@@ -17,7 +17,12 @@
  * rangée, restaurée ou lue : une fiche mal formée, venue d'une sauvegarde
  * ou d'un autre appareil, ne peut plus vider le carnet (audit du 04/10, S6).
  */
-import { EPOQUE, dateIso, egal, fusionnerFiches, normaliserChamps, normaliserFiche, sansDates, uneMsPlusTard } from "./fiche.js";
+import { EPOQUE, compacter, dateIso, decompacter, egal, fusionnerFiches, normaliserChamps, normaliserFiche, sansDates, uneMsPlusTard } from "./fiche.js";
+import { cause, genreErreur } from "./erreurs.js";
+
+// Ils vivent dans fiche.js, sans DOM (la synchro et ses essais s'en servent
+// sans tirer tout le stockage) ; on les donne encore d'ici, où on les prenait.
+export { compacter, decompacter };
 
 const CLE_LOCALE = "portee:partitions";
 const FORMAT_SAUVEGARDE = "portee-sauvegarde";
@@ -26,18 +31,6 @@ const ID_VALIDE = /^[A-Za-z0-9_-]{1,64}$/;
 // Un document de la base de claude.ai ne dépasse pas 256 Kio : le son d'un
 // mémo (base64) y est rangé par morceaux de 180 000 caractères (D8).
 const MORCEAU_MEMO = 180000;
-
-/** Traits → entiers au demi-pixel près : deux fois plus léger, aucune perte utile. */
-export function compacter(traits) {
-  return traits.map((t) => t.flatMap(([x, y]) => [Math.round(x * 2), Math.round(y * 2)]));
-}
-export function decompacter(compacts) {
-  return compacts.map((t) => {
-    const pts = [];
-    for (let i = 0; i < t.length; i += 2) pts.push([t[i] / 2, t[i + 1] / 2]);
-    return pts;
-  });
-}
 
 export function nouvelId() {
   return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -724,7 +717,9 @@ export async function restaurer(stockage, contenu, _dejaLa = null) {
       await stockage.creer(id, donnees, pages, { memo });
       bilan.revenues++;
     } catch (err) {
-      bilan.echecs.push({ id: e && e.id, titre, raison: (err && err.message) || String(err) });
+      // Une erreur du navigateur reconnue (la mémoire pleine) se dit en français (erreurs.js, I13) ;
+      // les nôtres, déjà en français (« fiche illisible »), passent telles quelles.
+      bilan.echecs.push({ id: e && e.id, titre, raison: genreErreur(err) === "inconnue" ? (err && err.message) || String(err) : cause(err) });
     }
   }
   return { ...bilan, ajoutees: bilan.revenues };

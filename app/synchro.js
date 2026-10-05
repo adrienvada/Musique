@@ -30,8 +30,7 @@
  * { code: "tool_error" } quand l'outil échoue (sinon, c'est le réseau) ;
  * `verrou(nom, f)` : un seul onglet synchronise à la fois (D7).
  */
-import { dateIso, egal, empreinte, fusionnerFiches, normaliserFiche, sansDates } from "./fiche.js";
-import { decompacter } from "./stockage.js";
+import { dateIso, decompacter, egal, empreinte, fusionnerFiches, normaliserFiche, sansDates } from "./fiche.js";
 
 const VERROU = "portee-synchro";
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -63,6 +62,13 @@ function texteErreur(e) {
   return m === "tool_error" ? "le connecteur a refusé cette partition" : m;
 }
 
+/**
+ * @param {object} o
+ * @param {any} o.local  le stockage d'ici (stockage.js)
+ * @param {(outil: string, args: object) => Promise<any>} o.appeler  un outil du connecteur
+ * @param {(etat: object) => void} [o.surEtat]  la synchro dit où elle en est (encours, ok, erreur)
+ * @param {(nom: string, f: () => any) => any} [o.verrou]  une seule synchro à la fois, tous onglets confondus
+ */
 export function creerSynchro({ local, appeler, surEtat = () => {}, verrou = verrouNavigateur }) {
   let enCours = null;
   let encore = false;
@@ -90,7 +96,8 @@ export function creerSynchro({ local, appeler, surEtat = () => {}, verrou = verr
    * puis range, seulement si rien n'a bougé ici entre-temps ; sinon, on
    * recommence avec l'état neuf. Une correction qui s'enregistre pendant la
    * synchro n'est donc jamais écrasée (S7).
-   * @returns { recue (quelque chose de là-bas est entré), copie (une copie de conflit a été faite) }
+   * @returns {Promise<{ recue: boolean, copie: boolean }>}  recue : quelque chose de là-bas
+   *   est entré ; copie : une copie de conflit a été faite
    */
   async function recevoir(f) {
     for (let essai = 0; essai < 5; essai++) {

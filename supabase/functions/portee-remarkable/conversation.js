@@ -180,6 +180,9 @@ export const NOMS_CONVERSATION = new Set(OUTILS_CONVERSATION.map((o) => o.name))
 // Vérifier les entrées
 // ------------------------------------------------------------------------
 
+// On refuse exprès les caractères de contrôle dans ce qu'on reçoit :
+// l'expression les nomme, c'est voulu (la règle ne se tait que pour elle).
+// eslint-disable-next-line no-control-regex
 const CONTROLE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 
 function champs(objet, permis, ou) {
@@ -349,7 +352,8 @@ async function montrer(bibliotheque, args) {
   const toutes = await fiches(bibliotheque);
   const f = await lireFiche(bibliotheque, args.id, toutes);
   const v = vue(f, toutes);
-  if (v.type === "morceau") throw new Error("Un morceau ne se montre pas encore ici : montre ses idées une à une (partition_lire donne ses blocs).");
+  // Seul un morceau n'a pas d'ABC à lui (`in` le dit aussi à la vérification des types).
+  if (v.type === "morceau" || !("abc" in v)) throw new Error("Un morceau ne se montre pas encore ici : montre ses idées une à une (partition_lire donne ses blocs).");
   let abc = v.abc, source = "partition";
   if (!abc && v.type === "idee") {
     // Une idée de Claude, pas encore passée par l'appli : une partition simple, d'après ses notes.

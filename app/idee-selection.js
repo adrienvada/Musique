@@ -29,7 +29,7 @@
  *   l'écran ou null, deps.nouvelleDepuis(seq).
  * Rend : { transformer(nom), durer(pas), pointer(), voisine(sens), etendre(),
  *   tout(), aucune(), ouvrirMenu(x, y, options), ouvrirBoite(), maj(),
- *   placer(), fermer(), menuOuvert, boiteOuverte }.
+ *   placer(), fermer(), fermerMenu(), menuOuvert, boiteOuverte }.
  */
 import { creerMenuRadial } from "./menu-radial.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
@@ -253,9 +253,9 @@ export function creerSelection(ctx) {
     let cible;
     if (sel.length) {
       const d0 = Math.min(...sel.map((n) => n.d));
-      cible = sens > 0 ? debuts.find((d) => d > d0) : [...debuts].reverse().find((d) => d < d0);
+      cible = sens > 0 ? debuts.find((d) => d > d0) : debuts.findLast((d) => d < d0);
     } else {
-      cible = sens > 0 ? debuts.find((d) => d >= e.curseur) : [...debuts].reverse().find((d) => d < e.curseur);
+      cible = sens > 0 ? debuts.find((d) => d >= e.curseur) : debuts.findLast((d) => d < e.curseur);
     }
     if (cible === undefined) return;
     ctx.choisir(notes.filter((n) => n.d === cible).map((n) => n.id));
@@ -430,6 +430,7 @@ export function creerSelection(ctx) {
     transformer, durer, pointer, voisine, etendre, tout, aucune, maj, placer,
     ouvrirMenu, ouvrirBoite,
     fermer: () => { menuRadial.fermer(); fermerFeuille(boite); pilule.hidden = true; },
+    fermerMenu: () => menuRadial.fermer(),
     get menuOuvert() { return menuRadial.ouvert; },
     get boiteOuverte() { return boite.open; },
   };

@@ -21,6 +21,7 @@
  * Sans import hors edition.js : le module sert tel quel à l'appli et aux tests.
  */
 import * as ed from "./edition.js";
+import { accorde, pluriel } from "./ui.js";
 
 /**
  * Les autres places qu'un doute peut viser, en plus de sa note ou de sa
@@ -330,7 +331,7 @@ export function recalculerDoutes(doutes, abc) {
         id: `r${numero + nouveaux.length + 1}`, type: "mesure", origine: "recalcul",
         page: voisin ? voisin.page : 1, portee: voisin ? voisin.portee : 0, boite: voisin ? voisin.boite : null,
         ligne: m.systeme, ...(main ? { main } : {}), rang, trouve: m.croches, attendu: m.attendu,
-        message: `Ligne ${m.systeme}${main ? `, main ${main}` : ""}, ${rang}ᵉ mesure : ${nb(m.croches)} croche${m.croches > 1 ? "s" : ""} au lieu de ${nb(m.attendu)} croche${m.attendu > 1 ? "s" : ""}.`,
+        message: `Ligne ${m.systeme}${main ? `, main ${main}` : ""}, ${rang}ᵉ mesure : ${nb(m.croches)} ${accorde(m.croches, "croche")} au lieu de ${nb(m.attendu)} ${accorde(m.attendu, "croche")}.`,
         cible: null, vise: { debut: m.debut, fin: m.fin }, leve: false,
       };
       const propositions = proposerPourMesure(doutes, abc, m);
@@ -386,7 +387,7 @@ const nb = (n) => (Number.isInteger(n) ? String(n) : n.toLocaleString("fr-FR", {
 export function enCroches(n) {
   if (Math.abs(n - 1) < 1e-9) return "une croche";
   if (Math.abs(n - 0.5) < 1e-9) return "une double croche";
-  return `${nb(n)} croche${n > 1 ? "s" : ""}`;
+  return `${nb(n)} ${accorde(n, "croche")}`;
 }
 
 const NOMS_DUREES = { 0.5: "double croche", 0.75: "double croche pointée", 1: "croche", 1.5: "croche pointée", 2: "noire", 3: "noire pointée", 4: "blanche", 6: "blanche pointée", 8: "ronde", 12: "ronde pointée" };
@@ -533,7 +534,7 @@ function poserArmure(d, abc, base) {
     if (ligne) for (const autre of d.autres || []) reponses.push(reponse(`cle-${autre}`, libelleCle(autre), "crayon", (a) => versCle(autre)(a, []), `L'armure devient : ${libelleCle(autre).toLowerCase()}.`));
     return {
       ...base, manuel: true, titre: "Bémols ou dièses ?",
-      detail: `Je vois ${d.bemols} bémol${d.bemols > 1 ? "s" : ""} et ${d.dieses} dièse${d.dieses > 1 ? "s" : ""} au début de la ligne : une armure n'a que l'un ou l'autre. Je l'ai lue en ${nomCle(d.cle)}.`,
+      detail: `Je vois ${pluriel(d.bemols, "bémol")} et ${pluriel(d.dieses, "dièse")} au début de la ligne : une armure n'a que l'un ou l'autre. Je l'ai lue en ${nomCle(d.cle)}.`,
       reponses,
     };
   }
