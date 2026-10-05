@@ -781,11 +781,16 @@ function validerCopie(rep, seq, c, copie) {
   const f = formeSure(copie);
   if (f) return refus(`copie : ${f}`);
   if (!estObjet(copie) || !Array.isArray(copie.pistes) || copie.pistes.length !== seq.pistes.length) return refus("copie : ce n'est pas l'idée");
+  // Aucun outil ne change tempo, mesure ni tonalité : une copie qui les change ne vient pas d'eux.
+  if (copie.tempo !== seq.tempo || copie.tonalite !== seq.tonalite || JSON.stringify(copie.mesure) !== JSON.stringify(seq.mesure)) return refus("copie : tempo, mesure ou tonalité changés");
   const [, w] = c.fenetre;
+  const ids = new Set();
   for (const [i, piste] of copie.pistes.entries()) {
     if (!estObjet(piste) || !Array.isArray(piste.notes)) return refus(`copie : piste ${i + 1} illisible`);
     for (const n of piste.notes) {
       if (!estObjet(n) || !Number.isInteger(n.id) || !entierDans(n.d, 0, w - 1) || !entierDans(n.l, 1, w - n.d) || !entierDans(n.h, BORNES.bas, BORNES.haut)) return refus(`copie : une note de la piste ${i + 1} est hors des bornes`);
+      if (ids.has(n.id)) return refus("copie : deux notes ont le même numéro");
+      ids.add(n.id);
     }
   }
   for (const a of copie.accords || []) {
@@ -1051,7 +1056,10 @@ export function outilsSurCopie(idee, gestes, { max = Infinity } = {}) {
           lus.push({ d, nom });
         }
         return geste(() => {
-          for (const m of new Set(lus.map((a) => Math.floor(a.d / ppm)))) poserAccords(etat, lus.filter((a) => Math.floor(a.d / ppm) === m), m * ppm, (m + 1) * ppm);
+          // Mesure après mesure, dans l'ordre : un accord posé au 3ᵉ temps laisse sonner avant lui celui
+          // que Claude vient de poser à la mesure d'avant, pas l'ancien.
+          const mesures = [...new Set(lus.map((a) => Math.floor(a.d / ppm)))].sort((a, b) => a - b);
+          for (const m of mesures) poserAccords(etat, lus.filter((a) => Math.floor(a.d / ppm) === m), m * ppm, (m + 1) * ppm);
           return `${nb(lus.length, "accord")} posé${lus.length > 1 ? "s" : ""}`;
         });
       },

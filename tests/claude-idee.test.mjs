@@ -397,6 +397,16 @@ test("les outils travaillent sur une copie, avec les gestes de sequence.js, et r
   assert.ok(copie().pistes[0].notes.length > 0);
 });
 
+test("poser_accords : mesure après mesure, ce que Claude pose sonne jusqu'à son accord suivant", () => {
+  const seq = idee([[0, 16, 60], [16, 16, 62], [32, 16, 64]], { accords: [[0, "C"]] });
+  const { outils, copie } = outilsSurCopie(seq, sq);
+  // Donnés dans le désordre : le fa de la mesure 1 tient jusqu'au sol 7 du 3ᵉ temps de la mesure 2,
+  // puis le do d'avant revient à la mesure 3, qu'on n'a pas demandé de changer.
+  outils.find((o) => o.name === "poser_accords").execute({ accords: [{ mesure: 2, temps: 3, nom: "G7" }, { mesure: 1, temps: 1, nom: "F" }] });
+  assert.deepEqual(copie().accords, [{ d: 0, nom: "F" }, { d: 24, nom: "G7" }, { d: 32, nom: "C" }]);
+  assert.equal(copie().accompagnement, "plaque");
+});
+
 test("une entrée invalide lève une erreur en français ; un geste qui abîmerait la copie est défait", () => {
   const seq = VALSE();
   const { outils, copie } = outilsSurCopie(seq, sq);
@@ -456,6 +466,10 @@ test("libre avec outils : la copie est revérifiée, et une copie inchangée n'e
   chevauche.pistes[0].notes.push({ id: 99, d: 1, l: 2, h: chevauche.pistes[0].notes[0].h });
   non(valider("libre", {}, seq, { ...o, copie: chevauche }), /se chevauchent/);
   non(valider("libre", { notes: [] }, seq, { ...o, copie: s.copie() }), /clé inattendue « notes »/);
+  non(valider("libre", {}, seq, { ...o, copie: { ...s.copie(), mesure: [7, 8] } }), /tempo, mesure ou tonalité/);
+  const doublon = s.copie();
+  doublon.pistes[0].notes[1].id = doublon.pistes[0].notes[0].id;
+  non(valider("libre", {}, seq, { ...o, copie: doublon }), /même numéro/);
   non(valider("libre", { pourquoi: "x" }, seq, { ...o, copie: { pistes: "rien" } }), /pas l'idée/);
 });
 
