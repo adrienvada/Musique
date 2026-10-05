@@ -2473,11 +2473,11 @@ garde.
     gestes de `sequence.js` (Claude fait ce que ferait le doigt d'Adrien).
     Un geste qui ferait se chevaucher deux notes, ou déborderait, est
     défait, et Claude lit pourquoi. La copie est revérifiée à la fin.
-  - Pourquoi les gestes passent en paramètre : `sequence.js` ne passe pas
-    encore `npm run types` (deux JSDoc), et un module vérifié qui
-    l'importerait l'y entraînerait. La mesure en pas et le nom des notes
-    sont recopiés ; un test les compare à `sequence.js` sur les 24
-    tonalités et les 88 touches.
+  - D'abord, les gestes passaient en paramètre et la mesure en pas comme le
+    nom des notes étaient recopiés : `sequence.js` ne passait pas encore
+    `npm run types`. Depuis que le lot architecture l'a corrigé, le lot H2
+    importe `sequence.js` directement, et les outils vivent dans
+    `claude-outils.js` (voir « Claude dans l'éditeur d'idée (H2) »).
 - **Sur un doute (H1, `app/claude-doute.js`).** `messageDoute`,
   `validerAvis`, `avisPossible`, `OPTIONS_AVIS`.
   - Ce qui part : la mesure en ABC (avec son chiffrage et son armure), ce

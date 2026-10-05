@@ -155,6 +155,19 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
     en JS, `couleurDuJeton("--x")`.
   - Une JSDoc s'écrit type d'abord (`@param {Object} options { … }`) :
     sinon TypeScript lit la prose comme un type.
+- **Claude dans la page (`sample`, version claude.ai seulement)** : la
+  fonction n'existe que si `claude.use("sample")` rend une fonction (sur le
+  site : absente, pas grisée). Un appel par geste d'Adrien, avec son
+  `AbortController`, un bouton « Arrêter » et `cache: false` ; jamais au
+  chargement, jamais de nouvel essai tout seul. Le texte de `onText` (du
+  JSON) ne se montre jamais. On valide, puis on applique sur la copie
+  envoyée, et rien ne s'applique si l'idée a changé entre-temps ; ce
+  qu'Adrien garde passe par `remplacerIdee` ou `changerTitre` (un seul
+  « Annuler »). Les échecs de `sample` passent par `lireEchec`
+  (`claude-idee.js`), jamais par `expliquer`, qui prendrait
+  `upstream_error` pour le connecteur. `permissions` ne se déclare pas : on
+  appelle `manage()` sur un bouton. Une nouvelle classe CSS se préfixe
+  (`.claude-…`) : `.gardee` et `.neuve` du mode Chanter ne le sont pas.
 - **Correction au toucher (`app/edition.js`)** : Adrien ne lit pas l'ABC.
   Toute correction passe par un geste (bouton, glissé, clavier) qui réécrit
   l'ABC ; le texte reste en « mode avancé ».
@@ -179,6 +192,7 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
 - **Éditeur d'idée** : `idee.js` (le cœur : état, annuler, la barre du
   haut, les modes), `idee-carnet.js`, `idee-tempo.js`, `idee-partition.js`
   (la gravure, `mettreEnPage`), `idee-ecoute.js`, `idee-enregistrement.js`,
+  `idee-claude.js` (la feuille « Demander à Claude », version claude.ai),
   les modes `idee-clavier.js`, `idee-chant.js`, `idee-accords.js`, puis
   `idee-selection.js`, `idee-direct.js`, `grille.js`, `clavier.js`,
   `menu-radial.js`, `micro.js`.
@@ -194,7 +208,8 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   `piano.js`, `transport.js`, `ecoute-page.js`, `eveil.js`,
   `sortie-midi.js`, `dossier-midi.js`, `reglages-live.js`.
 - **Claude dans Portée** (sans DOM : ce qui part vers Claude et ce qui est
-  vérifié au retour) : `claude-idee.js`, `claude-doute.js`, `suggestions.js`.
+  vérifié au retour) : `claude-idee.js`, `claude-outils.js` (les outils
+  d'une demande libre, sur une copie), `claude-doute.js`, `suggestions.js`.
 
 ## Vérifier
 
