@@ -2202,6 +2202,14 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   `conversation.js` devient une directive sur la seule ligne qui en a
   besoin, avec son pourquoi. Restent cinq avertissements hors du lot :
   `objets.js` (connecteur) et quatre dans les essais de la synchro.
+- **Code mort retiré**, chaque cas vérifié (ni la page, ni le code, ni
+  les essais ne s'en servaient) : la classe `.transport` de l'atelier
+  (l'écoute a son dock, `.dock-transport`), la classe `.mode` (l'état de
+  la bibliothèque est passé dans Réglages, `#mode`, hors de l'éditeur),
+  l'élément `#etat-son` du lecteur, l'icône `info`, la constante
+  `PAS_PAR_NOIRE` de sequence.js. Le double gestionnaire du bouton
+  « Portée » est parti avec le registre des écrans, et l'import d'une page
+  passe par `preparerDoutes` (voir plus haut).
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

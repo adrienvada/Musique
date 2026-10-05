@@ -87,7 +87,6 @@ code, .mono { font-family: var(--f-code); font-size: 0.9em; }
 .logo svg { width: 18px; height: 30px; color: var(--stylo); }
 .fil { display: flex; align-items: center; gap: 6px; color: var(--gris); font-size: 0.92rem; min-width: 0; }
 .fil b { color: var(--encre); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
-.mode { margin-left: auto; font-size: 0.8rem; color: var(--gris); }
 
 main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex; flex-direction: column; gap: 18px; }
 .vue { display: flex; flex-direction: column; gap: 18px; }
@@ -187,9 +186,6 @@ dialog.feuille-bas .feuille-tete h2 { flex: 1 1 auto; font-size: 1.35rem; }
 @media (pointer: coarse) {
   .btn, .btn-petit, .puce, .champ { min-height: 44px; }
   .seg > button { min-height: 40px; }
-}
-@media (max-width: 820px) {
-  .mode { margin-left: 0; width: 100%; }
 }
 @media print {
   .barre-haut, #toast, .infobulle { display: none !important; }

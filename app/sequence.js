@@ -21,7 +21,6 @@
 import { dureeABC } from "./edition.js";
 import { epellationsDeLAccord } from "./accords.js";
 
-export const PAS_PAR_NOIRE = 4;
 const LETTRES = "CDEFGAB";
 const NATUREL = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 const NOMS = { C: "do", D: "ré", E: "mi", F: "fa", G: "sol", A: "la", B: "si" };
