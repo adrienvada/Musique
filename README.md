@@ -88,14 +88,30 @@ L'éditeur est en ambiance *Studio* (sombre) ; Réglages › Éditeur la remet e
    tablette *Partager → PDF*).
 4. **Relis** : les passages douteux sont numérotés sur ta page, et Portée
    te pose ses questions une à une (« Croche ou noire ? », « Il manque une
-   croche »). Ta réponse corrige la bonne note. Pour le reste, touche une
-   note de la partition lue et choisis un geste. Rien à écrire, tout
-   s'annule.
+   croche »). Ta réponse corrige la bonne note, et les mesures se
+   recomptent à chaque geste. Pour le reste, touche une note de la
+   partition lue et choisis un geste. Rien à écrire, tout s'annule (doutes
+   compris). Au téléphone, ‹ et › vont de note en note ; − et +, ou deux
+   doigts, agrandissent la partition lue, et la note choisie reste en vue.
 5. **Écoute et exporte** : piano, tempo, transposition, puis « Télécharger le
    MIDI » (une piste par main, nommée, avec les changements de tonalité et
    de mesure de la page et la transposition choisie ; prête pour Ableton,
    MuseScore ou GarageBand). Aussi : imprimer ou PDF, MusicXML
    (transposition et changements compris).
+
+**Apprendre ton écriture** (une fois) : télécharge le modèle
+« Étalonnage » (Partitions → Modèles pour la tablette), écris chaque signe
+trois fois à côté du signe gris (silences, altérations, chiffres, « C »,
+« 3 » de triolet), et importe la page comme une autre. Portée ne crée pas de
+partition : elle apprend tes signes, te dit combien, et quelles cases sont
+restées vides, puis propose de relire tes pages pas encore corrigées. Tes
+réponses aux doutes de signe lui apprennent aussi, quand tu quittes la page.
+Ce qu'elle a appris voyage avec ta bibliothèque, la synchro et la
+sauvegarde. Une page écrite sur un modèle plus récent que l'appli est
+refusée, avec « mets l'appli à jour ».
+
+Sur claude.ai, un gros carnet arrive par tranches, et les pages illisibles
+sont signalées.
 
 Sur le site, ta bibliothèque se **synchronise entre tes appareils** :
 Réglages → « Synchroniser mes appareils », puis colle l'adresse de ton
@@ -134,8 +150,12 @@ deuxième mesure »). Claude met souvent 10 à 60 secondes (un titre, quelques
 secondes) ; « Arrêter » coupe. Portée vérifie sa réponse avant de te la
 montrer : tu la vois, tu l'écoutes, et « Garder » l'écrit d'un coup ;
 « Annuler » la retire, « Une autre » en redemande une. La première fois,
-claude.ai te demande d'autoriser Claude pour la page. Les demandes comptent
-sur ton abonnement : rien de plus à payer.
+claude.ai te demande d'autoriser Claude pour la page. Dans « Corriger », la
+carte d'un doute a aussi « Demander à Claude » : Claude regarde le passage
+(« Arrêter » à tout moment) et propose, par exemple « Claude pense : Croche
+— assez sûr » ; rien ne s'applique tant que tu ne touches pas sa
+proposition, et « Annuler » la défait. Les demandes comptent sur ton
+abonnement : rien de plus à payer.
 
 **Dans tes conversations** : dans une conversation claude.ai où le connecteur « Portée reMarkable » est
 activé, Claude lit ta bibliothèque. Demande par exemple « Montre-moi Pluie »
