@@ -168,13 +168,26 @@ const lireCorps = (req) => new Promise((ok) => {
  * supprimer et lister des objets, avec les réponses du vrai (400
  * « introuvable », 409…) et une date d'écriture par objet (updated_at).
  *
+ * Un compartiment a ses réglages, comme le vrai : sa taille maximale par
+ * objet (`file_size_limit`, `limite` ici) et ses types permis
+ * (`allowed_mime_types`, `types`), posés à sa création ou redits par
+ * `PUT /storage/v1/bucket/<id>`. Un objet qui les dépasse est refusé, avec
+ * les réponses du vrai (« Payload too large », « invalid_mime_type »).
+ *
  * Il contrôle la clé comme la plateforme : toujours dans `apikey` ; une clé
  * secrète (`sb_secret_…`, pas un JWT) glissée dans `Authorization: Bearer`
  * reçoit « Invalid JWT » ; l'ancienne clé (un JWT) doit voyager dans les
  * deux en-têtes, comme le connecteur l'a toujours envoyée.
+ *
+ * `requetes` : « MÉTHODE /chemin » de chaque requête (sans la clé, qui
+ * voyage en en-tête). `panne(motif, statut, { fois })` : les `fois`
+ * prochaines requêtes dont « MÉTHODE /chemin » correspond reçoivent
+ * `statut` (« coupure » : la connexion est coupée sans réponse).
  */
 export async function demarrerFauxStockage(cle = "cle-de-service-de-test") {
   const compartiments = new Map();
+  const requetes = [];
+  const pannes = [];
   let derniere = 0;
   const maintenant = () => { derniere = Math.max(Date.now(), derniere + 1); return new Date(derniere).toISOString(); };
   const refus = (req) => {
@@ -187,14 +200,32 @@ export async function demarrerFauxStockage(cle = "cle-de-service-de-test") {
   };
   const serveur = http.createServer(async (req, res) => {
     const json = (statut, corps) => { res.writeHead(statut, { "content-type": "application/json" }); res.end(JSON.stringify(corps)); };
+    requetes.push(`${req.method} ${req.url}`);
+    const panne = pannes.find((p) => p.fois > 0 && p.motif.test(`${req.method} ${req.url}`));
+    if (panne) {
+      panne.fois--;
+      if (panne.statut === "coupure") { req.socket.destroy(); return; }
+      return json(panne.statut, { statusCode: String(panne.statut), error: "Panne de test" });
+    }
     const refuse = refus(req);
     if (refuse) return json(...refuse);
     const corps = await lireCorps(req);
     if (req.method === "POST" && req.url === "/storage/v1/bucket") {
-      const { id, public: publique } = JSON.parse(corps);
+      const { id, public: publique, file_size_limit: limite = null, allowed_mime_types: types = null } = JSON.parse(corps);
       if (compartiments.has(id)) return json(400, { statusCode: "409", error: "Duplicate", message: "The resource already exists" });
-      compartiments.set(id, { publique, objets: new Map() });
+      compartiments.set(id, { publique, limite, types, objets: new Map() });
       return json(200, { name: id });
+    }
+    const reglage = req.url.match(/^\/storage\/v1\/bucket\/([^/]+)$/);
+    if (reglage && req.method === "PUT") {
+      const c = compartiments.get(reglage[1]);
+      if (!c) return json(400, { statusCode: "404", error: "Bucket not found", message: "Bucket not found" });
+      // Comme le vrai : un réglage absent du corps reste tel quel.
+      const r = JSON.parse(corps);
+      if ("public" in r) c.publique = r.public;
+      if ("file_size_limit" in r) c.limite = r.file_size_limit;
+      if ("allowed_mime_types" in r) c.types = r.allowed_mime_types;
+      return json(200, { message: "Successfully updated" });
     }
     const liste = req.url.match(/^\/storage\/v1\/object\/list\/([^/]+)$/);
     if (liste && req.method === "POST") {
@@ -216,6 +247,9 @@ export async function demarrerFauxStockage(cle = "cle-de-service-de-test") {
     const c = m && compartiments.get(m[1]);
     if (!c) return json(400, { statusCode: "404", error: "Bucket not found", message: "Bucket not found" });
     if (req.method === "POST") {
+      if (c.limite !== null && Buffer.byteLength(corps) > c.limite) return json(400, { statusCode: "413", error: "Payload too large", message: "The object exceeded the maximum allowed size" });
+      const type = String(req.headers["content-type"] || "").split(";")[0].trim();
+      if (c.types && !c.types.includes(type)) return json(400, { statusCode: "415", error: "invalid_mime_type", message: `mime type ${type} is not supported` });
       if (c.objets.has(m[2]) && req.headers["x-upsert"] !== "true") return json(400, { statusCode: "409", error: "Duplicate" });
       const avant = c.objets.get(m[2]);
       c.objets.set(m[2], { corps, maj: maintenant(), cree: avant ? avant.cree : new Date(derniere).toISOString() });
@@ -230,9 +264,10 @@ export async function demarrerFauxStockage(cle = "cle-de-service-de-test") {
   });
   await new Promise((r) => serveur.listen(0, "127.0.0.1", r));
   return {
-    url: `http://127.0.0.1:${serveur.address().port}`, cle, compartiments,
+    url: `http://127.0.0.1:${serveur.address().port}`, cle, compartiments, requetes,
     // Pour les tests : le contenu brut d'un objet (texte), ou undefined.
     objet: (compartiment, chemin) => compartiments.get(compartiment)?.objets.get(chemin)?.corps,
+    panne: (motif, statut, { fois = 1 } = {}) => { pannes.push({ motif, statut, fois }); },
     fermer: () => new Promise((r) => serveur.close(r)),
   };
 }

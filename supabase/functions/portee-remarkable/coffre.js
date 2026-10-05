@@ -23,6 +23,7 @@
  *
  * WebCrypto : le même code sous Deno (Supabase) et Node (tests).
  */
+import { REGLAGES_COMPARTIMENT } from "./objets.js";
 import { entetesSupabase, MANQUE_CLE } from "./supabase.js";
 
 const COMPARTIMENT = "portee-remarkable";
@@ -94,11 +95,13 @@ export function coffreSupabase(url, cle, { secret = null } = {}) {
   }
 
   async function ecrireBrut(texte) {
-    // Crée le compartiment privé au premier passage (400 ou 409 s'il existe déjà).
+    // Crée le compartiment privé au premier passage, avec les réglages de la
+    // bibliothèque (sa taille maximale, objets.js). S'il existe déjà (400 ou
+    // 409), la bibliothèque les lui redit à sa première écriture.
     const c = await fetch(`${url}/storage/v1/bucket`, {
       method: "POST",
       headers: { ...entetes, "content-type": "application/json" },
-      body: JSON.stringify({ id: COMPARTIMENT, name: COMPARTIMENT, public: false }),
+      body: JSON.stringify({ id: COMPARTIMENT, name: COMPARTIMENT, ...REGLAGES_COMPARTIMENT }),
     });
     await c.body?.cancel();
     const r = await fetch(adresse, {

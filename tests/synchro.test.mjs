@@ -11,6 +11,7 @@ import { stockageIndexe } from "../app/stockage.js";
 import { creerSynchro, verrouNavigateur } from "../app/synchro.js";
 import { Bibliotheque, LIMITES, verifierEcriture } from "../supabase/functions/portee-remarkable/bibliotheque.js";
 import { objetsSupabase } from "../supabase/functions/portee-remarkable/objets.js";
+import { Suggestions } from "../supabase/functions/portee-remarkable/suggestions.js";
 import { traiter } from "../supabase/functions/portee-remarkable/mcp.js";
 import { demarrerFauxStockage } from "./faux-cloud.mjs";
 
@@ -383,6 +384,37 @@ test("D6 · une partition supprimée reste 30 jours dans la corbeille, avec ses 
     assert.equal(objet(stockage, "corbeille/p.json"), undefined);
     assert.equal([...stockage.compartiments.get("portee-remarkable").objets.keys()].filter((c) => c.startsWith("versions/p/")).length, 0);
     assert.equal(objet(stockage, "bibliotheque/p.json").supprime, true, "la pierre tombale reste : les autres appareils doivent l'apprendre");
+  } finally {
+    await stockage.fermer();
+  }
+});
+
+test("D6 · partie pour de bon, une partition emmène les suggestions de Claude ; revenue entre-temps, elle garde les siennes", async () => {
+  let decalage = 0;
+  const { stockage, objets, appeler } = await monde({ maintenant: () => Date.now() + decalage });
+  try {
+    const sug = new Suggestions(objets);
+    const quand = (k) => new Date(Date.parse("2026-10-01T10:00:00.000Z") + k * 60000).toISOString();
+    const ids = ["partie", "revenue", "restee", "vivante"];
+    for (const id of ids) {
+      await appeler("bibliotheque_ecrire", { id, donnees: partition(id, quand(0)), modifieLe: quand(0), base: null });
+      await sug.ecrire({ cible: id, genre: "texte", contenu: { titre: `Un titre pour ${id}` }, pourquoi: "Pour l'essai." });
+      await sug.ecrire({ cible: id, genre: "accords", contenu: { accords: [{ debut: 0, nom: "C" }] }, pourquoi: "Pour l'essai." });
+    }
+    for (const id of ["partie", "revenue", "restee"]) await appeler("bibliotheque_ecrire", { id, supprime: true, modifieLe: quand(1), base: quand(0) });
+    // Revenues d'un geste : elles sortent de la corbeille…
+    for (const id of ["revenue", "restee"]) await appeler("bibliotheque_ecrire", { id, donnees: partition(id, quand(2)), modifieLe: quand(2), base: quand(1) });
+    // … sauf l'entrée de « restee », laissée là par une coupure en route : l'élagage la trouvera.
+    await objets.ecrire("corbeille/restee.json", { id: "restee", titre: "restee", type: null, supprimeLe: quand(1), modifieLe: quand(0), rev: 1 });
+    // Trente et un jours plus tard, une suppression élague la corbeille.
+    decalage = 31 * JOUR;
+    await appeler("bibliotheque_ecrire", { id: "autre", supprime: true, modifieLe: new Date(Date.now() + decalage).toISOString() });
+    assert.deepEqual(await sug.lister("partie"), []);
+    assert.equal([...stockage.compartiments.get("portee-remarkable").objets.keys()].filter((c) => c.startsWith("suggestions/partie/")).length, 0);
+    for (const id of ["revenue", "restee", "vivante"]) assert.equal((await sug.lister(id)).length, 2, id);
+    assert.deepEqual([...new Set((await sug.lister()).map((s) => s.cible))].sort(), ["restee", "revenue", "vivante"]);
+    assert.equal(objet(stockage, "corbeille/restee.json"), undefined, "seule l'entrée de la corbeille est partie");
+    assert.equal(objet(stockage, "bibliotheque/restee.json").supprime, false);
   } finally {
     await stockage.fermer();
   }

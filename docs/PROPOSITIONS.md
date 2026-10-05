@@ -1036,6 +1036,49 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     ailleurs, aucune erreur de console. Sans Playwright (en CI), l'essai se
     saute.
 
+**Compléments (04/10, pour les écrans)**
+
+- **Le compartiment a sa taille maximale (S4, `objets.js`).** 6 Mo par
+  objet, posés à la création du compartiment, qu'elle vienne de la
+  bibliothèque ou du coffre : le stockage refuse lui-même plus gros, même si
+  une borne du code venait à manquer. Ton compartiment existe déjà : il la
+  reçoit à la première écriture de chaque démarrage de la fonction (un
+  `PUT`, sans effet s'il l'a déjà). Rien à faire de ton côté.
+  - Un échec de cette mise à jour ne bloque ni lecture ni écriture : on
+    réessaie au démarrage suivant.
+  - 6 Mo, comme la porte (`http.js`) : rien de plus gros n'y entre, et les
+    pages d'une partition en font 5 au plus. Pas de liste de types : le
+    coffre range le jeton en `text/plain`.
+  - La bibliothèque et les suggestions partagent un seul client du stockage
+    (`index.ts`) : une mise à jour par démarrage, pas une par outil.
+- **Les suggestions partent avec leur partition (D6, `bibliotheque.js`).**
+  Quand une partition quitte la corbeille pour de bon (30 jours), les
+  suggestions que Claude avait rangées pour elle (`suggestions/<id>/…`)
+  partent aussi : personne ne pourrait plus les appliquer, et elles
+  restaient dans le stockage pour rien. Une partition revenue entre-temps
+  garde les siennes.
+- **Une idée refusée dit pourquoi (C5, `conversation.js`).** Quand la
+  bibliothèque refuse l'idée de Claude avec une raison (`refus`, une fiche
+  trop lourde par exemple), il lit cette raison, et quoi faire : rien n'est
+  enregistré, la même idée serait refusée encore, il corrige ou te le dit.
+  Avant, il lisait « réessaie dans un instant », et pouvait tourner en rond.
+  Ce message reste pour un conflit d'écriture, sans raison : là, réessayer
+  suffit.
+  - Les bornes d'`idee_ecrire` tiennent déjà une idée sous les 256 Ko de la
+    bibliothèque (194 Ko au plus, calculé) : c'est une garde, pour le jour
+    où l'une des deux bougerait.
+- **La version du modèle d'une page (L9, `remarkable.js`).** Le sujet du
+  PDF dit `portee:<modèle>:v<N>`, et le connecteur jetait la version.
+  Chaque version d'un modèle a maintenant sa calibration
+  (`modeles/<modèle>-v<N>.json`) : l'appli doit savoir sur laquelle la page
+  a été écrite. `document` rend donc `versionModele` (un nombre, `null` si
+  inconnue), à côté de `modele`.
+  - `modele` garde le nom seul (ou `null`) : le connecteur est déployé dès
+    la fusion, la version claude.ai de l'appli plus tard, et elle l'attend
+    tel quel. Un champ de plus ne la gêne pas.
+  - `arborescence` n'a pas de `modele` (il faudrait lire le PDF de chaque
+    document) : rien n'y change.
+
 ### Données et synchronisation (S6, D1 à D10)
 
 - **Chaque fiche est vérifiée et remise en forme (S6, `app/fiche.js`).**

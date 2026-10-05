@@ -1,12 +1,14 @@
 /**
- * Le connecteur côté HTTP : la porte (clé, origine, taille) avant le
- * protocole MCP (S4).
+ * Les bornes du connecteur (S4). Côté HTTP, la porte (clé, origine, taille)
+ * avant le protocole MCP ; côté stockage, la taille maximale du compartiment.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { memeCle, origineAdmise, repondreHttp, TAILLE_MAX } from "../supabase/functions/portee-remarkable/http.js";
 import { CloudRemarkable } from "../supabase/functions/portee-remarkable/remarkable.js";
-import { coffreMemoire } from "../supabase/functions/portee-remarkable/coffre.js";
+import { coffreMemoire, coffreSupabase } from "../supabase/functions/portee-remarkable/coffre.js";
+import { objetsSupabase, REGLAGES_COMPARTIMENT } from "../supabase/functions/portee-remarkable/objets.js";
+import { demarrerFauxStockage } from "./faux-cloud.mjs";
 
 const CLE = "k".repeat(32);
 const ADRESSE = `https://x.supabase.co/functions/v1/portee-remarkable/${CLE}`;
@@ -96,5 +98,99 @@ test("préflight et méthodes : 204 quelle que soit la clé, GET et DELETE refus
     const r = await appeler({ methode });
     assert.equal(r.status, 405, methode);
     assert.match(r.headers.get("allow"), /POST/);
+  }
+});
+
+// --- Côté stockage : la taille maximale du compartiment ----------------------
+
+const BUCKET = "portee-remarkable";
+const SIX_MO = 6291456;
+const CREATION = "POST /storage/v1/bucket", REGLAGE = `PUT /storage/v1/bucket/${BUCKET}`;
+const reglages = (stockage) => {
+  const c = stockage.compartiments.get(BUCKET);
+  return { publique: c.publique, limite: c.limite, types: c.types };
+};
+const compter = (stockage, requete) => stockage.requetes.filter((r) => r === requete).length;
+
+test("le compartiment naît avec sa taille maximale : le stockage refuse plus gros, même si le code l'oublie", async () => {
+  const stockage = await demarrerFauxStockage();
+  try {
+    const objets = objetsSupabase(stockage.url, stockage.cle);
+    await objets.ecrire("bibliotheque/essai.json", { titre: "Essai" });
+    // Privé, 6 Mo, et aucun type imposé.
+    assert.deepEqual(reglages(stockage), { publique: false, limite: SIX_MO, types: null });
+    assert.equal(compter(stockage, REGLAGE), 0, "créé avec ses réglages : rien à lui redire");
+    // Rien de plus gros n'entre par la porte : la borne du stockage suit la sienne.
+    assert.equal(REGLAGES_COMPARTIMENT.file_size_limit, TAILLE_MAX);
+    // Une borne oubliée dans le code : le stockage refuse quand même.
+    await assert.rejects(objets.ecrire("pages/enorme.json", ["x".repeat(SIX_MO)]), /HTTP 400/);
+    assert.equal(stockage.objet(BUCKET, "pages/enorme.json"), undefined);
+    // Le coffre range toujours son jeton en text/plain.
+    const coffre = coffreSupabase(stockage.url, stockage.cle);
+    await coffre.ecrire("jeton-appareil-de-test");
+    assert.equal(await coffre.lire(), "jeton-appareil-de-test");
+  } finally {
+    await stockage.fermer();
+  }
+  // La tablette reliée avant toute synchro : c'est le coffre qui crée le compartiment, avec les mêmes réglages.
+  const autre = await demarrerFauxStockage();
+  try {
+    await coffreSupabase(autre.url, autre.cle).ecrire("jeton-appareil-de-test");
+    assert.deepEqual(reglages(autre), { publique: false, limite: SIX_MO, types: null });
+  } finally {
+    await autre.fermer();
+  }
+});
+
+test("un compartiment d'avant la borne la reçoit une fois par démarrage, et un échec ne bloque rien", async () => {
+  const stockage = await demarrerFauxStockage();
+  try {
+    // Le compartiment d'une fonction déployée avant la borne.
+    stockage.compartiments.set(BUCKET, { publique: false, limite: null, types: null, objets: new Map() });
+    // Un client par démarrage de la fonction (index.ts).
+    const demarrer = () => objetsSupabase(stockage.url, stockage.cle);
+    const a = demarrer();
+    // Lire ne touche pas au compartiment.
+    assert.equal(await a.lire("bibliotheque/rien.json"), null);
+    assert.deepEqual([compter(stockage, CREATION), compter(stockage, REGLAGE)], [0, 0]);
+    // « Il existe déjà » : ses réglages lui sont redits, une fois, même pour des écritures simultanées.
+    await Promise.all([a.ecrire("bibliotheque/un.json", { n: 1 }), a.ecrire("bibliotheque/deux.json", { n: 2 }), a.creer("verrous/un.json", { le: "maintenant" })]);
+    await a.ecrire("bibliotheque/trois.json", { n: 3 });
+    assert.deepEqual(reglages(stockage), { publique: false, limite: SIX_MO, types: null });
+    assert.deepEqual([compter(stockage, CREATION), compter(stockage, REGLAGE)], [1, 1]);
+
+    // Le réglage échoue (une panne, une coupure) : on lit et on écrit quand même, et le démarrage suivant réessaie.
+    for (const panne of [500, "coupure"]) {
+      stockage.compartiments.get(BUCKET).limite = null;
+      stockage.panne(/^PUT \/storage\/v1\/bucket\//, panne);
+      const b = demarrer();
+      const avant = compter(stockage, REGLAGE);
+      await b.ecrire("bibliotheque/quatre.json", { n: 4 });
+      await b.ecrire("bibliotheque/cinq.json", { n: 5 });
+      assert.deepEqual(await b.lire("bibliotheque/quatre.json"), { n: 4 }, String(panne));
+      assert.equal(compter(stockage, REGLAGE), avant + 1, "pas d'autre essai avant le prochain démarrage");
+      assert.equal(reglages(stockage).limite, null);
+      await demarrer().ecrire("bibliotheque/six.json", { n: 6 });
+      assert.equal(reglages(stockage).limite, SIX_MO, String(panne));
+    }
+
+    // « Il existe déjà » dit en HTTP 409 (les stockages récents) : le même réglage.
+    stockage.compartiments.get(BUCKET).limite = null;
+    stockage.panne(/^POST \/storage\/v1\/bucket$/, 409);
+    await demarrer().ecrire("bibliotheque/sept.json", { n: 7 });
+    assert.equal(reglages(stockage).limite, SIX_MO);
+    // Un autre refus (403) : rien à lui redire ; l'écriture dira le sien, s'il y en a un.
+    const reglagesAvant = compter(stockage, REGLAGE);
+    stockage.panne(/^POST \/storage\/v1\/bucket$/, 403);
+    await demarrer().ecrire("bibliotheque/huit.json", { n: 8 });
+    assert.equal(compter(stockage, REGLAGE), reglagesAvant);
+    // Une coupure à la création : cette écriture échoue, la suivante refait la préparation.
+    stockage.panne(/^POST \/storage\/v1\/bucket$/, "coupure");
+    const c = demarrer();
+    await assert.rejects(c.ecrire("bibliotheque/neuf.json", { n: 9 }));
+    await c.ecrire("bibliotheque/neuf.json", { n: 9 });
+    assert.equal(stockage.objet(BUCKET, "bibliotheque/neuf.json"), JSON.stringify({ n: 9 }));
+  } finally {
+    await stockage.fermer();
   }
 });

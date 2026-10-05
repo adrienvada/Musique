@@ -214,6 +214,32 @@ test("idee_ecrire refuse ce qui ne va pas, dit quoi corriger, et n'écrit rien",
   }
 });
 
+test("idee_ecrire : un refus de la bibliothèque dit pourquoi et quoi faire ; sans raison (un conflit), réessayer suffit", async () => {
+  const stockage = await demarrerFauxStockage();
+  try {
+    const args = { titre: "Refusée", notes: [{ debut: 0, duree: 4, hauteur: 60 }] };
+    const appel = async (bib) => (await traiter({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "idee_ecrire", arguments: args } }, null, bib)).result;
+    // Un vrai refus : l'horloge de la bibliothèque retarde de deux jours, l'idée lui paraît venir du futur.
+    const enRetard = new Bibliotheque(objetsSupabase(stockage.url, stockage.cle), { maintenant: () => Date.now() - 2 * 24 * 3600 * 1000 });
+    const r = await appel(enRetard);
+    assert.equal(r.isError, true);
+    assert.match(r.content[0].text, /^La bibliothèque a refusé l'idée\. La date de modification est à plus d'un jour dans le futur/);
+    assert.match(r.content[0].text, /Rien n'est enregistré, et la même idée serait refusée encore : corrige ce point, ou dis-le à Adrien\.$/);
+    assert.doesNotMatch(r.content[0].text, /réessaie/, "la même idée serait refusée encore");
+    assert.deepEqual((await enRetard.changements(null)).partitions, []);
+    // Une fiche trop lourde : la raison, telle que la bibliothèque la donne.
+    const lourde = await appel({ ecrire: async () => ({ accepte: false, refus: "La partition est trop lourde (300 Ko, 256 Ko au plus)." }) });
+    assert.equal(lourde.isError, true);
+    assert.equal(lourde.content[0].text, "La bibliothèque a refusé l'idée. La partition est trop lourde (300 Ko, 256 Ko au plus). Rien n'est enregistré, et la même idée serait refusée encore : corrige ce point, ou dis-le à Adrien.");
+    // Sans raison : une autre écriture passait au même moment (la bibliothèque rend sa version) ; réessayer suffit.
+    const conflit = await appel({ ecrire: async () => ({ accepte: false, actuelle: { id: "x", modifieLe: QUAND } }) });
+    assert.equal(conflit.isError, true);
+    assert.equal(conflit.content[0].text, "La bibliothèque a refusé l'idée : réessaie dans un instant.");
+  } finally {
+    await stockage.fermer();
+  }
+});
+
 test("suggestion_ecrire range une proposition à part, sans toucher la partition", async () => {
   const { stockage, bib, outil } = await monde();
   try {

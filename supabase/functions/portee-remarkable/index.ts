@@ -58,13 +58,18 @@ const SECRET_COFFRE = Deno.env.get("PORTEE_COFFRE") || null;
 let cloud: CloudRemarkable | null = null;
 let bibliotheque: Bibliotheque | null = null;
 let suggestions: Suggestions | null = null;
+// Un seul client du stockage pour la bibliothèque et les suggestions : il
+// redit ses réglages au compartiment (sa taille maximale) une fois par
+// démarrage, pas une fois par outil.
+let objets: ReturnType<typeof objetsSupabase> | null = null;
+const stockage = () => (objets ??= objetsSupabase(URL_SUPABASE, CLE_SERVICE));
 
 Deno.serve((req: Request) =>
   repondreHttp(req, {
     cle: CLE,
     origines: [...ORIGINES, ...EN_PLUS],
     cloud: () => (cloud ??= new CloudRemarkable(coffreSupabase(URL_SUPABASE, CLE_SERVICE, { secret: SECRET_COFFRE }), { sync: HOTE_SYNC })),
-    bibliotheque: () => (bibliotheque ??= new Bibliotheque(objetsSupabase(URL_SUPABASE, CLE_SERVICE))),
-    suggestions: () => (suggestions ??= new Suggestions(objetsSupabase(URL_SUPABASE, CLE_SERVICE))),
+    bibliotheque: () => (bibliotheque ??= new Bibliotheque(stockage())),
+    suggestions: () => (suggestions ??= new Suggestions(stockage())),
   })
 );

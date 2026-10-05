@@ -403,9 +403,25 @@ async function creerIdee(bibliotheque, args) {
   // Un identifiant neuf : rien d'existant n'est jamais réécrit.
   const id = nouvelId();
   const r = await bibliotheque.ecrire({ id, donnees, pages: [], supprime: false, modifieLe: maintenant });
-  if (!r || r.accepte === false) throw new Error("La bibliothèque a refusé l'idée : réessaie dans un instant.");
+  if (!r || r.accepte === false) throw new Error(refusDeLIdee(r));
   const derniere = Math.max(...notes.map((x) => x.debut + x.duree), ...accords.map((a) => a.debut + 1));
   return { id, titre, notes: notes.length, accords: accords.length, mesures: Math.ceil(derniere / pasParMesure), tempo, mesure, tonalite };
+}
+
+/**
+ * Ce que Claude lit quand la bibliothèque refuse l'idée. Avec une raison
+ * (`refus` : une fiche trop lourde…), la même idée serait refusée encore :
+ * « réessaie » le faisait tourner en rond ; il doit savoir pourquoi, et quoi
+ * changer. Les bornes de idee_ecrire tiennent déjà une idée sous les 256 Ko
+ * de la bibliothèque : c'est une garde, pour le jour où l'une bougerait.
+ * Sans raison, une autre écriture passait au même moment (un conflit) :
+ * réessayer suffit.
+ */
+function refusDeLIdee(r) {
+  const raison = r && typeof r.refus === "string" ? r.refus.trim() : "";
+  if (!raison) return "La bibliothèque a refusé l'idée : réessaie dans un instant.";
+  const phrase = /[.!?…]$/.test(raison) ? raison : `${raison}.`;
+  return `La bibliothèque a refusé l'idée. ${phrase} Rien n'est enregistré, et la même idée serait refusée encore : corrige ce point, ou dis-le à Adrien.`;
 }
 
 async function suggerer(bibliotheque, suggestions, args) {

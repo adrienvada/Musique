@@ -11,6 +11,8 @@
  *                              supprimeLe, modifieLe et rev (la version d'avant) }, 30 jours
  *   verrous/<id>.json          le temps d'une écriture : une seule à la fois
  *                              par partition (S9)
+ * À côté, suggestions/<id>/… (suggestions.js) : ce que Claude propose pour
+ * une partition. Elles partent avec elle quand elle quitte la corbeille.
  *
  * Écriture conditionnelle (D4) : l'appareil dit de quelle version il part
  * (`base` : son modifieLe ; null pour une partition neuve). Si la référence a
@@ -238,7 +240,12 @@ export class Bibliotheque {
     await enParallele(vieilles, (o) => this.objets.supprimer(`versions/${id}/${o.nom}`));
   }
 
-  /** La corbeille : au bout de 30 jours, une partition supprimée part pour de bon (ses traits et ses versions avec elle). */
+  /**
+   * La corbeille : au bout de 30 jours, une partition supprimée part pour de
+   * bon, et avec elle ses traits, ses versions et les suggestions que Claude
+   * avait rangées pour elle (suggestions.js) : sans la partition, personne ne
+   * les appliquerait plus, et elles resteraient dans le stockage pour rien.
+   */
   async elaguerCorbeille(sauf = null) {
     const limite = this.maintenant() - LIMITES.garde;
     for (const o of await this.objets.lister("corbeille")) {
@@ -247,17 +254,23 @@ export class Bibliotheque {
       const liberer = await this.verrouiller(id);
       try {
         const tete = await this.objets.lire(`bibliotheque/${id}.json`);
-        // Revenue entre-temps : seule l'entrée de la corbeille part.
+        // Revenue entre-temps : seule l'entrée de la corbeille part ; ses suggestions restent.
         if (tete && tete.supprime) {
           await this.objets.supprimer(`pages/${id}.json`);
-          const versions = await this.objets.lister(`versions/${id}`);
-          await enParallele(versions, (v) => this.objets.supprimer(`versions/${id}/${v.nom}`));
+          await this.viderDossier(`versions/${id}`);
+          await this.viderDossier(`suggestions/${id}`);
         }
         await this.objets.supprimer(`corbeille/${id}.json`);
       } finally {
         await liberer();
       }
     }
+  }
+
+  /** Supprime tous les objets d'un dossier. */
+  async viderDossier(dossier) {
+    const objets = await this.objets.lister(dossier);
+    await enParallele(objets, (o) => this.objets.supprimer(`${dossier}/${o.nom}`));
   }
 
   /** Les versions d'une partition, la plus récente d'abord : [{ modifieLe, rev, ecritLe, supprime, actuelle }]. */
