@@ -800,6 +800,24 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   après celle qui précède. Brancher tout cela dans l'appli (importer la page
   d'étalonnage, ranger les gabarits avec la bibliothèque, apprendre des
   réponses) revient au lot atelier.
+- **Un banc d'essai sur tes pages validées (L17).** `node
+  outils/banc-lecteur.mjs ta-sauvegarde.json` relit chaque page marquée
+  « Prête » d'une sauvegarde avec le lecteur d'aujourd'hui, et la compare à
+  l'ABC que tu as validé : erreurs de hauteur (la note qui sonne, armure et
+  altérations de la mesure comprises), de durée, notes manquantes ou en
+  trop, barres mal placées ; part des erreurs silencieuses (qu'aucun doute
+  ne signalait) ; précision des doutes (combien désignent une vraie
+  erreur). `--json` pour comparer deux versions, `--detail` pour voir chaque
+  erreur, `--gabarits` pour lire avec tes gabarits.
+  - Pourquoi : les seuils sont réglés sur deux pages, et un réglage qui les
+    améliore peut en abîmer d'autres. À lancer avant et après chaque
+    changement du lecteur.
+  - Rien n'est écrit, tout s'affiche : tes pages ne doivent pas entrer dans
+    le dépôt, qui est public.
+  - Les barres se comparent par leur place dans la suite des notes, pas par
+    l'instant : une seule durée fausse aurait décalé toutes les suivantes.
+  - Une page lit la calibration de sa version (`versionModele`, que l'appli
+    doit ranger avec la page : lot atelier) ; sans elle, la v1.
 
 ### Connecteur (S3 à S5, C1 à C6)
 
