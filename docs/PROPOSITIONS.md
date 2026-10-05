@@ -1057,6 +1057,16 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
   partent aussi : personne ne pourrait plus les appliquer, et elles
   restaient dans le stockage pour rien. Une partition revenue entre-temps
   garde les siennes.
+- **Une idée refusée dit pourquoi (C5, `conversation.js`).** Quand la
+  bibliothèque refuse l'idée de Claude avec une raison (`refus`, une fiche
+  trop lourde par exemple), il lit cette raison, et quoi faire : rien n'est
+  enregistré, la même idée serait refusée encore, il corrige ou te le dit.
+  Avant, il lisait « réessaie dans un instant », et pouvait tourner en rond.
+  Ce message reste pour un conflit d'écriture, sans raison : là, réessayer
+  suffit.
+  - Les bornes d'`idee_ecrire` tiennent déjà une idée sous les 256 Ko de la
+    bibliothèque (194 Ko au plus, calculé) : c'est une garde, pour le jour
+    où l'une des deux bougerait.
 
 ### Données et synchronisation (S6, D1 à D10)
 
