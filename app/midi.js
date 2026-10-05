@@ -74,7 +74,7 @@ const metaArmure = (quintes, mineur) => meta(0x59, [(quintes + 256) & 0xff, mine
  */
 function finALaBarre(derniere, mesure, changements) {
   const sections = [{ d: 0, mesure }, ...changements.filter((c) => c.mesure !== undefined)].sort((a, b) => a.d - b.d);
-  const s = [...sections].reverse().find((x) => x.d <= derniere) || sections[0];
+  const s = sections.findLast((x) => x.d <= derniere) || sections[0];
   if (!s.mesure || derniere <= s.d) return derniere;
   const longueur = (s.mesure[0] * 16) / s.mesure[1];
   return s.d + Math.ceil((derniere - s.d) / longueur - 1e-9) * longueur;

@@ -2236,6 +2236,24 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     (ui.js) la fait résoudre par le navigateur.
   - Il faut Safari 17.5, Chrome 123 ou Firefox 120 (2024) ; un navigateur
     plus ancien perdrait toutes les couleurs.
+- **Les notes rangées par pas, à un seul endroit (T5).** Ce que lit le
+  transport (`notesA(pas)` et la fin) se calculait cinq fois : l'éditeur,
+  les cartes de la bibliothèque, la feuille des accords, le morceau et les
+  pages lues. `indexerParPas(notes)` (sequence.js, avec son essai) le fait
+  pour tous, avec `Map.groupBy`.
+  - `findLast` remplace les `[...x].reverse().find(…)` (accords, sélection,
+    MIDI, séquence). `sq.cloner` reste un aller-retour en JSON plutôt que
+    `structuredClone` : une séquence doit rester du JSON, et la copie le
+    garantit ; `structuredClone` sert là où l'on copiait des blocs ou un
+    changement (le morceau, « Corriger »).
+  - Les écouteurs : mesuré dans Chromium, ouvrir et fermer dix fois
+    l'idée, sa feuille Tempo, « Corriger », « Écouter », la feuille d'une
+    carte et les onglets ne laisse ni écouteur ni nœud de plus (avant le
+    lot non plus). Les écrans sont des fabriques qui branchent leurs
+    écouteurs une fois pour toutes ; le seul écouteur posé puis retiré à
+    chaque geste, le glissé du menu en cercle, passe par un
+    `AbortController` (un `abort()` le retire, quelle que soit la façon
+    dont le menu se ferme). Un écran qu'on recréerait ferait de même.
 - **Code mort retiré**, chaque cas vérifié (ni la page, ni le code, ni
   les essais ne s'en servaient) : la classe `.transport` de l'atelier
   (l'écoute a son dock, `.dock-transport`), la classe `.mode` (l'état de

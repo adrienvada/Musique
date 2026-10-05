@@ -20,7 +20,7 @@
  */
 import { dessinerApercu, dessinerApercuMorceau, dessinerApercuPage } from "./apercus.js";
 import { assembler, sourceDuMorceau } from "./morceau.js";
-import { pasParMesure, pasParTemps } from "./sequence.js";
+import { indexerParPas, pasParMesure, pasParTemps } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
 import { creerEcoute } from "./ecoute.js";
 import { libelleLecture } from "./atelier.js";
@@ -424,10 +424,8 @@ export function creerAccueil(deps) {
     if (p.type === "morceau") source = sourceDuMorceau(assembler(p, deps.ideesParId()));
     else {
       const seq = p.sequence;
-      const parPas = new Map();
-      let fin = 0;
-      for (const v of voixCompletes(seq)) for (const n of v.notes) { if (!parPas.has(n.d)) parPas.set(n.d, []); parPas.get(n.d).push(n); fin = Math.max(fin, n.d + n.l); }
-      source = () => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA: (x) => parPas.get(x) || [] });
+      const { notesA, fin } = indexerParPas(voixCompletes(seq).flatMap((v) => v.notes));
+      source = () => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA });
     }
     const libelle = bouton.innerHTML;
     const lecture = ecoute.jouer(bouton, source, {

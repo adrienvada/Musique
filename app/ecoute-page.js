@@ -23,7 +23,7 @@
  * Sans page : les calculs (plagesVoix, notesDePage, evenementA) se testent
  * sous Node avec abcjs (tests/ecoute-page.test.mjs).
  */
-import { pasParMesure, pasParTemps } from "./sequence.js";
+import { indexerParPas, pasParMesure, pasParTemps } from "./sequence.js";
 
 /** Les plages de caractères de chaque voix dans l'ABC (« [V:1] … », « [V:2] … »), pour couper une main. */
 export function plagesVoix(abc) {
@@ -57,23 +57,21 @@ export function notesDePage(objet, abc, { tempo, transposition = 0, voixMuettes 
   const audio = objet.setUpAudio({ chordsOff: true });
   const plages = plagesVoix(abc);
   const voixDe = (c, i) => (plages.length ? (plages.find((p) => c >= p.de && c <= p.a) || { voix: 1 }).voix : i + 1);
-  const parPas = new Map();
-  let fin = 0;
+  const notes = [];
   audio.tracks.forEach((piste, i) => {
     for (const ev of piste) {
       if (ev.cmd !== "note" || !(ev.pitch >= 0)) continue;
       if (voixMuettes.has(voixDe(ev.startChar, i))) continue;
       const d = Math.round(ev.start * 16), l = Math.max(1, Math.round(ev.duration * 16));
-      if (!parPas.has(d)) parPas.set(d, []);
-      parPas.get(d).push({ h: ev.pitch + transposition, l, v: ev.volume || 90 });
-      fin = Math.max(fin, d + l);
+      notes.push({ d, h: ev.pitch + transposition, l, v: ev.volume || 90 });
     }
   });
+  const { notesA, fin } = indexerParPas(notes);
   const mesure = mesureDe(objet);
   const seq = { mesure };
   return {
     fin,
-    source: () => ({ tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA: (p) => parPas.get(p) || [] }),
+    source: () => ({ tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA }),
   };
 }
 

@@ -440,22 +440,15 @@ export function creerEditeurIdee(deps) {
 
   // --- Écouter, boucle, métronome ---------------------------------------------
 
-  let cache = { version: -1 };
-  /** Ce que le transport joue : toutes les voix (accompagnement compris), indexées par pas. */
+  let cache = { version: -1, notesA: null, fin: 0 };
+  /**
+   * Ce que le transport joue : toutes les voix (accompagnement compris),
+   * rangées par pas une fois par version de l'idée. Le tempo se relit à
+   * chaque fois : il se règle pendant l'écoute.
+   */
   function source() {
-    if (cache.version !== e.version) {
-      const parPas = new Map();
-      let fin = 0;
-      for (const v of voixCompletes(e.seq)) {
-        for (const n of v.notes) {
-          if (!parPas.has(n.d)) parPas.set(n.d, []);
-          parPas.get(n.d).push(n);
-          fin = Math.max(fin, n.d + n.l);
-        }
-      }
-      cache = { version: e.version, parPas, fin };
-    }
-    return { tempo: e.seq.tempo, mesure: sq.pasParMesure(e.seq), temps: sq.pasParTemps(e.seq), fin: cache.fin, notesA: (p) => cache.parPas.get(p) || [] };
+    if (cache.version !== e.version) cache = { version: e.version, ...sq.indexerParPas(voixCompletes(e.seq).flatMap((v) => v.notes)) };
+    return { tempo: e.seq.tempo, mesure: sq.pasParMesure(e.seq), temps: sq.pasParTemps(e.seq), fin: cache.fin, notesA: cache.notesA };
   }
 
   /** La boucle : les mesures de la sélection, sinon toute l'idée. */

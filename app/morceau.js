@@ -12,7 +12,7 @@
  * Chaque bloc dure un nombre entier de mesures de son idée. Le tempo est
  * celui du morceau (celui de la première idée, au départ).
  */
-import { nbMesures, pasParMesure, pasParTemps, lireTonalite } from "./sequence.js";
+import { indexerParPas, nbMesures, pasParMesure, pasParTemps, lireTonalite } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
 import { fichierMidi } from "./midi.js";
 import { ecrireMusicXml } from "./musicxml.js";
@@ -92,14 +92,10 @@ export function musicXmlDuMorceau(morceau, idees) {
 
 /** Ce que le transport joue (transport.js). */
 export function sourceDuMorceau(a) {
-  const parPas = new Map();
-  for (const v of a.voix) for (const n of v.notes) {
-    if (!parPas.has(n.d)) parPas.set(n.d, []);
-    parPas.get(n.d).push(n);
-  }
+  const { notesA } = indexerParPas(a.voix.flatMap((v) => v.notes));
   const mesure = (a.mesure[0] * 16) / a.mesure[1];
   const temps = pasParTemps({ mesure: a.mesure });
-  return () => ({ tempo: a.tempo, mesure, temps, fin: a.fin, notesA: (p) => parPas.get(p) || [] });
+  return () => ({ tempo: a.tempo, mesure, temps, fin: a.fin, notesA });
 }
 
 // --- La structure en frise ---------------------------------------------------------

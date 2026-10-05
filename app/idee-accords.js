@@ -34,7 +34,7 @@
  *   avantSon(), apresSon().
  * Rend : { entrer(), sortir(), maj(), ouvrirFeuille(m, pas), fermer() }.
  */
-import { pasParMesure, pasParTemps, nbMesures, nomTonalite, lireTonalite } from "./sequence.js";
+import { indexerParPas, pasParMesure, pasParTemps, nbMesures, nomTonalite, lireTonalite } from "./sequence.js";
 import {
   roueDeLaTonalite, suitesProbables, accordsDeLaMelodie, notesDeLAccord, appliquerCouleur, couleurDe, COULEURS,
   degreDeLAccord, harmoniser, accompagnement, voixCompletes, motifAccompagnement, STYLES,
@@ -99,7 +99,7 @@ export function creerAccords(ctx) {
       mesure, m,
       fin: Math.min((m + 1) * mesure, suivant ? suivant.d : Infinity),
       actuel: tous.find((a) => a.d === d) || null,
-      avant: [...tous].reverse().find((a) => a.d < d) || null,
+      avant: tous.findLast((a) => a.d < d) || null,
     };
   }
 
@@ -415,15 +415,8 @@ export function creerAccords(ctx) {
     if (ecoute) { arreterEcoute(); return; }
     const mesure = pasParMesure(e.seq);
     const debut = Math.floor(ouverte.d / mesure) * mesure, fin = debut + mesure;
-    const parPas = new Map();
-    for (const v of voixCompletes(e.seq)) {
-      for (const n of v.notes) {
-        if (n.d < debut || n.d >= fin) continue;
-        if (!parPas.has(n.d)) parPas.set(n.d, []);
-        parPas.get(n.d).push(n);
-      }
-    }
-    if (!parPas.size) {
+    const { notesA, vide } = indexerParPas(voixCompletes(e.seq).flatMap((v) => v.notes).filter((n) => n.d >= debut && n.d < fin));
+    if (vide) {
       dire((e.seq.accompagnement || "aucun") === "aucun" && (e.seq.accords || []).length
         ? "Sans accompagnement, on n'entend plus que ta mélodie : ici, elle est vide."
         : "Rien à écouter ici : pose un accord, ou écris une mélodie.");
@@ -435,7 +428,7 @@ export function creerAccords(ctx) {
     majEcoute();
     try {
       await ctx.transport.jouer(
-        () => ({ tempo: e.seq.tempo, mesure, temps: pasParTemps(e.seq), fin, notesA: (p) => parPas.get(p) || [] }),
+        () => ({ tempo: e.seq.tempo, mesure, temps: pasParTemps(e.seq), fin, notesA }),
         { depuis: debut, surFin, surPosition: (pas) => { tete = pas; placerTete(); } },
       );
     } catch (err) {
