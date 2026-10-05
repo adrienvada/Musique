@@ -3628,6 +3628,15 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
     long (appuis simulés : la bulle, le bouton qui ne part pas, le défilement,
     le bouton rouge et le clavier qui gardent leur appui long ; inventaire :
     aucune icône sans description). 103 tests en Node.
+13. **Audit complet, puis toutes ses recommandations** (04/10 et 05/10,
+    demandé par Adrien) : *fait, à relire* (une seule PR). 86
+    recommandations sur 87 faites, une en partie (N6, le triolet d'une
+    page). Le rapport : [AUDIT-2026-10.md](AUDIT-2026-10.md) ; ce qui a
+    changé et pourquoi : « Évolutions du 04/10, lot par lot », plus haut.
+    516 tests en Node, 83 essais de bout en bout dans Chromium. Pas encore
+    essayé : un vrai iPhone, une vraie voix, un clavier MIDI, Live. La
+    version claude.ai reste à republier (les capacités à redonner sont dans
+    CLAUDE.md).
 
 ## Brancher la reMarkable (une fois)
 
