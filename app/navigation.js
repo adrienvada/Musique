@@ -116,8 +116,11 @@ export function creerNavigation(deps) {
 
   /**
    * L'onglet du navigateur et le titre de l'écran (h1) disent où l'on est ;
-   * `dire` : le lecteur d'écran l'entend (un écran qui s'ouvre).
+   * `dire` : le lecteur d'écran l'entend (un écran qui s'ouvre). Le même
+   * écran redessiné (une version reçue d'ailleurs, une suggestion gardée)
+   * ne se redit pas.
    */
+  let dernierDit = "";
   function titrer({ dire = false } = {}) {
     let nom = NOMS[vue], quoi = "";
     if (vue === "biblio") {
@@ -127,7 +130,9 @@ export function creerNavigation(deps) {
     document.title = [quoi, nom, "Portée"].filter(Boolean).join(" · ");
     const h1 = $(`titre-ecran-${vue}`);
     if (h1) h1.textContent = quoi ? `${nom} « ${quoi} »` : nom;
-    if (dire) annoncer(quoi ? `${nom} : « ${quoi} »` : nom);
+    const texte = quoi ? `${nom} : « ${quoi} »` : nom;
+    if (dire && texte !== dernierDit) annoncer(texte);
+    if (dire) dernierDit = texte;
   }
 
   // Le titre suit aussi ce qui change sans changer d'écran : l'onglet de l'accueil, la

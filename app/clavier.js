@@ -129,7 +129,7 @@ export function creerClavier(conteneur, { surNote, surOctave = () => {}, surFaco
 
   /**
    * Une touche du piano, pour le lecteur d'écran : un bouton qui dit sa note
-   * (« do4 », « do♯4 »). Hors de la tabulation : au clavier de l'ordinateur,
+   * (« do4 », « do dièse 4 »). Hors de la tabulation : au clavier de l'ordinateur,
    * les lettres jouent déjà (A W S E D…) ; au doigt, VoiceOver et TalkBack
    * la trouvent quand même (audit du 04/10, I11 : c'étaient des <div> muets).
    */

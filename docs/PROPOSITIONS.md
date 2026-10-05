@@ -2772,7 +2772,8 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   région à part (`#annonce`, `annoncer` dans `ui.js`) dit en une phrase ce
   qui a changé : « « Ma ballade » est dans tes favoris. », ce qu'une
   recherche ou un filtre laisse voir (« 2 idées et 3 partitions », compté
-  par sorte), l'écran qui s'ouvre (« Corriger : « Ma ballade » »). La
+  par sorte), l'écran qui s'ouvre (« Corriger : « Ma ballade » » ; le même
+  écran redessiné, par une version reçue d'ailleurs, ne se redit pas). La
   recherche ne se dit qu'une fois la frappe arrêtée (0,8 s) : elle ne coupe
   pas les lettres qu'on tape.
 - **Chaque écran a son titre, et l'onglet du navigateur le suit.** Un `h1`
