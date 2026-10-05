@@ -381,11 +381,12 @@ test("« Portée », en haut : le carnet, dessiné une seule fois (T3)", async (
     await page.click("#tab-partitions");
     await page.evaluate(() => {
       window.__dessins = 0;
-      new MutationObserver(() => { window.__dessins++; }).observe(document.getElementById("liste"), { childList: true });
+      new MutationObserver(() => { window.__dessins++; }).observe(document.getElementById("filtres-carnet"), { attributes: true, subtree: true });
     });
     await page.click("#aller-biblio");
     await page.waitForFunction(() => document.getElementById("tab-carnet").getAttribute("aria-selected") === "true");
-    // Un dessin du carnet vide la liste puis la remplit : une seule salve de changements.
+    // Un dessin du carnet repose l'état de ses filtres : une seule salve de changements. (Ses
+    // lignes, elles, ne bougent plus quand rien n'a changé, I9 : on ne peut plus les compter.)
     await page.waitForTimeout(200);
     assert.equal(await page.evaluate(() => window.__dessins), 1, "le carnet ne se dessine qu'une fois");
     await verifierPropre(page);

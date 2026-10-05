@@ -3,7 +3,10 @@
  *
  * Ce que chaque écran redéfinissait chez lui (audit du 04/10, T3) : `$` et
  * `el` pour la page, `pluriel` et `accorde` pour les nombres, les dates
- * dites au plus court, et le message passager (`toast`).
+ * dites au plus court (leurs formats faits une fois, I9), le message
+ * passager (`toast`, et `retirerMessagesPasses` en changeant d'écran), et
+ * ce que le lecteur d'écran entend (`annoncer`, `gravureSansTabulation`,
+ * I11).
  *
  * `echapper` : tout texte qui entre dans du HTML écrit en chaîne (innerHTML,
  * attributs) passe par elle. Un titre, une étiquette, un nom d'accord ou de
@@ -75,14 +78,32 @@ export const pluriel = (n, mot, motPluriel = `${mot}s`) => `${n} ${accorde(n, mo
  */
 export const accorde = (n, mot, motPluriel = `${mot}s`) => (n > 1 ? motPluriel : mot);
 
+/**
+ * Les formats de date, faits une fois : `toLocaleTimeString` en refait un à
+ * chaque appel, et un carnet d'un an en demandait 300 par dessin (0,25 s au
+ * téléphone, audit du 04/10, I9). Même texte qu'avant ; une date illisible
+ * passe encore par l'ancien chemin (qui ne lève pas d'erreur).
+ */
+const FORMATS = new Map();
+/**
+ * @param {Date} d
+ * @param {Intl.DateTimeFormatOptions} options
+ */
+export function formaterDate(d, options) {
+  if (Number.isNaN(d.getTime())) return d.toLocaleString("fr-FR", options);
+  const cle = JSON.stringify(options);
+  if (!FORMATS.has(cle)) FORMATS.set(cle, new Intl.DateTimeFormat("fr-FR", options));
+  return FORMATS.get(cle).format(d);
+}
+
 /** « 14:03 ». */
-export const heure = (iso) => new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+export const heure = (iso) => formaterDate(new Date(iso), { hour: "2-digit", minute: "2-digit" });
 
 /** « 5 oct., 14:03 » : une date de la bibliothèque, dite court. */
 export function dateCourte(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + ", " + heure(iso);
+  return formaterDate(d, { day: "numeric", month: "short" }) + ", " + heure(iso);
 }
 
 /**

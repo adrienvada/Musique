@@ -27,7 +27,7 @@ import { libelleLecture } from "./atelier.js";
 import { expliquer } from "./erreurs.js";
 import { compteParSorte, sorteDe } from "./garde.js";
 import { ico } from "./icones.js";
-import { $, annoncer, dateCourte, echapper, el, heure, pluriel } from "./ui.js";
+import { $, annoncer, dateCourte, echapper, el, formaterDate, heure, pluriel } from "./ui.js";
 import { ambianceStudio, lirePref, ecrirePref } from "./preferences.js";
 import { brancherFeuille, fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 import { estCopieDeConflit } from "./conflits.js";
@@ -58,8 +58,9 @@ function quand(iso, groupe) {
   if (!iso) return "";
   const d = new Date(iso);
   if (groupe === "Aujourd'hui" || groupe === "Hier") return heure(iso);
-  if (groupe === "Cette semaine") return `${d.toLocaleDateString("fr-FR", { weekday: "short" })} ${heure(iso)}`;
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  // Les formats faits une fois (ui.js) : un carnet d'un an en demandait des centaines par dessin (I9).
+  if (groupe === "Cette semaine") return `${formaterDate(d, { weekday: "short" })} ${heure(iso)}`;
+  return formaterDate(d, { day: "numeric", month: "short" });
 }
 
 /** « 1:57 » : la durée d'un morceau, d'après ses blocs et son tempo. */
@@ -222,6 +223,7 @@ export function creerAccueil(deps) {
   function fermerRecherche() {
     $("recherche-zone").hidden = true;
     $("chercher").setAttribute("aria-expanded", "false");
+    clearTimeout(minuterieRecherche);
     if ($("recherche").value) { $("recherche").value = ""; afficher(); }
     $("chercher").focus();
   }
@@ -234,12 +236,19 @@ export function creerAccueil(deps) {
     minuterieDire = setTimeout(() => annoncer(compteVisible(visibles)), attendre);
   }
 
+  // La recherche se regroupe : on dessine 150 ms après la dernière lettre, pas à chaque
+  // lettre. Avec un an d'idées, chaque lettre tapée coûtait 0,6 à 0,9 s au téléphone, et
+  // la suivante attendait (audit du 04/10, I9).
+  let minuterieRecherche = null;
   function brancherRecherche() {
     $("chercher").addEventListener("click", () => ($("recherche-zone").hidden ? ouvrirRecherche() : fermerRecherche()));
     $("fermer-recherche").addEventListener("click", fermerRecherche);
     $("recherche").addEventListener("input", () => {
-      afficher();
-      if (recherche()) direLeCompte({ attendre: 800 });
+      clearTimeout(minuterieRecherche);
+      minuterieRecherche = setTimeout(() => {
+        afficher();
+        if (recherche()) direLeCompte({ attendre: 650 });
+      }, 150);
     });
     $("recherche").addEventListener("keydown", (e) => { if (e.key === "Escape") fermerRecherche(); });
   }
@@ -247,6 +256,20 @@ export function creerAccueil(deps) {
   // ---------------------------------------------------------------------------
   // Les vignettes
   // ---------------------------------------------------------------------------
+
+  // Le cadre réel des vignettes de page, par sorte de vignette (toutes celles d'une liste ont le
+  // même) : mesuré une fois, pas une fois par vignette. Chaque mesure forçait une mise en page
+  // de tout le carnet, entre deux vignettes dessinées (audit du 04/10, I9). Il change avec la fenêtre.
+  const cadres = new Map();
+  addEventListener("resize", () => cadres.clear());
+  function ratioDu(svg, classe) {
+    if (!cadres.has(classe)) {
+      const r = svg.getBoundingClientRect();
+      if (!r.width || !r.height) return null; // pas encore à l'écran : on mesurera la prochaine fois
+      cadres.set(classe, r.width / r.height);
+    }
+    return cadres.get(classe);
+  }
 
   /** La vignette d'une partition : ses notes en barres, la frise d'un morceau, ou sa page. */
   function apercuDe(p, classe, ratio) {
@@ -267,8 +290,7 @@ export function creerAccueil(deps) {
       // Le cadre réel de la vignette (il change d'un écran à l'autre) ; à défaut, celui qu'on attendait.
       // La calibration de la version sur laquelle la page a été écrite (L9) : jamais celle d'une autre.
       deps.calibration(p.modele, p.versionModele).then((cal) => {
-        const r = svg.getBoundingClientRect();
-        dessinerApercuPage(svg, cal, p.apercu, r.width && r.height ? r.width / r.height : ratio);
+        dessinerApercuPage(svg, cal, p.apercu, ratioDu(svg, classe) || ratio);
       }).catch(() => {});
     }
     return svg;
@@ -376,19 +398,31 @@ export function creerAccueil(deps) {
       c.title = "Notée par Claude dans une conversation";
       meta.appendChild(c);
     }
-    const [genre, resume] = genreEtResume(p);
-    const date = groupe ? quand(p.modifieLe, groupe) : dateCourte(p.modifieLe);
-    // Avec « À relire » devant, le mot « Partition » n'apprend rien : la place sert à la date.
-    meta.appendChild(el("span", "ligne-quand", [meta.firstChild ? "" : genre, resume, date].filter(Boolean).join(" · ")));
+    meta.appendChild(el("span", "ligne-quand"));
     texte.appendChild(meta);
     const aide = ligneAide(p);
     if (aide) texte.appendChild(aide);
-    const etats = [...meta.children].map((c) => (c.classList.contains("p-claude") ? "notée par Claude" : c.textContent));
-    ouvrir.setAttribute("aria-label", nomDeLigne(p.titre, etats.concat(aide ? partiesAide(p) : [])));
-
     ouvrir.append(apercuDe(p, "apercu", 56 / 46), texte);
     ligne.append(ouvrir, boutonFavori(p), boutonPlus(p));
+    dater(ligne, p, groupe);
     return ligne;
+  }
+
+  /**
+   * La date d'une ligne, et son nom qui la dit : sous son groupe (« 14:03 »
+   * sous « Aujourd'hui »), ou en entier pendant une recherche. C'est la seule
+   * chose qui change d'une ligne quand une recherche commence : on la refait
+   * sans refaire la ligne (I9 : la première lettre redessinait tout).
+   */
+  function dater(ligne, p, groupe) {
+    const meta = ligne.querySelector(".ligne-meta");
+    const [genre, resume] = genreEtResume(p);
+    const date = groupe ? quand(p.modifieLe, groupe) : dateCourte(p.modifieLe);
+    // Avec « À relire » devant, le mot « Partition » n'apprend rien : la place sert à la date.
+    const avecPastille = !meta.firstElementChild.classList.contains("ligne-quand");
+    meta.querySelector(".ligne-quand").textContent = [avecPastille ? "" : genre, resume, date].filter(Boolean).join(" · ");
+    const etats = [...meta.children].map((c) => (c.classList.contains("p-claude") ? "notée par Claude" : c.textContent));
+    ligne.querySelector(".ligne-ouvrir").setAttribute("aria-label", nomDeLigne(p.titre, etats.concat(ligne.querySelector(".ligne-aide") ? partiesAide(p) : [])));
   }
 
   function rendreFiltres() {
@@ -406,6 +440,34 @@ export function creerAccueil(deps) {
     }
   }
 
+  /**
+   * Les lignes déjà dessinées, par partition ({ cle, ligne }), et les titres
+   * des groupes de dates. Une ligne dont rien de ce qu'elle montre n'a changé
+   * est reprise telle quelle : toucher une étoile redessinait les 150 lignes
+   * d'un an de carnet, 0,7 s au téléphone, et chaque lettre de la recherche
+   * autant (audit du 04/10, I9). Ce qu'une ligne montre tient à sa fiche
+   * (dont la date change à chaque écriture, stockage.js), à ce que Claude
+   * propose et, pour un morceau, aux idées qu'il enchaîne (sa frise) ; son
+   * groupe de dates ne change que sa date (`dater`).
+   */
+  let lignes = new Map(), groupes = new Map();
+  function cleDeLigne(p, idees) {
+    const c = [p.modifieLe, deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0, p.titre, !!p.favori, p.statut || ""];
+    if (p.type === "morceau") for (const b of p.blocs || []) c.push(idees.get(b.idee)?.modifieLe || "");
+    return JSON.stringify(c);
+  }
+
+  /** Met les enfants de `conteneur` dans l'ordre de `voulus`, en ne bougeant que ce qui a changé. */
+  function ranger(conteneur, voulus) {
+    const gardes = new Set(voulus);
+    for (const n of [...conteneur.children]) if (!gardes.has(n)) n.remove();
+    let ici = conteneur.firstElementChild;
+    for (const n of voulus) {
+      if (n === ici) { ici = ici.nextElementSibling; continue; }
+      conteneur.insertBefore(n, ici);
+    }
+  }
+
   function rendreCarnet() {
     const vide = !!deps.stockage() && partitions().length === 0;
     // Pendant une recherche, les résultats prennent la place : la carte « Noter une idée » revient avec la liste complète.
@@ -414,21 +476,38 @@ export function creerAccueil(deps) {
     $("vide").hidden = !vide;
     $("filtres-carnet").hidden = !deps.stockage() || vide;
     rendreFiltres();
-    const liste = $("liste");
-    liste.textContent = "";
     const q = recherche();
     visibles = partitions().filter((p) => correspondFiltre(p) && surRecherche(p));
     $("aucun").hidden = !(partitions().length > 0 && visibles.length === 0);
+    const idees = deps.ideesParId();
+    const voulus = [], dessinees = new Map(), titres = new Map();
     let avant = null;
     for (const p of visibles) {
       // Sans recherche, le carnet se découpe par date (il est trié du plus récent au plus ancien).
       const per = q ? null : periode(p.modifieLe);
       if (per && per !== avant) {
-        liste.appendChild(el("p", "surtitre groupe-date", per));
+        const titre = groupes.get(per) || el("p", "surtitre groupe-date", per);
+        titres.set(per, titre);
+        voulus.push(titre);
         avant = per;
       }
-      liste.appendChild(creerLigne(p, per));
+      const cle = cleDeLigne(p, idees);
+      const deja = lignes.get(p.id);
+      let ligne;
+      if (deja && deja.cle === cle) {
+        ligne = deja.ligne;
+        // La même ligne sous un autre groupe (minuit est passé, une recherche commence) : sa date seule.
+        if (deja.groupe !== per) dater(ligne, p, per);
+      } else ligne = creerLigne(p, per);
+      dessinees.set(p.id, { cle, ligne, groupe: per });
+      voulus.push(ligne);
     }
+    // Les lignes qu'une recherche ou un filtre cache restent prêtes : elles reviennent sans se refaire.
+    const presentes = new Set(partitions().map((p) => p.id));
+    for (const [id, l] of lignes) if (!dessinees.has(id) && presentes.has(id)) dessinees.set(id, l);
+    lignes = dessinees;
+    groupes = titres;
+    ranger($("liste"), voulus);
   }
 
   // ---------------------------------------------------------------------------

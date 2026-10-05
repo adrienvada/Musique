@@ -227,3 +227,12 @@ button.reglages-ligne:hover, label.reglages-ligne:hover { background: var(--creu
   .depot > .remarque { flex: 1 1 280px; }
   .reglages { max-width: 680px; }
 }
+
+/* Un an de carnet (150 lignes et plus) : le navigateur ne met en page et ne peint que les
+   lignes à l'écran (audit du 04/10, I9). La hauteur retenue (« auto ») est celle de la
+   ligne la dernière fois qu'elle s'est vue : la barre de défilement ne saute pas.
+   content-visibility rogne ce qui dépasse de la ligne, dont l'anneau de focus de ses
+   boutons : overflow-clip-margin le garde, et là où il n'existe pas, rien ne change. */
+@supports (overflow-clip-margin: 1px) {
+  .ligne-carnet { content-visibility: auto; contain-intrinsic-size: auto 68px; overflow-clip-margin: 6px; }
+}

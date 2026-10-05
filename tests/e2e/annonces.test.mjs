@@ -200,3 +200,72 @@ test("les onglets suivent les flèches au clavier ; touchés à la souris, ← �
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });
+
+// ---------------------------------------------------------------------------
+// Une grosse bibliothèque (I9)
+// ---------------------------------------------------------------------------
+
+test("une étoile ne refait que sa ligne, et la recherche se regroupe et garde les lignes (I9)", async () => {
+  const ctx = await contexte(navigateur, { appareil: TELEPHONE });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    // Chaque ligne reçoit une marque : une ligne refaite ne l'a plus.
+    const marquer = () => page.evaluate(() => { for (const l of document.querySelectorAll("#liste .ligne-carnet")) l.__marque = l.dataset.id; });
+    const marquees = () => page.evaluate(() => [...document.querySelectorAll("#liste .ligne-carnet")].filter((l) => l.__marque === l.dataset.id).map((l) => l.querySelector(".ligne-titre").textContent));
+    await marquer();
+    await page.locator('#liste .ligne-carnet:has(button[aria-label^="Ouvrir « Essai piano"]) .favori').tap();
+    await page.waitForSelector('#liste .ligne-carnet:has(button[aria-label^="Ouvrir « Essai piano"]) .favori[aria-pressed="true"]');
+    assert.deepEqual(await marquees(), ["Essai melodie-standard"]);
+    // Le focus revient sur l'étoile de la ligne refaite.
+    assert.equal(await page.evaluate(() => document.activeElement.closest(".ligne-carnet")?.querySelector(".ligne-titre").textContent), "Essai piano-standard");
+    // La recherche : une seule fois dessinée pour des lettres tapées vite, et les lignes gardées.
+    await marquer();
+    await page.locator("#chercher").tap();
+    await page.evaluate(() => { window.__dessins = 0; new MutationObserver(() => window.__dessins++).observe(document.getElementById("liste"), { childList: true }); });
+    await page.locator("#recherche").pressSequentially("piano", { delay: 30 });
+    await page.waitForFunction(() => document.querySelectorAll("#liste .ligne-carnet").length === 1);
+    assert.equal(await page.evaluate(() => window.__dessins), 1);
+    assert.deepEqual(await marquees(), ["Essai piano-standard"]);
+    // Pendant une recherche, la date se dit en entier (le jour et l'heure).
+    assert.match(await page.textContent("#liste .ligne-quand"), / · \d{1,2} \S+, \d\d:\d\d$/);
+    await page.locator("#fermer-recherche").tap();
+    await page.waitForFunction(() => document.querySelectorAll("#liste .ligne-carnet").length === 2);
+    assert.deepEqual((await marquees()).sort(), ["Essai melodie-standard", "Essai piano-standard"]);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("pincer la grille l'étire sans la redessiner ; le vrai dessin vient au lever des doigts (I9)", async () => {
+  const ctx = await contexte(navigateur, { appareil: TELEPHONE });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.locator("#nouvelle-idee").tap();
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    for (let i = 0; i < 4; i++) await page.locator("#idee-clavier .touche.blanche").nth(i).tap();
+    await page.waitForFunction(() => document.querySelectorAll("#idee-grille .g-note:not(.autre)").length === 4);
+    const largeur = () => page.evaluate(() => document.querySelector("#idee-grille .g-note:not(.autre)").getBoundingClientRect().width);
+    const avant = await largeur();
+    await page.evaluate(() => { window.__redessins = 0; new MutationObserver(() => window.__redessins++).observe(document.querySelector("#idee-grille .g-notes"), { childList: true }); });
+    const cdp = await ctx.newCDPSession(page);
+    const b = await page.locator("#idee-grille .g-defil").boundingBox();
+    const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx - 40, y: cy, id: 1 }, { x: cx + 40, y: cy, id: 2 }] });
+    for (let i = 1; i <= 8; i++) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx - 40 - i * 8, y: cy, id: 1 }, { x: cx + 40 + i * 8, y: cy, id: 2 }] });
+      await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => ok())));
+    }
+    // Pendant le geste : étiré (en largeur seulement), rien de redessiné.
+    const etire = /scale\(([\d.]+), 1\)/.exec(await page.evaluate(() => document.querySelector("#idee-grille .g-etire").style.transform));
+    assert.ok(etire && Number(etire[1]) > 1.5, String(etire));
+    assert.equal(await page.evaluate(() => window.__redessins), 0);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForFunction(() => window.__redessins > 0);
+    assert.equal(await page.evaluate(() => document.querySelector("#idee-grille .g-etire").style.transform), "");
+    const apres = await largeur();
+    assert.ok(apres > avant * 1.5, `${avant} → ${apres}`);
+    // Le zoom choisi se garde sur l'appareil, comme avant.
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem("portee:zoom-grille") || "null")?.px > 11);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});

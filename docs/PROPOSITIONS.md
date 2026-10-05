@@ -2826,6 +2826,47 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   .mid de Live y devient une idée depuis le lot notation.
 - Hors de mes fichiers, deux lignes : `ecran-atelier.js` appelle
   `gravureSansTabulation` après sa gravure.
+- **Une grosse bibliothèque reste fluide (I9).** Mesuré comme l'audit (150
+  documents, téléphone simulé, processeur ralenti ×4, `perf-grosse.mjs`),
+  avant → après : une lettre tapée dans la recherche, 584 à 936 ms →
+  16 à 72 ms ; une étoile touchée, une tâche de 719 ms → aucune au-delà
+  de 63 ms ; le pincement de la grille d'une idée de 64 mesures, 117 ms
+  par image (p95) et 19 images sautées → 17 ms et une seule (le vrai
+  dessin, au lever des doigts) ; l'ouverture du carnet, 948 → 318 ms de
+  blocage.
+  - **Le carnet ne refait que les lignes qui changent.** Chaque dessin
+    vidait et refaisait les 150 lignes (leurs vignettes, leurs dates) : une
+    étoile touchée, une lettre tapée, une synchro. Une ligne dont rien de
+    ce qu'elle montre n'a changé (sa fiche, dont la date change à chaque
+    écriture, ce que Claude propose, les idées d'un morceau) est reprise
+    telle quelle ; une recherche qui commence ne refait que les dates. Ses
+    écouteurs restent ceux de sa fiche : une fiche qui change refait sa
+    ligne.
+  - **La recherche se regroupe** : on dessine 150 ms après la dernière
+    lettre, pas à chaque lettre.
+  - **Les lignes hors de l'écran ne se mettent pas en page**
+    (`content-visibility: auto`), seulement là où `overflow-clip-margin`
+    existe : sans lui, l'anneau de focus des boutons d'une ligne était
+    rogné (essayé). Ailleurs, rien ne change.
+  - **Les vignettes de page mesurent leur cadre une fois par dessin**, pas
+    une fois chacune (chaque mesure forçait une mise en page de tout le
+    carnet), et **les dates ont leurs formats faits une fois**
+    (`formaterDate`, `ui.js`) : `toLocaleTimeString` en refaisait un à
+    chaque appel, trois cents par dessin. Même texte qu'avant.
+  - **Pincer étire la grille, sans la redessiner** : le dessin (dans une
+    enveloppe, `.g-etire`), la règle et les touches de gauche s'étirent par
+    une transformation, et le vrai dessin vient au lever des doigts, dans
+    la même image. C'est l'enveloppe qui s'étire, pas le plan : étiré, le
+    plan change la zone qui défile, et le navigateur rognait la position en
+    dézoomant.
+  - Piège : pas de `will-change: transform` sur ce dessin. Pour une idée de
+    64 mesures (des dizaines de milliers de pixels de large), il coûtait
+    105 ms par image au téléphone, plus que le redessin qu'il remplaçait
+    (mesuré : 24 images sautées avec, 2 sans).
+  - Hors de mes fichiers : l'essai « Portée, en haut : le carnet, dessiné
+    une seule fois » (`ecrans.test.mjs`) comptait les changements de la
+    liste ; un dessin qui ne change rien ne la touche plus. Il compte
+    maintenant ceux de ses filtres, que chaque dessin repose.
 - Essais : `tests/e2e/annonces.test.mjs`.
 
 ### Claude dans l'éditeur d'idée (H2)
