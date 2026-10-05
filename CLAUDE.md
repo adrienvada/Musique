@@ -29,7 +29,15 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
     une sauvegarde d'Adrien gardée hors du dépôt) ;
   - les gabarits de son écriture (`gabarits.js`) sont une entrée
     facultative : sans eux, la lecture ne change pas (un test le garde). Ce
-    sont ses données : jamais dans le dépôt.
+    sont ses données : jamais dans le dépôt. Dans la bibliothèque, ce sont
+    des fiches cachées (`type: "gabarits"`, id `gabarits-<signe>`), toujours
+    réunies par union, jamais « le plus récent gagne » ; tout ce qui liste
+    des partitions les écarte (`montrable` dans `stockage.js`, `fiches()`
+    dans `conversation.js`) ;
+  - une calibration se charge toujours avec sa version :
+    `calibration(modele, versionModele)` ;
+  - piège abcjs : après une barre, le `startChar` d'une note pointe sur
+    l'espace qui la précède (`debutDeNote`).
 - **Modèles (`modeles/`)** : générés par `outils/generer_modeles.py`, jamais
   retouchés à la main. Changer un modèle change sa calibration : on
   incrémente `VERSION`, et chaque version garde la sienne
@@ -179,7 +187,12 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   « Annuler »). Les échecs de `sample` passent par `lireEchec`
   (`claude-idee.js`), jamais par `expliquer`, qui prendrait
   `upstream_error` pour le connecteur. `permissions` ne se déclare pas : on
-  appelle `manage()` sur un bouton. Une nouvelle classe CSS se préfixe
+  appelle `manage()` sur un bouton. Le second avis sur un doute passe par
+  `validerAvis`, puis s'applique par `repondre`, comme la réponse d'Adrien ;
+  `issueAvis(err)` lit un échec de `sample` à son code et une `Error` de
+  Portée par `erreurs.js`. Dans un essai, un faux `sample` dont le signal
+  est déjà arrêté rejette sans rien envoyer : un essai qui touche
+  « Arrêter » attend que la question soit partie. Une nouvelle classe CSS se préfixe
   (`.claude-…`) : `.gardee` et `.neuve` du mode Chanter ne le sont pas.
 - **Correction au toucher (`app/edition.js`)** : Adrien ne lit pas l'ABC.
   Toute correction passe par un geste (bouton, glissé, clavier) qui réécrit
