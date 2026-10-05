@@ -197,16 +197,17 @@ if (autonome) {
     ecrire(f, texte);
   }
   // Les fichiers tiers portent la version de leur paquet : pdf.js (son
-  // module et son worker, appelés par app.js), abcjs (la page), les polices
-  // (polices.css).
+  // module et son worker, appelés par import-pdf.js), abcjs (la page), les
+  // polices (polices.css).
   const pdfjs = versionDuPaquet("pdfjs-dist");
-  let app = lire("app.js");
+  const IMPORT_PDF = "import-pdf.js";
+  let importPdf = lire(IMPORT_PDF);
   for (const f of ["pdf.min.mjs", "pdf.worker.min.mjs"]) {
     const adresse = `"./vendor/pdfjs/${f}"`;
-    if (!app.includes(adresse)) throw new Error(`app.js : ${adresse} introuvable (pdf.js a changé de place ?)`);
-    app = app.replaceAll(adresse, `"./vendor/pdfjs/${f}?v=${pdfjs}"`);
+    if (!importPdf.includes(adresse)) throw new Error(`${IMPORT_PDF} : ${adresse} introuvable (pdf.js a changé de place ?)`);
+    importPdf = importPdf.replaceAll(adresse, `"./vendor/pdfjs/${f}?v=${pdfjs}"`);
   }
-  ecrire("app.js", app);
+  ecrire(IMPORT_PDF, importPdf);
   ecrire("styles/polices.css", lire("styles/polices.css").replace(POLICE, (_, f) => `url("../polices/${f}?v=${versionDuPaquet(paquetDeLaPolice(f))}")`));
   const ABCJS = 'src="vendor/abcjs/abcjs-basic-min.js"';
   if (!corps.includes(ABCJS)) throw new Error("index.html : abcjs introuvable");

@@ -1980,6 +1980,25 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   d'une page dans l'accueil : l'accueil importait tout l'éditeur d'idée pour
   dessiner des petits traits. Ce que la vignette d'une page garde de ses
   traits à l'import (`apercuTraits`) les rejoint, avec son essai.
+- **La tablette et l'import ont leurs modules (T3).** `app/tablette.js`
+  tient le panneau « Ma reMarkable », ses lignes dans les Réglages,
+  l'adresse du connecteur (que la synchronisation emprunte) et les modèles
+  à télécharger ; `app/import-pdf.js` lit un PDF ou un .mid et range la
+  partition, pour lui comme pour la tablette (`enregistrerLecture`). Une
+  page lue range ses doutes par `preparerDoutes`, la fonction que les
+  essais du lecteur vérifient : l'appli en avait sa propre variante.
+  - **pdf.js revient sans recharger (T4).** Après un échec du réseau,
+    l'appli gardait la promesse ratée, et Chromium garde de toute façon
+    l'échec d'un `import()` attaché à son adresse jusqu'au rechargement
+    (essayé) : l'import de PDF échouait jusque-là, même le réseau revenu.
+    La promesse ratée s'oublie, et l'essai suivant demande pdf.js à une
+    autre adresse (`?essai=1`).
+  - Le connecteur appelé du site lance de vraies `Error`, avec leur pile
+    et leur cause, et toujours le `code` que l'appli lit (T4) ; c'étaient
+    des objets bruts.
+  - Essai : `tests/e2e/ecrans.test.mjs` (« un PDF illisible, puis pdf.js
+    qui ne vient pas ») : le message dit quoi faire, en français, et le
+    même import marche une fois le réseau revenu.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 
@@ -2318,10 +2337,10 @@ ou supprimer la fonction dans Supabase.
   dans `dist/` (sauf le piano, à part, et les licences) : un fichier que
   l'appli demande doit donc sortir de l'assembleur, sinon il manque hors
   ligne. Les fichiers tiers (pdf.js, abcjs, polices) portent la version de
-  leur paquet, que l'assembleur met dans leur adresse (`app.js`, la page,
-  `polices.css`) : il cherche pdf.js sous la forme
-  `"./vendor/pdfjs/pdf.min.mjs"` dans `app.js`, et s'arrête s'il ne la
-  trouve plus.
+  leur paquet, que l'assembleur met dans leur adresse (`import-pdf.js`, la
+  page, `polices.css`) : il cherche pdf.js sous la forme
+  `"./vendor/pdfjs/pdf.min.mjs"` dans `import-pdf.js` (dans `app.js`
+  jusqu'au 05/10), et s'arrête s'il ne la trouve plus.
 
 - **pdf.js 6** utilise `Map.prototype.getOrInsertComputed`, disponible
   partout seulement depuis le 14/02/2026 (Chrome 145, Firefox 144,

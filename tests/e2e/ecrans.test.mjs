@@ -10,8 +10,20 @@
  */
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import { servir } from "./serveur.mjs";
-import { ORDINATEUR, contexte, importerLesExemples, lancer, octetsDu, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { ORDINATEUR, RACINE, contexte, importerLesExemples, lancer, octetsDu, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+
+const MELODIE = path.join(RACINE, "tests/pages/2026-09-30-melodie-standard.pdf");
+
+/** Le message passager, dès qu'il correspond à `motif`. */
+async function messageQui(page, motif) {
+  await page.waitForFunction((m) => new RegExp(m).test(document.getElementById("toast").textContent), motif.source, { timeout: 20000 });
+  return page.textContent("#toast");
+}
+
+/** Les exceptions de la page (les erreurs gardées dans la console, elles, sont voulues ici). */
+const exceptions = (page) => page.erreurs.filter((e) => e.startsWith("[exception]"));
 
 let serveur, navigateur;
 before(async () => {
@@ -86,4 +98,36 @@ test("les exports passent tous par exports.js : MusicXML et ABC d'une page, tout
     assert.equal(tout.octets.subarray(0, 2).toString("latin1"), "PK");
     await verifierPropre(page);
   } finally { await ctx.close(); }
+});
+
+test("un PDF illisible, puis pdf.js qui ne vient pas : le message dit quoi faire, en français ; le réseau revenu, l'import remarche sans recharger (T4, I13)", async () => {
+  // Sans service worker : sa copie de pdf.js passerait par-dessus la panne.
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR, serviceWorkers: "block" });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    // Un fichier qui n'a de PDF que le nom.
+    await page.setInputFiles("#fichier", { name: "pas-un-pdf.pdf", mimeType: "application/pdf", buffer: Buffer.from("ceci n'est pas un PDF") });
+    const illisible = await messageQui(page, /^Impossible de lire « pas-un-pdf\.pdf »/);
+    assert.doesNotMatch(illisible, /Invalid|structure/i, illisible);
+    assert.match(illisible, /pas un PDF lisible.*Exporte la page à nouveau/, illisible);
+    // pdf.js ne vient pas (le réseau a manqué) ; c'est la première fois qu'on le demande.
+    const ctx2 = await contexte(navigateur, { appareil: ORDINATEUR, serviceWorkers: "block" });
+    try {
+      const page2 = await ouvrirPortee(ctx2, serveur.url);
+      serveur.etat.pannes.set("vendor/pdfjs/pdf.min.mjs", 503);
+      await page2.setInputFiles("#fichier", MELODIE);
+      const panne = await messageQui(page2, /^Impossible de lire « 2026-09-30-melodie-standard\.pdf »/);
+      assert.doesNotMatch(panne, /Failed|fetch|dynamically/i, panne);
+      assert.match(panne, /Portée n'a pas pu se charger.*réseau/, panne);
+      // Le réseau revient : le même import marche, sans recharger la page.
+      serveur.etat.pannes.delete("vendor/pdfjs/pdf.min.mjs");
+      await page2.setInputFiles("#fichier", MELODIE);
+      await page2.waitForSelector("#vue-atelier:not([hidden]) #gravure-atelier svg .abcjs-note", { state: "attached", timeout: 20000 });
+      assert.deepEqual(exceptions(page2), []);
+    } finally { await ctx2.close(); }
+    assert.deepEqual(exceptions(page), []);
+  } finally {
+    serveur.etat.pannes.clear();
+    await ctx.close();
+  }
 });

@@ -8,26 +8,26 @@
  * Adrien ne l'écrit jamais lui-même : il touche une note et choisit un
  * geste (plus haut, noire, dièse…), et edition.js réécrit l'ABC.
  */
-import { lireDocument } from "./lecteur/extraction.js";
 import { lirePartition } from "./lecteur/partition.js";
 import { dessinerPage } from "./manuscrit.js";
 import { Piano } from "./piano.js";
-import { decompacter, nouvelId, ouvrirStockage, restaurer, sauvegarde } from "./stockage.js";
+import { nouvelId, ouvrirStockage, restaurer, sauvegarde } from "./stockage.js";
 import * as ed from "./edition.js";
-import { adresseEnregistree, connecteurDirect, enregistrerAdresse, FORME_ADRESSE } from "./connecteur.js";
+import { adresseEnregistree } from "./connecteur.js";
 import { creerSynchro } from "./synchro.js";
 import { creerEditeurIdee } from "./idee.js";
 import { Transport } from "./transport.js";
 import { notesDePage, surlignage } from "./ecoute-page.js";
 import { installerEveil } from "./eveil.js";
 import { brancherLive } from "./reglages-live.js";
-import { sequenceDepuisAbc, pasParMesure, pasParTemps, ecrireAbc } from "./sequence.js";
+import { sequenceDepuisAbc, pasParMesure, pasParTemps } from "./sequence.js";
 import { voixCompletes, transposerIdee } from "./harmonie.js";
 import { creerVueMorceau } from "./vue-morceau.js";
 import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
-import { ideeDepuisMidi, midiDeLIdee } from "./midi.js";
+import { midiDeLIdee } from "./midi.js";
 import { creerExports } from "./exports.js";
-import { apercuTraits } from "./apercus.js";
+import { calibration, creerImport } from "./import-pdf.js";
+import { creerTablette } from "./tablette.js";
 import { ico, injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerHistorique } from "./historique.js";
@@ -36,12 +36,9 @@ import { creerAccueil } from "./accueil.js";
 import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, suivre } from "./doutes.js";
 import { afficherVueAtelier, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes, placerOnglets, suivreDock } from "./atelier.js";
 import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
-import { $, accorde, dateCourte, dateRelative, heure, pluriel, retirerToast, toast } from "./ui.js";
+import { $, accorde, dateRelative, heure, pluriel, retirerToast, toast } from "./ui.js";
 import { dialogue, veutSupprimer } from "./dialogue.js";
 
-const VERSION_LECTEUR = 1;
-// Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
-const CONNECTEUR = "Portée reMarkable";
 const ABCJS = () => window.ABCJS;
 // Pour la gravure seulement : la dernière ligne s'étire sur toute la largeur,
 // sinon une pièce d'une mesure s'affiche minuscule. abcjs compte ses
@@ -49,13 +46,6 @@ const ABCJS = () => window.ABCJS;
 const PREFIXE_GRAVURE = "%%stretchlast 1\n";
 const pourGravure = (abc) => PREFIXE_GRAVURE + abc;
 const dansClaude = () => !!(window.claude && typeof window.claude.use === "function");
-const MODELES = [
-  { id: "melodie-standard", nom: "Mélodie", detail: "7 portées, pour une ligne mélodique." },
-  { id: "melodie-large", nom: "Mélodie, large", detail: "5 portées aux interlignes plus grands." },
-  { id: "piano-standard", nom: "Piano", detail: "4 systèmes de deux portées, main droite et main gauche." },
-  { id: "piano-large", nom: "Piano, large", detail: "3 systèmes, plus de place pour écrire." },
-];
-
 const etat = {
   stockage: null,
   partitions: [],
@@ -81,19 +71,10 @@ const transport = new Transport(piano);
 const EN_CHARGEMENT = "Piano en chargement… La première fois, il se télécharge avec le réseau.";
 piano.surProbleme = (texte) => toast(texte, 7000);
 piano.surAttente = (oui) => (oui ? toast(EN_CHARGEMENT, 30000) : retirerToast(EN_CHARGEMENT));
-const calibrations = new Map();
 let editeur = null; // l'éditeur d'idée (idee.js), créé au démarrage
 let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
 let accueil = null; // l'accueil et ses quatre onglets (accueil.js)
-
-async function calibration(modele) {
-  if (!calibrations.has(modele)) {
-    const r = await fetch(new URL(`./modeles/${modele}.json`, import.meta.url));
-    if (!r.ok) throw new Error(`Modèle inconnu : ${modele}`);
-    calibrations.set(modele, await r.json());
-  }
-  return calibrations.get(modele);
-}
+let tablette = null; // le panneau « Ma reMarkable », l'adresse du connecteur, les modèles (tablette.js)
 
 // ------------------------------------------------------------------------
 // Petits outils d'interface
@@ -107,10 +88,6 @@ function pastilleStatut(p) {
   else if (p.statut === "prete") { span.className = "pastille p-ok"; span.textContent = "Prête"; }
   else { span.className = "pastille p-doute"; span.textContent = restants ? `À relire · ${pluriel(restants, "doute")}` : "À relire"; }
   return span;
-}
-
-function titreDepuisFichier(nom) {
-  return nom.replace(/\.pdf$/i, "").replace(/[_]+/g, " ").replace(/\s+copy$/i, "").trim() || "Sans titre";
 }
 
 // ------------------------------------------------------------------------
@@ -246,6 +223,10 @@ function reculer() {
 
 const ideesParId = () => new Map(etat.partitions.filter((x) => x.type === "idee").map((x) => [x.id, x]));
 
+// L'import des PDF et des .mid (import-pdf.js) ; la tablette (tablette.js) range ce
+// qu'elle lit par le même chemin.
+const { importer, importerExemples, enregistrerLecture } = creerImport({ stockage: () => etat.stockage, ouvrir: (id, vue) => ouvrir(id, vue) });
+
 // Les exports (MIDI, MusicXML, ABC, partage) : exports.js.
 const { exporterMidi, toutEnMidi, partagerMidi, exporterMusicXml, exporterAbc } = creerExports({
   stockage: () => etat.stockage, partitions: () => etat.partitions, idees: ideesParId, abcjs: ABCJS, dansClaude,
@@ -291,13 +272,6 @@ function afficherBibliotheque() {
 
 let synchro = null, minuterieSynchro = null, battement = null, dernierEtat = null;
 
-async function appelerOutil(outil, args) {
-  const m = await mcp();
-  if (!m) throw { code: "sans_adresse", message: "Pas d'adresse de connecteur." };
-  const r = await m.callTool(CONNECTEUR, outil, args, { cache: false });
-  return r.payload;
-}
-
 function synchronisable() {
   return !dansClaude() && etat.stockage && etat.stockage.synchronisable && !!adresseEnregistree();
 }
@@ -311,7 +285,7 @@ async function demarrerSynchro() {
     await etat.stockage.ecrireMeta("rejoint", false);
     await etat.stockage.ecrireMeta("adresse", adresse);
   }
-  synchro ??= creerSynchro({ local: etat.stockage, appeler: appelerOutil, surEtat: afficherSynchro });
+  synchro ??= creerSynchro({ local: etat.stockage, appeler: (outil, args) => tablette.appelerOutil(outil, args), surEtat: afficherSynchro });
   etat.stockage.surChangement(() => { clearTimeout(minuterieSynchro); minuterieSynchro = setTimeout(synchroniser, 2500); });
   clearInterval(battement);
   battement = setInterval(() => { if (document.visibilityState === "visible") synchroniser(); }, 90000);
@@ -376,7 +350,7 @@ function afficherSynchro(e) {
   const actif = synchronisable();
   $("synchroniser").hidden = !actif;
   $("activer-synchro").hidden = actif || dansClaude() || !(etat.stockage && etat.stockage.synchronisable);
-  majReglagesRm();
+  tablette.majReglagesRm();
   if (!etat.stockage) return;
   if (dansClaude() || etat.stockage.mode === "claude") {
     // Les textes de claude.ai sont posés au démarrage ; ici, seulement l'icône du haut.
@@ -405,24 +379,12 @@ function afficherSynchro(e) {
   accueil.montrerSynchro({ nuage: d.etat !== "erreur", ton: d.etat === "ok" ? "ok" : d.etat === "erreur" ? "alerte" : "gris", titre: $("mode").textContent });
 }
 
-/**
- * Les lignes « Ma reMarkable » des Réglages : où en est le connecteur, où en est la tablette.
- * La tablette n'est connue qu'après un premier appel au connecteur (le panneau de l'onglet Partitions).
- */
-function majReglagesRm() {
-  const adresse = !!adresseEnregistree();
-  $("rm-connecteur").textContent = dansClaude() ? "Portée reMarkable (claude.ai)" : adresse ? "Adresse enregistrée" : "Pas encore d'adresse";
-  $("rm-tablette").textContent = tabletteReliee === true ? "Reliée" : tabletteReliee === false ? "À relier"
-    : dansClaude() || adresse ? "Pas encore vérifiée" : "Colle l'adresse du connecteur";
-  $("changer-adresse").hidden = dansClaude() || !adresse;
-}
-
 function formulaireSynchro() {
   const bloc = document.createElement("div");
   bloc.className = "aide-connecteur";
   const p = document.createElement("p");
   p.textContent = "Colle l'adresse de ton connecteur « Portée reMarkable » (la même que dans claude.ai). Fais-le sur chaque appareil : ils partageront la même bibliothèque, et le bouton reMarkable marchera aussi.";
-  bloc.append(p, formulaireAdresse(() => { bloc.remove(); toast("Synchronisation activée."); }));
+  bloc.append(p, tablette.formulaireAdresse(() => { bloc.remove(); toast("Synchronisation activée."); }));
   return bloc;
 }
 
@@ -433,40 +395,6 @@ function formulaireSynchro() {
 /** Les panneaux de la reMarkable et des modèles sont dans l'onglet Partitions : on y va d'abord. */
 function versPartitions() {
   if (etat.onglet !== "partitions") accueil.choisirOnglet("partitions");
-}
-
-function afficherModeles() {
-  versPartitions();
-  $("panneau-modeles").hidden = false;
-  const zone = $("liste-modeles");
-  if (zone.childElementCount) return;
-  for (const m of MODELES) {
-    const bloc = document.createElement("div");
-    bloc.className = "modele";
-    const img = document.createElement("img");
-    img.src = new URL(`./modeles/apercu/${m.id}.svg`, import.meta.url).href;
-    img.alt = `Aperçu du modèle ${m.nom}`;
-    img.loading = "lazy";
-    const nom = document.createElement("span");
-    nom.className = "nom"; nom.textContent = m.nom;
-    const detail = document.createElement("span");
-    detail.className = "remarque"; detail.textContent = m.detail;
-    const b = document.createElement("button");
-    b.className = "btn btn-petit";
-    b.textContent = "Télécharger le PDF";
-    b.addEventListener("click", async () => {
-      try {
-        const r = await fetch(new URL(`./modeles/${m.id}.pdf`, import.meta.url));
-        await etat.stockage.enregistrerFichier(`Portée - ${m.nom}.pdf`, new Blob([await r.arrayBuffer()], { type: "application/pdf" }));
-      } catch (e) {
-        if (e && e.code === "declined") return;
-        toast("Le modèle n'a pas pu être téléchargé : " + (e.message || e.code || "erreur"));
-      }
-    });
-    bloc.append(img, nom, detail, b);
-    zone.appendChild(bloc);
-  }
-  $("panneau-modeles").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function sauvegarderBibliotheque() {
@@ -514,407 +442,6 @@ function bilanRestauration({ revenues = 0, ignorees = 0, differentes = 0, echecs
 
 function nomModele(m) {
   return { "melodie-large": "Mélodie, large", "melodie-standard": "Mélodie", "piano-large": "Piano, large", "piano-standard": "Piano" }[m] || m || "";
-}
-
-// ------------------------------------------------------------------------
-// Import d'une page exportée de la tablette
-// ------------------------------------------------------------------------
-
-let pdfjsPromesse = null;
-function chargerPdfjs() {
-  if (!pdfjsPromesse) {
-    pdfjsPromesse = import("./vendor/pdfjs/pdf.min.mjs").then((pdfjs) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdfjs/pdf.worker.min.mjs", import.meta.url).href;
-      return pdfjs;
-    });
-  }
-  return pdfjsPromesse;
-}
-
-async function importer(fichiers) {
-  if (!etat.stockage) { toast("La bibliothèque s'ouvre encore, réessaie dans un instant."); return; }
-  let dernier = null;
-  for (const f of fichiers) {
-    try {
-      toast(`Lecture de « ${f.name} »…`, 60000);
-      if (/\.midi?$/i.test(f.name) || /midi/i.test(f.type)) { dernier = (await importerMidi(f)) || dernier; continue; }
-      const pdfjs = await chargerPdfjs();
-      const doc = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise;
-      const lu = await lireDocument(pdfjs, doc);
-      if (!lu.modele) {
-        toast(`« ${f.name} » n'a pas été écrit sur un modèle Portée : impossible de savoir où sont les lignes. Duplique un modèle sur la tablette et écris dessus.`, 9000);
-        continue;
-      }
-      // La tablette exporte tout le document : on ne garde que les pages écrites.
-      const pages = lu.pages.map((p) => p.traits).filter((t) => t.length > 0);
-      if (!pages.length) { toast(`« ${f.name} » ne contient aucun trait.`); continue; }
-      dernier = await enregistrerLecture({ titre: titreDepuisFichier(f.name), modele: lu.modele, pages });
-    } catch (e) {
-      console.error(e);
-      toast(`Impossible de lire « ${f.name} » : ${e.message || e}`, 9000);
-    }
-  }
-  if (dernier && fichiers.length === 1) ouvrir(dernier, "atelier");
-}
-
-/**
- * Un fichier MIDI devient une idée : l'aller-retour avec Ableton (une phrase
- * retravaillée dans Live revient dans Portée). Les notes sont recalées au
- * pas (midi.js, ideeDepuisMidi) ; l'idée s'enregistre comme une autre, et
- * s'ouvre si c'est le seul fichier importé.
- */
-async function importerMidi(f) {
-  const titre = f.name.replace(/\.midi?$/i, "").replace(/[_]+/g, " ").trim() || "Idée MIDI";
-  const { sequence, ecartees } = ideeDepuisMidi(new Uint8Array(await f.arrayBuffer()));
-  const nb = sequence.pistes.reduce((n, p) => n + p.notes.length, 0);
-  if (!nb) { toast(`« ${f.name} » ne contient aucune note à garder.`, 6000); return null; }
-  const id = nouvelId();
-  const maintenant = new Date().toISOString();
-  await etat.stockage.creer(id, {
-    type: "idee", titre, sequence, abc: ecrireAbc(sequence, { voix: voixCompletes(sequence), titre }).abc,
-    statut: "idee", nbPages: 0, modele: null, tempo: sequence.tempo, note: "", etiquettes: [], favori: false, memo: null,
-    creeLe: maintenant, modifieLe: maintenant,
-  }, []);
-  const laisse = [ecartees.pistes ? `${pluriel(ecartees.pistes, "piste")} de plus` : "", ecartees.batterie ? "la batterie" : ""].filter(Boolean).join(" et ");
-  toast(`« ${titre} » : ${pluriel(nb, "note")}, une idée de plus.${laisse ? ` Laissées de côté : ${laisse} (une idée garde quatre pistes, sans percussions).` : ""}`, laisse ? 8000 : 4000);
-  return id;
-}
-
-/**
- * Lit les pages et range la partition. Commun à l'import d'un PDF et à
- * l'import direct depuis la reMarkable.
- */
-async function enregistrerLecture({ titre, modele, pages, source = null }) {
-  const cal = await calibration(modele);
-  const res = lirePartition(pages, cal, { titre });
-  const maintenant = new Date().toISOString();
-  const id = nouvelId();
-  await etat.stockage.creer(id, {
-    titre,
-    modele,
-    abc: res.abc,
-    abcLu: res.abc,
-    doutes: res.doutes.map((d) => ({ ...d, leve: false })),
-    statut: "a-relire",
-    nbPages: pages.length,
-    apercu: apercuTraits(pages[0], cal),
-    versionLecteur: VERSION_LECTEUR,
-    source,
-    creeLe: maintenant,
-    modifieLe: maintenant,
-  }, pages);
-  toast(`« ${titre} » est lue : ${res.doutes.length ? `${pluriel(res.doutes.length, "point")} à vérifier` : "rien à signaler"}.`);
-  return id;
-}
-
-// ------------------------------------------------------------------------
-// Ma reMarkable : parcourir la tablette et importer au clic
-// ------------------------------------------------------------------------
-//
-// Sur claude.ai, la page ne peut joindre aucun serveur : elle passe par le
-// connecteur « Portée reMarkable » qu'Adrien a ajouté à claude.ai. Ailleurs
-// (GitHub Pages), elle appelle ce même connecteur directement, à l'adresse
-// qu'Adrien a collée une fois (connecteur.js). Deux outils lisent la
-// tablette, « arborescence » et « document » ; « relier » sert une fois,
-// avec le code à 8 lettres de my.remarkable.com.
-
-let mcpPromesse = null;
-const mcp = () => (mcpPromesse ??= (async () => {
-  if (dansClaude()) return window.claude.use("mcp").catch(() => null);
-  const adresse = adresseEnregistree();
-  return adresse ? connecteurDirect(adresse) : null;
-})());
-let noeudsRm = [];
-let tabletteReliee = null; // null tant que le connecteur n'a pas répondu
-const ouverts = new Set();
-
-function etatRm(texte, aide = null) {
-  const e = $("etat-rm");
-  e.textContent = texte;
-  if (aide) e.appendChild(aide);
-}
-
-/** Le message d'un outil en échec (texte renvoyé par le connecteur). */
-function texteOutil(err) {
-  const c = err && err.result && err.result.content;
-  const t = Array.isArray(c) && c.find((x) => x && x.type === "text");
-  return (t && t.text) || (err && err.message) || "";
-}
-
-/** Ce qu'il faut faire, selon ce qui bloque. Chaque cas a sa réponse. */
-function expliquerErreurRm(err) {
-  const code = err && err.code;
-  const bloc = document.createElement("div");
-  bloc.className = "aide-connecteur";
-  const p = (t) => { const x = document.createElement("p"); x.textContent = t; bloc.appendChild(x); return x; };
-  if (code === "adresse_invalide") {
-    p("Cette adresse ne mène à aucun connecteur. Vérifie-la (elle finit par la clé), ou colle la nouvelle.");
-    bloc.appendChild(formulaireAdresse());
-  } else if (code === "server_not_connected" || code === "server_not_found") {
-    p(`Le connecteur « ${CONNECTEUR} » n'est pas ajouté à ton compte claude.ai.`);
-    p("Ajoute-le dans claude.ai → Paramètres → Connecteurs → Ajouter un connecteur personnalisé, avec exactement ce nom et l'adresse que Claude t'a donnée. Puis recharge cette page.");
-  } else if (code === "needs_reauth") {
-    p(`Reconnecte « ${CONNECTEUR} » dans claude.ai → Paramètres → Connecteurs, puis réessaie.`);
-  } else if (code === "not_in_manifest") {
-    p("Tu as refusé à Portée l'accès à ta reMarkable. Recharge la page pour qu'elle te le redemande.");
-  } else if (code === "selection_required") {
-    p(`Plusieurs connecteurs s'appellent « ${CONNECTEUR} » : choisis le bon quand claude.ai te le demande, ou supprime le doublon.`);
-  } else if (code === "server_unavailable" || code === "upstream_error") {
-    p("Le connecteur ne répond pas pour l'instant. Réessaie dans un moment : si ça dure, le projet Supabase s'est peut-être endormi (tableau de bord Supabase → relancer le projet).");
-  } else if (code === "tool_error") {
-    p(texteOutil(err) || "La reMarkable a refusé la demande.");
-  } else if (code === "blocked_by_policy" || code === "approval_required") {
-    p("Ton organisation claude.ai bloque ce connecteur pour les pages.");
-  } else {
-    p(`La reMarkable n'a pas pu être lue (${code || err.message || "erreur"}).`);
-  }
-  return bloc;
-}
-
-async function ouvrirRemarkable(rafraichir = false) {
-  versPartitions();
-  $("panneau-remarkable").hidden = false;
-  $("panneau-remarkable").scrollIntoView({ behavior: "smooth", block: "nearest" });
-  $("arbre-rm").textContent = "";
-  const m = await mcp();
-  if (!m) {
-    const bloc = document.createElement("div");
-    bloc.className = "aide-connecteur";
-    if (dansClaude()) {
-      bloc.textContent = "La page n'a pas accès aux connecteurs de claude.ai : recharge-la et autorise « Portée reMarkable ».";
-    } else {
-      const p = document.createElement("p");
-      p.textContent = "Pour parcourir ta reMarkable depuis ce site, colle une fois l'adresse de ton connecteur « Portée reMarkable » (la même que dans claude.ai). Elle reste dans ce navigateur, nulle part ailleurs.";
-      bloc.append(p, formulaireAdresse());
-    }
-    etatRm("", bloc);
-    return;
-  }
-  etatRm("Lecture de ta reMarkable… (quelques secondes la première fois)");
-  try {
-    const r = await m.callTool(CONNECTEUR, "arborescence", {}, rafraichir ? { cache: { refresh: true } } : undefined);
-    recevoirArbre(r.payload);
-  } catch (e) {
-    console.error(e);
-    etatRm("", expliquerErreurRm(e));
-  }
-}
-
-function oublierAdresse() {
-  enregistrerAdresse("");
-  mcpPromesse = null;
-  tabletteReliee = null;
-  $("changer-adresse").hidden = true;
-  arreterSynchro();
-  majReglagesRm();
-  // On reste dans les Réglages : l'adresse se recolle juste dessous.
-  const zone = $("zone-adresse");
-  zone.textContent = "";
-  const bloc = document.createElement("div");
-  bloc.className = "aide-connecteur";
-  const p = document.createElement("p");
-  p.textContent = "L'ancienne adresse est oubliée. Colle celle de ton connecteur « Portée reMarkable » (la même que dans claude.ai) : elle reste dans ce navigateur, nulle part ailleurs.";
-  bloc.append(p, formulaireAdresse(() => { zone.textContent = ""; toast("Adresse enregistrée."); }));
-  zone.appendChild(bloc);
-  bloc.querySelector("input").focus();
-}
-
-function recevoirArbre(reponse) {
-  if (reponse && reponse.connectee === false) {
-    tabletteReliee = false;
-    majReglagesRm();
-    noeudsRm = [];
-    $("arbre-rm").textContent = "";
-    etatRm("", formulaireRelier(reponse.raison));
-    return;
-  }
-  tabletteReliee = true;
-  majReglagesRm();
-  noeudsRm = (reponse && reponse.noeuds) || [];
-  const n = noeudsRm.filter((x) => x.type === "document").length;
-  etatRm(n === 1 ? "1 document sur ta reMarkable." : `${n} documents sur ta reMarkable.`);
-  dessinerArbre();
-}
-
-/** L'adresse du connecteur, pour appeler la tablette hors de claude.ai. */
-function formulaireAdresse(apres = () => ouvrirRemarkable(true)) {
-  const form = document.createElement("form");
-  form.className = "rangee";
-  const champ = document.createElement("input");
-  Object.assign(champ, { className: "champ", type: "url", placeholder: "https://….supabase.co/functions/v1/portee-remarkable/…", autocomplete: "off", spellcheck: false, value: adresseEnregistree() });
-  champ.setAttribute("aria-label", "Adresse du connecteur Portée reMarkable");
-  const bouton = document.createElement("button");
-  bouton.className = "btn btn-plein"; bouton.type = "submit"; bouton.textContent = "Enregistrer";
-  const retour = document.createElement("p");
-  retour.className = "remarque"; retour.setAttribute("role", "alert");
-  form.append(champ, bouton, retour);
-  form.addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const adresse = champ.value.trim();
-    if (!FORME_ADRESSE.test(adresse)) {
-      retour.textContent = "L'adresse ressemble à https://<projet>.supabase.co/functions/v1/portee-remarkable/<clé>.";
-      return;
-    }
-    enregistrerAdresse(adresse);
-    mcpPromesse = null;
-    $("changer-adresse").hidden = false;
-    demarrerSynchro();
-    apres();
-  });
-  return form;
-}
-
-/** Relier la tablette, une fois pour toutes : le code à 8 lettres de my.remarkable.com. */
-function formulaireRelier(raison) {
-  const bloc = document.createElement("div");
-  bloc.className = "aide-connecteur";
-  const intro = document.createElement("p");
-  intro.textContent = raison === "revoquee"
-    ? "Ta reMarkable ne reconnaît plus Portée (appareil retiré de ton compte ?). Relie-la à nouveau :"
-    : "Il reste à relier Portée à ta reMarkable. C'est à faire une seule fois :";
-  const etapes = document.createElement("ol");
-  const e1 = document.createElement("li");
-  const lien = document.createElement("a");
-  lien.href = "https://my.remarkable.com/device/desktop/connect";
-  lien.target = "_blank";
-  lien.rel = "noopener";
-  lien.textContent = "my.remarkable.com/device/desktop/connect";
-  e1.append("Ouvre ", lien, " (connecte-toi à ton compte reMarkable) ;");
-  const e2 = document.createElement("li");
-  e2.textContent = "recopie ici le code à 8 lettres affiché, sans attendre : il expire au bout de quelques minutes.";
-  etapes.append(e1, e2);
-  const form = document.createElement("form");
-  form.className = "rangee";
-  const champ = document.createElement("input");
-  Object.assign(champ, { className: "champ", id: "code-rm", maxLength: 8, placeholder: "abcdefgh", autocomplete: "off", spellcheck: false });
-  champ.setAttribute("autocapitalize", "none");
-  champ.setAttribute("aria-label", "Code à 8 lettres de my.remarkable.com");
-  champ.style.flex = "0 1 160px";
-  const bouton = document.createElement("button");
-  bouton.className = "btn btn-plein";
-  bouton.type = "submit";
-  bouton.textContent = "Relier";
-  form.append(champ, bouton);
-  const retour = document.createElement("p");
-  retour.className = "remarque";
-  retour.setAttribute("role", "alert");
-  form.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    const code = champ.value.trim().toLowerCase();
-    if (!/^[a-z]{8}$/.test(code)) { retour.textContent = "Le code fait exactement 8 lettres."; champ.focus(); return; }
-    const m = await mcp();
-    if (!m) return;
-    bouton.disabled = true;
-    bouton.textContent = "Liaison…";
-    retour.textContent = "";
-    try {
-      const r = await m.callTool(CONNECTEUR, "relier", { code }, { cache: false });
-      toast("Ta reMarkable est reliée à Portée.");
-      recevoirArbre(r.payload);
-    } catch (e) {
-      console.error(e);
-      if (e && e.code === "tool_error") retour.textContent = texteOutil(e) || "reMarkable a refusé ce code.";
-      else etatRm("", expliquerErreurRm(e));
-    } finally {
-      bouton.disabled = false;
-      bouton.textContent = "Relier";
-    }
-  });
-  bloc.append(intro, etapes, form, retour);
-  return bloc;
-}
-
-function dessinerArbre() {
-  const zone = $("arbre-rm");
-  zone.textContent = "";
-  const q = $("recherche-rm").value.trim().toLowerCase();
-  const enfants = new Map();
-  for (const n of noeudsRm) {
-    const cle = n.parent || "";
-    if (!enfants.has(cle)) enfants.set(cle, []);
-    enfants.get(cle).push(n);
-  }
-  const trier = (l) => l.sort((a, b) => (a.type === b.type ? a.nom.localeCompare(b.nom, "fr") : a.type === "dossier" ? -1 : 1));
-  const importees = new Map(etat.partitions.filter((p) => p.source && p.source.remarkable).map((p) => [p.source.remarkable, p]));
-  // Avec une recherche : liste à plat des documents qui correspondent.
-  if (q) {
-    const trouves = trier(noeudsRm.filter((n) => n.type === "document" && n.nom.toLowerCase().includes(q)));
-    if (!trouves.length) { const p = document.createElement("p"); p.className = "remarque"; p.textContent = "Aucun document ne porte ce nom."; zone.appendChild(p); }
-    for (const d of trouves) zone.appendChild(ligneDocument(d, importees.get(d.id)));
-    return;
-  }
-  const construire = (parent, conteneur) => {
-    for (const n of trier(enfants.get(parent) || [])) {
-      if (n.type === "dossier") {
-        const det = document.createElement("details");
-        det.open = ouverts.has(n.id);
-        det.addEventListener("toggle", () => (det.open ? ouverts.add(n.id) : ouverts.delete(n.id)));
-        const sum = document.createElement("summary");
-        sum.textContent = n.nom;
-        const sous = document.createElement("div");
-        sous.className = "enfants";
-        det.append(sum, sous);
-        conteneur.appendChild(det);
-        construire(n.id, sous);
-      } else {
-        conteneur.appendChild(ligneDocument(n, importees.get(n.id)));
-      }
-    }
-  };
-  construire("", zone);
-}
-
-function ligneDocument(d, dejaImportee) {
-  const ligne = document.createElement("div");
-  ligne.className = "doc-rm";
-  const nom = document.createElement("span");
-  nom.className = "nom"; nom.textContent = d.nom;
-  const meta = document.createElement("span");
-  meta.className = "meta";
-  meta.textContent = [d.modifie ? dateCourte(d.modifie) : "", d.pdf ? "" : "carnet (pas un modèle Portée)"].filter(Boolean).join(" · ");
-  const b = document.createElement("button");
-  b.className = "btn btn-petit" + (d.pdf ? " btn-plein" : "");
-  b.textContent = dejaImportee ? "Réimporter" : "Importer";
-  b.disabled = !d.pdf;
-  b.addEventListener("click", () => importerRemarkable(d, b));
-  ligne.append(nom, meta);
-  if (dejaImportee) {
-    const voir = document.createElement("button");
-    voir.className = "btn btn-petit";
-    voir.textContent = "Ouvrir";
-    voir.addEventListener("click", () => ouvrir(dejaImportee.id));
-    ligne.append(voir);
-  }
-  ligne.append(b);
-  return ligne;
-}
-
-async function importerRemarkable(d, bouton) {
-  const m = await mcp();
-  if (!m) return;
-  const libelle = bouton.textContent;
-  bouton.disabled = true;
-  bouton.textContent = "Lecture…";
-  try {
-    const r = await m.callTool(CONNECTEUR, "document", { id: d.id }, { cache: false });
-    const doc = r.payload || {};
-    if (!doc.modele) {
-      toast(`« ${d.nom} » n'a pas été écrit sur un modèle Portée : impossible de savoir où sont les lignes.`, 9000);
-      return;
-    }
-    const pages = (doc.pages || []).map((p) => decompacter(p.traits)).filter((t) => t.length > 0);
-    if (!pages.length) { toast(`« ${d.nom} » ne contient encore aucun trait.`); return; }
-    const id = await enregistrerLecture({ titre: doc.nom || d.nom, modele: doc.modele, pages, source: { remarkable: d.id, modifie: d.modifie || null } });
-    $("panneau-remarkable").hidden = true;
-    ouvrir(id, "atelier");
-  } catch (e) {
-    console.error(e);
-    const aide = expliquerErreurRm(e);
-    etatRm("", aide);
-  } finally {
-    bouton.disabled = false;
-    bouton.textContent = libelle;
-  }
 }
 
 // ------------------------------------------------------------------------
@@ -1538,26 +1065,11 @@ function brancher() {
   $("onglet-atelier").addEventListener("click", () => montrer("atelier"));
   $("onglet-lecteur").addEventListener("click", () => montrer("lecteur"));
 
-  // Import
+  // Import (import-pdf.js) ; la tablette et les modèles se branchent eux-mêmes (tablette.js).
   $("fichier").addEventListener("change", (e) => { importer([...e.target.files]); e.target.value = ""; });
-  $("exemples").addEventListener("click", async () => {
-    const noms = ["2026-09-30-piano-standard.pdf", "2026-09-30-melodie-standard.pdf"];
-    const fichiers = [];
-    for (const n of noms) {
-      const r = await fetch(new URL(`./exemples/${n}`, import.meta.url));
-      if (r.ok) fichiers.push(new File([await r.blob()], n.replace("2026-09-30-", "Essai "), { type: "application/pdf" }));
-    }
-    importer(fichiers);
-  });
+  $("exemples").addEventListener("click", importerExemples);
 
-  // Ma reMarkable, modèles, bibliothèque
-  $("ouvrir-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
-  $("reglage-rm").addEventListener("click", () => ouvrirRemarkable(false));
-  $("vide-remarkable").addEventListener("click", () => ouvrirRemarkable(false));
-  $("ouvrir-modeles").addEventListener("click", afficherModeles);
-  $("vide-modeles").addEventListener("click", afficherModeles);
-  $("fermer-modeles").addEventListener("click", () => { $("panneau-modeles").hidden = true; });
-  $("changer-adresse").addEventListener("click", oublierAdresse);
+  // La bibliothèque
   $("tout-midi").addEventListener("click", toutEnMidi);
   $("synchroniser").addEventListener("click", synchroniser);
   $("activer-synchro").addEventListener("click", () => {
@@ -1568,9 +1080,6 @@ function brancher() {
   window.addEventListener("offline", () => afficherSynchro(dernierEtat && { ...dernierEtat, etat: "erreur", erreur: { message: "hors ligne" } }));
   $("sauvegarder").addEventListener("click", sauvegarderBibliotheque);
   $("restaurer").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) restaurerBibliotheque(f); });
-  $("actualiser-rm").addEventListener("click", () => ouvrirRemarkable(true));
-  $("fermer-rm").addEventListener("click", () => { $("panneau-remarkable").hidden = true; });
-  $("recherche-rm").addEventListener("input", dessinerArbre);
 
   // Atelier
   $("titre").addEventListener("change", () => sauver({ titre: $("titre").value.trim() || "Sans titre" }));
@@ -1889,6 +1398,11 @@ async function demarrer() {
   // Au retour d'arrière-plan ou d'un appel : le son reprend, l'écran se rallume (eveil.js, M8).
   installerEveil({ piano });
   creerAccueilDeLAppli();
+  tablette = creerTablette({
+    dansClaude, stockage: () => etat.stockage, partitions: () => etat.partitions,
+    ouvrir: (id, vue) => ouvrir(id, vue), enregistrerLecture, versPartitions,
+    surAdresse: () => demarrerSynchro(), surOubli: () => arreterSynchro(),
+  });
   brancher();
   creerEditeur();
   creerVueDuMorceau();
@@ -1921,7 +1435,7 @@ async function demarrer() {
   }
   afficherSynchro(null);
   demarrerSynchro();
-  $("changer-adresse").hidden = dansClaude() || !adresseEnregistree();
+  tablette.majReglagesRm();
   // Hors ligne et installable, hors de claude.ai (sw.js n'existe que sur le site).
   // Un contexte sûr : https, ou l'ordinateur lui-même (les essais de bout en bout).
   if (!dansClaude() && "serviceWorker" in navigator && window.isSecureContext) brancherServiceWorker();
