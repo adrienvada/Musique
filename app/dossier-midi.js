@@ -23,6 +23,7 @@
  * « Morceaux ». Un fichier effacé à la main revient avec « Tout réécrire »
  * (ou au prochain changement de son idée).
  */
+import { explication, expliquer } from "./erreurs.js";
 
 /** Une seconde après le dernier changement : une idée qu'on écrit change à chaque note. */
 export const ATTENTE = 1000;
@@ -152,7 +153,15 @@ export function versionDe(p, idees) {
 /** Le calcul se fait par tranches de 8 ms au plus : une grosse bibliothèque ne bloque pas le jeu en direct. */
 const TRANCHE = 8;
 
-const messageErreur = (e) => (e && e.name === "NotAllowedError" ? "Portée n'a plus le droit d'écrire dans ce dossier." : (e && e.message) || String(e));
+// Ce que dit le navigateur (en anglais) se dit en français (I13) : ce qui
+// est propre à un dossier ici, le reste par erreurs.js.
+const messageErreur = (e) => {
+  const nom = e && e.name;
+  if (nom === "NotAllowedError") return "Portée n'a plus le droit d'écrire dans ce dossier.";
+  if (nom === "NotFoundError") return "Ce dossier n'est plus là (déplacé ou supprimé ?) : choisis-le de nouveau.";
+  if (nom === "QuotaExceededError") return "Le disque est plein : fais de la place, puis réessaie.";
+  return expliquer(e);
+};
 
 /**
  * @param o {
@@ -232,7 +241,7 @@ export function creerDossierMidi({
       }
       let octets;
       try { octets = fabriquer(p, idees); } catch (e) {
-        erreur = erreur || `« ${p.titre || "Sans titre"} » : ${e.message || e}`;
+        erreur = erreur || `« ${p.titre || "Sans titre"} » : ${explication(e)}`;
         if (avant) nouveaux[p.id] = avant;
         continue;
       }

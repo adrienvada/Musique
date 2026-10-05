@@ -43,6 +43,7 @@ import {
 import { ico } from "./icones.js";
 import { accorde, echapper, pluriel } from "./ui.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
+import { expliquer } from "./erreurs.js";
 
 /** Les six accords du pupitre : ceux de la roue, sans l'accord diminué (qui sonne rarement seul). */
 export function accordsDuPupitre(tonalite) {
@@ -439,7 +440,7 @@ export function creerAccords(ctx) {
       );
     } catch (err) {
       surFin();
-      dire(err.message || "Le piano n'a pas pu se charger.");
+      dire(expliquer(err, "Le piano n'a pas pu se charger."));
     }
   }
 

@@ -75,6 +75,7 @@ import { ico } from "./icones.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { garderEveille, laisserDormir } from "./eveil.js";
 import { accorde, pluriel } from "./ui.js";
+import { expliquer } from "./erreurs.js";
 
 const CLE_DECOMPTE = "portee:decompte";
 const CLE_ARRONDI = "portee:arrondi";
@@ -486,7 +487,7 @@ export function creerDirect(ctx) {
       if (e.enregistrement !== prise || prise.phase === "arrondi") transport.arreter();
     } catch (err) {
       if (e.enregistrement === prise) finir();
-      toast(err.message || "Le piano n'a pas pu se charger.");
+      toast(expliquer(err, "Le piano n'a pas pu se charger."));
     }
   }
 
@@ -671,7 +672,7 @@ export function creerDirect(ctx) {
       await transport.jouer(source, { metronome: true, sansFin: true, surFin: () => { if (reglage === moi) finirReglage(true); } });
     } catch (err) {
       if (reglage === moi) { reglage = null; majLatence(); ctx.apresSon(); }
-      toast(err.message || "Le piano n'a pas pu se charger.");
+      toast(expliquer(err, "Le piano n'a pas pu se charger."));
       return;
     }
     if (reglage !== moi) return;

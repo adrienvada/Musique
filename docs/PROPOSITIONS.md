@@ -1975,6 +1975,17 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   connecteur qui se tait, et dit en une phrase ce qui s'est passé puis quoi
   faire ; le détail reste dans la console. Un message que Portée écrit
   déjà en français passe tel quel. Essais : `tests/erreurs.test.mjs`.
+  - Toutes les erreurs montrées passent par lui : l'ouverture de la
+    bibliothèque, son écoute, le piano (l'éditeur, les accords, le jeu en
+    direct), le micro (`messageMicro`), le port MIDI et le dossier des
+    .mid (un dossier plein, déplacé ou supprimé a sa phrase à lui), la
+    restauration d'une sauvegarde (la mémoire pleine). Essais : « ce qui
+    empêche d'ouvrir le micro… » (`tests/micro.test.mjs`) et « ce qui
+    empêche d'écrire… » (`tests/dossier-midi.test.mjs`).
+  - Piège : un message de Portée se reconnaît comme français à ses
+    accents ou à ses petits mots (le, la, pas, est…). Un message sans l'un
+    ni l'autre (« fiche illisible ») passerait pour une erreur inconnue :
+    écris-les en phrases.
 - **Les vignettes sont dans `app/apercus.js` (T3).** Celle d'une idée
   vivait dans l'éditeur, celle d'un morceau dans l'écran Morceau, celle
   d'une page dans l'accueil : l'accueil importait tout l'éditeur d'idée pour

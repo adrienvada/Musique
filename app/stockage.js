@@ -18,6 +18,7 @@
  * ou d'un autre appareil, ne peut plus vider le carnet (audit du 04/10, S6).
  */
 import { EPOQUE, compacter, dateIso, decompacter, egal, fusionnerFiches, normaliserChamps, normaliserFiche, sansDates, uneMsPlusTard } from "./fiche.js";
+import { cause, genreErreur } from "./erreurs.js";
 
 // Ils vivent dans fiche.js, sans DOM (la synchro et ses essais s'en servent
 // sans tirer tout le stockage) ; on les donne encore d'ici, où on les prenait.
@@ -716,7 +717,9 @@ export async function restaurer(stockage, contenu, _dejaLa = null) {
       await stockage.creer(id, donnees, pages, { memo });
       bilan.revenues++;
     } catch (err) {
-      bilan.echecs.push({ id: e && e.id, titre, raison: (err && err.message) || String(err) });
+      // Une erreur du navigateur reconnue (la mémoire pleine) se dit en français (erreurs.js, I13) ;
+      // les nôtres, déjà en français (« fiche illisible »), passent telles quelles.
+      bilan.echecs.push({ id: e && e.id, titre, raison: genreErreur(err) === "inconnue" ? (err && err.message) || String(err) : cause(err) });
     }
   }
   return { ...bilan, ajoutees: bilan.revenues };

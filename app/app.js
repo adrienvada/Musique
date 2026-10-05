@@ -36,7 +36,7 @@ import { ambianceStudio } from "./preferences.js";
 import { creerNavigation } from "./navigation.js";
 import { creerHistorique } from "./historique.js";
 import { installerInfobulles } from "./infobulles.js";
-import { cause, explication, installerFilet } from "./erreurs.js";
+import { cause, explication, expliquer, installerFilet } from "./erreurs.js";
 import { $, pluriel, retirerToast, toast } from "./ui.js";
 import { dialogue, veutSupprimer } from "./dialogue.js";
 
@@ -431,7 +431,9 @@ async function demarrer() {
     });
   } catch (e) {
     // Base déjà passée à une version plus récente : pas de bibliothèque vide en douce.
-    const message = (e && e.message) || "La bibliothèque ne s'ouvre pas : recharge la page.";
+    // Le message du stockage est en français ; celui du navigateur reste dans la console (I13).
+    console.error(e);
+    const message = expliquer(e, "La bibliothèque ne s'ouvre pas : recharge la page.");
     $("mode").textContent = message;
     toast(message, 120000);
     return;
@@ -463,7 +465,7 @@ async function demarrer() {
       if (navigation.vue === "biblio") accueil.afficher();
       if (navigation.vue === "morceau") vueMorceau.rafraichir();
     },
-    (e) => toast("La bibliothèque ne répond plus : recharge la page. (" + (e.code || e.message) + ")", 9000),
+    (e) => { console.error(e); toast(`La bibliothèque ne répond plus : ${explication(e, "recharge la page.")}`, 9000); },
   );
   // Avec Live (audit du 04/10, M10) : la sortie MIDI et le dossier des .mid, sur ordinateur seulement.
   const live = brancherLive({

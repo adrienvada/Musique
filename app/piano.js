@@ -41,6 +41,7 @@
  */
 import { sessionAudio } from "./eveil.js";
 import { accorde, pluriel } from "./ui.js";
+import { expliquer } from "./erreurs.js";
 
 /** Le niveau de la sortie, avant le limiteur. */
 export const GAIN_SORTIE = 0.6;
@@ -205,7 +206,7 @@ export class Piano {
       this.signaler(e.message);
       throw e;
     }
-    try { await this.chargerIndex(); } catch (e) { this.signaler(e.message); throw e; }
+    try { await this.chargerIndex(); } catch (e) { this.signaler(expliquer(e, MESSAGE_RESEAU)); throw e; }
     const base = this.couche(this.index.base);
     const voulus = this.echantillonsPour(base, hauteurs && hauteurs.length ? hauteurs : [Math.round((this.registre[0] + this.registre[1]) / 2)]);
     this.demander(base, voulus, { priorite: 0 });
@@ -386,7 +387,7 @@ export class Piano {
 
   /** Toute une couche (la base sans nom), attendue jusqu'au bout : les essais hors ligne, les couches PP et FF. */
   async chargerCouche(nom = null, { priorite = 2 } = {}) {
-    try { await this.chargerIndex(); } catch (e) { this.signaler(e.message); throw e; }
+    try { await this.chargerIndex(); } catch (e) { this.signaler(expliquer(e, MESSAGE_RESEAU)); throw e; }
     const c = this.couche(nom || this.index.base);
     const tous = c.defs.map((d) => d.midi);
     this.demander(c, tous, { priorite });
