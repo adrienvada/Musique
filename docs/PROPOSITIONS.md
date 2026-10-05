@@ -2362,7 +2362,8 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   sur le faux cloud ; un connecteur d'avant ; un carnet de 1 203 pages ; la
   liste des modèles, qui doit suivre `modeles/`) et
   `tests/e2e/atelier.test.mjs` (un PDF au sujet faux, sans sujet, en v2 ;
-  une page v1 relue, une page corrigée gardée).
+  une page v1 relue, une page corrigée gardée ; le PDF de l'étalonnage
+  téléchargé, et un 404 qui n'est pas rangé).
 - **Les mesures se recomptent après chaque geste (L13, branché).** Après
   une réponse ou une correction, `recalculerDoutes` relit les mesures de
   l'ABC d'aujourd'hui : si la réponse en fausse une (« Croche » au doute du

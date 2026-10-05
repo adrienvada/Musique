@@ -102,6 +102,31 @@ test("L9 · un PDF dont le sujet se trompe ou manque : ses lignes grises disent 
   } finally { await ctx.close(); }
 });
 
+test("les modèles à télécharger : l'étalonnage en est, un vrai PDF ; une erreur du serveur n'est pas rangée comme un PDF, et on le dit", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.click("#tab-partitions");
+    await page.click("#ouvrir-modeles");
+    await page.waitForSelector("#panneau-modeles:not([hidden])");
+    const bouton = (nom) => page.locator("#liste-modeles .modele").filter({ has: page.locator(".nom", { hasText: new RegExp(`^${nom}$`) }) }).locator("button");
+    const [etalonnage] = await Promise.all([page.waitForEvent("download"), bouton("Étalonnage").click()]);
+    assert.equal(etalonnage.suggestedFilename(), "Portée - Étalonnage.pdf");
+    assert.equal(fs.readFileSync(await etalonnage.path()).subarray(0, 5).toString(), "%PDF-");
+    // Le serveur ne donne pas le PDF (404) : rien n'est téléchargé, et le message dit quoi faire.
+    await page.route("**/modeles/piano-standard.pdf", (r) => r.fulfill({ status: 404, contentType: "text/html", body: "<h1>Introuvable</h1>" }));
+    let telecharges = 0;
+    page.on("download", () => { telecharges++; });
+    await bouton("Piano").click();
+    assert.equal(await messageQui(page, /^Le modèle n'a pas pu être téléchargé/), "Le modèle n'a pas pu être téléchargé : le serveur ne l'a pas donné (erreur 404). Réessaie dans un moment.");
+    assert.equal(telecharges, 0);
+    // La console garde le refus du serveur et son détail ; rien d'autre ne s'y plaint.
+    assert.deepEqual(page.erreurs.map((e) => /404|le serveur ne l'a pas donné/.test(e)), page.erreurs.map(() => true));
+    page.erreurs.length = 0;
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
 test("une page lue par l'ancien lecteur, jamais touchée, est relue à l'ouverture ; une page corrigée garde sa lecture", async () => {
   const traits = [compacter(melodie.pages[0].traits)];
   const ancien = melodie.abc.replace(/^T:.*$/m, "T:Ancienne").replace(/\|/, "||"); // une lecture d'avant, un peu autre
