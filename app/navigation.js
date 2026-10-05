@@ -28,7 +28,7 @@
  * l'écran (son h1, caché à l'œil) ; le lecteur d'écran entend l'écran qui
  * s'ouvre. Les messages passagers de l'écran qu'on quitte s'en vont.
  */
-import { $, annoncer, retirerMessagesPasses, suivreMessages } from "./ui.js";
+import { $, annoncer, couleurDuJeton, retirerMessagesPasses, suivreMessages } from "./ui.js";
 
 const VUES = ["biblio", "atelier", "lecteur", "idee", "morceau"];
 
@@ -67,6 +67,23 @@ function flecheOnglet(e, auClavier) {
 }
 
 /**
+ * La barre du navigateur (theme-color : le site, l'appli installée) prend la
+ * couleur de la barre de l'écran : celle du Studio dans l'éditeur, le papier
+ * clair ou sombre ailleurs (audit du 04/10, I3). L'assembleur écrit les deux
+ * du Papier, une par réglage du téléphone : on les garde pour y revenir.
+ * claude.ai n'en a pas (la page y est un fragment).
+ */
+function suivreAmbiance() {
+  const metas = document.querySelectorAll('meta[name="theme-color"]');
+  if (!metas.length) return;
+  const studio = document.body.classList.contains("studio") ? couleurDuJeton("--feuille") : null;
+  for (const m of metas) {
+    if (!m.dataset.papier) m.dataset.papier = m.getAttribute("content");
+    m.setAttribute("content", studio || m.dataset.papier);
+  }
+}
+
+/**
  * @param deps {
  *   ecrans() → le registre (nom → écran),
  *   lire(id) → la fiche d'une partition (ou null),
@@ -97,6 +114,10 @@ export function creerNavigation(deps) {
     document.body.dataset.vue = nouvelle;
     // Papier pour lire, Studio pour jouer : l'éditeur passe en sombre (sauf réglage contraire).
     document.body.classList.toggle("studio", nouvelle === "idee" && deps.studio());
+    suivreAmbiance();
+    // (L'écran qui arrive se pose d'un fondu, en CSS : systeme.css, `.vue`. Pas de
+    // document.startViewTransition : il change la page un instant plus tard, alors que
+    // l'éditeur se mesure et prend ses couleurs juste après montrer().)
     // La barre de Portée ne sert qu'à l'accueil : un écran qui a sa propre barre
     // (avec son retour, [data-retour]) la remplace ; les autres la gardent.
     document.querySelector(".barre-haut").hidden = nouvelle !== "biblio" && !!$(`vue-${nouvelle}`).querySelector("[data-retour]");
@@ -210,7 +231,14 @@ export function creerNavigation(deps) {
   /** Un pas en arrière, du plus proche au plus lointain : ce qui est ouvert par-dessus, l'écran, puis l'écran d'avant. */
   function reculer() {
     const feuilles = [...document.querySelectorAll("dialog[open]")];
-    if (feuilles.length) { feuilles.at(-1).close(); return; }
+    // Celle du dessus d'abord. Une question (#dialogue) s'ouvre toujours par-dessus la
+    // feuille qui la pose, même quand celle-ci vient après elle dans la page (les
+    // versions et la corbeille sont posées à la fin, versions-ui.js) : l'ordre de la
+    // page fermait la feuille et laissait la question ouverte. Sur Android, le geste
+    // retour ferme déjà le <dialog> du dessus sans passer par ici (le navigateur le
+    // compte comme une demande de fermeture, sans toucher à l'historique) : rien ne
+    // se ferme deux fois.
+    if (feuilles.length) { (document.querySelector("#dialogue[open]") || feuilles.at(-1)).close(); return; }
     if (ecrans()[vue].reculer()) return;
     if (vue !== "biblio") revenir();
   }

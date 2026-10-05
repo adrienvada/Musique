@@ -90,6 +90,11 @@ export const ICONES = {
   d16: '<ellipse cx="12" cy="13.5" rx="5.2" ry="3.6" transform="rotate(-20 12 13.5)"/>',
   point: '<ellipse cx="9.5" cy="17.5" rx="3.7" ry="2.6" transform="rotate(-20 9.5 17.5)" fill="currentColor"/><path d="M12.9 16.6V3.8"/><circle cx="18" cy="16.5" r="1.6" fill="currentColor" stroke="none"/>',
   silence: '<path d="M10 3.5l4 4.5-3.2 3.6 4.2 4.6c-2.4-1-4.8-.2-3.8 3.3"/>',
+  // Les altérations (les outils de « Corriger ») : elles s'écrivaient ♯ ♭ ♮ en caractères, que chaque
+  // police dessinait à sa façon. Les traits de travers plus épais, comme gravés.
+  diese: '<path d="M10 4.5V21M14 3v16.5"/><path d="M6.5 10.4l11-3M6.5 16.6l11-3" stroke-width="2.5"/>',
+  bemol: '<path d="M8 3v17.5"/><path d="M8 13.2c2.2-2 6.6-2.3 6.6.8 0 2.6-3.4 4.8-6.6 6.5" stroke-width="2.1"/>',
+  becarre: '<path d="M8.5 3v13.6M15.5 7.4V21"/><path d="M8.5 9.8l7-2.4M8.5 16.6l7-2.4" stroke-width="2.5"/>',
   // Choisir aussi la note suivante (la sélection s'étend vers la droite)
   etendre: '<path d="M3.5 12h7M7 8.5v7"/><path d="M14 6l6 6-6 6"/>',
   // Demander à Claude (idee-claude.js) : une étincelle, le signe d'une proposition

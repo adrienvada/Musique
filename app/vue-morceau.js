@@ -18,6 +18,7 @@ import { nbMesures } from "./sequence.js";
 import { dessinerApercu } from "./apercus.js";
 import { ico } from "./icones.js";
 import { ouvrirFeuille, fermerFeuille } from "./feuilles.js";
+import { defilement } from "./mouvement.js";
 import { $, pluriel } from "./ui.js";
 import { creerEnregistreur } from "./enregistreur.js";
 import { creerEcoute } from "./ecoute.js";
@@ -44,7 +45,6 @@ export function creerVueMorceau(deps) {
   const lignes = () => [...$("morceau-blocs").children];
   const ligne = (id) => lignes().find((li) => li.dataset.id === id);
   const segment = (id) => [...$("morceau-frise").querySelectorAll(".frise-seg")].find((s) => s.dataset.id === id);
-  const reduireMouvement = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   $("morceau-sections").innerHTML = SECTIONS.map((s) => `<option value="${s}">`).join("");
 
@@ -164,8 +164,8 @@ export function creerVueMorceau(deps) {
   function afficherEtat(genre, texte = "") {
     const e = $("morceau-etat");
     e.dataset.genre = genre;
-    if (genre === "ok") e.innerHTML = `${ico("ok", "s")}<span class="sr">Enregistré</span>`;
-    else if (genre === "erreur") { e.innerHTML = `${ico("attention", "s")}<span class="sr"></span>`; e.querySelector(".sr").textContent = texte; }
+    if (genre === "ok") e.innerHTML = `${ico("ok", "s")}<span class="visuellement-cache">Enregistré</span>`;
+    else if (genre === "erreur") { e.innerHTML = `${ico("attention", "s")}<span class="visuellement-cache"></span>`; e.querySelector(".visuellement-cache").textContent = texte; }
     else e.textContent = genre === "attente" ? "…" : "";
   }
 
@@ -301,7 +301,7 @@ export function creerVueMorceau(deps) {
       ? `${pluriel(s.mesures, "mesure")} · ${dureeEnTexte(s.secondes)} · ${ico("d4", "s")}${tempo}`
       : "Morceau vide";
     $("morceau-tempo").value = tempo;
-    $("morceau-tempo-val").textContent = `♩ = ${tempo}`;
+    $("morceau-tempo-val").textContent = String(tempo); // la noire est une icône, devant (index.html)
   }
 
   /** Choisir une partie (ou aucune) : on n'y touche que par des classes. */
@@ -323,7 +323,7 @@ export function creerVueMorceau(deps) {
 
   /** Amène une carte sous les yeux, sans toucher à la page si elle y est déjà. */
   function defiler(li) {
-    li.scrollIntoView({ block: "nearest", behavior: reduireMouvement() ? "auto" : "smooth" });
+    li.scrollIntoView({ block: "nearest", behavior: defilement() });
   }
 
   // --- Choisir une idée à ajouter ---------------------------------------------------
@@ -459,7 +459,7 @@ export function creerVueMorceau(deps) {
 
   let minuterieTempo = null;
   $("morceau-tempo").addEventListener("input", () => {
-    $("morceau-tempo-val").textContent = `♩ = ${$("morceau-tempo").value}`;
+    $("morceau-tempo-val").textContent = $("morceau-tempo").value;
     arreterEcoute();
     clearTimeout(minuterieTempo);
     tempoEnAttente = true;

@@ -48,7 +48,7 @@ export function creerEcranLecteur(deps) {
     graver();
     const q = x.tempo || tempoInitial(objet);
     $("tempo").value = q;
-    $("tempo-val").textContent = `♩ = ${q}`;
+    $("tempo-val").textContent = String(q); // la noire est une icône, devant (index.html)
   }
 
   function graver() {
@@ -86,7 +86,7 @@ export function creerEcranLecteur(deps) {
 
   $("ecouter").addEventListener("click", ecouter);
   $("tempo").addEventListener("input", () => {
-    $("tempo-val").textContent = `♩ = ${$("tempo").value}`;
+    $("tempo-val").textContent = $("tempo").value;
     deps.arreterEcoute();
     page.changer({ tempo: Number($("tempo").value) }, { delai: 600 });
   });

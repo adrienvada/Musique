@@ -160,7 +160,8 @@ test("une suite écoutée puis gardée ; une variation des notes choisies, depui
     await page.waitForSelector("#idee-boite[open]");
     await page.click('#idee-boite [data-action="claude"]');
     await page.waitForSelector("#idee-claude[open] #claude-genres:not([hidden])");
-    assert.equal(await page.isVisible("#idee-boite"), false, "la boîte laisse la place à la feuille de Claude");
+    // La boîte laisse la place à la feuille de Claude (elle redescend, I3 : on attend qu'elle soit partie).
+    await page.waitForSelector("#idee-boite", { state: "hidden", timeout: 2000 });
     assert.equal(await page.textContent("#claude-sur"), "Sur les 13 notes choisies, mesures 1 à 4.");
     await page.click('#claude-genres [data-genre="variation"]');
     await page.click('#claude-intentions-choix [data-intention="plus calme"]');

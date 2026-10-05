@@ -2770,6 +2770,192 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Interface (I1 à I4, I6 à I15)
 
+**Voir et toucher (I1, I2, I3, I10)**
+
+- **Rien sous 44 px au doigt, et l'essai le garde (I1).** L'essai des 44 px
+  (`tests/e2e/interface.test.mjs`) était « à faire » ; il passe, à 390 et à
+  320 px et couché (844 × 390), et à 360 et 375 à la main
+  (`PORTEE_E2E_FORMATS=360,375`). Couché, les onglets de l'accueil passent
+  dans la barre du haut, où ils faisaient 40 px au doigt : 44 maintenant. Son
+  tour passe maintenant aussi par ce que la troisième vague a ajouté : une
+  note choisie dans « Corriger » (‹ ›, les outils, le zoom), la version
+  claude.ai (« Demander à Claude » étape par étape, le second avis sur un
+  doute, l'entrée de la boîte à outils) et la bibliothèque commune (le
+  bandeau des suggestions dans l'idée et dans « Corriger », les versions
+  précédentes, la corbeille), et les panneaux des modèles et de la
+  reMarkable. Il relevait 104 cibles trop petites sur ce tour, en portrait
+  (114 en comptant la carte des octaves) ; il n'en relève plus. Les trois
+  parcours d'un format (le site, claude.ai, la bibliothèque commune) se font
+  en même temps : l'essai prend 26 s pour ses trois formats.
+  - Trois causes dans `systeme.css` : un bouton rond rétrécissait dans une
+    rangée trop étroite (il ne rétrécit plus, c'est le texte d'à côté qui
+    cède) ; les segments faisaient 40 px au doigt (44 maintenant, et
+    `atelier.css` et `bibliotheque.css` n'ont plus à le corriger chacun pour
+    soi) ; la croix d'une étiquette faisait 28 px. Un curseur (le tempo)
+    fait 44 px de haut au doigt, le rail reste fin.
+  - **La barre de l'idée** : le titre fait 44 px, et le résumé « 90 · 4/4 ·
+    Do majeur » (une ligne de 17 px sous le titre) devient un bouton de
+    44 px à côté de lui : la noire et le tempo au téléphone, la mesure et la
+    tonalité en plus dès que la barre a la place (700 px). Son nom et sa
+    bulle disent toujours les trois. Pour cela, `idee.js` range le tempo
+    dans son propre `<span>` (deux lignes). Au téléphone, Grille | Partition
+    devient un seul bouton, celui de l'autre affichage : les deux côte à
+    côte faisaient 40 px et prenaient la place du titre.
+  - **Sous 390 px**, le pupitre serre ses marges : les huit durées gardent
+    44 px jusqu'à 360 ; plus étroit (320), elles passent sur deux rangées de
+    quatre, et le pupitre grandit d'autant (le piano garde sa hauteur). Le
+    transport serre ses écarts ; dans la rangée de la sélection, le nom de
+    la note cède sa place (elle le porte déjà sur la grille, et le lecteur
+    d'écran le dit toujours) ; « Tous les accords » se réduit à son icône.
+    Piano | Gamme perd la marge intérieure de son commutateur : 44 px dans
+    la même barre.
+  - **« Corriger »** : les points des doutes ont leur rangée sous le titre,
+    44 px chacun ; beaucoup de doutes passent à la ligne sans rien cacher
+    (avec dix-sept doutes, la tête du panneau s'écrasait sur ses rangées :
+    elle ne rétrécit plus). Les outils de la note gardent 44 px jusqu'à
+    360 px, puis passent à cinq colonnes.
+  - **Le morceau** : son titre et le nom d'une section font 44 px ; à
+    320 px, retour, écoute et « ••• » ne rétrécissent plus.
+  - **Les exceptions actées**, écrites dans l'essai avec leur pourquoi : la
+    carte des octaves (la bande entière est la cible : on y vise une région,
+    pas une case), un libellé posé sur un champ de 44 px (c'est le champ la
+    cible ; toucher le libellé ne fait que lui donner le focus) et les
+    touches du piano (un vrai clavier : noires étroites, et au moins une
+    octave, donc des blanches de 42 px à 320 px ; elles deviennent des
+    boutons pour le lecteur d'écran avec l'autre moitié du lot), et un lien
+    au milieu d'une phrase (« glisse-le sur my.remarkable.com » : il a la
+    hauteur de sa ligne, WCAG 2.5.8 l'excepte). Les rangées
+    de la grille (zoomables) et les notes gravées (le zoom de « Corriger »)
+    restent actées, sans entrer dans le compte.
+- **Trois contrastes sous le seuil, corrigés dans les jetons (I1).** Le vert
+  du clair est un peu plus sombre (`--ok`, « Prête » se lit à 4,6:1 sur son
+  vert doux, 4,36 avant) ; le surligneur doux du sombre et du Studio aussi
+  (le gris s'y lit à 4,6:1, 4,18 avant). Les bords de ce qu'on remplit ou
+  qu'on bascule (champs, titres qu'on renomme, interrupteurs) ont leur jeton,
+  `--bord-champ`, à 3:1 au moins sur la feuille, le papier et le creux, dans
+  les trois ambiances (WCAG 1.4.11) : `--trait-fort`, qui dessine les lignes
+  de la grille et de la page, n'en faisait que 2:1, et le foncer aurait
+  alourdi tout le reste.
+- **Deux touchers rapides ne zooment plus la page (I2).** `touch-action:
+  manipulation` sur les boutons, liens, libellés et champs : sur iPhone,
+  trois touchers sur ↑ pouvaient agrandir la page. Ce qui suit le doigt (les
+  notes de la grille, les poignées, le clavier) garde son `touch-action:
+  none`.
+- **Plus de caractère en guise d'icône (I2).** Dièse, bémol et bécarre, dans
+  les outils de « Corriger », s'écrivaient ♯ ♭ ♮ dans la police des titres :
+  ce sont trois icônes d'`icones.js` (`diese`, `bemol`, `becarre`), au trait
+  comme les autres, les traits de travers plus épais comme gravés. Le tempo
+  de l'écoute et du « ••• » du morceau (« ♩ = 90 ») s'écrit comme dans le
+  résumé du morceau : l'icône de la noire, puis le nombre (`.tempo-noire`) ;
+  `ecran-lecteur.js` et `vue-morceau.js` n'écrivent plus que le nombre.
+  « + Un nouveau morceau » (Ajouter à un morceau) prend l'icône « plus » :
+  `dialogue()` accepte une icône par choix (`icone`). Restent des ♯ et ♭
+  dans les noms de notes et d'accords (« fa♯ », « Si♭ majeur ») : c'est du
+  texte, pas une icône. Le résumé d'une idée dans le carnet (« 12 notes ·
+  ♩ 90 ») est dans `accueil.js`, à l'autre moitié du lot.
+- **Les jetons qui manquaient sont dans le système (I2).** Seize tailles de
+  texte (`--t-10` à `--t-72`, nommées par leur taille à 16 px) au lieu de
+  cinquante, toutes en rem : elles suivent la taille de texte choisie dans le
+  navigateur, le corps compris (il était à 15 px fixes). Huit rayons
+  (`--r-trait`, `--r-4` … `--r-22`, `--r-plein`) au lieu de vingt-trois ;
+  chaque valeur est allée au plus proche (un écart d'un ou deux pixels). Les
+  onze couches (`--z-…`, du fond aux bulles), à un seul endroit, chacune avec
+  ce qu'elle porte. Les vraies ombres et les lueurs (`--ombre`,
+  `--ombre-douce`, `--lueur`, `--lueur-rouge`) ; les anneaux (une ombre sans
+  flou, qui dessine un bord sans prendre de place) gardent leur épaisseur sur
+  place : ce sont des bords, et ils n'emploient que des jetons de couleur.
+  - Plus de couleur brute dans les règles : le voile des fenêtres et des
+    feuilles est `--voile`, le texte sur le rouge `--sur-rouge` (le fond de
+    l'écran, que l'éditeur prenait déjà pour lui), l'impression a ses deux
+    jetons.
+  - Les jetons définis ailleurs reviennent au système : la hauteur des
+    onglets (`bibliotheque.css`), le bleu de la gamme (`idee-clavier.css`),
+    les six couleurs de section (`morceau.css`). `idee.css` redéfinissait
+    `--sur-surligneur` avec un commentaire périmé (le système l'a) : retiré.
+  - Piège : un jeton qui se calcule d'autres jetons (`--gamme-…`,
+    `--section-…`, `--lueur`) se déclare sur `:root, .studio`. Une propriété
+    se calcule là où elle est déclarée : déclaré sur `:root` seul, il
+    garderait dans l'éditeur les couleurs du Papier.
+  - Le composant « visuellement caché » était recopié quatre fois (l'annonce
+    du mode, celle du chant, celle des accords, l'état du morceau) : tous
+    prennent `.visuellement-cache`.
+- **Les feuilles montent et redescendent, les fenêtres apparaissent en
+  douceur (I3).** Une feuille du bas monte du bas de l'écran (0,26 s) et y
+  redescend en se fermant ; la fenêtre d'une question grandit à peine en
+  apparaissant ; le voile se fond. L'entrée part de `@starting-style`, la
+  sortie garde le `<dialog>` dans la couche du dessus le temps qu'il s'en va
+  (`overlay`, `display` en `allow-discrete`). Là où `overlay` manque (Safari,
+  Firefox), la feuille se fermerait derrière le reste de la page : elle s'y
+  ferme d'un coup, comme avant. Ce qui s'en va ne prend plus aucun toucher.
+  - **Pas de `closedby="any"`, essayé puis écarté.** Il ferme une feuille au
+    voile sans rien écrire, mais au doigt, Chromium la ferme dès qu'on relève
+    le doigt, et le toucher atteint ce qui est sous le voile : la recherche
+    s'ouvrait sous la feuille, trois fois sur trois (vérifié aussi sur
+    l'appli d'avant, où l'on posait l'attribut à la main). `feuilles.js`
+    ferme sur le clic, une fois le toucher fini : rien ne passe au travers,
+    et Safari, qui ne connaît pas closedby, fait pareil.
+  - **L'écran qui s'ouvre se pose d'un fondu** (0,18 s), l'onglet de
+    l'accueil aussi. Pas de `document.startViewTransition` : il change la
+    page un instant plus tard, alors que `montrer()` doit la changer tout de
+    suite (l'éditeur se mesure et prend les couleurs du Studio juste après).
+    Un fondu seulement : rien ne bouge sous le doigt.
+  - **Moins de mouvement demandé** (le réglage du téléphone) : ni animation,
+    ni transition (le fondu des voiles compris), ni défilement doux. Quatre défilements glissaient malgré
+    lui (« Corriger » vers la partition lue et le mode avancé, les panneaux
+    de la tablette et des modèles) : ils passent par `defilement()`
+    (`app/mouvement.js`, sans DOM, vérifié par les types), comme celui du
+    morceau, qui avait sa propre fonction.
+  - **« Précédent » ferme la fenêtre du dessus.** Avec une question posée
+    sur une feuille de la racine de la page (les versions, la corbeille), il
+    fermait la feuille et laissait la question ouverte : l'ordre de la page
+    n'est pas celui de l'écran. La question passe d'abord. Sur Android, le
+    geste retour ferme déjà le `<dialog>` du dessus sans toucher à
+    l'historique : rien ne se ferme deux fois.
+  - **La barre du navigateur suit l'écran** (`theme-color`) : la couleur de
+    la barre du Studio dans l'éditeur, le papier clair ou sombre ailleurs
+    (`navigation.js` garde les deux couleurs de l'assembleur pour y revenir).
+  - Essais : `tests/e2e/feuilles.test.mjs` (le voile qui ferme sans toucher
+    ce qui est dessous, la sortie qui ne prend plus le doigt, Échap et
+    « précédent » avec une question sur une feuille, le mouvement réduit, la
+    barre du navigateur). L'essai de la boîte à outils qui laisse la place à
+    Claude (`claude-idee.test.mjs`) attend maintenant qu'elle soit
+    redescendue.
+- **À 320 px, plus rien ne défile de côté (I10).** L'onglet Morceaux
+  débordait de 22 px : son bouton passe sous le titre quand il n'a plus la
+  place (le titre a une base de 10 em, le bouton ne descend que s'il le
+  faut). L'éditeur débordait de 8 px : ses rangées serrent leurs marges sous
+  390 px (voir I1). Un bouton ou un segment trop long pour sa place passe à
+  la ligne au lieu de sortir de l'écran (le système ne les tient plus sur
+  une ligne de force).
+- **Couché, l'éditeur tient dans l'écran (I10).** Sous 500 px de haut (un
+  téléphone en paysage, une fenêtre basse), la grille est à gauche et le
+  pupitre à droite, chacun sur toute la hauteur : la grille a 334 px au lieu
+  de 80, et le pupitre garde la largeur des huit durées de 44 px. Dans
+  « Corriger », le panneau des doutes passe à droite de la même façon (en
+  bas, il prenait les trois quarts de l'écran et cachait ta page), et la
+  barre de l'écran repasse sur deux lignes, sans quoi le titre disparaissait.
+  Les outils de la note y comptent sur la largeur du panneau, pas sur celle
+  de l'écran : sur un petit téléphone couché (667 × 375), il n'a que 306 px,
+  et ils passent à cinq par rangée pour garder 44 px.
+  Le transport d'« Écouter », bas, reste en bas. L'encoche, qui passe alors
+  sur le côté, est laissée libre (le `<body>` et les panneaux fixés).
+- **Le texte agrandi (200 %) ne se chevauche plus (I10).** Le corps et toutes
+  les tailles sont en rem (I2) : ils suivent la taille de texte du
+  navigateur, le corps compris (15 px fixes avant). Ce qui n'a plus la place
+  de son nom se réduit à son icône, nom accessible et bulle gardés : les trois
+  modes (ils débordaient l'un sur l'autre), les durées (« do… », « cr… »),
+  « Tous les accords ». La barre Piano | Gamme passe sur deux rangées (la
+  carte des octaves, écrasée, se chevauchait). Le nom des onglets du bas
+  grandit tant qu'il tient dans sa case. La place se compte en em (requêtes
+  de conteneur) : elle suit la taille du texte, pas seulement celle de
+  l'écran.
+  - Mesures (scripts de l'audit, téléphone 390 px, police à 32 px) :
+    l'éditeur faisait 481 px de large et 1 039 de haut pour 390 × 844 ; il
+    tient dans l'écran. À 200 % et à 320 px, aucun des écrans du tour ne
+    déborde.
+  - Essai : `tests/e2e/formats.test.mjs` (320 px, 200 %, couché) ; il échoue
+    sur l'appli d'avant (« l'éditeur demande 507 px pour 390 »).
+
 **S'annoncer, se lancer, tenir la charge (I4, I9, I11, I12, I15)**
 
 - **Le lecteur d'écran entend une phrase, plus tout le carnet (I11).** La

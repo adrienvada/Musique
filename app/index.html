@@ -365,9 +365,9 @@
       <div class="outils-note" id="outils-note" role="toolbar" aria-label="Corriger la note choisie" hidden>
         <button class="btn outil" data-geste="haut" aria-label="Un degré plus haut" title="Un degré plus haut"><svg class="ico" aria-hidden="true"><use href="#i-haut"></use></svg></button>
         <button class="btn outil" data-geste="bas" aria-label="Un degré plus bas" title="Un degré plus bas"><svg class="ico" aria-hidden="true"><use href="#i-bas"></use></svg></button>
-        <button class="btn outil signe" data-alteration="^" aria-label="Dièse" title="Dièse">♯</button>
-        <button class="btn outil signe" data-alteration="_" aria-label="Bémol" title="Bémol">♭</button>
-        <button class="btn outil signe" data-alteration="=" aria-label="Bécarre" title="Bécarre">♮</button>
+        <button class="btn outil" data-alteration="^" aria-label="Dièse" title="Dièse"><svg class="ico" aria-hidden="true"><use href="#i-diese"></use></svg></button>
+        <button class="btn outil" data-alteration="_" aria-label="Bémol" title="Bémol"><svg class="ico" aria-hidden="true"><use href="#i-bemol"></use></svg></button>
+        <button class="btn outil" data-alteration="=" aria-label="Bécarre" title="Bécarre"><svg class="ico" aria-hidden="true"><use href="#i-becarre"></use></svg></button>
         <button class="btn outil" data-geste="silence" id="bouton-silence" aria-label="Changer en silence" title="Note ou silence"><svg class="ico" aria-hidden="true"><use href="#i-silence"></use></svg></button>
         <button class="btn outil" data-geste="dupliquer" aria-label="Une note de plus, juste après" title="Une de plus"><svg class="ico" aria-hidden="true"><use href="#i-repeter"></use></svg></button>
         <span class="separe" aria-hidden="true"></span>
@@ -413,7 +413,7 @@
     <aside class="dock dock-transport" id="transport-lecteur" aria-label="Écoute">
       <div class="transport-haut">
         <button class="btn btn-plein" id="ecouter" title="Espace"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg>Écouter</button>
-        <label class="tempo" for="tempo"><span class="remarque">Tempo</span><input type="range" id="tempo" min="30" max="200" value="90"><span class="val" id="tempo-val">♩ = 90</span></label>
+        <label class="tempo" for="tempo"><span class="remarque">Tempo</span><input type="range" id="tempo" min="30" max="200" value="90"><span class="val tempo-noire"><svg class="ico s" aria-hidden="true"><use href="#i-d4"></use></svg><span id="tempo-val">90</span></span></label>
       </div>
       <div class="transport-bas">
         <span class="transposer" role="group" aria-label="Transposer">
@@ -494,7 +494,7 @@
       <div class="menu-tempo">
         <div class="menu-tempo-tete">
           <label class="surtitre" for="morceau-tempo">Tempo</label>
-          <span class="mono menu-tempo-val" id="morceau-tempo-val"></span>
+          <span class="mono menu-tempo-val tempo-noire"><svg class="ico s" aria-hidden="true"><use href="#i-d4"></use></svg><span id="morceau-tempo-val"></span></span>
         </div>
         <div class="menu-tempo-reglage">
           <button class="btn rond" id="morceau-tempo-moins" aria-label="Un battement de moins par minute"><svg class="ico" aria-hidden="true"><use href="#i-moins"></use></svg></button>
@@ -523,7 +523,7 @@
       <button class="btn btn-fantome rond" data-retour aria-label="Retour au carnet"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
       <div class="idee-titres">
         <input class="idee-titre" id="idee-titre" aria-label="Titre de l'idée" autocomplete="off" spellcheck="false">
-        <button class="idee-resume" id="idee-reglages-bouton" aria-haspopup="dialog" aria-controls="idee-reglages" aria-label="Tempo, mesure et tonalité"><span class="mono" id="idee-resume"></span></button>
+        <button class="idee-resume" id="idee-reglages-bouton" aria-haspopup="dialog" aria-controls="idee-reglages" aria-label="Tempo, mesure et tonalité"><svg class="ico s" aria-hidden="true"><use href="#i-d4"></use></svg><span class="mono" id="idee-resume"></span></button>
       </div>
       <button class="puce idee-piste-puce" id="idee-piste-puce" hidden></button>
       <div class="seg idee-affichage" id="idee-affichage" role="group" aria-label="Affichage">
@@ -577,7 +577,7 @@
       </div>
       <!-- Capture après coup · la dernière phrase jouée au clavier, reprise avec son rythme (idee-direct.js, M13) -->
       <button class="btn dir-capturer" id="idee-capturer" aria-label="Capturer les dernières notes jouées, avec leur rythme (C)" title="Capturer ce que tu viens de jouer, avec son rythme (C)" hidden><svg class="ico s" aria-hidden="true"><use href="#i-onde"></use></svg><span>Capturer</span></button>
-      <span class="idee-mode" id="idee-mode" role="status"></span>
+      <span class="idee-mode visuellement-cache" id="idee-mode" role="status"></span>
     </div>
 
     <!-- Le pupitre : transport (idee.js), modes, et le contenu du mode -->
@@ -594,9 +594,9 @@
       </div>
 
       <div class="seg idee-modes" id="idee-modes" role="tablist" aria-label="Façon d'écrire">
-        <button role="tab" data-mode="clavier" aria-selected="true" aria-controls="pupitre-clavier"><svg class="ico s" aria-hidden="true"><use href="#i-clavier"></use></svg>Clavier</button>
-        <button role="tab" data-mode="chanter" aria-selected="false" aria-controls="micro-panneau"><svg class="ico s" aria-hidden="true"><use href="#i-micro"></use></svg>Chanter</button>
-        <button role="tab" data-mode="accords" aria-selected="false" aria-controls="pupitre-accords"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Accords</button>
+        <button role="tab" data-mode="clavier" aria-selected="true" aria-controls="pupitre-clavier" title="Clavier"><svg class="ico s" aria-hidden="true"><use href="#i-clavier"></use></svg>Clavier</button>
+        <button role="tab" data-mode="chanter" aria-selected="false" aria-controls="micro-panneau" title="Chanter"><svg class="ico s" aria-hidden="true"><use href="#i-micro"></use></svg>Chanter</button>
+        <button role="tab" data-mode="accords" aria-selected="false" aria-controls="pupitre-accords" title="Accords"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Accords</button>
       </div>
 
       <!-- Sélection · la rangée du pupitre, au-dessus du mode tant qu'une note est choisie (idee-selection.js) -->
@@ -664,7 +664,7 @@
               <ul id="chant-gardees" aria-label="Dernières notes écrites"></ul>
             </div>
             <!-- Dit « la4 écrite » au lecteur d'écran, sans rien montrer -->
-            <span class="chant-annonce" id="chant-annonce" role="status"></span>
+            <span class="chant-annonce visuellement-cache" id="chant-annonce" role="status"></span>
           </div>
         </div>
 
@@ -674,7 +674,7 @@
             <button class="btn btn-fantome rond" id="accords-mesure-avant" aria-label="Mesure précédente"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
             <span class="accords-mesure" id="accords-mesure"></span>
             <button class="btn btn-fantome rond" id="accords-mesure-apres" aria-label="Mesure suivante"><svg class="ico" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
-            <button class="btn btn-fantome accords-lien" id="accords-plus"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Tous les accords</button>
+            <button class="btn btn-fantome accords-lien" id="accords-plus" title="Tous les accords"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Tous les accords</button>
           </div>
           <div class="accords-pads" id="accords-pads" role="group" aria-label="Les accords de la tonalité"></div>
         </div>
@@ -1010,7 +1010,7 @@
         <button class="btn btn-danger" id="accord-retirer">Retirer</button>
         <button class="btn" id="accords-tout"><svg class="ico s" aria-hidden="true"><use href="#i-accords"></use></svg>Harmoniser toute l'idée</button>
       </div>
-      <span class="accords-annonce" id="accords-annonce" role="status"></span>
+      <span class="accords-annonce visuellement-cache" id="accords-annonce" role="status"></span>
     </dialog>
   </section>
 </main>

@@ -17,6 +17,7 @@ import { adresseEnregistree, connecteurDirect, documentParTranches, enregistrerA
 import { decompacter } from "./stockage.js";
 import { erreur, explication } from "./erreurs.js";
 import { $, accorde, dateCourte, el, toast } from "./ui.js";
+import { defilement } from "./mouvement.js";
 
 // Nom du connecteur tel qu'Adrien l'a ajouté dans claude.ai (Paramètres → Connecteurs).
 export const CONNECTEUR = "Portée reMarkable";
@@ -163,7 +164,7 @@ export function creerTablette(deps) {
   async function ouvrirRemarkable(rafraichir = false) {
     deps.versPartitions();
     $("panneau-remarkable").hidden = false;
-    $("panneau-remarkable").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    $("panneau-remarkable").scrollIntoView({ behavior: defilement(), block: "nearest" });
     $("arbre-rm").textContent = "";
     const m = await mcp();
     // Sans connecteur, rien à chercher ni à actualiser : seule l'adresse à coller se montre.
@@ -437,7 +438,7 @@ export function creerTablette(deps) {
       bloc.append(img, el("span", "nom", m.nom), el("span", "remarque", m.detail), b);
       zone.appendChild(bloc);
     }
-    $("panneau-modeles").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    $("panneau-modeles").scrollIntoView({ behavior: defilement(), block: "nearest" });
   }
 
   // --- Branchements ------------------------------------------------------------------

@@ -2,9 +2,6 @@
  * Quatre onglets, dans la barre du haut à l'ordinateur et fixés en bas du téléphone
  * (accueil.js). Rien que des jetons du système (systeme.css). */
 
-/* Hauteur de la barre d'onglets au téléphone, sans la zone de sécurité de l'écran. */
-:root { --onglets: 70px; }
-
 /* ---------- La barre du haut : Portée, chercher, l'état de la synchronisation ---------- */
 .barre-haut .dedans { flex-wrap: nowrap; gap: 4px 12px; }
 .logo { white-space: nowrap; }
@@ -15,50 +12,59 @@
 .recherche-zone { border-top: 1px solid var(--trait); }
 .dedans-recherche { max-width: 1240px; margin: 0 auto; padding: 8px 16px; display: flex; align-items: center; gap: 8px; }
 /* 16 px : en dessous, Safari zoome la page quand le champ prend le focus. */
-.dedans-recherche .champ { font-size: 1rem; }
+.dedans-recherche .champ { font-size: var(--t-16); }
 .barre-haut[data-onglet="reglages"] .recherche-zone { display: none; }
 
 /* ---------- Les quatre onglets ---------- */
 .onglets-accueil { display: flex; gap: 4px; margin-left: 8px; }
-.onglets-accueil [role="tab"] { border: 0; background: transparent; color: var(--gris); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-radius: 999px; font-weight: 500; font-size: 0.94rem; white-space: nowrap; }
+.onglets-accueil [role="tab"] { border: 0; background: transparent; color: var(--gris); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-radius: var(--r-plein); font-weight: 500; font-size: var(--t-15); white-space: nowrap; }
 .onglets-accueil [role="tab"]:hover { background: var(--creux); }
 .onglets-accueil [role="tab"][aria-selected="true"] { background: var(--stylo-doux); color: var(--stylo); }
 .onglets-accueil .bulle { display: flex; align-items: center; justify-content: center; }
+/* Dans la barre du haut (821 px et plus) au doigt : une tablette, un téléphone couché. 44 px, comme le reste. */
+@media (min-width: 821px) and (pointer: coarse) { .onglets-accueil [role="tab"] { min-height: 44px; } }
 
 @media (max-width: 820px) {
   /* Fixée en bas, sous le pouce ; l'onglet actif est une bulle de la couleur du stylo. */
-  .onglets-accueil { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; z-index: 6; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 2px 6px env(safe-area-inset-bottom, 0px); background: var(--feuille); border-top: 1px solid var(--trait); }
-  .onglets-accueil [role="tab"] { flex-direction: column; justify-content: center; gap: 4px; min-height: 64px; padding: 0; border-radius: 0; font-size: 0.75rem; font-weight: 600; }
+  .onglets-accueil { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; z-index: var(--z-dock); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 2px max(6px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(6px, env(safe-area-inset-left, 0px)); background: var(--feuille); border-top: 1px solid var(--trait); }
+  .onglets-accueil [role="tab"] { flex-direction: column; justify-content: center; gap: 4px; min-height: 64px; padding: 0; border-radius: 0; font-size: var(--t-12); font-weight: 600; }
   .onglets-accueil [role="tab"]:hover { background: transparent; }
   .onglets-accueil [role="tab"][aria-selected="true"] { background: transparent; }
-  .onglets-accueil .bulle { width: 58px; height: 32px; border-radius: 16px; }
+  .onglets-accueil .bulle { width: 58px; height: 32px; border-radius: var(--r-16); }
+  /* Le texte agrandi : le nom de l'onglet grandit tant qu'il tient dans son quart de barre
+     (« Partitions », le plus long, fait 5,4 em) ; plus grand, il débordait sur le voisin. */
+  .onglets-accueil { container: onglets / inline-size; }
+  .onglets-accueil .libelle { font-size: min(var(--t-12), calc((25cqi - 8px) / 5.4)); }
   .onglets-accueil [role="tab"][aria-selected="true"] .bulle { background: var(--stylo-doux); }
   /* Le dernier élément de l'accueil ne doit pas finir sous la barre. */
   #vue-biblio { padding-bottom: calc(var(--onglets) + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* ---------- Ce que les onglets ont en commun ---------- */
-.onglet { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.onglet-tete { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.onglet { display: flex; flex-direction: column; gap: 16px; min-width: 0; animation: vue-arrive 0.18s ease-out; }
+/* Le titre, et son bouton à droite ; trop étroit (320 px, ou le texte agrandi), le bouton passe dessous
+   (« Nouveau morceau » sortait de 22 px de l'écran, audit du 04/10, I10). */
+.onglet-tete { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 12px; }
+.onglet-tete > div { flex: 1 1 10em; min-width: 0; }
 .onglet-tete h1 { font-size: clamp(1.7rem, 4vw, 2.1rem); }
 .onglet-tete .remarque { margin-top: 2px; }
 
 /* ---------- Carnet : noter d'abord ---------- */
-.capture { background: var(--stylo); color: var(--sur-stylo); border-radius: 24px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.capture h1 { font-size: 1.5rem; }
+.capture { background: var(--stylo); color: var(--sur-stylo); border-radius: var(--r-22); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.capture h1 { font-size: var(--t-24); }
 .tuiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.tuile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 80px; border: 0; border-radius: 16px; background: color-mix(in srgb, var(--sur-stylo) 15%, transparent); color: var(--sur-stylo); font-weight: 600; font-size: 0.92rem; cursor: pointer; }
+.tuile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 80px; border: 0; border-radius: var(--r-16); background: color-mix(in srgb, var(--sur-stylo) 15%, transparent); color: var(--sur-stylo); font-weight: 600; font-size: var(--t-15); cursor: pointer; }
 .tuile:hover { background: color-mix(in srgb, var(--sur-stylo) 24%, transparent); }
 .tuile:active { background: color-mix(in srgb, var(--sur-stylo) 32%, transparent); }
 /* Le contour bleu du système serait invisible sur le bleu de la carte. */
 .tuile:focus-visible { outline-color: var(--sur-stylo); }
 
-.vide { background: var(--feuille); border: 1px solid var(--trait); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
-.vide h2 { font-size: 1.4rem; }
+.vide { background: var(--feuille); border: 1px solid var(--trait); border-radius: var(--r-16); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.vide h2 { font-size: var(--t-22); }
 .etapes { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: etape; }
 /* Le numéro à gauche, le texte et le bouton à droite : trois étapes tiennent sans prendre un écran entier. */
-.etapes li { border: 1px solid var(--trait); border-radius: 12px; padding: 12px 14px; background: var(--papier); display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; row-gap: 4px; align-items: start; counter-increment: etape; }
-.etapes li::before { content: counter(etape); grid-row: 1 / span 3; font-family: var(--f-titre); font-size: 1.5rem; color: var(--stylo); line-height: 1.1; }
+.etapes li { border: 1px solid var(--trait); border-radius: var(--r-12); padding: 12px 14px; background: var(--papier); display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; row-gap: 4px; align-items: start; counter-increment: etape; }
+.etapes li::before { content: counter(etape); grid-row: 1 / span 3; font-family: var(--f-titre); font-size: var(--t-24); color: var(--stylo); line-height: 1.1; }
 .etapes li > * { grid-column: 2; }
 .etapes li .btn { justify-self: start; margin-top: 4px; }
 
@@ -76,18 +82,18 @@
 .ligne-ouvrir { flex: 1 1 auto; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 12px; padding: 8px 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
 .ligne-ouvrir:hover .ligne-titre { text-decoration: underline; text-underline-offset: 3px; }
 .ligne-texte { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.ligne-titre { font-weight: 600; font-size: 1rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ligne-meta { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--gris); min-width: 0; }
-.ligne-meta .pastille { flex: none; min-height: 20px; padding: 0 8px; font-size: 0.7rem; }
+.ligne-titre { font-weight: 600; font-size: var(--t-16); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ligne-meta { display: flex; align-items: center; gap: 6px; font-size: var(--t-13); color: var(--gris); min-width: 0; }
+.ligne-meta .pastille { flex: none; min-height: 20px; padding: 0 8px; font-size: var(--t-11); }
 .ligne-quand { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.ligne-aide { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--gris); white-space: nowrap; overflow: hidden; min-width: 0; }
+.ligne-aide { display: flex; align-items: center; gap: 8px; font-size: var(--t-13); color: var(--gris); white-space: nowrap; overflow: hidden; min-width: 0; }
 .ligne-aide > * { flex: none; }
 .ligne-aide .aide-note { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .aide-memo { display: inline-flex; align-items: center; gap: 3px; }
 .aide-memo .ico { width: 14px; height: 14px; }
 .aide-etiquette { color: var(--encre); }
 /* Des suggestions de Claude attendent dans la partition (suggestions-ui.js). */
-.aide-claude { display: inline-flex; align-items: center; gap: 3px; color: var(--stylo); font-weight: 600; font-size: 0.78rem; }
+.aide-claude { display: inline-flex; align-items: center; gap: 3px; color: var(--stylo); font-weight: 600; font-size: var(--t-13); }
 .aide-claude .ico { width: 14px; height: 14px; }
 /* L'étoile et « ••• » : 44 px au doigt, discrets au repos. */
 .favori, .plus { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; border-radius: 50%; color: var(--gris); cursor: pointer; }
@@ -95,7 +101,7 @@
 .favori[aria-pressed="true"] { color: var(--alerte); }
 
 /* L'aperçu : les notes en barres, la page écrite, la frise d'un morceau. */
-svg.apercu { width: 56px; height: 46px; flex: none; display: block; border-radius: 9px; background: var(--feuille); border: 1px solid var(--trait); overflow: hidden; }
+svg.apercu { width: 56px; height: 46px; flex: none; display: block; border-radius: var(--r-8); background: var(--feuille); border: 1px solid var(--trait); overflow: hidden; }
 /* L'aperçu d'une idée est étiré (viewBox sans proportions fixes) : un trait d'épaisseur constante garde des barres lisibles. */
 .apercu .apercu-note, .frise .apercu-note { fill: var(--stylo); stroke: var(--stylo); stroke-width: 2px; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 /* La page, vue de loin : un trait plus gras que dans l'atelier, sinon il disparaît. */
@@ -103,7 +109,7 @@ svg.apercu { width: 56px; height: 46px; flex: none; display: block; border-radiu
 .apercu .encre polyline, .apercu-grand .encre polyline { stroke-width: 8; }
 
 /* ---------- Partitions : des cartes avec la page ---------- */
-.depot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 12px; margin: -12px; border: 2px solid transparent; border-radius: 18px; }
+.depot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 12px; margin: -12px; border: 2px solid transparent; border-radius: var(--r-16); }
 .depot.survol { border-style: dashed; border-color: var(--stylo); background: var(--stylo-doux); }
 .depot > .btn-plein { flex: 1 1 100%; min-height: 48px; }
 .depot-autres { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 10px 12px; }
@@ -113,54 +119,54 @@ svg.apercu { width: 56px; height: 46px; flex: none; display: block; border-radiu
 
 .grille-pages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .carte-page, .carte-morceau { position: relative; display: flex; flex-direction: column; background: var(--feuille); border: 1px solid var(--trait); overflow: hidden; }
-.carte-page { border-radius: 16px; }
+.carte-page { border-radius: var(--r-16); }
 .carte-page:hover, .carte-page:focus-within, .carte-morceau:hover, .carte-morceau:focus-within { border-color: var(--stylo); }
 .carte-ouvrir { display: flex; flex-direction: column; width: 100%; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
 svg.apercu-grand { width: 100%; height: 84px; display: block; background: var(--feuille); border-bottom: 1px solid var(--trait); }
 .carte-corps { padding: 10px 12px 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; width: 100%; }
 .carte-corps .titre { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.carte-corps .meta { font-size: 0.8rem; color: var(--gris); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.carte-corps .meta { font-size: var(--t-13); color: var(--gris); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* « ••• » en bas à droite de la carte, à la hauteur de la date : l'aperçu reste entier. */
 .carte-page .plus { position: absolute; bottom: 2px; right: 2px; }
 .carte-page .carte-corps .meta { padding-right: 38px; }
 
 /* ---------- Morceaux ---------- */
 .liste-morceaux { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
-.carte-morceau { border-radius: 18px; }
+.carte-morceau { border-radius: var(--r-16); }
 .carte-morceau .carte-ouvrir { gap: 12px; padding: 16px; }
 .carte-tete { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-right: 40px; }
-.carte-tete .titre { font-family: var(--f-titre); font-size: 1.25rem; line-height: 1.2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.carte-tete .duree { font-size: 0.8rem; color: var(--gris); flex: none; }
-svg.frise { width: 100%; height: 52px; display: block; border-radius: 10px; background: var(--creux); }
-.carte-morceau .parties { font-size: 0.85rem; color: var(--gris); }
+.carte-tete .titre { font-family: var(--f-titre); font-size: var(--t-20); line-height: 1.2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.carte-tete .duree { font-size: var(--t-13); color: var(--gris); flex: none; }
+svg.frise { width: 100%; height: 52px; display: block; border-radius: var(--r-10); background: var(--creux); }
+.carte-morceau .parties { font-size: var(--t-14); color: var(--gris); }
 .carte-morceau .plus { position: absolute; top: 8px; right: 8px; }
 
 /* ---------- Panneaux : la reMarkable, les modèles ---------- */
-#vue-biblio .panneau { border-radius: 16px; padding: 14px; scroll-margin-top: calc(var(--barre) + 12px); }
+#vue-biblio .panneau { border-radius: var(--r-16); padding: 14px; scroll-margin-top: calc(var(--barre) + 12px); }
 .panneau-tete { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.panneau-tete h2 { font-size: 1.25rem; }
+.panneau-tete h2 { font-size: var(--t-20); }
 .modeles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.modele { border: 1px solid var(--trait); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; background: var(--papier); }
+.modele { border: 1px solid var(--trait); border-radius: var(--r-12); padding: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; background: var(--papier); }
 /* Le modèle est un dessin noir sur fond transparent : il lui faut une feuille. En sombre, la
    même feuille adoucie que les touches du piano, pour ne pas éblouir. */
-.modele img { width: 100%; aspect-ratio: 3 / 4; object-fit: contain; background: var(--touche-blanche); border-radius: 6px; border: 1px solid var(--trait); }
+.modele img { width: 100%; aspect-ratio: 3 / 4; object-fit: contain; background: var(--touche-blanche); border-radius: var(--r-8); border: 1px solid var(--trait); }
 .modele .nom { font-weight: 600; }
 .modele .btn { align-self: stretch; white-space: normal; text-align: center; line-height: 1.2; }
 .arbre { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow: auto; }
-.arbre details > summary { cursor: pointer; min-height: 44px; padding: 0 6px; border-radius: 8px; font-weight: 500; list-style: none; display: flex; align-items: center; gap: 10px; }
+.arbre details > summary { cursor: pointer; min-height: 44px; padding: 0 6px; border-radius: var(--r-8); font-weight: 500; list-style: none; display: flex; align-items: center; gap: 10px; }
 .arbre details > summary::-webkit-details-marker { display: none; }
 /* Le chevron est dessiné en CSS : un caractère (▸) changerait de forme d'une police à l'autre. */
 .arbre details > summary::before { content: ""; flex: none; width: 7px; height: 7px; margin: 0 4px 0 2px; border-right: 2px solid var(--gris); border-bottom: 2px solid var(--gris); transform: rotate(-45deg); transition: transform 0.12s; }
 .arbre details[open] > summary::before { transform: rotate(45deg); }
 .arbre details > summary:hover { background: var(--creux); }
 .arbre .enfants { padding-left: 14px; border-left: 1px solid var(--trait); margin-left: 12px; display: flex; flex-direction: column; gap: 2px; }
-.doc-rm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px; border-radius: 8px; }
+.doc-rm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px; border-radius: var(--r-8); }
 .doc-rm:hover { background: var(--creux); }
 .doc-rm .nom { min-width: 0; overflow-wrap: anywhere; }
-.doc-rm .meta { font-size: 0.8rem; color: var(--gris); font-variant-numeric: tabular-nums; }
+.doc-rm .meta { font-size: var(--t-13); color: var(--gris); font-variant-numeric: tabular-nums; }
 .doc-rm .btn { margin-left: auto; }
 .doc-rm .btn + .btn { margin-left: 0; }
-.aide-connecteur { border: 1px solid var(--surligneur); background: var(--surligneur-doux); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; font-size: 0.92rem; }
+.aide-connecteur { border: 1px solid var(--surligneur); background: var(--surligneur-doux); border-radius: var(--r-12); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; font-size: var(--t-15); }
 .aide-connecteur ol { margin: 0; padding-left: 1.2em; }
 .aide-connecteur p:empty { display: none; }
 
@@ -168,19 +174,18 @@ svg.frise { width: 100%; height: 52px; display: block; border-radius: 10px; back
 .reglages { gap: 18px; }
 .reglages-bloc { display: flex; flex-direction: column; gap: 6px; }
 .reglages-bloc .surtitre { font-family: var(--f-texte); scroll-margin-top: calc(var(--barre) + 12px); }
-.reglages-groupe { background: var(--feuille); border: 1px solid var(--trait); border-radius: 16px; overflow: hidden; }
-.reglages-ligne { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 6px 14px; border: 0; border-bottom: 1px solid var(--trait); background: none; color: inherit; font-size: 0.95rem; text-align: left; }
+.reglages-groupe { background: var(--feuille); border: 1px solid var(--trait); border-radius: var(--r-16); overflow: hidden; }
+.reglages-ligne { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 6px 14px; border: 0; border-bottom: 1px solid var(--trait); background: none; color: inherit; font-size: var(--t-15); text-align: left; }
 button.reglages-ligne, label.reglages-ligne { cursor: pointer; }
 button.reglages-ligne:hover, label.reglages-ligne:hover { background: var(--creux); }
 .reglages-ligne .ico { color: var(--gris); }
 .reglages-ligne.principal { color: var(--stylo); font-weight: 600; }
 .reglages-ligne.principal .ico { color: var(--stylo); }
-.reglages-ligne .valeur { color: var(--gris); text-align: right; font-size: 0.9rem; }
+.reglages-ligne .valeur { color: var(--gris); text-align: right; font-size: var(--t-15); }
 .reglages-groupe > :last-child { border-bottom: 0; }
-.reglages-texte { padding: 12px 14px; font-size: 0.85rem; color: var(--gris); border-bottom: 1px solid var(--trait); }
+.reglages-texte { padding: 12px 14px; font-size: var(--t-14); color: var(--gris); border-bottom: 1px solid var(--trait); }
 .reglages-texte:empty { display: none; }
 .reglages-groupe .seg { flex: none; }
-.reglages-groupe .seg > button { min-height: 44px; }
 #zone-adresse:empty, #zone-synchro:empty { display: none; }
 /* Un rappel (la sauvegarde à refaire) : la couleur des avertissements, sans crier. */
 .reglages-rappel { display: flex; align-items: flex-start; gap: 8px; color: var(--alerte); }
@@ -190,11 +195,11 @@ button.reglages-ligne:hover, label.reglages-ligne:hover { background: var(--creu
 .reglages-de-cote .reglages-texte { border-bottom: 0; padding-bottom: 4px; }
 .reglages-liste { list-style: none; margin: 0; padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 10px; }
 .reglages-liste li { display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
-.de-cote-titre { font-weight: 600; font-size: 0.92rem; }
-.de-cote-raison { font-size: 0.85rem; color: var(--gris); }
+.de-cote-titre { font-weight: 600; font-size: var(--t-15); }
+.de-cote-raison { font-size: var(--t-14); color: var(--gris); }
 .reglages-de-cote .reglages-ligne { border-top: 1px solid var(--trait); border-bottom: 0; }
 /* Le guide d'installation (Safari) : un pas à pas, dans le groupe. */
-.reglages-guide { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--trait); background: var(--surligneur-doux); font-size: 0.9rem; }
+.reglages-guide { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--trait); background: var(--surligneur-doux); font-size: var(--t-15); }
 .reglages-guide .guide-titre { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .reglages-guide .guide-titre .ico { color: var(--alerte); }
 .reglages-guide ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 4px; }
@@ -208,12 +213,12 @@ button.reglages-ligne:hover, label.reglages-ligne:hover { background: var(--creu
 .version:last-child { border-bottom: 0; }
 .version-texte { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 180px; }
 .version-titre { font-weight: 600; overflow-wrap: anywhere; }
-.version-resume { font-size: 0.86rem; color: var(--gris); overflow-wrap: anywhere; }
+.version-resume { font-size: var(--t-14); color: var(--gris); overflow-wrap: anywhere; }
 .versions-vide { padding: 12px 0; color: var(--gris); }
 
 /* ---------- La feuille d'actions (« ••• ») ---------- */
 .feuille-liste { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-.feuille-liste .btn { width: 100%; min-height: 52px; justify-content: flex-start; gap: 12px; padding: 0 16px; border-radius: 14px; font-size: 1rem; }
+.feuille-liste .btn { width: 100%; min-height: 52px; justify-content: flex-start; gap: 12px; padding: 0 16px; border-radius: var(--r-12); font-size: var(--t-16); }
 #feuille-sous { overflow-wrap: anywhere; }
 
 /* ---------- À l'ordinateur ---------- */

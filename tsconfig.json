@@ -5,7 +5,7 @@
   // TypeScript lit les JSDoc (@param, @returns) et devine le reste. On ne
   // vérifie que des modules sans DOM, à zéro erreur (audit du 04/10, T2) :
   // le lecteur, l'édition de l'ABC, les doutes, le zip, les petits outils
-  // de l'interface (ui.js, erreurs.js), l'enregistrement différé et
+  // de l'interface (ui.js, erreurs.js, mouvement.js), l'enregistrement différé et
   // l'écoute, la musique (sequence, harmonie, accords, midi, musicxml,
   // morceau), la fiche et la synchro, les enregistrements de l'idée, et
   // tout le connecteur. Une JSDoc écrite en prose (`@param x { a, b }`) se
@@ -56,6 +56,7 @@
     "app/versions.js",
     "app/zip.js",
     "app/ui.js",
+    "app/mouvement.js",
     "app/erreurs.js",
     "app/enregistreur.js",
     "app/ecoute.js",
