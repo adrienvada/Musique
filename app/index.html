@@ -159,8 +159,16 @@
         <h2 class="surtitre" id="rg-synchro">Synchronisation</h2>
         <div class="reglages-groupe">
           <p class="reglages-texte" id="mode-detail"></p>
+          <!-- Ce que la synchronisation a mis de côté, et pourquoi (D2, synchronisation-ui.js). -->
+          <div class="reglages-de-cote" id="synchro-de-cote" hidden>
+            <p class="reglages-texte reglages-rappel" id="de-cote-resume" role="status"></p>
+            <ul class="reglages-liste" id="de-cote-liste"></ul>
+            <button class="reglages-ligne principal" id="reessayer-synchro"><span>Réessayer</span><svg class="ico s" aria-hidden="true"><use href="#i-refaire"></use></svg></button>
+          </div>
           <button class="reglages-ligne principal" id="activer-synchro" hidden><span>Synchroniser mes appareils</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
           <button class="reglages-ligne" id="synchroniser" hidden><span>Synchroniser maintenant</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
+          <!-- Ce que la bibliothèque commune garde 30 jours (D6, versions-ui.js) : avec la synchronisation seulement. -->
+          <button class="reglages-ligne" id="ouvrir-corbeille" data-avec-synchro aria-haspopup="dialog" hidden><span>Corbeille (30 jours)</span><svg class="ico s" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
         </div>
         <div id="zone-synchro"></div>
       </section>
@@ -209,8 +217,11 @@
       <section class="reglages-bloc" aria-labelledby="rg-sauvegarde">
         <h2 class="surtitre" id="rg-sauvegarde">Sauvegarde</h2>
         <div class="reglages-groupe">
+          <!-- Sans synchronisation, au-delà de 30 jours sans sauvegarde : un rappel (sauvegarde-ui.js, garde.js). -->
+          <p class="reglages-texte reglages-rappel" id="rappel-sauvegarde" role="status" hidden></p>
           <button class="reglages-ligne" id="tout-midi"><span>Tout exporter en MIDI (.zip)</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
           <button class="reglages-ligne" id="sauvegarder"><span>Sauvegarder ma bibliothèque</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
+          <div class="reglages-ligne" id="derniere-sauvegarde-ligne" hidden><span>Dernière sauvegarde</span><span class="valeur" id="derniere-sauvegarde">Jamais</span></div>
           <label class="reglages-ligne" for="restaurer" tabindex="0" id="restaurer-ligne"><span>Restaurer une sauvegarde</span><svg class="ico s" aria-hidden="true"><use href="#i-partager"></use></svg></label>
           <input id="restaurer" type="file" accept="application/json,.json" hidden>
         </div>
@@ -221,6 +232,12 @@
         <div class="reglages-groupe">
           <button class="reglages-ligne" id="installer" hidden><span>Installer l'appli sur cet appareil</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
           <div class="reglages-ligne"><span>Tes données</span><span class="valeur" id="mode">Ouverture de ta bibliothèque…</span></div>
+          <!-- Ce qui garde la bibliothèque de ce navigateur (D9, sauvegarde-ui.js) : rien de cela sur claude.ai. -->
+          <div class="reglages-ligne" id="garde-ligne" hidden><span>Bibliothèque protégée sur cet appareil</span><span class="valeur" id="garde-protegee"></span></div>
+          <div class="reglages-ligne" id="garde-place-ligne" hidden><span>Place prise</span><span class="valeur" id="garde-place"></span></div>
+          <p class="reglages-texte" id="garde-conseil" hidden></p>
+          <button class="reglages-ligne principal" id="garde-proteger" hidden><span>Demander au navigateur de la garder</span><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg></button>
+          <div class="reglages-guide" id="garde-guide" role="note" hidden></div>
         </div>
       </section>
     </div>
@@ -264,6 +281,8 @@
         <button role="tab" id="onglet-lecteur" aria-selected="false">Écouter et exporter</button>
       </div>
     </header>
+    <!-- Les suggestions rangées par Claude depuis une conversation (H3, suggestions-ui.js). -->
+    <div class="bandeau-claude" id="atelier-suggestions" role="region" aria-label="Suggestions de Claude" hidden></div>
     <div class="regle-vues">
       <div class="seg" id="vues-atelier" role="group" aria-label="Ce que tu vois">
         <button data-vue="page" aria-pressed="false">Ta page</button>
@@ -488,6 +507,8 @@
       <button class="btn btn-fantome rond" id="idee-partager" aria-label="Envoyer le MIDI" title="Envoyer le MIDI (AirDrop, Fichiers, mail…) ou le télécharger"><svg class="ico" aria-hidden="true"><use href="#i-partager"></use></svg></button>
       <button class="btn btn-fantome rond" id="idee-plus" aria-haspopup="dialog" aria-controls="idee-menu" aria-label="Plus d'actions"><svg class="ico" aria-hidden="true"><use href="#i-plus-actions"></use></svg></button>
     </header>
+    <!-- Les suggestions rangées par Claude depuis une conversation (H3, suggestions-ui.js). -->
+    <div class="bandeau-claude bandeau-plein" id="idee-suggestions" role="region" aria-label="Suggestions de Claude" hidden></div>
 
     <!-- La grille ou la partition (idee.js, grille.js) -->
     <div class="idee-surface" id="idee-surface">
@@ -822,6 +843,8 @@
         <button class="btn" data-menu="musicxml"><svg class="ico" aria-hidden="true"><use href="#i-partition"></use></svg>MusicXML (MuseScore)</button>
         <button class="btn" data-menu="morceau"><svg class="ico" aria-hidden="true"><use href="#i-morceau"></use></svg>Ajouter à un morceau</button>
         <button class="btn" data-menu="dupliquer"><svg class="ico" aria-hidden="true"><use href="#i-copier"></use></svg>Dupliquer l'idée</button>
+        <!-- Les versions gardées par la bibliothèque commune (D6, versions-ui.js) : avec la synchronisation seulement. -->
+        <button class="btn" data-menu="versions" data-avec-synchro hidden><svg class="ico" aria-hidden="true"><use href="#i-historique"></use></svg>Versions précédentes</button>
         <button class="btn" data-menu="infos"><svg class="ico" aria-hidden="true"><use href="#i-carnet"></use></svg>Notes, étiquettes, mémo</button>
         <button class="btn" data-menu="reglages"><svg class="ico" aria-hidden="true"><use href="#i-reglages"></use></svg>Tempo, mesure et réglages</button>
         <button class="btn btn-danger" data-menu="supprimer"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg>Supprimer l'idée</button>

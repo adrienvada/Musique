@@ -135,6 +135,30 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 .p-ok { background: var(--ok-doux); color: var(--ok); }
 .p-idee { background: var(--stylo-doux); color: var(--stylo); }
 .p-morceau { background: var(--ok-doux); color: var(--ok); }
+/* La version de l'autre appareil (une copie de conflit) : elle attend un choix, cerclée d'ambre. */
+.p-conflit { background: transparent; color: var(--alerte); box-shadow: inset 0 0 0 1.5px currentColor; }
+/* Une idée que Claude a notée (idee_ecrire) : cerclée du bleu du stylo. */
+.p-claude { background: transparent; color: var(--stylo); box-shadow: inset 0 0 0 1.5px currentColor; }
+
+/* Le bandeau des suggestions de Claude (suggestions-ui.js), en haut de l'idée ou de la page :
+   une ligne discrète, le pourquoi se déplie dessous. `.bandeau-plein` : bord à bord (l'éditeur). */
+.bandeau-claude { display: flex; flex-direction: column; gap: 2px; padding: 2px 4px 2px 12px; border: 1px solid var(--trait); border-radius: 14px; background: var(--stylo-doux); color: var(--encre); min-width: 0; }
+.bandeau-claude.bandeau-plein { flex: none; border-width: 0 0 1px; border-radius: 0; }
+.bandeau-rang { display: flex; align-items: center; gap: 4px; min-width: 0; }
+/* Les gestes gardent leur taille ; c'est le texte qui se raccourcit. */
+.bandeau-rang .btn { flex: none; }
+.bandeau-quoi { flex: 1 1 auto; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: inherit; font-weight: 500; text-align: left; cursor: pointer; }
+.bandeau-quoi .ico { color: var(--stylo); }
+.bandeau-texte { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Déplié, le résumé se lit en entier. */
+.bandeau-quoi[aria-expanded="true"] .bandeau-texte { white-space: normal; }
+.bandeau-compte { flex: none; font-size: 0.78rem; color: var(--gris); }
+.bandeau-pourquoi { padding: 0 8px 8px 26px; font-size: 0.86rem; color: var(--gris); overflow-wrap: anywhere; }
+/* Au téléphone, les trois gestes gardent leur icône (et leur nom, à l'appui long). */
+@media (max-width: 560px) {
+  .bandeau-rang .btn { width: 44px; padding: 0; }
+  .bandeau-libelle { display: none; }
+}
 .etiquette { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--stylo-doux); color: var(--encre); }
 .etiquette button { border: 0; background: none; cursor: pointer; padding: 0 4px; color: var(--gris); display: inline-flex; }
 

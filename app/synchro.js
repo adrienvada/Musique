@@ -361,9 +361,16 @@ export function creerSynchro({ local, appeler, surEtat = () => {}, verrou = verr
     async quarantaine() {
       return (await local.quarantaine()).map(({ fiche: _f, ...q }) => q);
     },
-    /** Réessaie tout de suite ce qui a été mis de côté (tout, ou seulement `id`). */
+    /**
+     * Réessaie tout de suite ce qui a été mis de côté (tout, ou seulement `id`).
+     * Une réception mise de côté se réessaie déjà à chaque passage, avec la
+     * fiche gardée : lever sa quarantaine la ferait oublier, puisque le
+     * curseur est passé (trouvé en branchant le bouton « Réessayer », lot
+     * « écrans des données »). Seuls les envois sont levés ; la passe qui
+     * suit relit les réceptions.
+     */
     async reessayer(id = null) {
-      for (const q of await local.quarantaine()) if (!id || q.id === id) await local.leverQuarantaine(q.id, q.sens);
+      for (const q of await local.quarantaine()) if (q.sens === "envoi" && (!id || q.id === id)) await local.leverQuarantaine(q.id, "envoi");
       return api.synchroniser();
     },
     /** Les versions d'une partition gardées par la bibliothèque commune (D6), de la plus récente à la plus ancienne. */
@@ -399,7 +406,10 @@ export function creerSynchro({ local, appeler, surEtat = () => {}, verrou = verr
         const avecMemo = pages.find((p) => p && p.memo);
         await local.creer(id, { ...donnees, modifieLe: maintenant }, avecMemo ? [] : pages.filter(Array.isArray).map(decompacter), { memo: avecMemo ? avecMemo.memo : null });
       }
-      return api.synchroniser();
+      // Écrite ici, elle est revenue : si la synchro échoue maintenant (le réseau), elle partira au
+      // prochain passage, et l'état le dit. Sans cela, l'écran disait « n'est pas revenue » pour une
+      // version bel et bien revenue (lot « écrans des données »).
+      return api.synchroniser().catch(() => null);
     },
     /** Fait revenir une partition de la corbeille. */
     async recupererSupprimee(id) {

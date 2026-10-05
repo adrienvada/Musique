@@ -48,6 +48,9 @@ async function avecClaude() {
   const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
   const claude = await installerFauxClaude(ctx, {
     async appelerOutil(serveurMcp, outil, args) {
+      // Le manifeste de la page publiée aujourd'hui : claude.ai refuse un outil qui n'y est pas, sans
+      // appeler le connecteur (les suggestions, H3, s'y déclareront à la republication).
+      if (!["arborescence", "document", "relier"].includes(outil)) return { erreur: { code: "not_in_manifest", message: outil } };
       appels.push(outil);
       if (serveurMcp !== "Portée reMarkable") return { erreur: { code: "server_not_found", message: serveurMcp } };
       const r = await traiter({ jsonrpc: "2.0", id: appels.length, method: "tools/call", params: { name: outil, arguments: args } }, tablette);

@@ -19,7 +19,8 @@ import { explication } from "./erreurs.js";
  *   stockage() → le stockage ouvert, partitions() → la bibliothèque,
  *   nouvelId(), pageOuverte (page-ouverte.js), editeur() → l'éditeur d'idée,
  *   vueMorceau() → l'écran du morceau, ouvrir(id) (une partition, dans son
- *   écran), ouvrirMorceau(p), montrer(vue), exports (exports.js)
+ *   écran), ouvrirMorceau(p), montrer(vue), exports (exports.js),
+ *   versions() → les versions précédentes (versions-ui.js)
  * }
  */
 export function creerGestes(deps) {
@@ -106,6 +107,8 @@ export function creerGestes(deps) {
       }
       case "morceau": return choisirMorceau(p);
       case "musicxml": return deps.exports.exporterMusicXml(p);
+      // Les versions que garde la bibliothèque commune (D6, versions-ui.js).
+      case "versions": return deps.versions().ouvrirVersions(p);
       default:
         toast("Bientôt.");
         return undefined;

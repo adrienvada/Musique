@@ -472,6 +472,25 @@ test("D2 · une panne passagère du connecteur : l'envoi reste en file ; à la c
   }
 });
 
+test("D2 · « Réessayer » ne fait pas oublier une réception mise de côté : elle revient dès qu'elle se lit", async () => {
+  const { stockage, objets, appareil } = await monde();
+  try {
+    const tel = await appareil();
+    // Une fiche abîmée dans la bibliothèque commune (écrite par un outil d'avant, ou à la main).
+    await objets.ecrire("bibliotheque/pabimee.json", { id: "pabimee", donnees: "pas une fiche", modifieLe: "2026-10-01T10:00:00.000Z", supprime: false, pagesLe: null, rev: 1 });
+    assert.equal((await tel.synchro.synchroniser()).quarantaine, 1);
+    assert.equal((await tel.synchro.quarantaine())[0].sens, "reception");
+    // « Réessayer » : la réception reste de côté (le curseur est passé : la lever l'aurait perdue).
+    assert.equal((await tel.synchro.reessayer()).quarantaine, 1);
+    // Réparée là-bas : elle arrive, et la quarantaine se lève.
+    await objets.ecrire("bibliotheque/pabimee.json", { id: "pabimee", donnees: idee("Réparée", "2026-10-01T11:00:00.000Z"), modifieLe: "2026-10-01T11:00:00.000Z", supprime: false, pagesLe: null, rev: 2 });
+    assert.equal((await tel.synchro.reessayer()).quarantaine, 0);
+    assert.equal((await tel.local.lire("pabimee")).titre, "Réparée");
+  } finally {
+    await stockage.fermer();
+  }
+});
+
 test("D2 · trop lourde pour le connecteur : mise de côté avant l'envoi, ou sur un HTTP 413, sans arrêter les autres", async () => {
   const { stockage, appeler } = await monde();
   try {

@@ -29,6 +29,7 @@ import { ico } from "./icones.js";
 import { $, dateCourte, echapper, el, heure, pluriel } from "./ui.js";
 import { ambianceStudio, lirePref, ecrirePref } from "./preferences.js";
 import { brancherFeuille, fermerFeuille, ouvrirFeuille } from "./feuilles.js";
+import { estCopieDeConflit } from "./conflits.js";
 
 const NS = "http://www.w3.org/2000/svg";
 export const ONGLETS = ["carnet", "partitions", "morceaux", "reglages"];
@@ -85,9 +86,20 @@ function nomModele(m) {
   return { "melodie-large": "Mélodie, large", "melodie-standard": "Mélodie", "piano-large": "Piano, large", "piano-standard": "Piano" }[m] || m || "";
 }
 
+/**
+ * « À choisir » : la version de l'autre appareil d'une partition (une copie
+ * de conflit, D4), qui attend que tu tranches depuis son « ••• ».
+ */
+const pastilleConflit = () => {
+  const s = el("span", "pastille p-conflit", "À choisir");
+  s.title = "La version de l'autre appareil : garde celle-ci, les deux, ou l'autre (•••)";
+  return s;
+};
+
 /** La pastille d'une carte : le genre (idée, morceau), ou l'état d'une page lue. */
 function pastilleStatut(p) {
   const restants = (p.doutes || []).filter((d) => !d.leve).length;
+  if (estCopieDeConflit(p)) return pastilleConflit();
   if (p.type === "idee") return el("span", "pastille p-idee", "Idée");
   if (p.type === "morceau") return el("span", "pastille p-morceau", "Morceau");
   if (p.statut === "prete") return el("span", "pastille p-ok", "Prête");
@@ -113,7 +125,10 @@ export function toutesEtiquettes(partitions) {
  *   ouvrir(id, vue), ouvrirIdee(p, options), ouvrirMorceau(p),
  *   partagerMidi(p), exporterMidi(p),
  *   supprimer(p) (demande confirmation, puis supprime),
- *   calibration(modele), ideesParId(), importer(fichiers), toast(texte)
+ *   calibration(modele), ideesParId(), importer(fichiers), toast(texte),
+ *   afficherReglages() (les Réglages relisent ce qui garde la bibliothèque, sauvegarde-ui.js),
+ *   versions (versions-ui.js : la copie de conflit, les versions précédentes),
+ *   suggestionsPour(id) → combien de suggestions de Claude attendent (suggestions-ui.js)
  * }
  */
 export function creerAccueil(deps) {
@@ -272,10 +287,20 @@ export function creerAccueil(deps) {
     return [p.statut === "prete" ? "Partition prête" : "Partition", nomModele(p.modele)];
   }
 
-  /** Mémo, étiquettes, note en abrégé : une seule ligne, discrète. */
+  /** « Claude propose » : des suggestions de Claude attendent dans la partition (H3). */
+  function marqueClaude(n) {
+    const c = el("span", "aide-claude");
+    c.innerHTML = ico("etincelle", "s");
+    c.appendChild(el("span", "", n > 1 ? `Claude propose ${n} choses` : "Claude propose"));
+    return c;
+  }
+
+  /** Mémo, étiquettes, note en abrégé : une seule ligne, discrète. Ce que Claude propose vient en tête (H3). */
   function ligneAide(p) {
-    if (!((p.etiquettes || []).length || p.memo || p.note)) return null;
+    const propositions = deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0;
+    if (!((p.etiquettes || []).length || p.memo || p.note || propositions)) return null;
     const l = el("span", "ligne-aide");
+    if (propositions) l.appendChild(marqueClaude(propositions));
     if (p.memo) { const m = el("span", "aide-memo"); m.innerHTML = `${ico("micro", "s")}${echapper(p.memo.duree)} s`; l.appendChild(m); }
     for (const t of p.etiquettes || []) l.appendChild(el("span", "aide-etiquette", "# " + t));
     if (p.note) l.appendChild(el("span", "aide-note", p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note));
@@ -293,8 +318,16 @@ export function creerAccueil(deps) {
     const texte = el("span", "ligne-texte");
     texte.appendChild(el("span", "ligne-titre", p.titre));
     const meta = el("span", "ligne-meta");
-    // « À relire » : le seul état qui demande quelque chose ; une idée n'en a pas.
-    if (!p.type && p.statut !== "prete") meta.appendChild(el("span", "pastille p-doute", "À relire"));
+    // « À relire » : le seul état qui demande quelque chose ; une idée n'en a pas. La version de
+    // l'autre appareil (D4) demande plus : « À choisir » prend sa place.
+    if (estCopieDeConflit(p)) meta.appendChild(pastilleConflit());
+    else if (!p.type && p.statut !== "prete") meta.appendChild(el("span", "pastille p-doute", "À relire"));
+    // Une idée que Claude a notée dans une conversation (idee_ecrire) : elle le dit (H3, C5).
+    else if (p.source && p.source.claude === true) {
+      const c = el("span", "pastille p-claude", "Claude");
+      c.title = "Notée par Claude dans une conversation";
+      meta.appendChild(c);
+    }
     const [genre, resume] = genreEtResume(p);
     const date = groupe ? quand(p.modifieLe, groupe) : dateCourte(p.modifieLe);
     // Avec « À relire » devant, le mot « Partition » n'apprend rien : la place sert à la date.
@@ -375,6 +408,8 @@ export function creerAccueil(deps) {
       ouvrir.addEventListener("click", () => ouvrirPartition(p));
       const corps = el("span", "carte-corps");
       corps.append(el("span", "titre", p.titre), pastilleStatut(p), el("span", "meta", [nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ")));
+      const propositions = deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0;
+      if (propositions) corps.appendChild(marqueClaude(propositions));
       ouvrir.append(apercuDe(p, "apercu-grand", 2), corps);
       carte.append(ouvrir, boutonPlus(p));
       liste.appendChild(carte);
@@ -465,17 +500,31 @@ export function creerAccueil(deps) {
     };
     // On ferme avant d'agir : l'action peut ouvrir un autre écran, ou le partage du téléphone.
     const puis = (f) => () => { fermerFeuille(feuille); f(); };
+    // La version de l'autre appareil (D4) : trancher d'abord, c'est ce qu'elle attend.
+    const aTrancher = estCopieDeConflit(p) && !!deps.versions;
+    if (aTrancher) {
+      const autre = deps.versions.autreDe(p);
+      $("feuille-sous").textContent = autre
+        ? `La version de l'autre appareil de « ${autre.titre} » : tu l'avais corrigée ici et là-bas. Laquelle garder ?`
+        : "La version de l'autre appareil : l'autre version n'est plus dans ta bibliothèque.";
+      ajouter("ok", "Garder celle-ci", puis(() => deps.versions.trancherConflit("celle-ci", p)), { plein: true });
+      ajouter("copier", "Garder les deux", puis(() => deps.versions.trancherConflit("les-deux", p)));
+      if (autre) ajouter("annuler", "Garder l'autre", puis(() => deps.versions.trancherConflit("l-autre", p)));
+    }
     if (p.type === "idee" || p.type === "morceau") {
       ajouter("carnet", "Ouvrir", puis(() => deps.ouvrir(p.id)), { plein: true });
       // L'écoute reste dans la feuille : « Arrêter » est là, sous le doigt ; fermer la feuille coupe le son.
       boutonEcoute = ajouter("lire", "Écouter", (b) => ecouter(p, b));
       ajouter("partager", "Envoyer le MIDI", puis(() => deps.partagerMidi(p)));
     } else {
-      ajouter("crayon", "Corriger", puis(() => deps.ouvrir(p.id, "atelier")), { plein: p.statut !== "prete" });
-      ajouter("lire", "Écouter", puis(() => deps.ouvrir(p.id, "lecteur")), { plein: p.statut === "prete" });
+      // Une seule action principale : trancher, quand la version attend un choix.
+      ajouter("crayon", "Corriger", puis(() => deps.ouvrir(p.id, "atelier")), { plein: !aTrancher && p.statut !== "prete" });
+      ajouter("lire", "Écouter", puis(() => deps.ouvrir(p.id, "lecteur")), { plein: !aTrancher && p.statut === "prete" });
       ajouter("telecharger", "MIDI", puis(() => deps.exporterMidi(p)));
     }
     ajouter(p.favori ? "etoile-pleine" : "etoile", p.favori ? "Retirer des favoris" : "Mettre en favori", puis(() => basculerFavori(p)));
+    // Les versions que garde la bibliothèque commune (D6) : avec la synchronisation seulement.
+    if (deps.versions && deps.versions.possibles()) ajouter("historique", "Versions précédentes", puis(() => deps.versions.ouvrirVersions(p)));
     // Supprimer se faisait seulement de l'intérieur (le « ••• » de l'écran ouvert) :
     // depuis la liste, on ne trouvait pas comment. La question vient ensuite.
     ajouter("corbeille", "Supprimer", puis(() => deps.supprimer(p)), { danger: true });
@@ -558,11 +607,16 @@ export function creerAccueil(deps) {
     montrer();
   }
 
-  /** L'icône de la barre du haut : l'état de la synchronisation d'un coup d'œil. */
-  function montrerSynchro({ nuage, ton, titre }) {
+  /**
+   * L'icône de la barre du haut : l'état de la synchronisation d'un coup d'œil.
+   * `vers` : la section des Réglages où elle mène (la synchronisation, ou la
+   * sauvegarde quand c'est elle qu'il faut refaire).
+   */
+  function montrerSynchro({ nuage, ton, titre, vers = "rg-synchro" }) {
     const b = $("etat-synchro");
     b.innerHTML = ico(nuage ? "nuage" : "nuage-vide");
     b.dataset.ton = ton;
+    b.dataset.vers = vers;
     b.title = titre;
     b.setAttribute("aria-label", `${titre} (ouvrir les réglages)`);
   }
@@ -576,6 +630,8 @@ export function creerAccueil(deps) {
     if (etat.onglet === "carnet") rendreCarnet();
     else if (etat.onglet === "partitions") rendrePartitions();
     else if (etat.onglet === "morceaux") rendreMorceaux();
+    // Les Réglages relisent ce qui garde la bibliothèque (sauvegarde-ui.js) : la place, la dernière sauvegarde.
+    else if (deps.afficherReglages) deps.afficherReglages();
     // Sans partition, rien à exporter ni à sauvegarder (restaurer reste là).
     $("tout-midi").hidden = $("sauvegarder").hidden = partitions().length === 0;
     // La feuille ouverte sur une partition qui vient de disparaître (une autre fenêtre l'a supprimée) se ferme.
@@ -620,8 +676,11 @@ export function creerAccueil(deps) {
     if (f) { etat.filtrePages = f.dataset.filtrePage; afficher(); }
   });
 
-  // L'état de la synchronisation mène aux réglages.
-  $("etat-synchro").addEventListener("click", () => { choisirOnglet("reglages"); $("rg-synchro").scrollIntoView({ block: "start" }); });
+  // L'état de la synchronisation mène aux réglages : à la section dont il parle.
+  $("etat-synchro").addEventListener("click", (ev) => {
+    choisirOnglet("reglages");
+    ($(ev.currentTarget.dataset.vers || "rg-synchro") || $("rg-synchro")).scrollIntoView({ block: "start" });
+  });
 
   choisirOnglet(etat.onglet);
   return {

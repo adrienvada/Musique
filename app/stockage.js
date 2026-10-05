@@ -129,7 +129,16 @@ export function stockageClaude(db, downloads) {
     },
     async modifier(id, patch) {
       // Seulement les champs donnés, remis en forme : la base fusionne elle-même les champs d'un document.
-      await col.doc(id).update(normaliserChamps(patch));
+      const champs = normaliserChamps(patch);
+      // Un champ donné à undefined s'en va, comme dans IndexedDB (la marque d'une copie de conflit
+      // qu'on garde, conflits.js) : `update` ne sait pas retirer un champ, on réécrit le document.
+      const retires = Object.keys(patch || {}).filter((k) => patch[k] === undefined);
+      if (!retires.length) { await col.doc(id).update(champs); return; }
+      const d = await col.doc(id).get();
+      if (!d.exists) return;
+      const tout = { ...d.data(), ...champs };
+      for (const k of retires) delete tout[k];
+      await col.doc(id).set(normaliserFiche(tout) || tout);
     },
     async supprimer(id, nb) {
       await col.doc(id).delete();

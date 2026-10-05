@@ -2320,7 +2320,212 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Écrans des données (D6, D7, D9, H3)
 
-<!-- lot écrans des données -->
+- **Ce que la synchronisation met de côté se voit (D2,
+  `app/synchronisation-ui.js`).** Le lot données met de côté, au lieu de
+  tout bloquer, une partition que la bibliothèque commune refuse ou qu'on
+  ne peut pas ranger ici ; mais rien ne le montrait, et le nuage restait
+  vert. Maintenant, « Tes données » dit « Synchronisé à 14:03 · 1 mise de
+  côté », le nuage passe à l'ambre, et Réglages › Synchronisation liste
+  chacune avec sa raison (« Refusée par la bibliothèque commune : la date
+  de modification est à plus d'un jour dans le futur… », « Pas rangée
+  ici : fiche illisible… »), puis « Réessayer ». La raison passe par la
+  traduction des erreurs ; la brute reste dans la console.
+  - **« Réessayer » faisait oublier une réception (`synchro.js`, une
+    ligne).** Lever la quarantaine d'une réception jetait la fiche gardée,
+    et le curseur était déjà passé : elle ne revenait plus jamais. Une
+    réception se réessaie déjà à chaque passage ; « Réessayer » ne lève
+    plus que les envois. Trouvé en branchant le bouton ; essai : « D2 ·
+    « Réessayer » ne fait pas oublier une réception… »
+    (`tests/synchro.test.mjs`).
+  - Pendant une passe, la liste garde ce qu'elle montrait : elle ne
+    clignote pas toutes les 90 s.
+  - Une copie de conflit faite par la synchro se dit en message (« la
+    version de l'autre est à côté, dans ton carnet »), voir plus bas.
+  - Essai : « ce que la synchronisation met de côté… »
+    (`tests/e2e/donnees.test.mjs`) : une fiche abîmée dans la
+    bibliothèque commune et une partition datée de 2031, refusées avec
+    leur raison ; réparée là-bas, la première arrive à « Réessayer ».
+- **Ce que Claude range depuis une conversation arrive dans l'appli (H3,
+  C5, `app/suggestions-ui.js`).** Tu demandes à Claude « propose des
+  accords pour Pluie » ; il range sa proposition à côté de la partition
+  (`suggestion_ecrire`, lot connecteur) sans la toucher. Dans Portée :
+  - le carnet le marque (« Claude propose », sous la ligne ; les cartes
+    de Partitions aussi), et une idée que Claude a notée lui-même
+    (`idee_ecrire`) porte la pastille « Claude » ;
+  - l'idée, ou la page dans « Corriger », montre un bandeau discret en
+    haut : « Claude propose 2 accords » (le pourquoi se déplie d'un
+    toucher), et trois gestes : « Écouter » (l'idée avec la proposition,
+    jouée sans rien écrire ; une suite s'écoute depuis la mesure d'avant),
+    « Appliquer », « Ignorer ». Plusieurs suggestions : « 1 sur 3 », la
+    plus récente d'abord.
+  - « Appliquer » revérifie la suggestion sur la partition telle qu'elle
+    est à ce moment-là (avec ce qui n'est pas encore enregistré), puis la
+    pose en un seul geste : dans l'éditeur, les notes et les accords
+    prennent un seul pas d'« Annuler » ; un message propose aussi
+    « Annuler » (dix secondes), qui ne défait rien si la partition a
+    changé entre-temps. Une réponse à un doute devient l'avis de Claude
+    sur ce doute (`doutes[i].avis`, que l'atelier montre) ; le doute reste
+    à régler d'un toucher.
+  - Appliquée ou ignorée, la suggestion part du connecteur
+    (`suggestion_retirer`). Une qui ne s'applique plus (l'idée a changé)
+    le dit, « Cette suggestion ne peut pas s'appliquer (…) : elle est
+    retirée », et part ; une qui ne changerait rien (déjà faite sur un
+    autre appareil) part sans un mot.
+  - Tout ce qui vient de Claude s'écrit en texte, jamais en HTML (S1) :
+    l'essai y glisse une balise et un gestionnaire, qui restent du texte.
+  - **Sur le site**, par le connecteur. Le carnet relit toutes les
+    suggestions après une synchronisation, au plus toutes les cinq
+    minutes ; l'idée ou la page relit les siennes à chaque ouverture.
+    **Sur claude.ai**, par la capacité `mcp`, seulement quand tu ouvres une
+    idée ou une page (rien ne part sans un geste) ; le carnet n'a pas de
+    marque. Les partitions de la base de la page n'ont les mêmes
+    identifiants que celles de la bibliothèque commune que si elles en
+    viennent (une sauvegarde du site restaurée) : sinon, il n'y a rien à
+    montrer.
+  - Un refus durable (outil pas déclaré sur claude.ai, connecteur absent
+    ou d'avant les suggestions) cache la fonction pour la visite ; une
+    panne passagère attend la prochaine ouverture. Rien ne réessaie tout
+    seul.
+  - L'éditeur d'idée s'ouvre d'une entrée, à un seul endroit (`idee.js`,
+    son API) : `fiche()` (l'idée telle qu'elle est) et `changer(f)` (la
+    poser en un geste), qui passe par les mêmes chemins que « Demander à
+    Claude » (`remplacerIdee` par `modifier`, `changerTitre`). « Corriger »
+    ne change pas : la page passe par `page-ouverte.js`, comme une
+    correction, et l'écran se redessine. La marque est l'étincelle de
+    « Demander à Claude » : une seule icône pour Claude dans Portée.
+  - Essais : « une idée notée par Claude, et ses suggestions… », « Corriger :
+    Claude répond à un doute… » et « claude.ai : les suggestions passent
+    par la capacité mcp… » (`tests/e2e/donnees.test.mjs`). L'essai
+    claude.ai existant (`claude.test.mjs`) refuse maintenant, comme
+    claude.ai, un outil que le manifeste d'aujourd'hui ne déclare pas : la
+    page ouverte y demande ses suggestions, qui se cachent.
+- **Les versions précédentes et la corbeille (D6, `app/versions.js`,
+  `app/versions-ui.js`).** Le connecteur garde depuis le lot données la
+  version d'avant à chaque écriture (20 au plus, 30 jours) et 30 jours ce
+  qui a été supprimé ; rien ne permettait d'y revenir.
+  - Le « ••• » d'une partition, d'une idée ou d'un morceau (carnet,
+    Partitions, Morceaux), et celui de l'éditeur d'idée : « Versions
+    précédentes ». Une feuille liste les versions, la plus récente d'abord,
+    avec leur date et ce que chacune a changé quand c'est simple (« 2 notes
+    de plus », « titre « Pluie » », « 1 doute réglé · marquée prête » ;
+    au-delà de deux changements : « … et d'autres changements »). Puis
+    « Récupérer cette version », après une question qui dit que celle
+    d'aujourd'hui reste dans les versions. Elle s'écrit comme une
+    modification neuve et part partout ; l'éditeur ouvert sur l'idée la
+    reprend aussitôt.
+  - Réglages › Synchronisation › « Corbeille (30 jours) » : ce qui a été
+    supprimé, sa sorte, sa date, les jours qui restent, et « Récupérer ».
+  - Rien de tout cela sans connecteur, ni sur claude.ai : caché, pas
+    grisé (un attribut `data-avec-synchro`, que l'état de la synchro
+    montre ou cache).
+  - Pourquoi une synchro juste avant de lister : ce qui attend part
+    d'abord, la liste est à jour, et une version récupérée part de la
+    dernière.
+  - Pourquoi chaque version se relit (une à quatre à la fois) : le nom
+    d'une version ne dit que sa date ; ce qu'elle a changé, il faut la
+    lire, ainsi que celle d'avant. La liste s'affiche d'abord, les phrases
+    arrivent ensuite. Deux versions de la même minute se distinguent par
+    leurs secondes.
+  - L'appareil qui a écrit une version : le connecteur ne le note pas. Il
+    faudrait qu'il range le nom de l'appareil avec chaque écriture (lot
+    connecteur) ; la ligne pourra alors le dire.
+  - **Une version revenue se disait « pas revenue » hors ligne
+    (`synchro.js`, une ligne).** `recupererVersion` écrivait ici puis
+    synchronisait ; si la synchro échouait (le réseau), l'erreur
+    remontait, alors que la version était bel et bien revenue. L'échec de
+    la synchro ne remonte plus : elle partira au prochain passage, et
+    l'état le dit.
+  - Essais : `tests/versions.test.mjs`, et « les versions précédentes
+    d'une idée… » et « sans connecteur, ni corbeille ni versions… »
+    (`tests/e2e/donnees.test.mjs`).
+- **La version de l'autre appareil : tu tranches d'un geste (D4,
+  `app/conflits.js`, `app/versions-ui.js`).** Quand le texte d'une page
+  lue a changé ici et sur un autre appareil, la synchronisation garde
+  celui d'ici et range l'autre à côté, « Valse (version de l'autre
+  appareil) » (lot données). Elle se voyait comme une partition de plus.
+  Maintenant, elle porte « À choisir » (une pastille cerclée d'ambre, à la
+  place de « À relire ») dans le carnet et dans Partitions, la synchro le
+  dit en message, et son « ••• » commence par trois choix :
+  - « Garder celle-ci » : elle remplace l'autre, qui part à la corbeille
+    (30 jours pour la récupérer), et reprend le titre sans la marque ;
+  - « Garder les deux » : la marque s'en va, les deux restent ;
+  - « Garder l'autre » : celle-ci part à la corbeille.
+  - Les deux qui font partir une version demandent d'abord (la question
+    dit où elle va : la corbeille avec la synchronisation, sinon pour de
+    bon). Tout passe par `stockage.modifier` et `stockage.supprimer` : la
+    synchro emporte le choix partout.
+  - Pourquoi « Garder celle-ci » supprime l'autre plutôt que de recopier
+    son texte dedans : l'autre va ainsi à la corbeille, d'où elle revient
+    entière si tu t'es trompé, et une page lue n'est citée par rien
+    d'autre ; son identifiant peut changer sans rien casser.
+  - **Sur claude.ai, un champ ne pouvait pas s'effacer (`stockage.js`,
+    quelques lignes).** `update` de la base fusionne : la marque
+    `conflitDe` ne s'en allait jamais. Un champ donné à `undefined` s'en
+    va maintenant comme dans IndexedDB (le document est réécrit, sans
+    lui). Aucun écran ne passait de champ à `undefined` jusque-là ; le
+    changement ne touche que ce geste. Une copie de conflit n'arrive sur
+    claude.ai que par une sauvegarde du site, mais elle doit s'y trancher
+    aussi.
+  - Essais : `tests/conflits.test.mjs` (IndexedDB, et la base de
+    claude.ai sur une fausse base), et « une page corrigée ici et sur un
+    autre appareil… » (`tests/e2e/donnees.test.mjs`) : la vraie synchro
+    fait la copie, « Garder celle-ci » la met à la place, et l'autre est
+    dans la corbeille de la bibliothèque commune.
+- **Ce qui garde ta bibliothèque se voit dans les Réglages (D9,
+  `app/garde.js`, `app/sauvegarde-ui.js`).** « L'appli » dit maintenant si
+  la bibliothèque est protégée sur cet appareil (Oui, Non, On ne sait pas)
+  et la place que Portée y prend. Le lot données savait le lire
+  (`etatStockage`), personne ne le montrait.
+  - Sur l'iPhone, dans Safari, sans installation : « Non », même si Safari
+    a promis de la garder, et un pas à pas pour l'installer sur l'écran
+    d'accueil (Partager, puis « Sur l'écran d'accueil »), avec le pourquoi :
+    sinon, Safari efface tout au bout de 7 jours sans visite. Sur un Mac :
+    Fichier, puis « Ajouter au Dock ».
+  - Le guide dit aussi que l'appli installée a sa propre bibliothèque,
+    vide au début : elle repart de la synchronisation (l'adresse du
+    connecteur à recoller), ou d'une sauvegarde qu'on y restaure. Safari ne
+    partage pas ses données avec l'appli de l'écran d'accueil.
+  - Ailleurs (Chrome, Firefox), quand le navigateur n'a rien promis : une
+    ligne « Demander au navigateur de la garder », qui lit sa réponse et la
+    dit. Sur claude.ai, rien de tout cela : c'est claude.ai qui garde la
+    bibliothèque.
+- **La dernière sauvegarde, et un rappel au-delà de 30 jours (D9).** Chaque
+  sauvegarde réussie note sa date (une préférence de l'appareil,
+  `portee:derniere-sauvegarde`), que la ligne « Dernière sauvegarde »
+  montre. Sans synchronisation, c'est la seule copie de ta bibliothèque
+  hors de ce navigateur : au-delà de 30 jours (ou jamais faite, pour une
+  bibliothèque de plus de 30 jours), un rappel discret dans « Sauvegarde »,
+  et le nuage du haut passe à l'ambre ; le toucher mène à la sauvegarde.
+  Avec la synchronisation, ou sur claude.ai, pas de rappel : la
+  bibliothèque est déjà ailleurs.
+- **Une idée n'est plus une « partition » dans les messages (B12).**
+  « 3 partitions sauvegardées » comptait les idées et les morceaux. La
+  sauvegarde dit maintenant « 1 idée et 2 partitions sauvegardées », et la
+  restauration « 2 idées et 1 morceau revenus ». Le compte par sorte se
+  calcule d'après le fichier (ce qui n'était pas là et n'a pas échoué) ;
+  s'il ne tombe pas juste (un identifiant en double dans le fichier),
+  l'appli dit « 3 éléments revenus » plutôt que de se tromper de sorte.
+- **Deux onglets (D7) : c'était branché, un mot était faux.** Le lot
+  architecture avait déjà relié `surAutreOnglet` (la liste et la partition
+  ouverte se reprennent) et `surBloque` (« Ferme l'autre onglet de
+  Portée », dans les Réglages et en message). Mais un changement venu d'un
+  autre onglet se disait « modifiée sur un autre appareil » : il se dit
+  maintenant « dans un autre onglet ». Essai : « deux onglets… »
+  (`tests/e2e/donnees.test.mjs`).
+- Essais : `tests/garde.test.mjs`, `tests/sauvegarde-ui.test.mjs`, et les
+  trois essais « Réglages… », « sans synchronisation… » et « sur
+  l'iPhone… » de `tests/e2e/donnees.test.mjs` (un iPhone simulé par son
+  agent utilisateur).
+- **Hors des fichiers du lot, le minimum, chacun à un endroit :**
+  `app.js` compose les nouveaux modules (et les registres disent
+  « supprimée dans un autre onglet ») ; `index.html` a les deux
+  conteneurs du bandeau (l'idée, « Corriger ») et l'entrée « Versions
+  précédentes » du « ••• » de l'idée ; `idee.js`, `fiche()` et
+  `changer(f)` dans son API ; `gestes.js`, le cas « versions » ;
+  `icones.js`, l'horloge des versions ; `systeme.css`, les pastilles
+  « À choisir » et « Claude » et le bandeau (un composant partagé par deux
+  écrans) ; `stockage.js` et `synchro.js`, les trois corrections dites
+  plus haut ; `claude.test.mjs`, le manifeste d'aujourd'hui.
 
 ### Interface (I1 à I4, I6 à I15)
 

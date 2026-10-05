@@ -36,6 +36,8 @@ import { calibration, creerImport } from "./import-pdf.js";
 import { creerTablette } from "./tablette.js";
 import { creerSynchronisation } from "./synchronisation-ui.js";
 import { brancherSauvegarde } from "./sauvegarde-ui.js";
+import { creerVersions } from "./versions-ui.js";
+import { creerSuggestions } from "./suggestions-ui.js";
 import { brancherHorsLigne, brancherInstallation } from "./mises-a-jour.js";
 import { installerEveil } from "./eveil.js";
 import { brancherLive } from "./reglages-live.js";
@@ -71,6 +73,7 @@ let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
 let accueil = null; // l'accueil et ses quatre onglets (accueil.js)
 let tablette = null; // le panneau « Ma reMarkable », l'adresse du connecteur, les modèles (tablette.js)
 let synchronisation = null; // la bibliothèque synchronisée, vue de l'appli (synchronisation-ui.js)
+let sauvegardes = null; // la sauvegarde, et ce qui garde la bibliothèque sur cet appareil (sauvegarde-ui.js)
 let atelier = null; // « Corriger » (ecran-atelier.js)
 let lecteur = null; // « Écouter et exporter » (ecran-lecteur.js)
 let ecrans = null; // le registre des écrans, pour la navigation (creerRegistre, plus bas)
@@ -127,6 +130,7 @@ function ouvrirPage(p, pages, vue) {
   lecteur.ouvrir(p);
   $("fil-titre").textContent = p.titre;
   montrer(vue);
+  suggestions.montrer("page", p);
 }
 
 /** Ouvre un morceau ; sans partition, un nouveau, qui ne s'enregistre qu'au premier bloc. */
@@ -153,7 +157,7 @@ function creerRegistre() {
     partition: () => (pageOuverte.partition ? pageOuverte.partition.id : null),
     occupe: () => pageOuverte.occupe,
     recharger: rechargerPage,
-    supprimee: () => `« ${pageOuverte.partition.titre} » a été supprimée sur un autre appareil.`,
+    supprimee: (ou = "sur un autre appareil") => `« ${pageOuverte.partition.titre} » a été supprimée ${ou}.`,
   };
   ecrans = {
     biblio: { afficher: () => accueil.afficher(), fermer: () => {}, reculer: () => accueil.reculer(), aLaRacine: () => accueil.aLaRacine(), partition: () => null },
@@ -165,12 +169,12 @@ function creerRegistre() {
       toucheBas: (e) => !(e.target.closest && e.target.closest("button") && (e.key === " " || e.key === "Enter")) && editeur.toucheBas(e),
       toucheHaut: (e) => editeur.toucheHaut(e),
       partition: () => editeur.id, occupe: () => editeur.occupe(), recharger: (p) => editeur.recharger(p),
-      supprimee: () => "Cette idée a été supprimée sur un autre appareil.",
+      supprimee: (ou = "sur un autre appareil") => `Cette idée a été supprimée ${ou}.`,
     },
     morceau: {
       fermer: () => vueMorceau.fermer(), reculer: sans, aLaRacine: sans,
       partition: () => vueMorceau.id, occupe: () => vueMorceau.occupe(), recharger: (p) => vueMorceau.recharger(p),
-      supprimee: () => "Ce morceau a été supprimé sur un autre appareil.",
+      supprimee: (ou = "sur un autre appareil") => `Ce morceau a été supprimé ${ou}.`,
     },
   };
 }
@@ -191,7 +195,20 @@ const { exporterMidi, toutEnMidi, partagerMidi, exporterMusicXml, exporterAbc } 
 const gestes = creerGestes({
   stockage: () => etat.stockage, partitions: () => etat.partitions, nouvelId, pageOuverte,
   editeur: () => editeur, vueMorceau: () => vueMorceau, ouvrir: (id) => ouvrir(id), ouvrirMorceau, montrer,
-  exports: { exporterMidi, exporterMusicXml },
+  exports: { exporterMidi, exporterMusicXml }, versions: () => versions,
+});
+
+// Les autres versions d'une partition : la copie de conflit (D4), la corbeille et les versions précédentes (D6) : versions-ui.js.
+const versions = creerVersions({
+  stockage: () => etat.stockage, partitions: () => etat.partitions,
+  synchro: () => (synchronisation ? synchronisation.synchro() : null),
+  // Une version récupérée depuis l'écran qui la montre (le « ••• » de l'éditeur) : il la reprend.
+  apresRecuperation: async (id) => {
+    const ecran = navigation.partitionOuverte();
+    if (!ecran || ecran.partition() !== id) return;
+    const p = await etat.stockage.lire(id);
+    if (p) await ecran.recharger(p);
+  },
 });
 
 /** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */
@@ -200,6 +217,36 @@ function ouvrirIdee(p = null, options = {}) {
   if (navigation.vue === "idee") editeur.fermer();
   montrer("idee");
   editeur.ouvrir(p, options);
+  suggestions.montrer("idee", p);
+}
+
+// Les suggestions rangées par Claude depuis une conversation (H3) : un bandeau dans l'idée et
+// dans « Corriger », des marques dans le carnet (suggestions-ui.js).
+const suggestions = creerSuggestions({
+  appeler: (outil, args) => tablette.appelerOutil(outil, args),
+  actif: () => dansClaude() || (!!synchronisation && synchronisation.active()),
+  dansClaude, transport,
+  surChange: () => { if (accueil && navigation.vue === "biblio") accueil.afficher(); },
+});
+
+/** Les bandeaux : chacun lit la partition de son écran, et la change d'un seul geste. */
+function creerBandeaux() {
+  suggestions.bandeau("idee", $("idee-suggestions"), { fiche: () => editeur.fiche(), changer: (f) => editeur.changer(f) });
+  suggestions.bandeau("page", $("atelier-suggestions"), {
+    fiche: () => pageOuverte.partition,
+    // Ce qu'une suggestion change d'une page (le titre, les étiquettes, la note, l'avis sur un
+    // doute) passe par page-ouverte, comme une correction ; « Corriger » se redessine.
+    changer: (f) => {
+      const p = pageOuverte.partition;
+      if (!p || p.id !== f.id) return false;
+      const patch = {};
+      for (const c of ["titre", "etiquettes", "note", "doutes"]) if (!egal(p[c], f[c])) patch[c] = structuredClone(f[c]);
+      if (Object.keys(patch).length) pageOuverte.changer(patch);
+      $("fil-titre").textContent = p.titre;
+      montrer(navigation.vue);
+      return true;
+    },
+  });
 }
 
 // ------------------------------------------------------------------------
@@ -245,7 +292,10 @@ function brancher() {
 
   // La bibliothèque : tout en MIDI ; la sauvegarde dans un fichier (sauvegarde-ui.js)
   $("tout-midi").addEventListener("click", toutEnMidi);
-  brancherSauvegarde({ stockage: () => etat.stockage, partitions: () => etat.partitions });
+  sauvegardes = brancherSauvegarde({
+    stockage: () => etat.stockage, partitions: () => etat.partitions, dansClaude,
+    synchronisee: () => synchronisation.active(), apresSauvegarde: () => synchronisation.afficher(null),
+  });
 
   // Les raccourcis : chaque écran les siens (le registre, navigation.js).
   document.addEventListener("keydown", navigation.toucheBas);
@@ -289,6 +339,8 @@ function creerAccueilDeLAppli() {
     panneaux: { reculer: () => tablette.reculer(), aLaRacine: () => tablette.aLaRacine() },
     partagerMidi, exporterMidi,
     supprimer: async (p) => { if (await veutSupprimer(p, etat.partitions)) await gestes.supprimerDeLaBibliotheque(p); },
+    afficherReglages: () => sauvegardes && sauvegardes.afficher(),
+    versions, suggestionsPour: (id) => suggestions.pour(id),
   });
 }
 
@@ -326,11 +378,14 @@ async function demarrer() {
     montrerSynchro: (x) => accueil.montrerSynchro(x),
     ouverte: () => navigation.partitionOuverte(),
     quitter: () => { if (navigation.vue === "atelier" || navigation.vue === "lecteur") pageOuverte.fermer(); montrer("biblio"); },
+    rappel: () => (sauvegardes ? sauvegardes.rappel() : null), partitions: () => etat.partitions,
+    apresSynchro: () => suggestions.rafraichir(),
   });
   brancher();
   creerEditeur();
   creerVueDuMorceau();
   creerEcransDePage();
+  creerBandeaux();
   creerRegistre();
   accueil.afficher();
   let bloquee = false;
@@ -373,6 +428,8 @@ async function demarrer() {
   etat.stockage.ecouter(
     (liste) => {
       etat.partitions = liste;
+      // L'état du haut peut porter le rappel de sauvegarde, qui dépend de la bibliothèque.
+      synchronisation.afficher(null);
       if (navigation.vue === "biblio") accueil.afficher();
       if (navigation.vue === "morceau") vueMorceau.rafraichir();
     },
