@@ -16,8 +16,8 @@
  *
  * Ce module tient le cœur : l'état (e), qu'il est seul à écrire avec les
  * modules qui changent l'idée, annuler et refaire, le dessin (grille.js ou
- * idee-partition.js), le transport (écouter, boucle, métronome), la barre
- * du haut, la feuille •••, et le choix du mode du pupitre. Le reste vit
+ * idee-partition.js), la barre du haut, la feuille •••, et le choix du
+ * mode du pupitre. Le reste vit
  * dans des modules qui reçoivent un contexte explicite (ctx, plus bas) et
  * ne partagent rien d'autre ; ceux qui n'ont qu'à lire l'état le reçoivent
  * en lecture seule (le clavier, le chant, la partition) :
@@ -31,7 +31,8 @@
  *   idee-carnet.js    la feuille Carnet (note, étiquettes, favori, mémo vocal) ;
  *   idee-tempo.js     la feuille Tempo et mesure (et les pistes) ;
  *   idee-partition.js la partition gravée par abcjs (et sa mise en page) ;
- *   idee-enregistrement.js  les enregistrements dans la bibliothèque.
+ *   idee-enregistrement.js  les enregistrements dans la bibliothèque ;
+ *   idee-ecoute.js    écouter, la boucle, le métronome.
  *
  * L'idée vit en notes (sequence.js) ; la partition n'en est qu'une
  * traduction. Ce module ne parle à l'appli que par les dépendances qu'on
@@ -39,11 +40,8 @@
  */
 import { lirePref, ecrirePref } from "./preferences.js";
 import * as sq from "./sequence.js";
-import { voixCompletes } from "./harmonie.js";
 import { creerGrille } from "./grille.js";
-import { ico } from "./icones.js";
 import { $, dateCourte } from "./ui.js";
-import { expliquer } from "./erreurs.js";
 import { egal } from "./fiche.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { creerModeClavier } from "./idee-clavier.js";
@@ -55,6 +53,7 @@ import { creerCarnet } from "./idee-carnet.js";
 import { creerTempo, defauts } from "./idee-tempo.js";
 import { creerPartition } from "./idee-partition.js";
 import { creerEnregistrementIdee } from "./idee-enregistrement.js";
+import { creerEcouteIdee } from "./idee-ecoute.js";
 
 const CLE_MODE = "portee:mode-idee";
 const MODES = ["clavier", "chanter", "accords"];
@@ -117,6 +116,13 @@ export function creerEditeurIdee(deps) {
     defile: () => selection.placer(),
   });
 
+  // Écouter, la boucle, le métronome (idee-ecoute.js) : les modules du pupitre en
+  // empruntent la source et la pause du micro ; elle, les modules créés plus bas.
+  const ecoute = creerEcouteIdee({
+    e, $, transport, toast, grille, rafraichir, choisies: () => choisies(),
+    chant: () => chant, direct: () => direct, partition: () => partition,
+  });
+
   // --- Le contexte des modules ---------------------------------------------------
   //
   // Tout ce qu'un module du pupitre peut lire ou faire passe par ici : pas
@@ -127,7 +133,7 @@ export function creerEditeurIdee(deps) {
     modifier, rafraichir, entendre, enfoncer, relever, pedale,
     dureeCourante: () => dureeCourante(), choisirDuree, basculerPointee, silence, effacer,
     choisir, notesPiste: () => notesPiste(), choisies: () => choisies(),
-    source, suivreLecture, avantSon, apresSon, choisirMode,
+    source: ecoute.source, suivreLecture: ecoute.suivre, avantSon: ecoute.avantSon, apresSon: ecoute.apresSon, choisirMode,
     boiteSelection, grille,
     // La boîte à outils de la sélection (idee-selection.js) cache le pupitre : elle a son propre « Annuler ».
     annuler: () => revenir(e.annuler, e.refaire),
@@ -438,75 +444,6 @@ export function creerEditeurIdee(deps) {
     choisir(j.ids);
   }
 
-  // --- Écouter, boucle, métronome ---------------------------------------------
-
-  let cache = { version: -1, notesA: null, fin: 0 };
-  /**
-   * Ce que le transport joue : toutes les voix (accompagnement compris),
-   * rangées par pas une fois par version de l'idée. Le tempo se relit à
-   * chaque fois : il se règle pendant l'écoute.
-   */
-  function source() {
-    if (cache.version !== e.version) cache = { version: e.version, ...sq.indexerParPas(voixCompletes(e.seq).flatMap((v) => v.notes)) };
-    return { tempo: e.seq.tempo, mesure: sq.pasParMesure(e.seq), temps: sq.pasParTemps(e.seq), fin: cache.fin, notesA: cache.notesA };
-  }
-
-  /** La boucle : les mesures de la sélection, sinon toute l'idée. */
-  function etendueBoucle() {
-    const mesure = sq.pasParMesure(e.seq);
-    const sel = choisies();
-    if (sel.length) {
-      const [a, b] = sq.etendue(sel);
-      return [Math.floor(a / mesure) * mesure, Math.ceil(b / mesure) * mesure];
-    }
-    return [0, sq.nbMesures(e.seq) * mesure];
-  }
-
-  // Le micro et le piano ne marchent pas ensemble (le piano repasserait dans
-  // le micro) : le micro se tait tant que le piano joue, puis reprend.
-  function avantSon() { chant.pause(); }
-  function apresSon() { chant.reprendre(); }
-
-  function majJouer(enCours) {
-    const b = $("idee-jouer");
-    b.innerHTML = ico(enCours ? "pause" : "lire");
-    b.setAttribute("aria-label", enCours ? "Arrêter l'écoute" : "Écouter");
-    b.setAttribute("aria-pressed", String(enCours));
-  }
-
-  async function jouer() {
-    if (transport.actif) { transport.arreter(); return; }
-    if (e.enregistrement) return;
-    avantSon();
-    const s = source();
-    const boucle = e.boucle ? etendueBoucle() : null;
-    let depuis = 0;
-    if (boucle) depuis = boucle[0];
-    else if (e.selection.size) depuis = Math.min(...choisies().map((n) => n.d));
-    else if (e.curseur > 0 && e.curseur < s.fin) depuis = e.curseur;
-    majJouer(true);
-    try {
-      await transport.jouer(source, {
-        depuis, boucle, metronome: e.metronome,
-        // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
-        titre: e.titre, relancer: () => { if (e.ouverte && !transport.actif) jouer(); },
-        surPosition: suivreLecture,
-        surFin: () => { majJouer(false); suivreLecture(null); apresSon(); partition.apresLecture(); },
-      });
-    } catch (err) {
-      majJouer(false);
-      apresSon();
-      toast(expliquer(err, "Le piano n'a pas pu se charger."));
-    }
-  }
-
-  /** Suit la lecture : la tête dans la grille, ou la note jouée sur la partition. */
-  function suivreLecture(pas) {
-    if (e.affichage === "grille") grille.lecture(pas);
-    else partition.suivre(pas);
-    direct.suivre(pas);
-  }
-
   // --- Le carnet : note, étiquettes, favori, mémo vocal (idee-carnet.js) ----------
 
   const carnet = creerCarnet({
@@ -541,7 +478,7 @@ export function creerEditeurIdee(deps) {
         seq: e.seq, piste: e.piste, selection: e.selection, curseur: e.curseur,
         // Avec une note choisie, le clavier la change : le curseur n'écrit plus, on le cache.
         curseurVisible: !e.selection.size,
-        boucle: e.boucle ? etendueBoucle() : null, pas: Math.min(dureeCourante(), sq.pasParTemps(e.seq)),
+        boucle: e.boucle ? ecoute.etendueBoucle() : null, pas: Math.min(dureeCourante(), sq.pasParTemps(e.seq)),
         mesureChoisie: e.mesureChoisie, accordsVisibles: true,
       });
     } else partition.planifier();
@@ -555,8 +492,7 @@ export function creerEditeurIdee(deps) {
     $("idee-reglages-bouton").title = dit;
     $("idee-reglages-bouton").setAttribute("aria-label", dit);
     tempo.maj();
-    $("idee-boucle").setAttribute("aria-pressed", String(e.boucle));
-    $("idee-metronome").setAttribute("aria-pressed", String(e.metronome));
+    ecoute.maj();
     $("idee-annuler").disabled = !e.annuler.length || !!e.enregistrement;
     $("idee-refaire").disabled = !e.refaire.length || !!e.enregistrement;
     // Les pistes : une puce dans la barre (dès qu'il y en a deux), le choix dans la feuille Tempo.
@@ -616,19 +552,8 @@ export function creerEditeurIdee(deps) {
     deps.partager(p);
   });
 
-  // --- Le transport -------------------------------------------------------------
+  // --- Annuler, refaire, la place qui change -----------------------------------------
 
-  $("idee-jouer").addEventListener("click", jouer);
-  $("idee-boucle").addEventListener("click", () => {
-    e.boucle = !e.boucle;
-    transport.regler({ boucle: e.boucle ? etendueBoucle() : null });
-    rafraichir();
-  });
-  $("idee-metronome").addEventListener("click", () => {
-    e.metronome = !e.metronome;
-    transport.regler({ metronome: e.metronome });
-    rafraichir();
-  });
   $("idee-annuler").addEventListener("click", () => revenir(e.annuler, e.refaire));
   $("idee-refaire").addEventListener("click", () => revenir(e.refaire, e.annuler));
   new ResizeObserver(() => { if (e.ouverte) rafraichir(); }).observe($("idee-surface"));
@@ -651,7 +576,7 @@ export function creerEditeurIdee(deps) {
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
     if (clavierMode.toucheBas(ev)) return true;
     const actions = {
-      Space: jouer,
+      Space: ecoute.jouer,
       KeyR: direct.basculer,
       // Capturer la dernière phrase jouée, avec son rythme (M13, comme dans Live).
       KeyC: direct.capturer,

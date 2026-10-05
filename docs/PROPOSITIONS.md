@@ -2194,9 +2194,12 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     les touches du piano et les accesseurs en sortaient, et rien ne s'en
     servait. Le lot « Claude dans l'éditeur » (H2) ajoutera ce qu'il lui
     faut, en lecture seule si lire lui suffit.
-  - `idee.js` : 1 094 lignes avant, ≈700 après. Le reste est le cœur :
-    l'état, annuler et refaire, jouer une note, écouter, la barre du haut,
-    le choix du mode, et le contexte des modules.
+  - `app/idee-ecoute.js` : écouter, la boucle, le métronome, la tête de
+    lecture. Les modules du pupitre en empruntent la source (le jeu en
+    direct) et la pause du micro (les accords) par le contexte.
+  - `idee.js` : 1 094 lignes avant, ≈620 après. Le reste est le cœur :
+    l'état, annuler et refaire, jouer une note, la barre du haut, le choix
+    du mode, et le contexte des modules.
 - **Les types couvrent la musique, la fiche, la synchro et tout le
   connecteur (T2).** `sequence`, `accords`, `harmonie`, `midi`,
   `musicxml`, `morceau`, `fiche`, `synchro`, `idee-enregistrement`,
