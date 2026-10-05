@@ -106,6 +106,9 @@ export function dateRelative(iso, maintenant = Date.now()) {
 
 let minuterieToast = null;
 
+/** L'instant présent, pour dater les messages (l'horloge de la page ; sous Node aussi). */
+const maintenant = () => /** @type {any} */ (globalThis).performance.now();
+
 /** Cache le message passager. */
 function cacherToast() {
   const t = $("toast");
@@ -113,11 +116,13 @@ function cacherToast() {
   try { if (t.hidePopover) t.hidePopover(); } catch { /* déjà fermé */ }
 }
 
-/** Un message passager, en bas de l'écran, `duree` millisecondes. */
+/** Un message passager, en haut de l'écran, `duree` millisecondes. */
 export function toast(texte, duree = 4000) {
   const t = $("toast");
   t.textContent = texte;
   t.hidden = false;
+  // Son heure : en changeant d'écran, un message plus ancien s'en va (retirerMessagesPasses).
+  t.dataset.depuis = String(maintenant());
   // En « popover », le message passe au-dessus d'une feuille du bas ouverte
   // (un <dialog> est dans la couche du dessus) au lieu d'être grisé dessous.
   // Le rouvrir le remet au premier plan ; sans popover, il s'affiche comme avant.
@@ -129,4 +134,78 @@ export function toast(texte, duree = 4000) {
 /** Retire le message passager s'il dit encore `texte` (un autre l'a peut-être remplacé). */
 export function retirerToast(texte) {
   if ($("toast").textContent === texte) cacherToast();
+}
+
+/**
+ * Les messages qui proposent un geste (« Relire », « Annuler » : `.toast-action`,
+ * écrits par chaque écran) reçoivent leur heure en entrant dans la page : on
+ * ne la leur demande pas, chaque écran les écrit à sa façon. À brancher une
+ * fois, au démarrage (navigation.js).
+ */
+export function suivreMessages() {
+  const corps = page() && page().body;
+  const Observateur = /** @type {any} */ (globalThis).MutationObserver;
+  if (!corps || typeof Observateur !== "function") return;
+  new Observateur((changements) => {
+    for (const c of changements) {
+      for (const n of c.addedNodes) if (n.classList && n.classList.contains("toast")) n.dataset.depuis = String(maintenant());
+    }
+  }).observe(corps, { childList: true });
+}
+
+/**
+ * En changeant d'écran, les messages de l'écran d'avant s'en vont : ils
+ * restaient par-dessus « Ta page | Lue » ou la règle de la grille, à propos
+ * d'un écran qu'on venait de quitter (audit du 04/10). Un message de moins
+ * de `age` ms parle du changement lui-même (« Page lue… », « … supprimée ») :
+ * il reste. « Une nouvelle version est prête » vaut pour toute l'appli :
+ * il reste aussi. Les messages gardent leur place, en haut.
+ * @param {number} [age]
+ */
+export function retirerMessagesPasses(age = 1000) {
+  const doc = page();
+  if (!doc) return;
+  const vieux = (m) => maintenant() - (Number(m.dataset.depuis) || 0) > age;
+  const t = $("toast");
+  if (t && !t.hidden && vieux(t)) cacherToast();
+  for (const m of doc.querySelectorAll(".toast.toast-action")) if (m.id !== "toast-version" && vieux(m)) m.remove();
+}
+
+// ------------------------------------------------------------------------
+// Ce que le lecteur d'écran entend
+// ------------------------------------------------------------------------
+
+/**
+ * Une partition gravée par abcjs, pour le clavier et le lecteur d'écran :
+ * abcjs fait de chaque note qu'on peut toucher un arrêt de tabulation, sans
+ * nom (« g », deux cents fois de suite pour une longue idée ; audit du
+ * 04/10, I11). L'éditeur et « Corriger » ont leur chemin au clavier (← →
+ * choisissent la note d'à côté, qui se dit) : les notes sortent de la
+ * tabulation, et la partition prend un nom en français (abcjs dit « Sheet
+ * Music »).
+ * @param {any} zone  l'élément où abcjs a gravé
+ * @param {string} nom
+ */
+export function gravureSansTabulation(zone, nom) {
+  if (!zone) return;
+  for (const n of zone.querySelectorAll('[selectable="true"]')) n.setAttribute("tabindex", "-1");
+  for (const svg of zone.querySelectorAll("svg[role='img']")) svg.setAttribute("aria-label", nom);
+}
+
+let minuterieAnnonce = null;
+
+/**
+ * Une phrase courte pour le lecteur d'écran, sans rien montrer : l'écran
+ * ouvert, l'étoile touchée, le nombre de résultats. Avant, le carnet entier
+ * était une région vivante (aria-live) : une étoile touchée faisait relire
+ * ses 8 000 caractères (audit du 04/10, I11). La région se vide d'abord :
+ * la même phrase deux fois de suite se redit.
+ * @param {string} texte
+ */
+export function annoncer(texte) {
+  const r = $("annonce");
+  if (!r) return;
+  r.textContent = "";
+  clearTimeout(minuterieAnnonce);
+  minuterieAnnonce = setTimeout(() => { r.textContent = texte; }, 60);
 }

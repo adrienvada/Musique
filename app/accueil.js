@@ -25,8 +25,9 @@ import { voixCompletes } from "./harmonie.js";
 import { creerEcoute } from "./ecoute.js";
 import { libelleLecture } from "./atelier.js";
 import { expliquer } from "./erreurs.js";
+import { compteParSorte, sorteDe } from "./garde.js";
 import { ico } from "./icones.js";
-import { $, dateCourte, echapper, el, heure, pluriel } from "./ui.js";
+import { $, annoncer, dateCourte, echapper, el, heure, pluriel } from "./ui.js";
 import { ambianceStudio, lirePref, ecrirePref } from "./preferences.js";
 import { brancherFeuille, fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 import { estCopieDeConflit } from "./conflits.js";
@@ -106,6 +107,25 @@ function pastilleStatut(p) {
   return el("span", "pastille p-doute", restants ? `À relire · ${pluriel(restants, "doute")}` : "À relire");
 }
 
+/**
+ * Le nom d'une ligne ou d'une carte pour le lecteur d'écran : « Ouvrir « Ma
+ * ballade » », puis tout ce qu'elle montre (son état, sa date, ses
+ * étiquettes…). Avec « Ouvrir « titre » » seul, il perdait « À relire ·
+ * 14:03 » (audit du 04/10, I11). Il commence toujours par « Ouvrir
+ * « titre » » : la commande vocale et les essais s'y fient. « ♩ 90 » se lit
+ * « tempo 90 » : le signe se lit mal, ou pas du tout.
+ * @param {string} titre
+ * @param {Array<string | null | undefined | false>} parties
+ */
+export const nomDeLigne = (titre, parties) => [`Ouvrir « ${titre} »`, ...parties.filter(Boolean).map((t) => String(t).replace(/♩ ?/g, "tempo "))].join(", ");
+
+/** « 2 idées et 3 partitions », ou « Rien ne correspond » : ce qu'une recherche ou un filtre laisse voir. */
+export function compteVisible(liste) {
+  const sortes = { idee: 0, morceau: 0, partition: 0 };
+  for (const p of liste) sortes[sorteDe(p)]++;
+  return compteParSorte(sortes).texte || "Rien ne correspond";
+}
+
 /** Toutes les étiquettes de la bibliothèque, les plus employées d'abord (le carnet, l'éditeur d'idée). */
 export function toutesEtiquettes(partitions) {
   const compte = new Map();
@@ -148,6 +168,7 @@ export function creerAccueil(deps) {
   let actionsDe = null;       // l'id de la partition dont la feuille est ouverte
   let boutonEcoute = null;    // le « Écouter » de la feuille, tant qu'elle est ouverte
   let refocaliser = null;     // { id, classe } : où remettre le focus après avoir touché une étoile (la liste est redessinée)
+  let visibles = [];          // ce que l'onglet ouvert montre (après filtres et recherche), pour le dire
 
   const recherche = () => $("recherche").value.trim().toLowerCase();
   const surRecherche = (p) => { const q = recherche(); return !q || texteDe(p).includes(q); };
@@ -205,10 +226,21 @@ export function creerAccueil(deps) {
     $("chercher").focus();
   }
 
+  // Ce que la recherche trouve se dit quand on s'arrête de taper, en une phrase (I11) : le carnet
+  // ne se relit plus à chaque lettre. Assez tard pour ne pas couper la frappe.
+  let minuterieDire = null;
+  function direLeCompte({ attendre = 0 } = {}) {
+    clearTimeout(minuterieDire);
+    minuterieDire = setTimeout(() => annoncer(compteVisible(visibles)), attendre);
+  }
+
   function brancherRecherche() {
     $("chercher").addEventListener("click", () => ($("recherche-zone").hidden ? ouvrirRecherche() : fermerRecherche()));
     $("fermer-recherche").addEventListener("click", fermerRecherche);
-    $("recherche").addEventListener("input", afficher);
+    $("recherche").addEventListener("input", () => {
+      afficher();
+      if (recherche()) direLeCompte({ attendre: 800 });
+    });
     $("recherche").addEventListener("keydown", (e) => { if (e.key === "Escape") fermerRecherche(); });
   }
 
@@ -249,7 +281,12 @@ export function creerAccueil(deps) {
     b.setAttribute("aria-pressed", String(!!p.favori));
     b.setAttribute("aria-label", p.favori ? `Retirer « ${p.titre} » des favoris` : `Mettre « ${p.titre} » en favori`);
     b.innerHTML = ico(p.favori ? "etoile-pleine" : "etoile");
-    b.addEventListener("click", () => { refocaliser = { id: p.id, classe: "favori" }; basculerFavori(p); });
+    b.addEventListener("click", async () => {
+      refocaliser = { id: p.id, classe: "favori" };
+      await basculerFavori(p);
+      // Le carnet ne se relit plus en entier (I11) : une phrase dit ce qui a changé.
+      annoncer(p.favori ? `« ${p.titre} » n'est plus dans tes favoris.` : `« ${p.titre} » est dans tes favoris.`);
+    });
     return b;
   }
 
@@ -308,12 +345,22 @@ export function creerAccueil(deps) {
     return l;
   }
 
+  /** La même ligne d'aide, dite au lecteur d'écran (le micro et « # » ne se lisent pas). */
+  function partiesAide(p) {
+    const propositions = deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0;
+    return [
+      propositions ? (propositions > 1 ? `Claude propose ${propositions} choses` : "Claude propose") : "",
+      p.memo ? `mémo de ${p.memo.duree} s` : "",
+      (p.etiquettes || []).length ? `${(p.etiquettes || []).length > 1 ? "étiquettes" : "étiquette"} ${(p.etiquettes || []).join(", ")}` : "",
+      p.note ? (p.note.length > 60 ? p.note.slice(0, 60) + "…" : p.note) : "",
+    ];
+  }
+
   function creerLigne(p, groupe) {
     const ligne = el("article", "ligne-carnet");
     ligne.dataset.id = p.id;
     const ouvrir = el("button", "ligne-ouvrir");
     ouvrir.type = "button";
-    ouvrir.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
     ouvrir.addEventListener("click", () => ouvrirPartition(p));
 
     const texte = el("span", "ligne-texte");
@@ -336,6 +383,8 @@ export function creerAccueil(deps) {
     texte.appendChild(meta);
     const aide = ligneAide(p);
     if (aide) texte.appendChild(aide);
+    const etats = [...meta.children].map((c) => (c.classList.contains("p-claude") ? "notée par Claude" : c.textContent));
+    ouvrir.setAttribute("aria-label", nomDeLigne(p.titre, etats.concat(aide ? partiesAide(p) : [])));
 
     ouvrir.append(apercuDe(p, "apercu", 56 / 46), texte);
     ligne.append(ouvrir, boutonFavori(p), boutonPlus(p));
@@ -368,7 +417,7 @@ export function creerAccueil(deps) {
     const liste = $("liste");
     liste.textContent = "";
     const q = recherche();
-    const visibles = partitions().filter((p) => correspondFiltre(p) && surRecherche(p));
+    visibles = partitions().filter((p) => correspondFiltre(p) && surRecherche(p));
     $("aucun").hidden = !(partitions().length > 0 && visibles.length === 0);
     let avant = null;
     for (const p of visibles) {
@@ -394,7 +443,7 @@ export function creerAccueil(deps) {
       ? `${pluriel(pages.length, "page écrite", "pages écrites")} à la main${aRelire ? ` · ${aRelire} à relire` : ""}`
       : "Les pages écrites à la main sur ta tablette apparaîtront ici.";
     $("filtres-pages").hidden = pages.length === 0;
-    const visibles = pages.filter((p) => (etat.filtrePages === "tout" || p.statut === etat.filtrePages) && surRecherche(p));
+    visibles = pages.filter((p) => (etat.filtrePages === "tout" || p.statut === etat.filtrePages) && surRecherche(p));
     const liste = $("liste-partitions");
     liste.textContent = "";
     const aucune = $("aucune-partition");
@@ -405,12 +454,13 @@ export function creerAccueil(deps) {
       carte.dataset.id = p.id;
       const ouvrir = el("button", "carte-ouvrir");
       ouvrir.type = "button";
-      ouvrir.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
       ouvrir.addEventListener("click", () => ouvrirPartition(p));
       const corps = el("span", "carte-corps");
-      corps.append(el("span", "titre", p.titre), pastilleStatut(p), el("span", "meta", [nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ")));
+      const statut = pastilleStatut(p), meta = [nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ");
+      corps.append(el("span", "titre", p.titre), statut, el("span", "meta", meta));
       const propositions = deps.suggestionsPour ? deps.suggestionsPour(p.id) : 0;
       if (propositions) corps.appendChild(marqueClaude(propositions));
+      ouvrir.setAttribute("aria-label", nomDeLigne(p.titre, [statut.textContent, meta, propositions ? (propositions > 1 ? `Claude propose ${propositions} choses` : "Claude propose") : ""]));
       ouvrir.append(apercuDe(p, "apercu-grand", 2), corps);
       carte.append(ouvrir, boutonPlus(p));
       liste.appendChild(carte);
@@ -426,7 +476,7 @@ export function creerAccueil(deps) {
     $("resume-morceaux").textContent = morceaux.length
       ? pluriel(morceaux.length, "morceau", "morceaux")
       : "Des idées mises bout à bout : une intro, un couplet, un refrain…";
-    const visibles = morceaux.filter(surRecherche);
+    visibles = morceaux.filter(surRecherche);
     const liste = $("liste-morceaux");
     liste.textContent = "";
     const aucun = $("aucun-morceau");
@@ -438,12 +488,13 @@ export function creerAccueil(deps) {
       carte.dataset.id = p.id;
       const ouvrir = el("button", "carte-ouvrir");
       ouvrir.type = "button";
-      ouvrir.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
       ouvrir.addEventListener("click", () => deps.ouvrir(p.id));
       const tete = el("span", "carte-tete");
-      tete.append(el("span", "titre", p.titre), el("span", "mono duree", dureeMorceau(p, idees)));
+      const duree = dureeMorceau(p, idees);
+      tete.append(el("span", "titre", p.titre), el("span", "mono duree", duree));
       const parties = partiesDuMorceau(p);
       ouvrir.append(tete, apercuDe(p, "frise"), el("span", "parties", parties || "Aucune partie pour l'instant"));
+      ouvrir.setAttribute("aria-label", nomDeLigne(p.titre, [duree && `durée ${duree}`, parties || "aucune partie pour l'instant"]));
       carte.append(ouvrir, boutonPlus(p));
       liste.appendChild(carte);
     }
@@ -666,15 +717,16 @@ export function creerAccueil(deps) {
   $("nouveau-morceau").addEventListener("click", () => deps.ouvrirMorceau(null));
 
   // Les filtres : un seul à la fois, plus une étiquette.
+  // Un filtre touché : ce qui reste se dit (I11), puisque la liste ne se relit plus.
   $("filtres-carnet").addEventListener("click", (e) => {
     const f = e.target.closest("[data-filtre]");
-    if (f) { etat.filtre = f.dataset.filtre; afficher(); return; }
+    if (f) { etat.filtre = f.dataset.filtre; afficher(); direLeCompte(); return; }
     const t = e.target.closest("[data-etiquette]");
-    if (t) { etat.etiquette = etat.etiquette === t.dataset.etiquette ? null : t.dataset.etiquette; afficher(); }
+    if (t) { etat.etiquette = etat.etiquette === t.dataset.etiquette ? null : t.dataset.etiquette; afficher(); direLeCompte(); }
   });
   $("filtres-pages").addEventListener("click", (e) => {
     const f = e.target.closest("[data-filtre-page]");
-    if (f) { etat.filtrePages = f.dataset.filtrePage; afficher(); }
+    if (f) { etat.filtrePages = f.dataset.filtrePage; afficher(); direLeCompte(); }
   });
 
   // L'état de la synchronisation mène aux réglages : à la section dont il parle.

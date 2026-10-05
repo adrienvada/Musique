@@ -75,11 +75,14 @@ export function creerGrille(conteneur, rappels) {
   let dernierToucher = { id: null, t: 0 };
 
   conteneur.classList.add("grille-notes");
+  // La zone qui défile se prend au clavier (Tab), comme toute zone qui défile : sinon on ne la
+  // faisait défiler qu'au doigt ou à la souris (audit du 04/10, I11). Les flèches y restent celles
+  // de l'éditeur (choisir, monter) : Page haut et bas, Début et Fin la font défiler.
   conteneur.innerHTML = `
     <div class="g-coin"></div>
     <div class="g-regle"><div class="g-regle-dedans"></div></div>
     <div class="g-touches"><div class="g-touches-dedans"></div></div>
-    <div class="g-defil"><div class="g-plan"><svg class="g-fond" aria-hidden="true"></svg><div class="g-notes"></div><div class="g-curseur"></div><div class="g-lecture" hidden></div></div></div>
+    <div class="g-defil" tabindex="0" role="group" aria-label="La grille des notes : le temps de gauche à droite, la hauteur de bas en haut"><div class="g-plan"><svg class="g-fond" aria-hidden="true"></svg><div class="g-notes"></div><div class="g-curseur"></div><div class="g-lecture" hidden></div></div></div>
     <p class="g-invite" hidden>Joue sur le clavier, chante, ou touche la grille pour poser une note.</p>`;
   const regle = conteneur.querySelector(".g-regle-dedans");
   const touches = conteneur.querySelector(".g-touches-dedans");

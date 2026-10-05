@@ -2764,7 +2764,69 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Interface (I1 à I4, I6 à I15)
 
-<!-- lot interface -->
+**S'annoncer, se lancer, tenir la charge (I4, I9, I11, I12, I15)**
+
+- **Le lecteur d'écran entend une phrase, plus tout le carnet (I11).** La
+  liste du carnet était une région vivante (`aria-live`) : une étoile
+  touchée faisait relire ses 8 000 caractères. Elle ne l'est plus ; une
+  région à part (`#annonce`, `annoncer` dans `ui.js`) dit en une phrase ce
+  qui a changé : « « Ma ballade » est dans tes favoris. », ce qu'une
+  recherche ou un filtre laisse voir (« 2 idées et 3 partitions », compté
+  par sorte), l'écran qui s'ouvre (« Corriger : « Ma ballade » »). La
+  recherche ne se dit qu'une fois la frappe arrêtée (0,8 s) : elle ne coupe
+  pas les lettres qu'on tape.
+- **Chaque écran a son titre, et l'onglet du navigateur le suit.** Un `h1`
+  par écran, caché à l'œil (« Corriger « Ma ballade » », « Idée « … » »…) :
+  le titre visible est un champ qu'on modifie, pas un titre. L'onglet dit
+  « Ma ballade · Corriger · Portée », « Partitions · Portée »… et suit un
+  renommage (`navigation.js`). Le logo se nomme « Portée, revenir au
+  carnet » : il commence par ce qu'on lit, pour la commande vocale (WCAG
+  2.5.3).
+- **Une ligne du carnet dit tout ce qu'elle montre.** Son nom était
+  « Ouvrir « titre » » seul : il perdait « À relire · 14:03 ». Il dit
+  maintenant l'état, le genre, la date, les étiquettes, le mémo, ce que
+  Claude propose (« ♩ 90 » devient « tempo 90 » : le signe se lit mal). Il
+  commence toujours par « Ouvrir « titre » » : les essais s'y fient, et la
+  commande vocale aussi. Les cartes des Partitions et des Morceaux de même.
+- **Les touches du piano à l'écran sont des boutons qui disent leur note**
+  (« do dièse 4 » : le signe ♯ se lit mal), hors de la tabulation (au
+  clavier, les lettres jouent déjà) ; activées par le lecteur d'écran (un
+  clic sans pointeur), elles jouent une note courte, comme les grosses
+  touches de gamme. Ce n'étaient que des `<div>` muets.
+  - Piège : l'essai des 44 px compte tout `[role=button]` ; les touches
+    noires (28 px de large, comme sur un vrai piano) et, à 320 px, les
+    blanches (42 px : une octave doit tenir) y sont une exception actée.
+- **La grille se prend au clavier** : sa zone qui défile (`.g-defil`) a
+  un nom et reçoit le focus (axe `scrollable-region-focusable`). Les
+  flèches y restent celles de l'éditeur ; Page haut et bas, Début et Fin la
+  font défiler.
+- **Les notes gravées ne sont plus deux cents arrêts de tabulation sans
+  nom.** abcjs rend chaque note qu'on peut toucher focalisable, sans nom :
+  dans l'éditeur et dans « Corriger », ← → choisissent déjà la note d'à
+  côté. Elles sortent de la tabulation (`gravureSansTabulation`, `ui.js`),
+  la partition s'appelle « La partition de l'idée » ou « La partition lue »
+  (abcjs disait « Sheet Music »), et la note choisie de « Corriger » se dit
+  (`#note-choisie`), comme celle de l'éditeur.
+- **Les onglets suivent les flèches** (Clavier, Chanter, Accords ;
+  Corriger, Écouter), comme ceux de l'accueil : → l'onglet suivant, ←
+  le précédent, Début et Fin. Seulement si l'on y est venu au clavier
+  (Tab) : un onglet touché à la souris garde le focus, et ← → y
+  choisissaient la note d'à côté ; c'est toujours le cas.
+  - Piège : `:focus-visible` ne distingue pas les deux. Chromium le passe
+    à vrai dès qu'une touche est pressée, avant qu'on la lise (essayé) :
+    `navigation.js` retient lui-même d'où vient le focus (Tab ou pointeur).
+- **Les messages passagers de l'écran qu'on quitte s'en vont.** Ils
+  restaient par-dessus « Ta page | Lue » ou la règle de la grille. Un
+  message de moins d'une seconde parle du changement lui-même (« … est
+  supprimée », « … est lue ») : il reste, comme « Une nouvelle version
+  est prête », qui vaut pour toute l'appli. Ils restent en haut.
+- **« Ma reMarkable » sans connecteur ne propose plus Chercher ni
+  Actualiser** : il n'y a rien à chercher tant que l'adresse n'est pas
+  collée. Et « Importer un PDF » dit « Importer un PDF ou un MIDI » : un
+  .mid de Live y devient une idée depuis le lot notation.
+- Hors de mes fichiers, deux lignes : `ecran-atelier.js` appelle
+  `gravureSansTabulation` après sa gravure.
+- Essais : `tests/e2e/annonces.test.mjs`.
 
 ### Claude dans l'éditeur d'idée (H2)
 

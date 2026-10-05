@@ -15,7 +15,8 @@
 
 <header class="barre-haut">
   <div class="dedans">
-    <button class="logo" id="aller-biblio" aria-label="Revenir au carnet">
+    <!-- Le nom commence par ce qu'on lit (« Portée ») : la commande vocale le trouve (WCAG 2.5.3, I11). -->
+    <button class="logo" id="aller-biblio" aria-label="Portée, revenir au carnet">
       <svg viewBox="-10 -1110 690 1780" aria-hidden="true"><path fill="currentColor" d="M376,-415C374,-427 376,-428 382,-434C398,-449 419,-470 438,-491C522,-583 572,-702 572,-815C572,-902 548,-988 507,-1048C492,-1070 466,-1098 455,-1098C441,-1098 410,-1072 390,-1050C316,-968 292,-843 292,-739C292,-681 299,-616 306,-575C308,-563 309,-561 297,-551C233,-498 164,-437 112,-373C43,-287 0,-194 0,-87C0,87 119,252 364,252C387,252 413,250 433,246C444,244 446,243 448,255C460,322 475,409 475,456C475,604 375,622 316,622C262,622 236,606 236,593C236,586 245,583 268,576C299,567 335,540 335,482C335,427 300,380 239,380C172,380 132,433 132,495C132,560 171,658 322,658C389,658 519,628 519,458C519,401 501,306 490,244C488,232 489,233 503,227C604,187 671,102 671,-11C671,-139 577,-252 430,-252C404,-252 404,-252 401,-270ZM470,-943C503,-943 530,-916 530,-861C530,-792 497,-728 419,-650C403,-634 379,-611 356,-591C349,-585 345,-586 343,-599C339,-625 337,-659 337,-691C337,-847 409,-943 470,-943ZM361,-262C364,-243 364,-244 346,-238C258,-208 201,-129 201,-44C201,46 248,110 316,133C324,136 336,139 343,139C351,139 355,134 355,128C355,121 347,118 340,115C298,97 268,54 268,8C268,-49 307,-92 368,-109C384,-113 386,-112 388,-101L438,197C440,208 439,208 424,211C408,214 388,216 368,216C193,216 80,119 80,-20C80,-79 90,-158 173,-252C233,-319 279,-356 326,-394C336,-402 338,-401 340,-390ZM430,-103C428,-115 429,-118 441,-117C522,-110 589,-42 589,46C589,109 551,160 495,188C483,194 481,194 479,182Z"/></svg>
       Portée
     </button>
@@ -76,7 +77,9 @@
         <button class="puce" data-filtre="favori" aria-pressed="false"><svg class="ico s" aria-hidden="true"><use href="#i-etoile"></use></svg>Favoris</button>
         <span class="filtres-etiquettes" id="filtres-etiquettes"></span>
       </div>
-      <div id="liste" class="liste-carnet" aria-live="polite"></div>
+      <!-- Pas d'aria-live ici : une étoile touchée faisait relire tout le carnet (8 000 caractères).
+           Ce qui change se dit en une phrase dans #annonce (I11). -->
+      <div id="liste" class="liste-carnet"></div>
       <p class="remarque" id="aucun" hidden>Rien ne correspond. Essaie un autre mot, ou le filtre « Tout ».</p>
     </div>
 
@@ -92,7 +95,7 @@
       <div class="depot" id="depot">
         <button class="btn btn-plein" id="ouvrir-remarkable"><svg class="ico s" aria-hidden="true"><use href="#i-tablette"></use></svg>Importer de ma reMarkable</button>
         <div class="depot-autres">
-          <label class="btn" for="fichier" tabindex="0" id="importer-pdf"><svg class="ico s" aria-hidden="true"><use href="#i-page"></use></svg>Importer un PDF</label>
+          <label class="btn" for="fichier" tabindex="0" id="importer-pdf"><svg class="ico s" aria-hidden="true"><use href="#i-page"></use></svg>Importer un PDF ou un MIDI</label>
           <button class="btn" id="ouvrir-modeles"><svg class="ico s" aria-hidden="true"><use href="#i-partition"></use></svg>Modèles pour la tablette</button>
         </div>
         <p class="remarque">Une page écrite sur un modèle Portée s'exporte de la tablette en PDF (<em>Partager → PDF</em>) : importe-le, ou glisse-le sur cet onglet.</p>
@@ -111,7 +114,8 @@
           <h2>Ma reMarkable</h2>
           <button class="btn btn-fantome btn-petit" id="fermer-rm"><svg class="ico s" aria-hidden="true"><use href="#i-fermer"></use></svg>Fermer</button>
         </div>
-        <div class="rangee">
+        <!-- Chercher et Actualiser n'apparaissent qu'avec un connecteur (tablette.js) : sans adresse, il n'y a rien à chercher. -->
+        <div class="rangee" id="outils-rm" hidden>
           <input class="champ" id="recherche-rm" type="search" placeholder="Chercher un document…" aria-label="Chercher un document de la reMarkable">
           <button class="btn btn-petit" id="actualiser-rm">Actualiser</button>
         </div>
@@ -267,6 +271,9 @@
   <!-- La page d'abord, les doutes un par un : sa barre, ta page et la partition lue, et en bas un panneau
        fixé (doute, ou outils de la note choisie). Les doutes s'y posent en questions fermées (doutes.js). -->
   <section class="vue vue-partition vue-atelier" id="vue-atelier" hidden>
+    <!-- Le titre de l'écran pour le lecteur d'écran, complété par navigation.js (« Corriger « Ma ballade » », I11) :
+         le titre visible est un champ qu'on modifie, pas un titre. -->
+    <h1 class="visuellement-cache" id="titre-ecran-atelier">Corriger</h1>
     <header class="barre-ecran">
       <button class="btn btn-fantome rond" data-retour aria-label="Retour à la bibliothèque"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
       <div class="barre-titre">
@@ -335,7 +342,9 @@
         <div class="dock-gauche" id="tete-note" hidden>
           <!-- Note précédente et suivante (I14), comme dans la sélection de l'éditeur : au clavier, ← et →. -->
           <button class="btn btn-fantome rond" id="note-precedente" aria-label="Note précédente" title="Note précédente (←)"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
-          <span class="note-choisie" id="note-choisie"></span>
+          <!-- La note choisie se dit (← →, ou au toucher), comme dans l'éditeur (#idee-nom-choix) : les notes
+               gravées ne sont plus des arrêts de tabulation (I11). -->
+          <span class="note-choisie" id="note-choisie" aria-live="polite"></span>
           <button class="btn btn-fantome rond" id="note-suivante" aria-label="Note suivante" title="Note suivante (→)"><svg class="ico" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
         </div>
         <span class="remarque pousse" id="enregistre" role="status"></span>
@@ -379,6 +388,7 @@
 
   <!-- ===== Lecteur ===== -->
   <section class="vue vue-partition vue-lecteur" id="vue-lecteur" hidden>
+    <h1 class="visuellement-cache" id="titre-ecran-lecteur">Écouter et exporter</h1>
     <header class="barre-ecran">
       <button class="btn btn-fantome rond" data-retour aria-label="Retour à la bibliothèque"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
       <div class="barre-titre">
@@ -426,6 +436,7 @@
   </section>
   <!-- ===== Morceau ===== -->
   <section class="vue vue-morceau" id="vue-morceau" hidden>
+    <h1 class="visuellement-cache" id="titre-ecran-morceau">Morceau</h1>
     <!-- La barre et la frise restent en haut quand la liste défile : on voit la tête de lecture avancer. -->
     <div class="morceau-tete">
       <div class="morceau-barre">
@@ -501,6 +512,7 @@
        comme la sélection (idee-selection.js) et le jeu en direct
        (idee-direct.js) : un bloc commenté par module ci-dessous. -->
   <section class="vue vue-idee" id="vue-idee" hidden>
+    <h1 class="visuellement-cache" id="titre-ecran-idee">Idée</h1>
     <!-- Barre du haut (idee.js) -->
     <header class="idee-barre-haut">
       <button class="btn btn-fantome rond" data-retour aria-label="Retour au carnet"><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
@@ -997,6 +1009,9 @@
 </main>
 
 <div class="toast" id="toast" role="status" popover="manual" hidden></div>
+<!-- Ce que le lecteur d'écran doit entendre sans rien voir changer : l'écran ouvert, une étoile
+     touchée, le nombre de résultats d'une recherche (ui.js, annoncer ; I11). Une phrase courte. -->
+<p class="visuellement-cache" id="annonce" role="status"></p>
 <dialog class="dialogue" id="dialogue"><form method="dialog" class="dialogue-dedans" id="dialogue-dedans"></form></dialog>
 
 <!-- abcjs vient du site (copié de node_modules par l'assembleur, version figée par package.json) : plus de CDN.
