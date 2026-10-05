@@ -2037,7 +2037,8 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   fixe ce qu'il écrira au moment où on le planifie : la cible (la partition
   de ce moment-là) et une copie de son contenu. Une autre cible fait
   d'abord partir ce qui attendait ; les écritures se suivent. L'éditeur
-  d'idée et le morceau s'en servent déjà ; avant, une écriture en attente
+  d'idée, le morceau et « Corriger » (`page-ouverte.js`) s'en servent ;
+  avant, une écriture en attente
   au moment d'ouvrir une autre idée (« Idée tirée d'une phrase ») lisait
   l'idée suivante, et pouvait en créer une seconde.
   - **Une idée rechargée tout de suite n'est plus perdue (T4).** Le premier
@@ -2097,9 +2098,9 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   dit maintenant lui-même comment on le quitte (`fermer`), s'il a encore un
   pas à défaire (`reculer` → vrai : une note choisie, le jeu en direct, le
   menu en cercle, la recherche, un panneau de la tablette, un autre onglet
-  que le carnet) et, pour l'accueil, s'il est à sa racine. `app.js` ferme
-  d'abord le `<dialog>` ouvert, puis interroge l'écran, puis revient à
-  l'écran d'avant ; `historique.js` n'a pas changé (il demande toujours
+  que le carnet) et, pour l'accueil, s'il est à sa racine.
+  `navigation.js` ferme d'abord le `<dialog>` ouvert, puis interroge
+  l'écran, puis revient à l'écran d'avant ; `historique.js` n'a pas changé (il demande toujours
   `racine()` et `reculer()` à l'appli).
   - **« Précédent » laisse d'abord la note choisie dans « Corriger »,**
     comme il le faisait déjà dans l'éditeur d'idée.
