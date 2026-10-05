@@ -1539,8 +1539,6 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   visite », qui garde les 82 fichiers du piano par la liste de
   l'assembleur.
 
-<!-- lot musique -->
-
 ### Outillage, hors ligne et dépendances (S2, I5, T1, T2, T6)
 
 - **pdf.js passe en 6.4.299 (T6),** la version du 03/10. Toujours sa
