@@ -40,13 +40,12 @@ import { dialogue, veutSupprimer } from "./dialogue.js";
 
 const ABCJS = () => window.ABCJS;
 const dansClaude = () => !!(window.claude && typeof window.claude.use === "function");
+// L'état de l'appli : la bibliothèque, l'écran ouvert, et d'où l'on vient. Chaque
+// écran tient le sien (l'accueil son onglet et ses filtres, « Corriger » sa note
+// choisie et son historique…).
 const etat = {
   stockage: null,
   partitions: [],
-  filtre: "tout",     // filtre du carnet : tout, idee, partition, morceau, favori
-  etiquette: null,    // filtre par étiquette (carnet)
-  onglet: "carnet",   // l'onglet de l'accueil, retenu dans une préférence (accueil.js)
-  filtrePages: "tout", // filtre de l'onglet Partitions : tout, a-relire, prete
   vue: "biblio",
   pile: [],           // les écrans d'où l'on vient (hors accueil), pour « précédent »
 };
@@ -96,10 +95,7 @@ function pastilleStatut(p) {
 function montrer(vue) {
   if (vue === "biblio") etat.pile = [];
   // L'écran qu'on quitte s'arrête et fait partir ce qui attendait d'être enregistré.
-  if (etat.vue === "idee" && vue !== "idee" && editeur) editeur.fermer();
-  if (etat.vue === "morceau" && vue !== "morceau" && vueMorceau) vueMorceau.fermer();
-  if (etat.vue === "atelier" && vue !== "atelier" && atelier) atelier.fermer();
-  if (etat.vue === "lecteur" && vue !== "lecteur" && lecteur) lecteur.fermer();
+  if (etat.vue !== vue && ecrans) ecrans[etat.vue].fermer();
   ecoutePage.arreter();
   transport.arreter();
   etat.vue = vue;
@@ -204,36 +200,42 @@ async function revenirEcran() {
   } finally { enRetour = false; }
 }
 
-const visible = (sel) => !!document.querySelector(sel);
+// ------------------------------------------------------------------------
+// Le registre des écrans
+// ------------------------------------------------------------------------
+//
+// Chaque écran dit lui-même comment on le quitte (`fermer` : il arrête son
+// son, fait partir ce qui attendait d'être enregistré), s'il a encore un pas
+// à défaire avant (`reculer` → true : une note choisie, le jeu en direct, un
+// panneau ouvert) et s'il est à sa racine (`aLaRacine`, l'accueil seulement).
+// Avant, « précédent » cliquait les boutons des autres écrans (audit du 04/10,
+// T3). Un calque qui n'est pas un <dialog> se déclare dans le `reculer` et
+// l'`aLaRacine` de son écran ; les <dialog> ouverts se ferment avant tout.
+
+let ecrans = null;
+
+function creerRegistre() {
+  const sans = () => false;
+  ecrans = {
+    biblio: { fermer: () => {}, reculer: () => accueil.reculer(), aLaRacine: () => accueil.aLaRacine() },
+    atelier: { fermer: () => atelier.fermer(), reculer: () => atelier.reculer(), aLaRacine: sans },
+    lecteur: { fermer: () => lecteur.fermer(), reculer: () => lecteur.reculer(), aLaRacine: sans },
+    idee: { fermer: () => editeur.fermer(), reculer: () => editeur.reculer(), aLaRacine: sans },
+    morceau: { fermer: () => vueMorceau.fermer(), reculer: sans, aLaRacine: sans },
+  };
+}
 
 /** L'appli est à sa racine : le carnet, rien d'ouvert par-dessus. */
 function aLaRacine() {
-  return etat.vue === "biblio" && etat.onglet === "carnet"
-    && !visible("dialog[open]") && !visible(".radial:not([hidden])")
-    && $("recherche-zone").hidden && $("panneau-remarkable").hidden && $("panneau-modeles").hidden;
+  return etat.vue === "biblio" && !document.querySelector("dialog[open]") && ecrans.biblio.aLaRacine();
 }
 
 /** Un pas en arrière, du plus proche au plus lointain : ce qui est ouvert par-dessus, puis l'écran. */
 function reculer() {
   const feuilles = [...document.querySelectorAll("dialog[open]")];
   if (feuilles.length) { feuilles.at(-1).close(); return; }
-  const cercle = document.querySelector(".radial:not([hidden])");
-  if (cercle) { cercle.querySelector(".radial-centre").click(); return; }
-  if (etat.vue === "biblio") {
-    if (!$("recherche-zone").hidden) { $("fermer-recherche").click(); return; }
-    if (!$("panneau-remarkable").hidden) { $("fermer-rm").click(); return; }
-    if (!$("panneau-modeles").hidden) { $("fermer-modeles").click(); return; }
-    if (etat.onglet !== "carnet") accueil.choisirOnglet("carnet");
-    return;
-  }
-  if (etat.vue === "idee") {
-    // Pendant le jeu en direct, « précédent » l'arrête (la feuille de l'arrondi s'ouvre) ;
-    // avec des notes choisies, il les laisse.
-    if ($("idee-enregistrer").getAttribute("aria-pressed") === "true") { $("idee-enregistrer").click(); return; }
-    const laisser = document.querySelector('#idee-selection:not([hidden]) [data-action="deselectionner"]');
-    if (laisser) { laisser.click(); return; }
-  }
-  revenirEcran();
+  if (ecrans[etat.vue].reculer()) return;
+  if (etat.vue !== "biblio") revenirEcran();
 }
 
 const ideesParId = () => new Map(etat.partitions.filter((x) => x.type === "idee").map((x) => [x.id, x]));
@@ -326,7 +328,7 @@ const partitionOuverte = () => (etat.vue === "idee" ? montrees.idee : etat.vue =
 
 /** Les panneaux de la reMarkable et des modèles sont dans l'onglet Partitions : on y va d'abord. */
 function versPartitions() {
-  if (etat.onglet !== "partitions") accueil.choisirOnglet("partitions");
+  if (accueil.onglet !== "partitions") accueil.choisirOnglet("partitions");
 }
 
 async function sauvegarderBibliotheque() {
@@ -439,7 +441,8 @@ function resumeIdee(seq) {
 // ------------------------------------------------------------------------
 
 function brancher() {
-  $("aller-biblio").addEventListener("click", () => montrer("biblio"));
+  // « Portée », en haut : le carnet. Un seul dessin (l'accueil en avait un second, à lui).
+  $("aller-biblio").addEventListener("click", () => { accueil.choisirOnglet("carnet", { dessiner: false }); montrer("biblio"); });
   // Chaque écran (idée, morceau, pages) a sa propre barre et son bouton retour.
   document.addEventListener("click", (ev) => { if (ev.target.closest("[data-retour]")) revenirEcran(); });
   $("onglet-atelier").addEventListener("click", () => montrer("atelier"));
@@ -558,7 +561,9 @@ function creerVueDuMorceau() {
 /** L'accueil : ses onglets, sa recherche, ses listes. Il ne sait rien de la tablette ni du stockage : tout passe par ces dépendances. */
 function creerAccueilDeLAppli() {
   accueil = creerAccueil({
-    etat, toast, ouvrir, ouvrirIdee, ouvrirMorceau, calibration, ideesParId, importer,
+    toast, ouvrir, ouvrirIdee, ouvrirMorceau, calibration, ideesParId, importer,
+    stockage: () => etat.stockage, partitions: () => etat.partitions,
+    panneaux: { reculer: () => tablette.reculer(), aLaRacine: () => tablette.aLaRacine() },
     ecouter: ecouterIdee,
     enLecture: (bouton) => ecouteCartes.cle === bouton,
     arreter: () => ecouteCartes.arreter(),
@@ -665,6 +670,7 @@ async function demarrer() {
   creerEditeur();
   creerVueDuMorceau();
   creerEcransDePage();
+  creerRegistre();
   afficherBibliotheque();
   let bloquee = false;
   try {

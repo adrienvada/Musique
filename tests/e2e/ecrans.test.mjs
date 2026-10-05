@@ -12,7 +12,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { servir } from "./serveur.mjs";
-import { ORDINATEUR, RACINE, attendreQue, contexte, importerLesExemples, lancer, octetsDu, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { ORDINATEUR, RACINE, TELEPHONE, attendreQue, contexte, importerLesExemples, lancer, octetsDu, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
 import { demarrerFauxStockage } from "../faux-cloud.mjs";
 import { Bibliotheque } from "../../supabase/functions/portee-remarkable/bibliotheque.js";
 import { coffreMemoire } from "../../supabase/functions/portee-remarkable/coffre.js";
@@ -344,5 +344,50 @@ test("« Écouter » pendant que le piano se charge : quitter l'écran, ou touch
     await page.waitForTimeout(1500);
     assert.equal(await departs(page), n, "plus rien ne part après « Arrêter »");
     assert.match(await page.textContent("#ecouter"), /Écouter/);
+  } finally { await ctx.close(); }
+});
+
+test("« précédent » dans « Corriger » : la note choisie se laisse d'abord, puis l'écran ; à l'accueil, un panneau ouvert se ferme (T3)", async () => {
+  const ctx = await contexte(navigateur, { appareil: TELEPHONE });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await ouvrirPartition(page, "Essai melodie");
+    await toucherNote(page, 2);
+    await page.goBack();
+    await page.waitForSelector("#outils-note", { state: "hidden" });
+    assert.equal(await page.isVisible("#vue-atelier"), true, "toujours dans « Corriger », sans note choisie");
+    await page.goBack();
+    await page.waitForSelector("#vue-biblio:not([hidden])");
+    // L'onglet Partitions et le panneau des modèles : le panneau, puis l'onglet, puis on reste à Portée.
+    await page.click("#tab-partitions");
+    await page.click("#ouvrir-modeles");
+    await page.waitForSelector("#panneau-modeles:not([hidden])");
+    await page.goBack();
+    await page.waitForSelector("#panneau-modeles", { state: "hidden" });
+    assert.equal(await page.getAttribute("#tab-partitions", "aria-selected"), "true");
+    await page.goBack();
+    await page.waitForFunction(() => document.getElementById("tab-carnet").getAttribute("aria-selected") === "true");
+    assert.equal(new URL(page.url()).pathname, "/Musique/");
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+test("« Portée », en haut : le carnet, dessiné une seule fois (T3)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await importerLesExemples(page);
+    await page.click("#tab-partitions");
+    await page.evaluate(() => {
+      window.__dessins = 0;
+      new MutationObserver(() => { window.__dessins++; }).observe(document.getElementById("liste"), { childList: true });
+    });
+    await page.click("#aller-biblio");
+    await page.waitForFunction(() => document.getElementById("tab-carnet").getAttribute("aria-selected") === "true");
+    // Un dessin du carnet vide la liste puis la remplit : une seule salve de changements.
+    await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => window.__dessins), 1, "le carnet ne se dessine qu'une fois");
+    await verifierPropre(page);
   } finally { await ctx.close(); }
 });

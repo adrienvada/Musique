@@ -1091,8 +1091,21 @@ export function creerEditeurIdee(deps) {
     return clavierMode.toucheHaut(ev);
   }
 
+  /**
+   * « Précédent » dans l'éditeur, avant de quitter l'écran : le menu en
+   * cercle se ferme, le jeu en direct s'arrête (la feuille de l'arrondi
+   * s'ouvre), puis les notes choisies se laissent. Rend true s'il a reculé
+   * d'un pas. (Avant, app.js cliquait ces boutons-là lui-même.)
+   */
+  function reculer() {
+    if (selection.menuOuvert) { selection.fermerMenu(); return true; }
+    if (e.enregistrement && e.enregistrement.phase !== "arrondi") { direct.arreter(); return true; }
+    if (choisies().length) { selection.aucune(); return true; }
+    return false;
+  }
+
   return {
-    ouvrir, fermer, recharger, occupe, toucheBas, toucheHaut, enfoncer, relever,
+    ouvrir, fermer, recharger, occupe, reculer, toucheBas, toucheHaut, enfoncer, relever,
     transformer: (nom) => selection.transformer(nom),
     choisirMode,
     get id() { return e.id; },

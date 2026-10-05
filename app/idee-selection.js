@@ -29,7 +29,7 @@
  *   l'écran ou null, deps.nouvelleDepuis(seq).
  * Rend : { transformer(nom), durer(pas), pointer(), voisine(sens), etendre(),
  *   tout(), aucune(), ouvrirMenu(x, y, options), ouvrirBoite(), maj(),
- *   placer(), fermer(), menuOuvert, boiteOuverte }.
+ *   placer(), fermer(), fermerMenu(), menuOuvert, boiteOuverte }.
  */
 import { creerMenuRadial } from "./menu-radial.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
@@ -430,6 +430,7 @@ export function creerSelection(ctx) {
     transformer, durer, pointer, voisine, etendre, tout, aucune, maj, placer,
     ouvrirMenu, ouvrirBoite,
     fermer: () => { menuRadial.fermer(); fermerFeuille(boite); pilule.hidden = true; },
+    fermerMenu: () => menuRadial.fermer(),
     get menuOuvert() { return menuRadial.ouvert; },
     get boiteOuverte() { return boite.open; },
   };

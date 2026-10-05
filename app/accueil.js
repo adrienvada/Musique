@@ -70,7 +70,9 @@ function partiesDuMorceau(p) {
 
 /**
  * @param deps {
- *   etat, ouvrir(id, vue), ouvrirIdee(p, options), ouvrirMorceau(p),
+ *   stockage() → le stockage ouvert, partitions() → la bibliothèque,
+ *   panneaux { reculer(), aLaRacine() } (ceux de la tablette, dans l'onglet Partitions),
+ *   ouvrir(id, vue), ouvrirIdee(p, options), ouvrirMorceau(p),
  *   ecouter(p, bouton), enLecture(bouton), arreter(), partagerMidi(p), exporterMidi(p),
  *   supprimer(p) (demande confirmation, puis supprime),
  *   calibration(modele), ideesParId(), etiquettes(), importer(fichiers),
@@ -78,15 +80,20 @@ function partiesDuMorceau(p) {
  * }
  */
 export function creerAccueil(deps) {
-  const { etat, toast } = deps;
+  const { toast } = deps;
+  // L'état de l'accueil est à lui (avant, il l'écrivait dans celui de l'appli, audit du 04/10, T3).
+  const etat = {
+    onglet: ONGLETS.includes(lirePref(CLE_ONGLET)) ? lirePref(CLE_ONGLET) : "carnet",
+    filtre: "tout",       // filtre du carnet : tout, idee, partition, morceau, favori
+    etiquette: null,      // filtre par étiquette (carnet)
+    filtrePages: "tout",  // filtre de l'onglet Partitions : tout, a-relire, prete
+  };
+  const partitions = () => deps.partitions();
   const onglets = [...document.querySelectorAll("#onglets-accueil [role='tab']")];
   const feuille = $("feuille-actions");
   let actionsDe = null;       // l'id de la partition dont la feuille est ouverte
   let boutonEcoute = null;    // le « Écouter » de la feuille, tant qu'elle est ouverte
   let refocaliser = null;     // { id, classe } : où remettre le focus après avoir touché une étoile (la liste est redessinée)
-
-  etat.onglet = ONGLETS.includes(lirePref(CLE_ONGLET)) ? lirePref(CLE_ONGLET) : "carnet";
-  etat.filtrePages = "tout";
 
   const recherche = () => $("recherche").value.trim().toLowerCase();
   const surRecherche = (p) => { const q = recherche(); return !q || texteDe(p).includes(q); };
@@ -95,7 +102,8 @@ export function creerAccueil(deps) {
   // Les onglets
   // ---------------------------------------------------------------------------
 
-  function choisirOnglet(nom, { focus = false } = {}) {
+  /** Un onglet de l'accueil ; `dessiner: false` quand l'écran sera dessiné juste après (montrer). */
+  function choisirOnglet(nom, { focus = false, dessiner = true } = {}) {
     if (!ONGLETS.includes(nom)) nom = "carnet";
     etat.onglet = nom;
     ecrirePref(CLE_ONGLET, nom);
@@ -108,6 +116,7 @@ export function creerAccueil(deps) {
     for (const n of ONGLETS) $(`onglet-${n}`).hidden = n !== nom;
     // La recherche ne sert pas dans les réglages (la feuille de style la masque).
     document.querySelector(".barre-haut").dataset.onglet = nom;
+    if (!dessiner) return;
     afficher();
     window.scrollTo({ top: 0 });
   }
@@ -122,8 +131,6 @@ export function creerAccueil(deps) {
       e.preventDefault();
       choisirOnglet(ONGLETS[(cible + ONGLETS.length) % ONGLETS.length], { focus: true });
     });
-    // « Portée », en haut : le carnet.
-    $("aller-biblio").addEventListener("click", () => choisirOnglet("carnet"));
   }
 
   // ---------------------------------------------------------------------------
@@ -202,7 +209,7 @@ export function creerAccueil(deps) {
     return b;
   }
 
-  const basculerFavori = (p) => etat.stockage.modifier(p.id, { favori: !p.favori, modifieLe: new Date().toISOString() });
+  const basculerFavori = (p) => deps.stockage().modifier(p.id, { favori: !p.favori, modifieLe: new Date().toISOString() });
   const ouvrirPartition = (p) => deps.ouvrir(p.id, p.statut === "prete" ? "lecteur" : "atelier");
 
   // ---------------------------------------------------------------------------
@@ -278,18 +285,18 @@ export function creerAccueil(deps) {
   }
 
   function rendreCarnet() {
-    const vide = !!etat.stockage && etat.partitions.length === 0;
+    const vide = !!deps.stockage() && partitions().length === 0;
     // Pendant une recherche, les résultats prennent la place : la carte « Noter une idée » revient avec la liste complète.
     $("capture").hidden = !!recherche();
     // Tant que la bibliothèque s'ouvre, rien : l'accueil des premières fois ne doit pas clignoter.
     $("vide").hidden = !vide;
-    $("filtres-carnet").hidden = !etat.stockage || vide;
+    $("filtres-carnet").hidden = !deps.stockage() || vide;
     rendreFiltres();
     const liste = $("liste");
     liste.textContent = "";
     const q = recherche();
-    const visibles = etat.partitions.filter((p) => correspondFiltre(p) && surRecherche(p));
-    $("aucun").hidden = !(etat.partitions.length > 0 && visibles.length === 0);
+    const visibles = partitions().filter((p) => correspondFiltre(p) && surRecherche(p));
+    $("aucun").hidden = !(partitions().length > 0 && visibles.length === 0);
     let avant = null;
     for (const p of visibles) {
       // Sans recherche, le carnet se découpe par date (il est trié du plus récent au plus ancien).
@@ -308,7 +315,7 @@ export function creerAccueil(deps) {
 
   function rendrePartitions() {
     for (const b of document.querySelectorAll("#filtres-pages [data-filtre-page]")) b.setAttribute("aria-pressed", String(b.dataset.filtrePage === etat.filtrePages));
-    const pages = etat.partitions.filter((p) => !p.type);
+    const pages = partitions().filter((p) => !p.type);
     const aRelire = pages.filter((p) => p.statut !== "prete").length;
     $("resume-partitions").textContent = pages.length
       ? `${pluriel(pages.length, "page écrite", "pages écrites")} à la main${aRelire ? ` · ${aRelire} à relire` : ""}`
@@ -340,7 +347,7 @@ export function creerAccueil(deps) {
   // ---------------------------------------------------------------------------
 
   function rendreMorceaux() {
-    const morceaux = etat.partitions.filter((p) => p.type === "morceau");
+    const morceaux = partitions().filter((p) => p.type === "morceau");
     $("resume-morceaux").textContent = morceaux.length
       ? pluriel(morceaux.length, "morceau", "morceaux")
       : "Des idées mises bout à bout : une intro, un couplet, un refrain…";
@@ -502,9 +509,9 @@ export function creerAccueil(deps) {
     else if (etat.onglet === "partitions") rendrePartitions();
     else if (etat.onglet === "morceaux") rendreMorceaux();
     // Sans partition, rien à exporter ni à sauvegarder (restaurer reste là).
-    $("tout-midi").hidden = $("sauvegarder").hidden = etat.partitions.length === 0;
+    $("tout-midi").hidden = $("sauvegarder").hidden = partitions().length === 0;
     // La feuille ouverte sur une partition qui vient de disparaître (une autre fenêtre l'a supprimée) se ferme.
-    if (actionsDe && feuille.open && !etat.partitions.some((p) => p.id === actionsDe)) fermerFeuille(feuille);
+    if (actionsDe && feuille.open && !partitions().some((p) => p.id === actionsDe)) fermerFeuille(feuille);
     if (refocaliser) {
       const { id, classe } = refocaliser;
       refocaliser = null;
@@ -549,5 +556,22 @@ export function creerAccueil(deps) {
   $("etat-synchro").addEventListener("click", () => { choisirOnglet("reglages"); $("rg-synchro").scrollIntoView({ block: "start" }); });
 
   choisirOnglet(etat.onglet);
-  return { afficher, choisirOnglet, montrerSynchro };
+  return {
+    afficher, choisirOnglet, montrerSynchro,
+    /** L'onglet ouvert : carnet, partitions, morceaux ou reglages. */
+    get onglet() { return etat.onglet; },
+    /**
+     * « Précédent » dans l'accueil, du plus proche au plus lointain : la
+     * recherche, un panneau de la tablette, puis le carnet. Rend true s'il a
+     * reculé d'un pas ; au carnet, rien ne reste à défaire.
+     */
+    reculer() {
+      if (!$("recherche-zone").hidden) { fermerRecherche(); return true; }
+      if (deps.panneaux.reculer()) return true;
+      if (etat.onglet !== "carnet") { choisirOnglet("carnet"); return true; }
+      return false;
+    },
+    /** Le carnet, sans recherche ni panneau ouvert : la racine de l'appli. */
+    aLaRacine: () => etat.onglet === "carnet" && $("recherche-zone").hidden && deps.panneaux.aLaRacine(),
+  };
 }

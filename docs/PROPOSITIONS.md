@@ -2071,6 +2071,24 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - Essais : « corriger une note puis ouvrir vite une autre partition »
     (la correction, puis le tempo) et « Écouter pendant que le piano se
     charge » (`tests/e2e/ecrans.test.mjs`), `tests/ecoute.test.mjs`.
+- **Un registre des écrans pour « précédent » (T3).** `reculer()` cliquait
+  les boutons des autres écrans (`#fermer-rm`, `#idee-enregistrer`, la
+  croix du menu en cercle…) et `aLaRacine()` lisait leur page. Chaque écran
+  dit maintenant lui-même comment on le quitte (`fermer`), s'il a encore un
+  pas à défaire (`reculer` → vrai : une note choisie, le jeu en direct, le
+  menu en cercle, la recherche, un panneau de la tablette, un autre onglet
+  que le carnet) et, pour l'accueil, s'il est à sa racine. `app.js` ferme
+  d'abord le `<dialog>` ouvert, puis interroge l'écran, puis revient à
+  l'écran d'avant ; `historique.js` n'a pas changé (il demande toujours
+  `racine()` et `reculer()` à l'appli).
+  - **« Précédent » laisse d'abord la note choisie dans « Corriger »,**
+    comme il le faisait déjà dans l'éditeur d'idée.
+  - L'accueil garde son état à lui (l'onglet, les filtres) : il l'écrivait
+    dans celui de l'appli. Il dit son onglet (`accueil.onglet`).
+  - **Le bouton « Portée » n'a plus qu'un gestionnaire** : app.js et
+    l'accueil en avaient chacun un, et le carnet se dessinait deux fois.
+  - Essais : « précédent dans Corriger » et « Portée, en haut »
+    (`tests/e2e/ecrans.test.mjs`).
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 
