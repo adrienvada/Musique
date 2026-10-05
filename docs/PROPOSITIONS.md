@@ -2455,9 +2455,9 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     bon). Tout passe par `stockage.modifier` et `stockage.supprimer` : la
     synchro emporte le choix partout.
   - Pourquoi « Garder celle-ci » supprime l'autre plutôt que de recopier
-    son texte dedans : c'est ce que tu as demandé (l'autre va à la
-    corbeille, d'où elle revient entière), et une page lue n'est citée par
-    rien d'autre ; son identifiant peut changer sans rien casser.
+    son texte dedans : l'autre va ainsi à la corbeille, d'où elle revient
+    entière si tu t'es trompé, et une page lue n'est citée par rien
+    d'autre ; son identifiant peut changer sans rien casser.
   - **Sur claude.ai, un champ ne pouvait pas s'effacer (`stockage.js`,
     quelques lignes).** `update` de la base fusionne : la marque
     `conflitDe` ne s'en allait jamais. Un champ donné à `undefined` s'en
@@ -2516,6 +2516,16 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   trois essais « Réglages… », « sans synchronisation… » et « sur
   l'iPhone… » de `tests/e2e/donnees.test.mjs` (un iPhone simulé par son
   agent utilisateur).
+- **Hors des fichiers du lot, le minimum, chacun à un endroit :**
+  `app.js` compose les nouveaux modules (et les registres disent
+  « supprimée dans un autre onglet ») ; `index.html` a les deux
+  conteneurs du bandeau (l'idée, « Corriger ») et l'entrée « Versions
+  précédentes » du « ••• » de l'idée ; `idee.js`, `fiche()` et
+  `changer(f)` dans son API ; `gestes.js`, le cas « versions » ;
+  `icones.js`, l'horloge des versions ; `systeme.css`, les pastilles
+  « À choisir » et « Claude » et le bandeau (un composant partagé par deux
+  écrans) ; `stockage.js` et `synchro.js`, les trois corrections dites
+  plus haut ; `claude.test.mjs`, le manifeste d'aujourd'hui.
 
 ### Interface (I1 à I4, I6 à I15)
 

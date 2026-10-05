@@ -150,6 +150,8 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: flex
 .bandeau-quoi { flex: 1 1 auto; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: inherit; font-weight: 500; text-align: left; cursor: pointer; }
 .bandeau-quoi .ico { color: var(--stylo); }
 .bandeau-texte { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Déplié, le résumé se lit en entier. */
+.bandeau-quoi[aria-expanded="true"] .bandeau-texte { white-space: normal; }
 .bandeau-compte { flex: none; font-size: 0.78rem; color: var(--gris); }
 .bandeau-pourquoi { padding: 0 8px 8px 26px; font-size: 0.86rem; color: var(--gris); overflow-wrap: anywhere; }
 /* Au téléphone, les trois gestes gardent leur icône (et leur nom, à l'appui long). */
