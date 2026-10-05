@@ -16,11 +16,12 @@
  * arrivant), s'il a encore un pas à défaire avant qu'on le quitte
  * (`reculer` → true : une note choisie, le jeu en direct, un panneau
  * ouvert), s'il est à sa racine (`aLaRacine`, l'accueil seulement), et,
- * s'il montre une partition, laquelle (`partition`). Avant, « précédent »
- * cliquait les boutons des autres écrans et lisait leur page (audit du
- * 04/10, T3). Un calque qui n'est pas un <dialog> se déclare dans le
- * `reculer` et l'`aLaRacine` de son écran ; les <dialog> ouverts se ferment
- * avant tout.
+ * s'il montre une partition, laquelle (`partition`), et ses raccourcis
+ * (`toucheBas`, `toucheHaut` → true si la touche a servi). Avant,
+ * « précédent » cliquait les boutons des autres écrans et lisait leur page
+ * (audit du 04/10, T3). Un calque qui n'est pas un <dialog> se déclare dans
+ * le `reculer` et l'`aLaRacine` de son écran ; les <dialog> ouverts se
+ * ferment avant tout.
  */
 import { $ } from "./ui.js";
 
@@ -100,6 +101,27 @@ export function creerNavigation(deps) {
     return vue === "biblio" && !document.querySelector("dialog[open]") && ecrans().biblio.aLaRacine();
   }
 
+  /**
+   * Les raccourcis de l'écran montré. Une fenêtre ou une feuille ouverte
+   * garde les touches pour elle : avant, Suppr effaçait la note derrière la
+   * feuille « ••• », ↑ la montait, et Échap retirait la sélection au lieu de
+   * fermer la fenêtre (audit du 04/10, I6). Échap, laissé au navigateur,
+   * ferme le <dialog>. Un champ de texte garde aussi les siennes.
+   */
+  function toucheBas(e) {
+    if (document.querySelector("dialog[open]")) return;
+    const cible = e.target;
+    if (cible.closest && cible.closest("input, textarea, select, [contenteditable]")) return;
+    const ecran = ecrans()[vue];
+    if (ecran.toucheBas && ecran.toucheBas(e)) e.preventDefault();
+  }
+
+  /** Une touche relâchée (le clavier de l'ordinateur joue tant qu'on appuie). */
+  function toucheHaut(e) {
+    const ecran = ecrans()[vue];
+    if (ecran.toucheHaut && ecran.toucheHaut(e)) e.preventDefault();
+  }
+
   /** Un pas en arrière, du plus proche au plus lointain : ce qui est ouvert par-dessus, l'écran, puis l'écran d'avant. */
   function reculer() {
     const feuilles = [...document.querySelectorAll("dialog[open]")];
@@ -109,7 +131,7 @@ export function creerNavigation(deps) {
   }
 
   return {
-    montrer, retenir, revenir, aLaRacine, reculer,
+    montrer, retenir, revenir, aLaRacine, reculer, toucheBas, toucheHaut,
     /** L'écran montré. */
     get vue() { return vue; },
     /** L'écran montré, s'il montre une partition (pour la synchronisation). */

@@ -7,6 +7,14 @@
  * la partition : le lecteur de traits l'écrit, abcjs le grave et le joue.
  * Adrien ne l'écrit jamais lui-même : il touche une note et choisit un
  * geste (plus haut, noire, dièse…), et edition.js réécrit l'ABC.
+ *
+ * Ce module ne fait que composer (audit du 04/10, T3) : il crée les écrans
+ * et les modules, leur passe ce dont ils ont besoin, et tient le registre
+ * des écrans (navigation.js dit ce que chacun déclare). Le reste vit chez
+ * qui s'en sert : un écran (accueil, ecran-atelier, ecran-lecteur, idee,
+ * vue-morceau), ses enregistrements (enregistreur.js, page-ouverte.js),
+ * les gestes sur une partition entière (gestes.js), l'import, les exports,
+ * la tablette, la synchronisation, les erreurs.
  */
 import { Piano } from "./piano.js";
 import { Transport } from "./transport.js";
@@ -34,11 +42,12 @@ import { brancherLive } from "./reglages-live.js";
 import { injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
 import { creerNavigation } from "./navigation.js";
+import { creerGestes } from "./gestes.js";
 import { creerHistorique } from "./historique.js";
 import { installerInfobulles } from "./infobulles.js";
 import { cause, explication, expliquer, installerFilet } from "./erreurs.js";
-import { $, pluriel, retirerToast, toast } from "./ui.js";
-import { dialogue, veutSupprimer } from "./dialogue.js";
+import { $, retirerToast, toast } from "./ui.js";
+import { veutSupprimer } from "./dialogue.js";
 
 const ABCJS = () => window.ABCJS;
 const dansClaude = () => !!(window.claude && typeof window.claude.use === "function");
@@ -148,10 +157,13 @@ function creerRegistre() {
   };
   ecrans = {
     biblio: { afficher: () => accueil.afficher(), fermer: () => {}, reculer: () => accueil.reculer(), aLaRacine: () => accueil.aLaRacine(), partition: () => null },
-    atelier: { afficher: () => atelier.afficher(), fermer: () => atelier.fermer(), reculer: () => atelier.reculer(), aLaRacine: sans, ...page },
-    lecteur: { afficher: () => lecteur.afficher(), fermer: () => lecteur.fermer(), reculer: () => lecteur.reculer(), aLaRacine: sans, ...page },
+    atelier: { afficher: () => atelier.afficher(), fermer: () => atelier.fermer(), reculer: () => atelier.reculer(), aLaRacine: sans, toucheBas: (e) => atelier.toucheBas(e), ...page },
+    lecteur: { afficher: () => lecteur.afficher(), fermer: () => lecteur.fermer(), reculer: () => lecteur.reculer(), aLaRacine: sans, toucheBas: (e) => lecteur.toucheBas(e), ...page },
     idee: {
       fermer: () => editeur.fermer(), reculer: () => editeur.reculer(), aLaRacine: sans,
+      // Espace ou Entrée sur un bouton de l'éditeur : c'est le bouton qu'on touche, pas l'écoute.
+      toucheBas: (e) => !(e.target.closest && e.target.closest("button") && (e.key === " " || e.key === "Enter")) && editeur.toucheBas(e),
+      toucheHaut: (e) => editeur.toucheHaut(e),
       partition: () => editeur.id, occupe: () => editeur.occupe(), recharger: (p) => editeur.recharger(p),
       supprimee: () => "Cette idée a été supprimée sur un autre appareil.",
     },
@@ -173,6 +185,13 @@ const { importer, importerExemples, enregistrerLecture } = creerImport({ stockag
 // Les exports (MIDI, MusicXML, ABC, partage) : exports.js.
 const { exporterMidi, toutEnMidi, partagerMidi, exporterMusicXml, exporterAbc } = creerExports({
   stockage: () => etat.stockage, partitions: () => etat.partitions, idees: ideesParId, abcjs: ABCJS, dansClaude,
+});
+
+// Supprimer, dupliquer, ajouter à un morceau, le menu ••• de l'éditeur : gestes.js.
+const gestes = creerGestes({
+  stockage: () => etat.stockage, partitions: () => etat.partitions, nouvelId, pageOuverte,
+  editeur: () => editeur, vueMorceau: () => vueMorceau, ouvrir: (id) => ouvrir(id), ouvrirMorceau, montrer,
+  exports: { exporterMidi, exporterMusicXml },
 });
 
 /** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */
@@ -208,23 +227,6 @@ function versPartitions() {
   if (accueil.onglet !== "partitions") accueil.choisirOnglet("partitions");
 }
 
-/** Supprime la page ouverte, après la même question que depuis le carnet (dialogue.js). */
-async function supprimerOuverte() {
-  const p = pageOuverte.partition;
-  if (!p || !(await veutSupprimer(p, etat.partitions))) return;
-  try {
-    await pageOuverte.vider();
-    await etat.stockage.supprimer(p.id, p.nbPages || 0);
-  } catch (e) {
-    console.error(e);
-    toast(`« ${p.titre} » n'a pas pu être supprimée : ${explication(e)}`, 7000);
-    return;
-  }
-  if (pageOuverte.partition === p) pageOuverte.fermer();
-  toast(`« ${p.titre} » est supprimée.`);
-  montrer("biblio");
-}
-
 // ------------------------------------------------------------------------
 // Branchements
 // ------------------------------------------------------------------------
@@ -245,103 +247,12 @@ function brancher() {
   $("tout-midi").addEventListener("click", toutEnMidi);
   brancherSauvegarde({ stockage: () => etat.stockage, partitions: () => etat.partitions });
 
-  document.addEventListener("keydown", clavier);
-  document.addEventListener("keyup", (e) => { if (navigation.vue === "idee" && editeur.toucheHaut(e)) e.preventDefault(); });
+  // Les raccourcis : chaque écran les siens (le registre, navigation.js).
+  document.addEventListener("keydown", navigation.toucheBas);
+  document.addEventListener("keyup", navigation.toucheHaut);
 
   // Appli installable (hors claude.ai) : le navigateur propose, on montre le bouton (mises-a-jour.js).
   brancherInstallation();
-}
-
-/**
- * Raccourcis : chaque écran a les siens (Espace pour écouter ; dans
- * « Corriger », les gestes sur la note choisie). Une fenêtre ou une feuille
- * ouverte garde les touches pour elle : avant, Suppr effaçait la note
- * derrière la feuille « ••• », ↑ la montait, et Échap retirait la sélection
- * au lieu de fermer la fenêtre (audit du 04/10, I6). Échap, laissé au
- * navigateur, ferme le <dialog>.
- */
-function clavier(e) {
-  const cible = e.target;
-  if (document.querySelector("dialog[open]")) return;
-  if (cible.closest && cible.closest("input, textarea, select, [contenteditable]")) return;
-  if (navigation.vue === "idee") {
-    if (cible.closest && cible.closest("button") && (e.key === " " || e.key === "Enter")) return;
-    if (editeur.toucheBas(e)) e.preventDefault();
-    return;
-  }
-  const ecran = navigation.vue === "atelier" ? atelier : navigation.vue === "lecteur" ? lecteur : null;
-  if (ecran && ecran.toucheBas(e)) e.preventDefault();
-}
-
-/** Ce que le menu « ••• » de l'éditeur d'idée demande. */
-async function actionIdee(action, p) {
-  switch (action) {
-    case "telecharger-midi": return exporterMidi(p);
-    case "dupliquer": return dupliquer(p);
-    case "supprimer": {
-      if (!(await veutSupprimer(p, etat.partitions))) return undefined;
-      await editeur.fermer();
-      await supprimerDeLaBibliotheque(p);
-      return montrer("biblio");
-    }
-    case "morceau": return choisirMorceau(p);
-    case "musicxml": return exporterMusicXml(p);
-    default:
-      toast("Bientôt.");
-      return undefined;
-  }
-}
-
-/** Une copie de l'idée, qu'on ouvre aussitôt. Un échec se dit (T4 : il passait sans un mot). */
-async function dupliquer(p) {
-  const id = nouvelId();
-  const maintenant = new Date().toISOString();
-  const { id: _ancien, ...donnees } = p;
-  try {
-    await etat.stockage.creer(id, { ...donnees, titre: `${p.titre} (copie)`, creeLe: maintenant, modifieLe: maintenant }, []);
-  } catch (e) {
-    console.error(e);
-    toast(`La copie n'a pas pu se faire : ${explication(e)}`, 7000);
-    return;
-  }
-  toast("Copie faite : tu y es.");
-  await ouvrir(id);
-}
-
-/** Supprime `p` de la bibliothèque (et des autres appareils, par la synchro). Rend true si c'est fait. */
-async function supprimerDeLaBibliotheque(p) {
-  const e = p.type === "morceau" ? "" : "e";
-  try {
-    await etat.stockage.supprimer(p.id, p.type ? 0 : p.nbPages || 0);
-  } catch (err) {
-    console.error(err);
-    toast(`« ${p.titre} » n'a pas pu être supprimé${e} : ${explication(err)}`, 7000);
-    return false;
-  }
-  toast(`« ${p.titre} » est supprimé${e}.`);
-  return true;
-}
-
-/** « Ajouter à un morceau » : un morceau existant, ou un nouveau. */
-async function choisirMorceau(p) {
-  const morceaux = etat.partitions.filter((x) => x.type === "morceau");
-  const choix = await dialogue("Ajouter à un morceau", `« ${p.titre} » devient un bloc du morceau choisi.`, [
-    { valeur: "nouveau", texte: "+ Un nouveau morceau", plein: true },
-    ...morceaux.map((x) => ({ valeur: x.id, texte: `${x.titre} (${pluriel((x.blocs || []).length, "bloc")})` })),
-  ]);
-  if (!choix) return;
-  let morceau = null;
-  try {
-    if (choix !== "nouveau") morceau = await etat.stockage.lire(choix);
-  } catch (e) {
-    console.error(e);
-    toast(`Ce morceau ne s'ouvre pas : ${explication(e)}`, 7000);
-    return;
-  }
-  await editeur.fermer();
-  ouvrirMorceau(morceau);
-  vueMorceau.ajouter(p.id);
-  $("morceau-choix").hidden = true;
 }
 
 /** « Corriger » et « Écouter » : la même page lue, la même écoute. */
@@ -349,11 +260,11 @@ function creerEcransDePage() {
   const arreterEcoute = () => ecoutePage.arreter();
   atelier = creerEcranAtelier({
     page: pageOuverte, piano, abcjs: ABCJS, calibration, ecouter: ecouterPage, arreterEcoute,
-    valider: () => montrer("lecteur"), supprimer: supprimerOuverte,
+    valider: () => montrer("lecteur"), supprimer: gestes.supprimerOuverte,
   });
   lecteur = creerEcranLecteur({
     page: pageOuverte, abcjs: ABCJS, ecouter: ecouterPage, arreterEcoute,
-    exports: { exporterMidi, exporterMusicXml, exporterAbc }, ouvrirIdee, supprimer: supprimerOuverte,
+    exports: { exporterMidi, exporterMusicXml, exporterAbc }, ouvrirIdee, supprimer: gestes.supprimerOuverte,
   });
 }
 
@@ -377,7 +288,7 @@ function creerAccueilDeLAppli() {
     stockage: () => etat.stockage, partitions: () => etat.partitions,
     panneaux: { reculer: () => tablette.reculer(), aLaRacine: () => tablette.aLaRacine() },
     partagerMidi, exporterMidi,
-    supprimer: async (p) => { if (await veutSupprimer(p, etat.partitions)) await supprimerDeLaBibliotheque(p); },
+    supprimer: async (p) => { if (await veutSupprimer(p, etat.partitions)) await gestes.supprimerDeLaBibliotheque(p); },
   });
 }
 
@@ -387,7 +298,7 @@ function creerEditeur() {
     stockage: () => etat.stockage,
     abcjs: ABCJS,
     partager: partagerMidi,
-    menu: actionIdee,
+    menu: gestes.actionIdee,
     titreChange: (t) => { $("fil-titre").textContent = t; },
     etiquettes: () => toutesEtiquettes(etat.partitions),
     nouvelleDepuis: (seq) => ouvrirIdee(null, { seq, titre: "Idée tirée d'une phrase" }),

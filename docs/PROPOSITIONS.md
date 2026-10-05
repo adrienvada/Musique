@@ -2110,9 +2110,15 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - Essais : « précédent dans Corriger » et « Portée, en haut »
     (`tests/e2e/ecrans.test.mjs`).
 - **`app.js` ne fait plus que composer (T3) : 2 125 lignes avant le lot,
-  ≈450 après.** Il crée les écrans et les modules, et les relie (ouvrir une
-  partition dans son écran, les actions du « ••• » de l'éditeur,
-  supprimer). Ce qui restait part chez qui s'en sert :
+  ≈380 après.** Il crée les écrans et les modules, les relie (ouvrir une
+  partition dans son écran) et tient le registre des écrans. Ce qui
+  restait part chez qui s'en sert :
+  - `app/gestes.js` : les gestes sur une partition entière (supprimer la
+    page ouverte, dupliquer, ajouter à un morceau, le menu « ••• » de
+    l'éditeur), chacun avec son message d'échec ;
+  - les raccourcis passent par le registre : chaque écran y déclare
+    `toucheBas` (et l'éditeur `toucheHaut`), et `navigation.js` garde
+    pour tous la règle des fenêtres et des champs de texte (I6) ;
   - `app/navigation.js` : montrer un écran, la pile des écrans d'où l'on
     vient, et le bouton « précédent » (il interroge le registre des
     écrans) ;
