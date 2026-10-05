@@ -1,6 +1,6 @@
 # Propositions — de la tablette au piano
 
-*Mis à jour le 2 octobre 2026 : refonte visuelle complète (système Papier et Studio, puis les écrans un à un).*
+*Mis à jour le 5 octobre 2026 : l'audit complet du 4 octobre et toutes ses recommandations (rapport : [AUDIT-2026-10.md](AUDIT-2026-10.md) ; ce qui a changé, lot par lot : « Évolutions du 04/10 » plus bas).*
 
 **L'appli** :
 - **https://adrienvada.fr/Musique/** (site public sur GitHub Pages, installable, bibliothèque synchronisée) ;
@@ -104,7 +104,7 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
   Choisie par Adrien parmi les suggestions.
   - Chaque appareil garde toute la bibliothèque dans son navigateur, hors
     ligne compris, et note ce qu'il change dans une file d'envois
-    (IndexedDB v2).
+    (IndexedDB v2 ; v3 depuis le 04/10, avec le magasin `bases`).
   - La référence commune vit dans le compartiment privé
     `portee-remarkable` du stockage Supabase : `bibliotheque/<id>.json` et
     `pages/<id>.json`. Pas de table dans la base du site, pas de compte à
@@ -115,6 +115,12 @@ https://claude.ai/artifact/99p6MDcPHbxYz8z1yvEfAn
   - Le plus récent gagne (`modifieLe`). Une suppression voyage comme une
     « pierre tombale ». Le curseur « depuis » suit l'horloge du stockage, pas
     celle des appareils.
+    *Remplacé le 04/10 (audit, D1 à D4)* : un appareil reçoit avant
+    d'envoyer, et une fiche changée des deux côtés se fusionne champ par
+    champ et note par note depuis la dernière version commune ; deux textes
+    de page qui s'opposent donnent une copie « À choisir ». Le plus récent
+    entier ne sert plus que pour une fiche sans version commune, et pour un
+    morceau. Voir « Données et synchronisation » plus bas.
   - Pourquoi pas Supabase Auth et une table avec RLS : cela voulait dire un
     compte, une migration dans la base du site et une clé anon dans le site
     public, pour un seul utilisateur.
@@ -3342,16 +3348,17 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
    échantillonné, curseur, tempo, transposition, mains séparables, raccourci
    Espace. MIDI en un clic (tempo et transposition compris), impression ou
    PDF, texte ABC.
-4. **Autres signes** : *fait dans le lecteur (04/10), à brancher dans l'appli*.
+4. **Autres signes** : *fait (04/10), dans le lecteur et dans l'appli*.
    - Reconnus par les règles : soupirs et demi-soupirs, pauses et
      demi-pauses (par leur place), bémols, dièses (même collés), bécarres,
      accents, liaisons de durée ; un triolet est un doute.
    - Avec tes gabarits (page d'étalonnage, puis tes corrections) : silences
      courts (dont le quart de soupir), altérations, chiffres du chiffrage
      (lu au lieu d'être deviné), « 3 » des triolets.
-   - Pas encore : importer la page d'étalonnage et apprendre des réponses
-     dans l'appli (lot atelier) ; nuances, ornements et paroles restent
-     ignorés. HOMUS écarté (licence non indiquée) : les gabarits viennent de toi.
+   - La page d'étalonnage s'importe comme une page, et tes réponses aux
+     doutes de signe l'affinent (lot atelier). Nuances, ornements et
+     paroles restent ignorés. HOMUS écarté (licence non indiquée) : les
+     gabarits viennent de toi.
 5. **Corriger** : *fait*. Correction au toucher (voir la décision du 30/09),
    ta page redessinée à côté, les doutes surlignés, « Annuler », enregistrement
    automatique. L'ABC reste accessible en mode avancé.
@@ -3475,8 +3482,15 @@ ou supprimer la fonction dans Supabase.
   Safari 26.2) : garder la version `legacy/` tant qu'un iPhone antérieur à
   iOS 26.2 doit pouvoir lire un PDF.
 - **Le publieur de claude.ai refuse les caractères de contrôle bruts.** Le
-  worker de pdf.js en contient 719 dans une table de données.
-  `assembler-appli.mjs` les réécrit en `\xNN`, ce qui revient au même.
+  worker de pdf.js en contient dans une table de données (810 en 6.4.299,
+  719 avant), et abcjs 15. `assembler-appli.mjs` les réécrit en `\xNN`, ce
+  qui revient au même. Il accepte aussi les polices (`.woff2`, à publier en
+  `font/woff2`) et leurs licences (`.txt`, en `text/plain`).
+- **La protection de GitHub contre les fuites refuse un envoi** qui contient
+  une fausse clé ayant la forme exacte d'une vraie (`sb_secret_…`, JWT
+  signé). Rencontré le 04/10 avec un essai du connecteur : les commits ont
+  été réécrits avant tout envoi. Dans un essai, une fausse clé s'assemble à
+  l'exécution (`["sb", "secret", …].join("_")`).
 - **Les téléchargements d'une page claude.ai suivent une liste fermée de
   formats**, sans `.mid`. Le MIDI part donc dans un `.zip` (`app/zip.js`).
 - **Tête noircie en deux coups, hampe repassée, ligature tracée en deux
@@ -3504,7 +3518,10 @@ ou supprimer la fonction dans Supabase.
   pourrait écrire un `modifieLe` plus ancien que la version qu'il vient de
   recevoir, et la bibliothèque commune refuserait sa correction.
   `stockage.modifier` rend donc chaque `modifieLe` strictement plus récent que
-  le précédent. Un envoi refusé applique aussitôt la version gagnante.
+  le précédent. Depuis le 04/10 (D4), l'envoi dit d'où il part (`base`,
+  `baseRev`) : refusé, l'appareil reçoit la version de la bibliothèque, la
+  fusionne avec la sienne depuis leur version commune, et renvoie. Le
+  numéro de révision (`rev`) départage deux horloges qui retardent.
 - **IndexedDB `portee`, version 3** : magasins `partitions`, `pages`,
   `envois` (file à synchroniser, un numéro par envoi), `meta` (curseur,
   adresse, « rejoint », et la quarantaine : `quarantaine:<envoi|reception>:<id>`)
@@ -3578,3 +3595,7 @@ ou supprimer la fonction dans Supabase.
    ligne 2 fait 11 croches au lieu de 12 : est-ce le petit trait au bout d'une
    hampe, un crochet oublié ?
 2. Les modèles v1 conviennent-ils à la main (interlignes, nombre de portées) ?
+3. Les questions de l'audit du 04/10 (capture après coup, levée du
+   décompte, jeu lié aux petites valeurs, une seule bibliothèque…) : voir
+   « Ce qui reste à décider » dans [AUDIT-2026-10.md](AUDIT-2026-10.md),
+   avec ma recommandation pour chacune.
