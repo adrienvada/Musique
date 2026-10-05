@@ -2328,7 +2328,38 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Claude dans l'éditeur d'idée (H2)
 
-<!-- lot claude -->
+- **`claude-idee.js` lit sequence.js, et les outils sont à part
+  (`app/claude-outils.js`).** Le module gardait une copie de la mesure en
+  pas et du nom des notes, et recevait les gestes des outils en paramètre :
+  sequence.js ne passait pas `npm run types`, et un module vérifié fait
+  vérifier ce qu'il importe. Il passe depuis le lot architecture : l'import
+  est direct, et les outils de « Ce que tu veux » vivent dans leur module
+  (claude-idee.js faisait 1 110 lignes). Ce que suggestions.js et
+  claude-doute.js y prennent n'a pas bougé.
+- **« Transpose en ré » transpose aussi les accords et la tonalité**
+  (l'outil `transposer_idee`). L'outil `transposer` ne montait que les notes
+  d'une piste : les accords restaient en do. Le nouvel outil fait ce que fait
+  la feuille Tempo (`transposerIdee`) ; la copie peut donc changer de
+  tonalité, mais seulement pour une tonalité du menu (c'est vérifié). Les
+  outils sont rangés du plus utile au moins utile : si claude.ai en permet
+  moins, ce sont les derniers (à l'envers, miroir) qui restent dehors.
+- **Ce que l'écran dit quand `sample` échoue est écrit une fois
+  (`lireEchec`),** code par code (sample.d.ts) : rien après « Arrêter » ; la
+  fonction cachée pour la visite quand claude.ai la refuse (`not_granted`
+  propose en plus d'autoriser Claude) ; « Claude est très demandé :
+  réessaie dans un moment » ; une phrase pour une session expirée et pour un
+  refus ; le message de refus de Portée pour le reste. Un code inconnu vaut
+  `upstream_error`, comme le dit sample.d.ts. Jamais de nouvel essai tout
+  seul : chaque appel coûte sur ton compte. Le second avis sur un doute (H1)
+  peut s'en servir.
+  - Piège : une erreur de `sample` ne passe pas par `expliquer` (erreurs.js) :
+    il lit `upstream_error` comme le code du connecteur, et dirait « le
+    connecteur ne répond pas… Supabase ». Seules les erreurs de Portée et du
+    navigateur y vont.
+- Deux fonctions sans DOM pour l'écran, essayées sous Node : ce qu'on écoute
+  d'une proposition (`etendueEcoute` : une suite part de la dernière mesure,
+  pour l'entendre arriver) et ce qu'elle dit en une ligne (`resume` :
+  « 8 notes sur les mesures 5 et 6 », « 7 notes changées, en si mineur »).
 
 ### Claude dans Portée : ce qui part, ce qui est vérifié (H1, H2, H3)
 
