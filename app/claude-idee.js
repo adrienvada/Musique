@@ -195,6 +195,18 @@ function nomNote(/** @type {number} */ h, /** @type {string} */ tonalite) {
 /** @param {Sequence} seq @returns {Sequence} */
 const cloner = (seq) => JSON.parse(JSON.stringify(seq));
 
+/**
+ * L'idée comptée en pas : { ppm (pas par mesure), ppt (par temps), nb
+ * (mesures), fin (la barre après la dernière mesure), finLibre (jusqu'où une
+ * réécriture entière peut aller, voir finLibre) }. suggestions.js s'en sert
+ * aussi, plutôt qu'une troisième copie de sequence.js.
+ * @param {Sequence} seq
+ */
+export function enPas(seq) {
+  const ppm = pasParMesure(seq), nb = nbMesures(seq);
+  return { ppm, ppt: pasParTemps(seq), nb, fin: nb * ppm, finLibre: finLibre(seq) };
+}
+
 // ------------------------------------------------------------------------
 // Lire ce qui revient : la forme d'abord, puis chaque champ
 // (claude-doute.js et suggestions.js s'en servent aussi : une seule façon de
@@ -817,8 +829,8 @@ export function valider(genre, reponse, idee, options = {}) {
 // (de petites fonctions que sequence.js n'a pas : remplacer d'un coup)
 // ------------------------------------------------------------------------
 
-/** Ajoute des notes à une piste, chacune avec un numéro neuf, et la range comme sequence.js. */
-function ajouterNotes(/** @type {Sequence} */ seq, /** @type {number} */ p, /** @type {NoteNeuve[]} */ notes) {
+/** Ajoute des notes à une piste (sur place), chacune avec un numéro neuf, et la range comme sequence.js. */
+export function ajouterNotes(/** @type {Sequence} */ seq, /** @type {number} */ p, /** @type {NoteNeuve[]} */ notes) {
   const piste = seq.pistes[p];
   // Un `suivant` en retard sur les numéros donnerait deux fois le même.
   let max = 0;
@@ -828,7 +840,8 @@ function ajouterNotes(/** @type {Sequence} */ seq, /** @type {number} */ p, /** 
   piste.notes.sort((a, b) => a.d - b.d || a.h - b.h);
 }
 
-function remplacerNotes(/** @type {Sequence} */ seq, /** @type {number} */ p, /** @type {number[]} */ ids, /** @type {NoteNeuve[]} */ notes) {
+/** Remplace des notes d'une piste (sur place) : celles de `ids` partent, `notes` arrivent. */
+export function remplacerNotes(/** @type {Sequence} */ seq, /** @type {number} */ p, /** @type {number[]} */ ids, /** @type {NoteNeuve[]} */ notes) {
   const partis = new Set(ids);
   seq.pistes[p].notes = seq.pistes[p].notes.filter((n) => !partis.has(n.id));
   ajouterNotes(seq, p, notes);

@@ -2068,6 +2068,30 @@ garde.
   - Claude conseille, il ne corrige pas : c'est le toucher d'Adrien qui
     applique le geste de la réponse, comme toujours. Une question à moins
     de deux réponses fermées ne part pas : il n'y a rien à trancher.
+- **Les suggestions d'une conversation (H3, `app/suggestions.js`).**
+  `validerSuggestion`, `appliquerSuggestion`, `resumeSuggestion`.
+  - Le connecteur vérifie à l'écriture ; l'appli revérifie à la lecture :
+    une fiche peut venir d'un connecteur plus ancien, d'une main, d'un
+    stockage abîmé, et la partition a pu changer depuis. Mêmes bornes que
+    le connecteur (hauteurs de 21 à 108, durées positives, accords lisibles
+    par `accords.js`), plus celles de la bibliothèque (16 384 pas, 20 000
+    notes), au-delà desquelles `fiche.js` rabattrait en silence. Un test
+    fait écrire de vraies suggestions par `suggestion_ecrire` et les relit.
+  - La cible doit être celle de la fiche ; des notes et des accords ne
+    vont qu'à une idée. La suite commence à la barre qui suit la dernière
+    mesure ; une variation peut aller jusqu'au double de l'idée.
+  - Une suggestion qui ne changerait rien (déjà appliquée sur un autre
+    appareil, doute déjà réglé) est refusée avec `sansEffet` : l'écran peut
+    l'écarter sans la montrer.
+  - Une liste d'accords vide dans une variation n'efface pas ceux
+    d'Adrien : dans le doute, on ne détruit rien.
+  - Une réponse à un doute n'est qu'une phrase : elle ne peut pas réécrire
+    l'ABC. Appliquée, elle devient l'avis de Claude sur ce doute (`avis`),
+    que l'atelier montrera près de la question ; le doute reste ouvert.
+  - L'ABC d'une idée modifiée est vidé : le stockage le refait d'après les
+    notes (`normaliserFiche`), comme pour une idée écrite par le connecteur.
+    `suggestions.js` n'importe donc pas `fiche.js`, qui ne passe pas encore
+    `npm run types`.
 
 ## La refonte visuelle : le plan (02/10)
 
