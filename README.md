@@ -16,7 +16,7 @@ Nouvelle idée, Chanter ou Mémo. Sur Android, depuis l'appli reMarkable ou
 Fichiers, « Partager → Portée » importe le PDF et l'ouvre dans Corriger. À
 l'ordinateur, ouvre un PDF, un `.mid` ou une sauvegarde `.json` avec Portée
 (double clic, ou « Ouvrir avec ») ; si Portée est déjà ouverte, le fichier
-arrive dans la même fenêtre. Au lecteur d'écran, chaque écran a un titre,
+arrive dans la même fenêtre. Avec un lecteur d'écran, chaque écran a un titre,
 une étoile ou une recherche se dit en une phrase, et les touches du piano
 disent leur note.
 
