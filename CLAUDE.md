@@ -123,17 +123,78 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   moins de 44 px. Les choix d'une action se font dans une feuille du bas
   (`<dialog class="feuille-bas">`, `feuilles.js`) : le bouton « précédent »
   la ferme tout seul (`historique.js`). Un calque qui ne serait pas un
-  `<dialog>` doit être ajouté à `aLaRacine()` et `reculer()` (`app.js`).
+  `<dialog>` doit être déclaré dans le `reculer()` et l'`aLaRacine()` de son
+  écran, dans le registre des écrans (`app.js`, `navigation.js`).
   Tout bouton à icône a un `aria-label` ou un `title` : un appui long
   l'affiche en infobulle (`infobulles.js`). Un élément qui a son propre
   appui long porte `data-sans-infobulle`. Tout texte inséré en HTML passe
   par `echapper` (`app/ui.js`) : une fiche peut venir de la synchro, d'une
   sauvegarde ou de Claude.
+- **Architecture (`app/`)** : `app.js` ne fait que composer. Chaque écran
+  est une fabrique qui branche ses écouteurs une fois et s'inscrit dans le
+  registre (`creerRegistre`, `navigation.js`) avec `fermer`, `reculer`
+  (vrai s'il restait un pas à défaire), `aLaRacine` et, au besoin,
+  `afficher`, `toucheBas`, `toucheHaut`, `partition`, `occupe`,
+  `recharger` et `supprimee`. `navigation.js` ferme d'abord les `<dialog>`
+  ouverts et ne transmet aucune touche tant qu'un `<dialog>` ou un champ de
+  texte est actif.
+  - Ce qui s'enregistre passe par `enregistreur.js` : la cible et une copie
+    du contenu sont fixées quand on planifie (`planifier(cible, copie)`), la
+    file se vide quand on quitte l'écran et quand la page se ferme, avec une
+    copie de secours (`portee:secours`). Une session `{ id, cree, derniere }`
+    donne `depuis` au stockage.
+  - Une écoute par écran, par `ecoute.js`. Toute question passe par
+    `dialogue.js` (`dialogue`, `confirmer`, `veutSupprimer`), jamais
+    `window.confirm`. Toute erreur montrée passe par `erreurs.js`
+    (`expliquer`), et on lance des `Error` avec leur cause
+    (`erreur(code, message, { cause })`).
+  - L'éditeur d'idée donne à ses modules un contexte explicite, et l'état en
+    lecture seule à ceux qui n'ont qu'à le lire ; son API ne s'élargit
+    qu'au besoin.
+  - Les couleurs s'écrivent `light-dark(clair, sombre)` dans `systeme.css` ;
+    en JS, `couleurDuJeton("--x")`.
+  - Une JSDoc s'écrit type d'abord (`@param {Object} options { … }`) :
+    sinon TypeScript lit la prose comme un type.
 - **Correction au toucher (`app/edition.js`)** : Adrien ne lit pas l'ABC.
   Toute correction passe par un geste (bouton, glissé, clavier) qui réécrit
   l'ABC ; le texte reste en « mode avancé ».
 - **Outillage** : Playwright reste en 1.56.1 (Dependabot ne le monte pas) ;
   un module sans DOM qui passe à zéro erreur s'ajoute à `tsconfig.json`.
+
+## Carte de l'appli (`app/`)
+
+- **Composer et naviguer** : `app.js` (crée et relie les écrans, tient le
+  registre), `navigation.js` (montrer un écran, la pile, « précédent », les
+  raccourcis par écran), `historique.js` (le bouton « précédent » du
+  téléphone).
+- **Petits outils** : `ui.js` (`$`, `el`, `pluriel`, les dates, `toast`,
+  `echapper`, `couleurDuJeton`), `dialogue.js`, `erreurs.js`, `feuilles.js`,
+  `infobulles.js`, `icones.js`, `preferences.js`.
+- **Écrans** : `accueil.js` (les quatre onglets), `ecran-atelier.js`
+  (« Corriger »), `ecran-lecteur.js` (« Écouter et exporter »),
+  `page-ouverte.js` (la page lue que ces deux écrans partagent),
+  `atelier.js` (leurs pièces communes), `vue-morceau.js` (un morceau),
+  `gestes.js` (supprimer, dupliquer, ajouter à un morceau, le « ••• » de
+  l'éditeur).
+- **Éditeur d'idée** : `idee.js` (le cœur : état, annuler, la barre du
+  haut, les modes), `idee-carnet.js`, `idee-tempo.js`, `idee-partition.js`
+  (la gravure, `mettreEnPage`), `idee-ecoute.js`, `idee-enregistrement.js`,
+  les modes `idee-clavier.js`, `idee-chant.js`, `idee-accords.js`, puis
+  `idee-selection.js`, `idee-direct.js`, `grille.js`, `clavier.js`,
+  `menu-radial.js`, `micro.js`.
+- **Enregistrer et synchroniser** : `enregistreur.js`, `ecoute.js`,
+  `stockage.js` (IndexedDB ou la base claude.ai), `fiche.js` (vérifier,
+  remettre en forme, fusionner une fiche), `synchro.js`,
+  `synchronisation-ui.js`, `sauvegarde-ui.js`, `mises-a-jour.js` et `sw.js`.
+- **Tablette et import** : `tablette.js` (le panneau « Ma reMarkable »),
+  `connecteur.js`, `import-pdf.js` (PDF et .mid), `apercus.js`,
+  `manuscrit.js`, `doutes.js`, `edition.js`.
+- **Musique et sorties** : `sequence.js`, `harmonie.js`, `accords.js`,
+  `morceau.js`, `midi.js`, `musicxml.js`, `exports.js`, `zip.js`,
+  `piano.js`, `transport.js`, `ecoute-page.js`, `eveil.js`,
+  `sortie-midi.js`, `dossier-midi.js`, `reglages-live.js`.
+- **Claude dans Portée** (sans DOM : ce qui part vers Claude et ce qui est
+  vérifié au retour) : `claude-idee.js`, `claude-doute.js`, `suggestions.js`.
 
 ## Vérifier
 
