@@ -216,6 +216,101 @@ test("une page corrigée ici et sur un autre appareil : la version de l'autre es
 });
 
 // ---------------------------------------------------------------------------
+// D6 : les versions précédentes et la corbeille
+// ---------------------------------------------------------------------------
+
+/** Le nombre de notes de la mélodie d'une fiche de la bibliothèque commune. */
+const notesCommunes = (f) => (f && f.donnees && f.donnees.sequence ? f.donnees.sequence.pistes[0].notes.length : -1);
+
+test("les versions précédentes d'une idée : ce que chacune a changé, et « Récupérer cette version » ; la corbeille rend ce qu'on a supprimé (D6)", async () => {
+  const commun = await bibliothequeCommune();
+  try {
+    const ctx = await commun.appareil(TELEPHONE);
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await noterUneIdee(page);
+    const premiere = await ficheCommune(commun, (f) => notesCommunes(f) === 3);
+    // Une note de plus, depuis l'éditeur : la bibliothèque commune garde la version d'avant.
+    await page.click("#liste .ligne-carnet .ligne-ouvrir");
+    await page.waitForFunction(() => !document.getElementById("vue-idee").hidden && document.getElementById("idee-etat").textContent === "");
+    await page.keyboard.press("KeyF");
+    await page.waitForFunction(() => document.getElementById("idee-etat").textContent === "Enregistrée");
+    await page.click("#vue-idee [data-retour]");
+    await ficheCommune(commun, (f) => f.id === premiere.id && notesCommunes(f) === 4);
+    // Le « ••• » de la ligne : « Versions précédentes ».
+    await page.click("#liste .ligne-carnet .plus");
+    await page.click('#feuille-liste .btn:has-text("Versions précédentes")');
+    await page.waitForSelector("#feuille-versions[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#feuille-versions .version").length === 2, null, { timeout: 20000 });
+    await page.waitForFunction(() => ![...document.querySelectorAll("#feuille-versions .version-resume")].some((r) => r.textContent === "…"));
+    const lignes = await page.locator("#feuille-versions .version").allTextContents();
+    assert.match(lignes[0], /^Maintenant\s*1 note de plus$/);
+    assert.match(lignes[1], /La plus ancienne gardée\..*Récupérer cette version/);
+    // Récupérer : une question, qui dit que la version d'aujourd'hui reste.
+    await page.click("#feuille-versions .version >> nth=1 >> button");
+    await page.waitForSelector("#dialogue[open]");
+    assert.match(await page.textContent("#dialogue"), /Celle que tu as maintenant reste dans les versions précédentes/);
+    await page.click('#dialogue button[value="oui"]');
+    assert.match(await messageQui(page, /est revenue/), /la version du .* est revenue\./);
+    await page.waitForSelector("#feuille-versions:not([open])", { state: "attached" });
+    // Elle s'écrit comme une modification neuve : trois notes, ici et dans la bibliothèque commune.
+    await page.waitForFunction(() => /3 notes/.test(document.querySelector("#liste .ligne-carnet .ligne-quand").textContent));
+    await ficheCommune(commun, (f) => f.id === premiere.id && notesCommunes(f) === 3);
+    assert.equal((await commun.bibliotheque.versions(premiere.id)).length, 3, "celle d'aujourd'hui est devenue une version précédente");
+
+    // Depuis l'éditeur aussi, dans son « ••• ».
+    await page.click("#liste .ligne-carnet .ligne-ouvrir");
+    await page.waitForSelector("#vue-idee:not([hidden])");
+    await page.click("#idee-plus");
+    await page.click('#idee-menu [data-menu="versions"]');
+    await page.waitForFunction(() => document.querySelectorAll("#feuille-versions[open] .version").length === 3, null, { timeout: 20000 });
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#feuille-versions:not([open])", { state: "attached" });
+    await page.click("#vue-idee [data-retour]");
+
+    // Supprimée, puis récupérée de la corbeille.
+    await page.click("#liste .ligne-carnet .plus");
+    await page.click('#feuille-liste .btn:has-text("Supprimer")');
+    await page.click('#dialogue button[value="oui"]');
+    await page.waitForFunction(() => document.querySelectorAll("#liste .ligne-carnet").length === 0);
+    await ficheCommune(commun, (f) => f.id === premiere.id && f.supprime);
+    await page.click("#tab-reglages");
+    await page.click("#ouvrir-corbeille");
+    await page.waitForSelector("#feuille-corbeille[open] .version");
+    assert.match(await page.textContent("#feuille-corbeille .version"), /Idée · supprimée le \d+ .* · encore 30 jours/);
+    await page.click('#feuille-corbeille .version button[aria-label^="Récupérer « Idée du"]');
+    assert.match(await messageQui(page, /dans ta bibliothèque/), /est revenue dans ta bibliothèque\./);
+    assert.match(await page.textContent("#feuille-corbeille .versions-liste"), /La corbeille est vide\./);
+    await page.keyboard.press("Escape");
+    await page.click("#tab-carnet");
+    await page.waitForFunction(() => document.querySelectorAll("#liste .ligne-carnet").length === 1);
+    await ficheCommune(commun, (f) => f.id === premiere.id && !f.supprime);
+    await verifierPropre(page);
+  } finally { await commun.fermer(); }
+});
+
+test("sans connecteur, ni corbeille ni versions précédentes : caché, pas grisé (D6)", async () => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await noterUneIdee(page);
+    await page.click("#liste .ligne-carnet .plus");
+    await page.waitForSelector("#feuille-actions[open]");
+    assert.equal(await page.locator('#feuille-liste .btn:has-text("Versions précédentes")').count(), 0);
+    await page.keyboard.press("Escape");
+    await page.click("#liste .ligne-carnet .ligne-ouvrir");
+    await page.waitForSelector("#vue-idee:not([hidden])");
+    await page.click("#idee-plus");
+    await page.waitForSelector("#idee-menu[open]");
+    assert.equal(await page.isVisible('#idee-menu [data-menu="versions"]'), false);
+    await page.keyboard.press("Escape");
+    await page.click("#vue-idee [data-retour]");
+    await page.click("#tab-reglages");
+    assert.equal(await page.isVisible("#ouvrir-corbeille"), false);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+// ---------------------------------------------------------------------------
 // D7 : deux onglets
 // ---------------------------------------------------------------------------
 

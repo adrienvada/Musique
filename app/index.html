@@ -166,6 +166,8 @@
           </div>
           <button class="reglages-ligne principal" id="activer-synchro" hidden><span>Synchroniser mes appareils</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
           <button class="reglages-ligne" id="synchroniser" hidden><span>Synchroniser maintenant</span><svg class="ico s" aria-hidden="true"><use href="#i-nuage"></use></svg></button>
+          <!-- Ce que la bibliothèque commune garde 30 jours (D6, versions-ui.js) : avec la synchronisation seulement. -->
+          <button class="reglages-ligne" id="ouvrir-corbeille" data-avec-synchro aria-haspopup="dialog" hidden><span>Corbeille (30 jours)</span><svg class="ico s" aria-hidden="true"><use href="#i-suivant"></use></svg></button>
         </div>
         <div id="zone-synchro"></div>
       </section>
@@ -832,6 +834,8 @@
         <button class="btn" data-menu="musicxml"><svg class="ico" aria-hidden="true"><use href="#i-partition"></use></svg>MusicXML (MuseScore)</button>
         <button class="btn" data-menu="morceau"><svg class="ico" aria-hidden="true"><use href="#i-morceau"></use></svg>Ajouter à un morceau</button>
         <button class="btn" data-menu="dupliquer"><svg class="ico" aria-hidden="true"><use href="#i-copier"></use></svg>Dupliquer l'idée</button>
+        <!-- Les versions gardées par la bibliothèque commune (D6, versions-ui.js) : avec la synchronisation seulement. -->
+        <button class="btn" data-menu="versions" data-avec-synchro hidden><svg class="ico" aria-hidden="true"><use href="#i-historique"></use></svg>Versions précédentes</button>
         <button class="btn" data-menu="infos"><svg class="ico" aria-hidden="true"><use href="#i-carnet"></use></svg>Notes, étiquettes, mémo</button>
         <button class="btn" data-menu="reglages"><svg class="ico" aria-hidden="true"><use href="#i-reglages"></use></svg>Tempo, mesure et réglages</button>
         <button class="btn btn-danger" data-menu="supprimer"><svg class="ico" aria-hidden="true"><use href="#i-corbeille"></use></svg>Supprimer l'idée</button>

@@ -406,7 +406,10 @@ export function creerSynchro({ local, appeler, surEtat = () => {}, verrou = verr
         const avecMemo = pages.find((p) => p && p.memo);
         await local.creer(id, { ...donnees, modifieLe: maintenant }, avecMemo ? [] : pages.filter(Array.isArray).map(decompacter), { memo: avecMemo ? avecMemo.memo : null });
       }
-      return api.synchroniser();
+      // Écrite ici, elle est revenue : si la synchro échoue maintenant (le réseau), elle partira au
+      // prochain passage, et l'état le dit. Sans cela, l'écran disait « n'est pas revenue » pour une
+      // version bel et bien revenue (lot « écrans des données »).
+      return api.synchroniser().catch(() => null);
     },
     /** Fait revenir une partition de la corbeille. */
     async recupererSupprimee(id) {

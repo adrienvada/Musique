@@ -105,6 +105,9 @@ export function creerSynchronisation(deps) {
     const actif = synchronisable();
     const s = stockage();
     $("synchroniser").hidden = !actif;
+    // Ce qui ne sert qu'avec la bibliothèque commune (la corbeille, les versions précédentes, D6) :
+    // caché sans elle, pas grisé.
+    for (const x of document.querySelectorAll("[data-avec-synchro]")) x.hidden = !actif;
     $("activer-synchro").hidden = actif || dansClaude() || !(s && s.synchronisable);
     deps.majReglagesRm();
     if (!s) return;
@@ -226,6 +229,8 @@ export function creerSynchronisation(deps) {
     demarrer, arreter, synchroniser, afficher, rafraichirOuverte,
     /** La synchronisation est branchée (le site, une adresse de connecteur, IndexedDB). */
     active: synchronisable,
+    /** La synchronisation, pour ce qu'elle garde (la corbeille, les versions : D6) ; null sans elle. */
+    synchro: () => (synchronisable() ? synchro : null),
     /** Le stockage est ouvert : un autre onglet qui change une partition la fait reprendre ici (S8). */
     brancher() {
       const s = stockage();

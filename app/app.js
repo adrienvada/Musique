@@ -193,13 +193,20 @@ const { exporterMidi, toutEnMidi, partagerMidi, exporterMusicXml, exporterAbc } 
 const gestes = creerGestes({
   stockage: () => etat.stockage, partitions: () => etat.partitions, nouvelId, pageOuverte,
   editeur: () => editeur, vueMorceau: () => vueMorceau, ouvrir: (id) => ouvrir(id), ouvrirMorceau, montrer,
-  exports: { exporterMidi, exporterMusicXml },
+  exports: { exporterMidi, exporterMusicXml }, versions: () => versions,
 });
 
 // Les autres versions d'une partition : la copie de conflit (D4), la corbeille et les versions précédentes (D6) : versions-ui.js.
 const versions = creerVersions({
   stockage: () => etat.stockage, partitions: () => etat.partitions,
-  synchronisee: () => !!synchronisation && synchronisation.active(),
+  synchro: () => (synchronisation ? synchronisation.synchro() : null),
+  // Une version récupérée depuis l'écran qui la montre (le « ••• » de l'éditeur) : il la reprend.
+  apresRecuperation: async (id) => {
+    const ecran = navigation.partitionOuverte();
+    if (!ecran || ecran.partition() !== id) return;
+    const p = await etat.stockage.lire(id);
+    if (p) await ecran.recharger(p);
+  },
 });
 
 /** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */

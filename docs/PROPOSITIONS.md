@@ -2345,6 +2345,45 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     (`tests/e2e/donnees.test.mjs`) : une fiche abîmée dans la
     bibliothèque commune et une partition datée de 2031, refusées avec
     leur raison ; réparée là-bas, la première arrive à « Réessayer ».
+- **Les versions précédentes et la corbeille (D6, `app/versions.js`,
+  `app/versions-ui.js`).** Le connecteur garde depuis le lot données la
+  version d'avant à chaque écriture (20 au plus, 30 jours) et 30 jours ce
+  qui a été supprimé ; rien ne permettait d'y revenir.
+  - Le « ••• » d'une partition, d'une idée ou d'un morceau (carnet,
+    Partitions, Morceaux), et celui de l'éditeur d'idée : « Versions
+    précédentes ». Une feuille liste les versions, la plus récente d'abord,
+    avec leur date et ce que chacune a changé quand c'est simple (« 2 notes
+    de plus », « titre « Pluie » », « 1 doute réglé · marquée prête » ;
+    au-delà de deux changements : « … et d'autres changements »). Puis
+    « Récupérer cette version », après une question qui dit que celle
+    d'aujourd'hui reste dans les versions. Elle s'écrit comme une
+    modification neuve et part partout ; l'éditeur ouvert sur l'idée la
+    reprend aussitôt.
+  - Réglages › Synchronisation › « Corbeille (30 jours) » : ce qui a été
+    supprimé, sa sorte, sa date, les jours qui restent, et « Récupérer ».
+  - Rien de tout cela sans connecteur, ni sur claude.ai : caché, pas
+    grisé (un attribut `data-avec-synchro`, que l'état de la synchro
+    montre ou cache).
+  - Pourquoi une synchro juste avant de lister : ce qui attend part
+    d'abord, la liste est à jour, et une version récupérée part de la
+    dernière.
+  - Pourquoi chaque version se relit (une à quatre à la fois) : le nom
+    d'une version ne dit que sa date ; ce qu'elle a changé, il faut la
+    lire, ainsi que celle d'avant. La liste s'affiche d'abord, les phrases
+    arrivent ensuite. Deux versions de la même minute se distinguent par
+    leurs secondes.
+  - L'appareil qui a écrit une version : le connecteur ne le note pas. Il
+    faudrait qu'il range le nom de l'appareil avec chaque écriture (lot
+    connecteur) ; la ligne pourra alors le dire.
+  - **Une version revenue se disait « pas revenue » hors ligne
+    (`synchro.js`, une ligne).** `recupererVersion` écrivait ici puis
+    synchronisait ; si la synchro échouait (le réseau), l'erreur
+    remontait, alors que la version était bel et bien revenue. L'échec de
+    la synchro ne remonte plus : elle partira au prochain passage, et
+    l'état le dit.
+  - Essais : `tests/versions.test.mjs`, et « les versions précédentes
+    d'une idée… » et « sans connecteur, ni corbeille ni versions… »
+    (`tests/e2e/donnees.test.mjs`).
 - **La version de l'autre appareil : tu tranches d'un geste (D4,
   `app/conflits.js`, `app/versions-ui.js`).** Quand le texte d'une page
   lue a changé ici et sur un autre appareil, la synchronisation garde

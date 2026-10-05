@@ -125,7 +125,9 @@ export function toutesEtiquettes(partitions) {
  *   ouvrir(id, vue), ouvrirIdee(p, options), ouvrirMorceau(p),
  *   partagerMidi(p), exporterMidi(p),
  *   supprimer(p) (demande confirmation, puis supprime),
- *   calibration(modele), ideesParId(), importer(fichiers), toast(texte)
+ *   calibration(modele), ideesParId(), importer(fichiers), toast(texte),
+ *   afficherReglages() (les Réglages relisent ce qui garde la bibliothèque, sauvegarde-ui.js),
+ *   versions (versions-ui.js : la copie de conflit, les versions précédentes)
  * }
  */
 export function creerAccueil(deps) {
@@ -502,6 +504,8 @@ export function creerAccueil(deps) {
       ajouter("telecharger", "MIDI", puis(() => deps.exporterMidi(p)));
     }
     ajouter(p.favori ? "etoile-pleine" : "etoile", p.favori ? "Retirer des favoris" : "Mettre en favori", puis(() => basculerFavori(p)));
+    // Les versions que garde la bibliothèque commune (D6) : avec la synchronisation seulement.
+    if (deps.versions && deps.versions.possibles()) ajouter("historique", "Versions précédentes", puis(() => deps.versions.ouvrirVersions(p)));
     // Supprimer se faisait seulement de l'intérieur (le « ••• » de l'écran ouvert) :
     // depuis la liste, on ne trouvait pas comment. La question vient ensuite.
     ajouter("corbeille", "Supprimer", puis(() => deps.supprimer(p)), { danger: true });
