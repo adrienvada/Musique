@@ -1999,6 +1999,46 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   - Essai : `tests/e2e/ecrans.test.mjs` (« un PDF illisible, puis pdf.js
     qui ne vient pas ») : le message dit quoi faire, en français, et le
     même import marche une fois le réseau revenu.
+- **La synchronisation vue de l'appli a son module
+  (`app/synchronisation-ui.js`, T3),** et un seul endroit reprend la
+  partition ouverte quand elle change ailleurs (`rafraichirOuverte`).
+  - **Plus de faux « modifiée sur un autre appareil » (T4).** L'idée et le
+    morceau se rechargeaient dès que la synchro recevait quoi que ce soit,
+    même une autre partition, et le disaient. Chaque écran compare
+    maintenant ce qu'il montre (le titre, les notes, les blocs…) avec la
+    version reçue : rien n'a changé pour lui, rien ne bouge et rien ne se
+    dit. Et il ne recharge jamais pendant qu'une écriture attend ou part
+    (avant, seule la minuterie comptait : la version d'avant pouvait
+    remplacer à l'écran la note qu'on venait d'écrire).
+  - **Un autre onglet qui change la partition ouverte la fait reprendre
+    ici (S8, seconde moitié),** par `surAutreOnglet`. L'éditeur d'idée et
+    le morceau disent au stockage d'où ils partent (`depuis`, la dernière
+    version qu'ils savent dans la base) : si elle a changé entre-temps, les
+    deux se fusionnent au lieu que l'une écrase l'autre. Cette version de
+    départ est rangée avec l'ouverture (`session.derniere`), pas avec
+    l'écran : une écriture en retard pour l'idée d'avant part avec la
+    sienne.
+  - Essai : « une idée ouverte ne se dit modifiée que si elle l'a été »
+    (`tests/e2e/ecrans.test.mjs`), avec le vrai connecteur sur le faux
+    stockage des tests.
+- **Un enregistrement différé commun (`app/enregistreur.js`, T3, T4).** Il
+  y en avait trois (« Corriger », l'éditeur d'idée, le morceau). Celui-ci
+  fixe ce qu'il écrira au moment où on le planifie : la cible (la partition
+  de ce moment-là) et une copie de son contenu. Une autre cible fait
+  d'abord partir ce qui attendait ; les écritures se suivent. L'éditeur
+  d'idée et le morceau s'en servent déjà ; avant, une écriture en attente
+  au moment d'ouvrir une autre idée (« Idée tirée d'une phrase ») lisait
+  l'idée suivante, et pouvait en créer une seconde.
+  - **Une idée rechargée tout de suite n'est plus perdue (T4).** Le premier
+    enregistrement attend 0,7 s, et rien n'écrivait quand la page se
+    fermait. Tous les enregistreurs se vident quand la page passe en
+    arrière-plan (`visibilitychange`), se recharge ou se ferme
+    (`beforeunload`, `pagehide`). `pagehide` seul ne suffisait pas : à ce
+    moment, Chromium abandonne la transaction IndexedDB avec la page
+    (essayé) ; `beforeunload`, au début de la navigation, lui laisse le
+    temps. Ni l'un ni l'autre ne demande quoi que ce soit à Adrien.
+  - Essais : `tests/enregistreur.test.mjs`, et « quatre notes, puis un
+    rechargement tout de suite » dans `tests/e2e/ecrans.test.mjs`.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

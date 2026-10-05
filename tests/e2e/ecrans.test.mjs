@@ -12,7 +12,55 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { servir } from "./serveur.mjs";
-import { ORDINATEUR, RACINE, contexte, importerLesExemples, lancer, octetsDu, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { ORDINATEUR, RACINE, attendreQue, contexte, importerLesExemples, lancer, octetsDu, ouvrirPortee, siteAssemble, verifierPropre } from "./commun.mjs";
+import { demarrerFauxStockage } from "../faux-cloud.mjs";
+import { Bibliotheque } from "../../supabase/functions/portee-remarkable/bibliotheque.js";
+import { coffreMemoire } from "../../supabase/functions/portee-remarkable/coffre.js";
+import { repondreHttp } from "../../supabase/functions/portee-remarkable/http.js";
+import { objetsSupabase } from "../../supabase/functions/portee-remarkable/objets.js";
+import { CloudRemarkable } from "../../supabase/functions/portee-remarkable/remarkable.js";
+
+/**
+ * Un appareil relié à une bibliothèque commune : le vrai connecteur (http.js)
+ * sur le faux stockage des tests, à une adresse de la forme exacte que
+ * l'appli attend, assemblée ici (rien qui ressemble à un vrai secret dans le
+ * dépôt). L'adresse est collée d'avance : la synchronisation part au démarrage.
+ */
+async function appareilSynchronise(appareil = ORDINATEUR) {
+  const stockage = await demarrerFauxStockage();
+  const projet = ["essai", "ecrans"].join("").padEnd(20, "x");
+  const cle = ["cle", "d", "essai", "ecrans"].join("-").padEnd(32, "0");
+  const adresse = `https://${projet}.supabase.co/functions/v1/portee-remarkable/${cle}`;
+  const bibliotheque = new Bibliotheque(objetsSupabase(stockage.url, stockage.cle));
+  const tablette = new CloudRemarkable(coffreMemoire(null), { auth: "http://127.0.0.1:9", sync: "http://127.0.0.1:9" });
+  const ctx = await contexte(navigateur, {
+    appareil,
+    routes: [[(u) => u.hostname === `${projet}.supabase.co`, async (route) => {
+      const r = route.request();
+      const reponse = await repondreHttp(new Request(r.url(), { method: r.method(), headers: await r.allHeaders(), body: r.postData() ?? undefined }), {
+        cle, cloud: () => tablette, bibliotheque: () => bibliotheque, origines: [serveur.origine],
+      });
+      await route.fulfill({ status: reponse.status, headers: Object.fromEntries(reponse.headers), body: Buffer.from(await reponse.arrayBuffer()) });
+    }]],
+  });
+  await ctx.addInitScript((a) => { try { localStorage.setItem("portee:connecteur", a); } catch { /* sans stockage */ } }, adresse);
+  return { ctx, bibliotheque, fermer: async () => { await ctx.close(); await stockage.fermer(); } };
+}
+
+/** Les messages passagers, notés au fil de l'eau (un message peut en remplacer un autre avant qu'on le lise). */
+const noterLesMessages = (page) => page.evaluate(() => {
+  window.__messages = [];
+  const t = document.getElementById("toast");
+  new MutationObserver(() => { if (t.textContent) window.__messages.push(t.textContent); }).observe(t, { childList: true, characterData: true, subtree: true });
+});
+const messages = (page) => page.evaluate(() => window.__messages);
+const synchroniserMaintenant = (page) => page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+/** La partition `id` est dans la base de la page (la synchro l'a reçue). */
+const recue = (page, id) => attendreQue(page, (i) => new Promise((ok) => {
+  const r = indexedDB.open("portee");
+  r.onsuccess = () => { const q = r.result.transaction("partitions").objectStore("partitions").get(i); q.onsuccess = () => { ok(!!q.result); r.result.close(); }; };
+  r.onerror = () => ok(false);
+}), id);
 
 const MELODIE = path.join(RACINE, "tests/pages/2026-09-30-melodie-standard.pdf");
 
@@ -130,4 +178,61 @@ test("un PDF illisible, puis pdf.js qui ne vient pas : le message dit quoi faire
     serveur.etat.pannes.clear();
     await ctx.close();
   }
+});
+
+test("une idée ouverte ne se dit « modifiée sur un autre appareil » que si elle l'a été (T4)", async () => {
+  const { ctx, bibliotheque, fermer } = await appareilSynchronise();
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.waitForFunction(() => /Synchronisé/.test(document.getElementById("mode").textContent), null, { timeout: 20000 });
+    await page.click("#nouvelle-idee");
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    for (const k of ["KeyA", "KeyS", "KeyD"]) await page.keyboard.press(k);
+    await page.waitForFunction(() => document.getElementById("idee-etat").textContent === "Enregistrée");
+    // L'idée rejoint la bibliothèque commune.
+    const debut = Date.now();
+    let fiche = null;
+    while (!fiche && Date.now() - debut < 15000) {
+      fiche = (await bibliotheque.changements()).partitions.find((f) => f.donnees?.type === "idee") || null;
+      if (!fiche) await new Promise((ok) => setTimeout(ok, 200));
+    }
+    assert.ok(fiche, "l'idée est partie");
+    await noterLesMessages(page);
+    // Un autre appareil ajoute une partition qui n'a rien à voir.
+    const maintenant = new Date().toISOString();
+    const autre = { type: "idee", titre: "Autre chose", statut: "idee", nbPages: 0, modele: null, tempo: 90, sequence: { version: 1, tempo: 90, mesure: [4, 4], tonalite: "C", accompagnement: "aucun", suivant: 2, accords: [], pistes: [{ nom: "Mélodie", cle: "sol", notes: [{ id: 1, d: 0, l: 4, h: 72 }] }] }, creeLe: maintenant };
+    assert.equal((await bibliotheque.ecrire({ id: "pautre", donnees: autre, pages: [], modifieLe: maintenant })).accepte, true);
+    await synchroniserMaintenant(page);
+    await recue(page, "pautre");
+    await page.waitForTimeout(400); // rafraichirOuverte a eu le temps de passer
+    assert.deepEqual((await messages(page)).filter((m) => /autre appareil/.test(m)), [], "rien n'a changé pour l'idée ouverte");
+    assert.equal(await page.locator("#idee-grille .g-note:not(.autre)").count(), 3);
+    // Cette fois, l'idée ouverte elle-même change ailleurs : elle se reprend, et le dit.
+    const plusTard = new Date(Date.now() + 1000).toISOString();
+    const seq = structuredClone(fiche.donnees.sequence);
+    seq.pistes[0].notes.push({ id: 99, d: 12, l: 4, h: 77 });
+    assert.equal((await bibliotheque.ecrire({ id: fiche.id, donnees: { ...fiche.donnees, sequence: seq }, pages: [], modifieLe: plusTard })).accepte, true);
+    await synchroniserMaintenant(page);
+    await page.waitForFunction(() => document.querySelectorAll("#idee-grille .g-note:not(.autre)").length === 4, null, { timeout: 15000 });
+    assert.equal((await messages(page)).filter((m) => /modifiée sur un autre appareil/.test(m)).length, 1);
+    await verifierPropre(page);
+  } finally { await fermer(); }
+});
+
+test("quatre notes, puis un rechargement tout de suite : l'idée est là (T4)", async (t) => {
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await page.click("#nouvelle-idee");
+    await page.waitForSelector("#vue-idee:not([hidden]) #idee-clavier .touche");
+    for (const k of ["KeyA", "KeyS", "KeyD", "KeyF"]) await page.keyboard.press(k);
+    // Bien avant les 0,7 s du premier enregistrement : sinon, cette machine est trop lente pour l'essai.
+    if ((await page.textContent("#idee-etat")) !== "Enregistrement…") { t.skip("le premier enregistrement est déjà passé"); return; }
+    await page.reload();
+    await page.waitForFunction(() => document.querySelectorAll("#liste .ligne-carnet").length === 1, null, { timeout: 10000 })
+      .catch(() => assert.fail("l'idée a été perdue au rechargement"));
+    await page.click("#liste .ligne-carnet .ligne-ouvrir");
+    await page.waitForFunction(() => document.querySelectorAll("#idee-grille .g-note:not(.autre)").length === 4);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
 });

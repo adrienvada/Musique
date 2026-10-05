@@ -19,11 +19,20 @@ import { dessinerApercu } from "./apercus.js";
 import { ico } from "./icones.js";
 import { ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { $, pluriel } from "./ui.js";
+import { creerEnregistreur } from "./enregistreur.js";
+import { cause } from "./erreurs.js";
+import { egal } from "./fiche.js";
+
+// Ce que l'écran montre d'un morceau : une version d'ailleurs qui ne change rien de cela ne se recharge pas.
+const CHAMPS_MONTRES = ["titre", "blocs", "tempo"];
 
 
 export function creerVueMorceau(deps) {
   const { transport, toast } = deps;
-  const m = { id: null, titre: "", blocs: [], tempo: null, creeLe: null, minuterie: null, sauvegarde: Promise.resolve(), choisi: null };
+  // `session` : le morceau ouvert, pour ses enregistrements (son identifiant une fois créé, et la
+  // dernière version qu'il sait dans le stockage, d'où part la fusion : S8).
+  const m = { id: null, titre: "", blocs: [], tempo: null, creeLe: null, choisi: null, session: { id: null, derniere: null } };
+  let tempoEnAttente = false;
   let glisse = null;
   let lecture = null; // { cle: "tout" | id d'un bloc } tant que cet écran fait sonner le transport
   let joue = null;    // le bloc qui sonne
@@ -38,9 +47,12 @@ export function creerVueMorceau(deps) {
   $("morceau-sections").innerHTML = SECTIONS.map((s) => `<option value="${s}">`).join("");
 
   function ouvrir(p) {
+    // Ce qui attendait pour le morceau d'avant part d'abord, avec son contenu à lui.
+    ecritures.vider();
+    m.session = { id: p ? p.id : null, derniere: p };
     m.id = p ? p.id : null;
     m.titre = p ? p.titre : "Nouveau morceau";
-    m.blocs = p ? JSON.parse(JSON.stringify(p.blocs || [])) : [];
+    m.blocs = p ? structuredClone(p.blocs || []) : [];
     m.tempo = p ? p.tempo || null : null;
     m.creeLe = p ? p.creeLe : null;
     m.choisi = null;
@@ -56,8 +68,7 @@ export function creerVueMorceau(deps) {
     lecture = null;
     joue = null;
     fermerFeuilles();
-    if (m.minuterie) { clearTimeout(m.minuterie); m.minuterie = null; sauver(); }
-    await m.sauvegarde;
+    await ecritures.vider();
   }
 
   function fermerFeuilles() {
@@ -89,37 +100,42 @@ export function creerVueMorceau(deps) {
     planifier();
   }
 
-  /** L'enregistrement, une demi-seconde après le dernier geste. */
+  /**
+   * L'enregistrement, une demi-seconde après le dernier geste (enregistreur.js) :
+   * ce qui part est la copie du morceau prise maintenant, pour ce morceau-ci.
+   */
   function planifier() {
-    clearTimeout(m.minuterie);
     afficherEtat("attente");
-    m.minuterie = setTimeout(() => { m.minuterie = null; sauver(); }, 500);
+    ecritures.planifier(m.session, { titre: m.titre, blocs: structuredClone(m.blocs), tempo: m.tempo });
   }
 
-  function sauver() {
-    m.sauvegarde = m.sauvegarde.then(async () => {
-      const stockage = deps.stockage();
-      const maintenant = new Date().toISOString();
-      const donnees = { type: "morceau", titre: m.titre, blocs: m.blocs, tempo: m.tempo, statut: "morceau", nbPages: 0, modele: null };
-      try {
-        if (!m.id) {
-          if (!m.blocs.length) return;
-          m.id = deps.nouvelId();
-          m.creeLe = maintenant;
-          await stockage.creer(m.id, { ...donnees, creeLe: maintenant, modifieLe: maintenant }, []);
-        } else {
-          await stockage.modifier(m.id, { ...donnees, modifieLe: maintenant });
-        }
-        afficherEtat("ok");
-      } catch (e) {
-        console.error(e);
-        const texte = "Non enregistré : " + (e.message || e.code || "erreur");
-        afficherEtat("erreur", texte);
-        toast(texte, 7000);
+  /** Écrit une copie du morceau (`x`) dans son morceau (`s`) : le créer au premier bloc, sinon le modifier (S8). */
+  async function ecrire(s, x) {
+    const stockage = deps.stockage();
+    const maintenant = new Date().toISOString();
+    const donnees = { type: "morceau", titre: x.titre, blocs: x.blocs, tempo: x.tempo, statut: "morceau", nbPages: 0, modele: null };
+    const ici = s === m.session;
+    try {
+      if (!s.id) {
+        if (!x.blocs.length) return;
+        s.id = deps.nouvelId();
+        if (ici) { m.id = s.id; m.creeLe = maintenant; }
+        const fiche = { ...donnees, creeLe: maintenant, modifieLe: maintenant };
+        // Écrite, elle devient la dernière version connue (les écritures se suivent : `s` n'a pas bougé).
+        await stockage.creer(s.id, fiche, []).then(() => { s.derniere = fiche; });
+      } else {
+        const fiche = { ...donnees, modifieLe: maintenant };
+        await stockage.modifier(s.id, fiche, { depuis: s.derniere }).then(() => { s.derniere = fiche; });
       }
-    });
-    return m.sauvegarde;
+      if (ici) afficherEtat("ok");
+    } catch (e) {
+      console.error(e);
+      const texte = "Non enregistré : " + cause(e);
+      if (ici) afficherEtat("erreur", texte);
+      toast(texte, 7000);
+    }
   }
+  const ecritures = creerEnregistreur({ ecrire, delai: 500, fondre: (_avant, apres) => apres });
 
   /**
    * L'état d'enregistrement, discret : un point de suspension qui attend, une
@@ -442,7 +458,8 @@ export function creerVueMorceau(deps) {
     $("morceau-tempo-val").textContent = `♩ = ${$("morceau-tempo").value}`;
     arreterEcoute();
     clearTimeout(minuterieTempo);
-    minuterieTempo = setTimeout(() => { m.tempo = Number($("morceau-tempo").value); changement(); }, 300);
+    tempoEnAttente = true;
+    minuterieTempo = setTimeout(() => { tempoEnAttente = false; m.tempo = Number($("morceau-tempo").value); changement(); }, 300);
   });
   // − et + : un battement de plus ou de moins, pour qui n'a pas le doigt assez fin pour la glissière.
   for (const [id, pas] of [["morceau-tempo-moins", -1], ["morceau-tempo-plus", 1]]) {
@@ -466,11 +483,19 @@ export function creerVueMorceau(deps) {
   $("morceau-supprimer").addEventListener("click", async () => {
     if (!m.id) { deps.quitter(); return; }
     if (!(await deps.veutSupprimer({ id: m.id, type: "morceau", titre: m.titre }))) return;
-    clearTimeout(m.minuterie); m.minuterie = null;
-    await m.sauvegarde;
-    await deps.stockage().supprimer(m.id, 0);
-    toast(`« ${m.titre} » est supprimé.`);
-    m.id = null;
+    // Ce qui attendait ne part plus ; ce qui s'écrit finit d'abord.
+    const id = m.id, titre = m.titre;
+    ecritures.oublier();
+    await ecritures.vider();
+    try {
+      await deps.stockage().supprimer(id, 0);
+    } catch (e) {
+      console.error(e);
+      toast(`« ${titre} » n'a pas pu être supprimé : ${cause(e)}.`, 7000);
+      return;
+    }
+    toast(`« ${titre} » est supprimé.`);
+    if (m.id === id) { m.id = null; m.session = { id: null, derniere: null }; }
     deps.quitter();
   });
 
@@ -564,11 +589,19 @@ export function creerVueMorceau(deps) {
   liste.addEventListener("pointerup", lacher);
   liste.addEventListener("pointercancel", lacher);
 
-  /** Le morceau a changé sur un autre appareil : on le reprend, sauf changement en cours ici. */
+  /** Une écriture attend ou part, ou le tempo se règle : on ne recharge pas sous les doigts. */
+  const occupe = () => ecritures.occupe || tempoEnAttente;
+
+  /**
+   * Le morceau a changé ailleurs : on le reprend, sauf changement en cours
+   * ici. Rien de ce qu'il montre n'a changé : rien à faire, et rien à dire (T4).
+   */
   function recharger(p) {
-    if (!p || p.id !== m.id || m.minuterie) return false;
+    if (!p || p.id !== m.id || occupe()) return false;
+    if (CHAMPS_MONTRES.every((c) => egal(p[c], m.session.derniere && m.session.derniere[c]))) return false;
+    m.session.derniere = p;
     m.titre = p.titre;
-    m.blocs = JSON.parse(JSON.stringify(p.blocs || []));
+    m.blocs = structuredClone(p.blocs || []);
     m.tempo = p.tempo || null;
     $("morceau-titre").value = m.titre;
     afficher();
@@ -576,7 +609,7 @@ export function creerVueMorceau(deps) {
   }
 
   return {
-    ouvrir, fermer, ajouter, recharger,
+    ouvrir, fermer, ajouter, recharger, occupe,
     get id() { return m.id; },
     // Une idée a changé : on redessine, sauf si on est en train de nommer un bloc.
     rafraichir: () => {

@@ -13,8 +13,8 @@ import { dessinerPage } from "./manuscrit.js";
 import { Piano } from "./piano.js";
 import { nouvelId, ouvrirStockage, restaurer, sauvegarde } from "./stockage.js";
 import * as ed from "./edition.js";
-import { adresseEnregistree } from "./connecteur.js";
-import { creerSynchro } from "./synchro.js";
+import { creerSynchronisation } from "./synchronisation-ui.js";
+import { egal } from "./fiche.js";
 import { creerEditeurIdee } from "./idee.js";
 import { Transport } from "./transport.js";
 import { notesDePage, surlignage } from "./ecoute-page.js";
@@ -36,7 +36,7 @@ import { creerAccueil } from "./accueil.js";
 import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, suivre } from "./doutes.js";
 import { afficherVueAtelier, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes, placerOnglets, suivreDock } from "./atelier.js";
 import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
-import { $, accorde, dateRelative, heure, pluriel, retirerToast, toast } from "./ui.js";
+import { $, accorde, dateRelative, pluriel, retirerToast, toast } from "./ui.js";
 import { dialogue, veutSupprimer } from "./dialogue.js";
 
 const ABCJS = () => window.ABCJS;
@@ -75,6 +75,7 @@ let editeur = null; // l'éditeur d'idée (idee.js), créé au démarrage
 let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
 let accueil = null; // l'accueil et ses quatre onglets (accueil.js)
 let tablette = null; // le panneau « Ma reMarkable », l'adresse du connecteur, les modèles (tablette.js)
+let synchronisation = null; // la bibliothèque synchronisée, vue de l'appli (synchronisation-ui.js)
 
 // ------------------------------------------------------------------------
 // Petits outils d'interface
@@ -262,131 +263,55 @@ function afficherBibliotheque() {
 }
 
 // ------------------------------------------------------------------------
-// Bibliothèque synchronisée (site seulement ; sur claude.ai, sa base suffit)
+// La partition ouverte, pour la synchronisation
 // ------------------------------------------------------------------------
 //
-// Chaque appareil garde toute la bibliothèque ; synchro.js échange les
-// changements avec la bibliothèque commune, par le connecteur. Déclencheurs :
-// démarrage, retour sur l'onglet ou du réseau, quelques secondes après une
-// modification, et toutes les 90 s tant que la page est visible.
+// Ce que chaque écran dit de ce qu'il montre (synchronisation-ui.js) : de quoi
+// le reprendre quand la partition change ailleurs, et ne pas le faire pendant
+// qu'il écrit.
 
-let synchro = null, minuterieSynchro = null, battement = null, dernierEtat = null;
+// Ce que « Corriger » et « Écouter » montrent d'une page : une version d'ailleurs qui n'y change rien ne se recharge pas.
+const CHAMPS_PAGE = ["titre", "abc", "doutes", "statut", "tempo", "transposition"];
 
-function synchronisable() {
-  return !dansClaude() && etat.stockage && etat.stockage.synchronisable && !!adresseEnregistree();
-}
-
-async function demarrerSynchro() {
-  if (!synchronisable()) { afficherSynchro(null); return; }
-  // Une autre adresse, c'est une autre bibliothèque commune : on la rejoint depuis le début.
-  const adresse = adresseEnregistree();
-  if ((await etat.stockage.lireMeta("adresse")) !== adresse) {
-    await etat.stockage.ecrireMeta("curseur", null);
-    await etat.stockage.ecrireMeta("rejoint", false);
-    await etat.stockage.ecrireMeta("adresse", adresse);
-  }
-  synchro ??= creerSynchro({ local: etat.stockage, appeler: (outil, args) => tablette.appelerOutil(outil, args), surEtat: afficherSynchro });
-  etat.stockage.surChangement(() => { clearTimeout(minuterieSynchro); minuterieSynchro = setTimeout(synchroniser, 2500); });
-  clearInterval(battement);
-  battement = setInterval(() => { if (document.visibilityState === "visible") synchroniser(); }, 90000);
-  synchroniser();
-}
-
-function arreterSynchro() {
-  clearInterval(battement);
-  clearTimeout(minuterieSynchro);
-  if (etat.stockage && etat.stockage.surChangement) etat.stockage.surChangement(() => {});
-  synchro = null;
-  afficherSynchro(null);
-}
-
-async function synchroniser() {
-  if (!synchro || !synchronisable()) return;
-  try {
-    const { recues } = await synchro.synchroniser();
-    if (recues) await rafraichirOuverte();
-  } catch (e) {
-    console.warn("Synchronisation", e);
-  }
-}
-
-/** La partition ouverte a changé sur un autre appareil : on la recharge, ou on revient à la bibliothèque. */
-async function rafraichirOuverte() {
-  if (etat.vue === "morceau") {
-    if (!vueMorceau.id) return;
-    const neuf = await etat.stockage.lire(vueMorceau.id);
-    if (!neuf) { toast("Ce morceau a été supprimé sur un autre appareil."); montrer("biblio"); return; }
-    vueMorceau.recharger(neuf);
-    return;
-  }
-  if (etat.vue === "idee") {
-    if (!editeur.id) return;
-    const neuve = await etat.stockage.lire(editeur.id);
-    if (!neuve) { toast("Cette idée a été supprimée sur un autre appareil."); montrer("biblio"); return; }
-    if (editeur.recharger(neuve)) toast(`« ${neuve.titre} » a été modifiée sur un autre appareil : mise à jour.`);
-    return;
-  }
+/** Une page lue a changé ailleurs : on la reprend, avec ses traits. */
+async function rechargerPage(neuve) {
   const p = etat.courante;
-  if (!p || etat.vue === "biblio") return;
-  const neuve = await etat.stockage.lire(p.id);
-  if (!neuve) {
-    toast(`« ${p.titre} » a été supprimée sur un autre appareil.`);
-    etat.courante = null;
-    montrer("biblio");
-    return;
-  }
-  if ((neuve.modifieLe || "") <= (p.modifieLe || "")) return;
-  // Une correction en cours ici garde la main : elle partira à son tour.
-  if ($("enregistre").textContent === "…") return;
-  toast(`« ${neuve.titre} » a été modifiée sur un autre appareil : mise à jour.`);
-  etat.courante = neuve;
-  etat.pages = await etat.stockage.pages(neuve.id, neuve.nbPages || 0).catch(() => etat.pages);
-  $("fil-titre").textContent = neuve.titre;
+  if (!p || (neuve.modifieLe || "") <= (p.modifieLe || "")) return false;
+  if (CHAMPS_PAGE.every((c) => egal(neuve[c], p[c]))) return false;
+  const pages = await etat.stockage.pages(neuve.id, neuve.nbPages || 0).catch(() => null);
+  if (etat.courante !== p) return false; // une autre partition s'est ouverte entre-temps
+  poserPage(neuve, pages || etat.pages);
   montrer(etat.vue);
+  return true;
 }
 
-function afficherSynchro(e) {
-  if (e) dernierEtat = e;
-  const actif = synchronisable();
-  $("synchroniser").hidden = !actif;
-  $("activer-synchro").hidden = actif || dansClaude() || !(etat.stockage && etat.stockage.synchronisable);
-  tablette.majReglagesRm();
-  if (!etat.stockage) return;
-  if (dansClaude() || etat.stockage.mode === "claude") {
-    // Les textes de claude.ai sont posés au démarrage ; ici, seulement l'icône du haut.
-    const surClaude = etat.stockage.mode === "claude";
-    if (!surClaude) $("mode").textContent = "Enregistré dans ce navigateur";
-    accueil.montrerSynchro(surClaude
-      ? { nuage: true, ton: "ok", titre: "Enregistré sur claude.ai" }
-      : { nuage: false, ton: "gris", titre: "Enregistré dans ce navigateur" });
-    return;
-  }
-  if (!actif) {
-    $("mode").textContent = "Enregistré dans ce navigateur";
-    $("mode-detail").textContent = "Tes partitions restent dans ce navigateur. Active la synchronisation pour les retrouver sur tous tes appareils, ou sauvegarde-les dans un fichier.";
-    accueil.montrerSynchro({ nuage: false, ton: "gris", titre: "Enregistré dans ce navigateur, pas synchronisé" });
-    return;
-  }
-  const d = dernierEtat || { etat: "encours" };
-  const attente = d.attente ? ` · ${pluriel(d.attente, "modification")} en attente` : "";
-  if (d.etat === "encours") $("mode").textContent = "Synchronisation…";
-  else if (d.etat === "ok") $("mode").textContent = `Synchronisé à ${heure(d.le)}` + attente;
-  else $("mode").textContent = (navigator.onLine === false ? "Hors ligne" : "Synchronisation impossible") + attente;
-  $("mode-detail").textContent = d.etat === "erreur"
-    ? `Tes partitions restent dans ce navigateur et partiront à la prochaine connexion. (${(d.erreur && (d.erreur.message || d.erreur.code)) || "erreur"})`
-    : "Ta bibliothèque est synchronisée : tu retrouves les mêmes partitions sur chaque appareil où tu as collé l'adresse du connecteur.";
-  // L'icône du haut : verte quand tout est parti, ambre quand quelque chose attend.
-  accueil.montrerSynchro({ nuage: d.etat !== "erreur", ton: d.etat === "ok" ? "ok" : d.etat === "erreur" ? "alerte" : "gris", titre: $("mode").textContent });
+/** La page lue que montrent « Corriger » et « Écouter », avec ses traits. */
+function poserPage(p, pages) {
+  etat.courante = p;
+  etat.pages = pages;
+  $("fil-titre").textContent = p.titre;
 }
 
-function formulaireSynchro() {
-  const bloc = document.createElement("div");
-  bloc.className = "aide-connecteur";
-  const p = document.createElement("p");
-  p.textContent = "Colle l'adresse de ton connecteur « Portée reMarkable » (la même que dans claude.ai). Fais-le sur chaque appareil : ils partageront la même bibliothèque, et le bouton reMarkable marchera aussi.";
-  bloc.append(p, tablette.formulaireAdresse(() => { bloc.remove(); toast("Synchronisation activée."); }));
-  return bloc;
-}
+const montrees = {
+  idee: {
+    partition: () => editeur.id, occupe: () => editeur.occupe(), recharger: (p) => editeur.recharger(p),
+    supprimee: () => "Cette idée a été supprimée sur un autre appareil.",
+  },
+  morceau: {
+    partition: () => vueMorceau.id, occupe: () => vueMorceau.occupe(), recharger: (p) => vueMorceau.recharger(p),
+    supprimee: () => "Ce morceau a été supprimé sur un autre appareil.",
+  },
+  page: {
+    partition: () => (etat.courante ? etat.courante.id : null),
+    // Une correction en cours ici garde la main : elle partira à son tour.
+    occupe: () => $("enregistre").textContent === "…",
+    recharger: rechargerPage,
+    supprimee: () => `« ${etat.courante.titre} » a été supprimée sur un autre appareil.`,
+  },
+};
+/** L'écran ouvert, s'il montre une partition. */
+const partitionOuverte = () => (etat.vue === "idee" ? montrees.idee : etat.vue === "morceau" ? montrees.morceau
+  : etat.vue === "atelier" || etat.vue === "lecteur" ? montrees.page : null);
 
 // ------------------------------------------------------------------------
 // Modèles à mettre sur la tablette, sauvegarde de la bibliothèque
@@ -1071,13 +996,6 @@ function brancher() {
 
   // La bibliothèque
   $("tout-midi").addEventListener("click", toutEnMidi);
-  $("synchroniser").addEventListener("click", synchroniser);
-  $("activer-synchro").addEventListener("click", () => {
-    if (!document.querySelector("#zone-synchro .aide-connecteur")) $("zone-synchro").appendChild(formulaireSynchro());
-  });
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") synchroniser(); });
-  window.addEventListener("online", synchroniser);
-  window.addEventListener("offline", () => afficherSynchro(dernierEtat && { ...dernierEtat, etat: "erreur", erreur: { message: "hors ligne" } }));
   $("sauvegarder").addEventListener("click", sauvegarderBibliotheque);
   $("restaurer").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) restaurerBibliotheque(f); });
 
@@ -1401,7 +1319,15 @@ async function demarrer() {
   tablette = creerTablette({
     dansClaude, stockage: () => etat.stockage, partitions: () => etat.partitions,
     ouvrir: (id, vue) => ouvrir(id, vue), enregistrerLecture, versPartitions,
-    surAdresse: () => demarrerSynchro(), surOubli: () => arreterSynchro(),
+    surAdresse: () => synchronisation.demarrer(), surOubli: () => synchronisation.arreter(),
+  });
+  synchronisation = creerSynchronisation({
+    dansClaude, stockage: () => etat.stockage,
+    appeler: (outil, args) => tablette.appelerOutil(outil, args),
+    formulaireAdresse: (apres) => tablette.formulaireAdresse(apres), majReglagesRm: () => tablette.majReglagesRm(),
+    montrerSynchro: (x) => accueil.montrerSynchro(x),
+    ouverte: partitionOuverte,
+    quitter: () => { if (etat.vue === "atelier" || etat.vue === "lecteur") etat.courante = null; montrer("biblio"); },
   });
   brancher();
   creerEditeur();
@@ -1433,8 +1359,10 @@ async function demarrer() {
     $("mode").textContent = "Enregistré sur claude.ai";
     $("mode-detail").textContent = "Tes partitions sont enregistrées sur claude.ai : elles te suivent sur tous tes appareils.";
   }
-  afficherSynchro(null);
-  demarrerSynchro();
+  synchronisation.afficher(null);
+  synchronisation.demarrer();
+  // Un autre onglet a changé une partition : celle qui est ouverte ici se reprend (S8).
+  synchronisation.brancher();
   tablette.majReglagesRm();
   // Hors ligne et installable, hors de claude.ai (sw.js n'existe que sur le site).
   // Un contexte sûr : https, ou l'ordinateur lui-même (les essais de bout en bout).

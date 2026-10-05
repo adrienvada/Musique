@@ -39,6 +39,9 @@ import { creerGrille } from "./grille.js";
 import { ico } from "./icones.js";
 import { $, dateCourte, echapper } from "./ui.js";
 import { confirmer } from "./dialogue.js";
+import { creerEnregistreur } from "./enregistreur.js";
+import { cause, explication } from "./erreurs.js";
+import { egal } from "./fiche.js";
 import { brancherFeuille, ouvrirFeuille, fermerFeuille } from "./feuilles.js";
 import { creerModeClavier } from "./idee-clavier.js";
 import { creerChant, messageMicro } from "./idee-chant.js";
@@ -52,6 +55,8 @@ const MESURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8", "2/2"]
 const CLE_DEFAUTS = "portee:idee-defauts";
 const CLE_MODE = "portee:mode-idee";
 const MODES = ["clavier", "chanter", "accords"];
+// Ce que l'éditeur montre d'une idée : une version d'ailleurs qui ne change rien de cela ne se recharge pas.
+const CHAMPS_MONTRES = ["titre", "sequence", "note", "etiquettes", "favori", "memo"];
 
 const titreDuJour = () => `Idée du ${dateCourte(new Date().toISOString())}`;
 
@@ -82,9 +87,15 @@ export function creerEditeurIdee(deps) {
     enregistrement: null, // le jeu en direct en cours (idee-direct.js seul l'écrit)
     accordEnCours: null,
     jetons: [], elements: new Map(),
-    sauvegarde: Promise.resolve(), minuterie: null, ouverte: false,
+    ouverte: false,
+    // L'idée ouverte, pour ses enregistrements : son identifiant (une fois créée) et la
+    // dernière version qu'elle sait dans le stockage (`derniere`), d'où part la fusion
+    // si un autre onglet ou la synchro l'a changée entre-temps (S8).
+    session: { id: null, creeLe: null, derniere: null },
   };
   const tenues = new Map(); // hauteur → note qui sonne (piano)
+  // Les enregistrements de l'idée, un instant après le dernier geste (enregistreur.js).
+  const ecritures = creerEnregistreur({ ecrire: (s, x) => ecrire(s, x), delai: 700, fondre: (_avant, apres) => apres });
   // Le tempo se règle par petits pas (−, +, le curseur) : on l'affiche tout
   // de suite, on ne l'écrit qu'une fois le geste fini (un seul « Annuler »).
   let tempoEnAttente = null, minuterieTempo = null;
@@ -146,7 +157,10 @@ export function creerEditeurIdee(deps) {
    *   ("clavier", "chanter" ou "accords" ; sinon le dernier employé) }
    */
   function ouvrir(p = null, { seq = null, titre = null, memo = false, mode = null } = {}) {
+    // Ce qui attendait pour l'idée d'avant part d'abord, avec son contenu à elle.
+    ecritures.vider();
     e.ouverte = true;
+    e.session = { id: p ? p.id : null, creeLe: p ? p.creeLe : null, derniere: p };
     e.id = p ? p.id : null;
     e.creeLe = p ? p.creeLe : null;
     e.titre = p ? p.titre : titre || titreDuJour();
@@ -196,13 +210,21 @@ export function creerEditeurIdee(deps) {
     for (const h of [...tenues.keys()]) relever(h);
     // Une pédale restée enfoncée ne doit pas tenir les notes des autres écrans.
     piano.pedale(false);
-    if (e.minuterie) { clearTimeout(e.minuterie); e.minuterie = null; sauver(); }
-    await e.sauvegarde;
+    await ecritures.vider();
   }
 
-  /** L'idée a changé sur un autre appareil : on la reprend, sauf modification en cours ici. */
+  /** Une écriture attend ou part, le tempo se règle, ou le jeu en direct tourne : on ne recharge pas sous les doigts. */
+  const occupe = () => ecritures.occupe || tempoEnAttente !== null || !!e.enregistrement;
+
+  /**
+   * L'idée a changé ailleurs (un autre appareil, un autre onglet) : on la
+   * reprend, sauf modification en cours ici. Rien de ce qu'elle montre n'a
+   * changé : rien à faire, et rien à dire (T4).
+   */
   function recharger(p) {
-    if (!e.ouverte || p.id !== e.id || e.minuterie || e.enregistrement) return false;
+    if (!e.ouverte || p.id !== e.id || occupe()) return false;
+    if (CHAMPS_MONTRES.every((c) => egal(p[c], e.session.derniere && e.session.derniere[c]))) return false;
+    e.session.derniere = p;
     e.titre = p.titre;
     e.seq = sq.cloner(p.sequence);
     e.note = p.note || ""; e.etiquettes = p.etiquettes || []; e.favori = !!p.favori; e.memo = p.memo || null;
@@ -268,48 +290,62 @@ export function creerEditeurIdee(deps) {
     planifierSauvegarde();
   }
 
+  /**
+   * Enregistre un instant après le dernier geste (enregistreur.js) : ce qui
+   * part est la copie de l'idée prise maintenant, pour l'idée de maintenant.
+   */
   function planifierSauvegarde(delai = 700) {
-    clearTimeout(e.minuterie);
     $("idee-etat").textContent = "Enregistrement…";
-    e.minuterie = setTimeout(() => { e.minuterie = null; sauver(); }, delai);
+    ecritures.planifier(e.session, instantane(), delai);
   }
+
+  /** Ce que l'idée montre, copié (les gestes qui suivent ne le changent plus). */
+  const instantane = () => ({ titre: e.titre, seq: sq.cloner(e.seq), note: e.note, etiquettes: [...e.etiquettes], favori: e.favori, memo: e.memo });
 
   // Une idée sans note, sans accord, sans mot ni mémo ne s'enregistre pas.
-  const vide = () => e.seq.pistes.every((p) => !p.notes.length) && !(e.seq.accords || []).length && !e.memo && !e.note && !e.etiquettes.length;
+  const vide = (x) => x.seq.pistes.every((p) => !p.notes.length) && !(x.seq.accords || []).length && !x.memo && !x.note && !x.etiquettes.length;
 
-  function donnees() {
-    const { abc } = sq.ecrireAbc(e.seq, { voix: voixCompletes(e.seq), titre: e.titre });
+  /** La fiche d'une idée, telle que le stockage la garde (l'ABC est écrit d'après ses notes). */
+  function donneesDe(x) {
+    const { abc } = sq.ecrireAbc(x.seq, { voix: voixCompletes(x.seq), titre: x.titre });
     return {
-      type: "idee", titre: e.titre, sequence: sq.cloner(e.seq), abc, statut: "idee", nbPages: 0, modele: null, tempo: e.seq.tempo,
-      note: e.note, etiquettes: e.etiquettes, favori: e.favori, memo: e.memo,
+      type: "idee", titre: x.titre, sequence: x.seq, abc, statut: "idee", nbPages: 0, modele: null, tempo: x.seq.tempo,
+      note: x.note, etiquettes: x.etiquettes, favori: x.favori, memo: x.memo,
     };
   }
+  const donnees = () => donneesDe(instantane());
 
-  /** Enregistre (les écritures se suivent, jamais deux à la fois). */
-  function sauver() {
-    e.sauvegarde = e.sauvegarde.then(async () => {
-      const stockage = deps.stockage();
-      if (!stockage) return;
-      const maintenant = new Date().toISOString();
-      try {
-        if (!e.id) {
-          if (vide()) { $("idee-etat").textContent = ""; return; } // une idée vide ne s'enregistre pas
-          e.id = deps.nouvelId();
-          e.creeLe = maintenant;
-          await stockage.creer(e.id, { ...donnees(), creeLe: maintenant, modifieLe: maintenant }, []);
-        } else {
-          await stockage.modifier(e.id, { ...donnees(), modifieLe: maintenant });
-        }
-        if (e.ouverte) $("idee-etat").textContent = "Enregistrée";
-      } catch (err) {
-        console.error(err);
-        const texte = "Non enregistrée : " + (err.message || err.code || "erreur");
-        $("idee-etat").textContent = texte;
-        // L'état ne se voit plus dans la barre : une erreur se dit tout haut.
-        if (e.ouverte) toast(`L'idée n'a pas pu être enregistrée (${err.message || err.code || "erreur"}).`, 8000);
+  /**
+   * Écrit une copie de l'idée (`x`) dans son idée (`s`, la session de
+   * l'ouverture où on l'a prise) : la créer à la première note, sinon la
+   * modifier en disant d'où l'on part (S8).
+   */
+  async function ecrire(s, x) {
+    const stockage = deps.stockage();
+    if (!stockage) return;
+    const ici = () => s === e.session && e.ouverte;
+    const maintenant = new Date().toISOString();
+    try {
+      if (!s.id) {
+        if (vide(x)) { if (ici()) $("idee-etat").textContent = ""; return; } // une idée vide ne s'enregistre pas
+        s.id = deps.nouvelId();
+        s.creeLe = maintenant;
+        if (s === e.session) { e.id = s.id; e.creeLe = maintenant; }
+        const fiche = { ...donneesDe(x), creeLe: maintenant, modifieLe: maintenant };
+        // Écrite, elle devient la dernière version connue (les écritures se suivent : `s` n'a pas bougé).
+        await stockage.creer(s.id, fiche, []).then(() => { s.derniere = fiche; });
+      } else {
+        const fiche = { ...donneesDe(x), modifieLe: maintenant };
+        await stockage.modifier(s.id, fiche, { depuis: s.derniere }).then(() => { s.derniere = fiche; });
       }
-    });
-    return e.sauvegarde;
+      if (ici()) $("idee-etat").textContent = "Enregistrée";
+    } catch (err) {
+      console.error(err);
+      if (s !== e.session) return;
+      $("idee-etat").textContent = "Non enregistrée : " + cause(err);
+      // L'état ne se voit plus dans la barre : une erreur se dit tout haut.
+      if (e.ouverte) toast(`L'idée n'a pas pu être enregistrée : ${explication(err)}`, 8000);
+    }
   }
 
   // --- Jouer une note, écrire -----------------------------------------------------
@@ -628,9 +664,9 @@ export function creerEditeurIdee(deps) {
   /** Garde le mémo (ou l'efface, avec null) : la fiche d'abord, puis le son. */
   async function garderMemo(memo) {
     e.memo = memo ? { duree: memo.duree, type: memo.type } : null;
-    clearTimeout(e.minuterie); e.minuterie = null;
-    await sauver();
-    if (e.id) await deps.stockage().ecrireMemo(e.id, memo).catch((err) => toast("Le mémo n'a pas pu être gardé : " + (err.message || err)));
+    planifierSauvegarde(0);
+    await ecritures.vider();
+    if (e.id) await deps.stockage().ecrireMemo(e.id, memo).catch((err) => toast(`Le mémo n'a pas pu être gardé : ${explication(err)}`));
     afficherInfos();
   }
 
@@ -1010,10 +1046,7 @@ export function creerEditeurIdee(deps) {
     ecrirePref(CLE_DEFAUTS, JSON.stringify({ tempo: e.seq.tempo, mesure: e.seq.mesure, tonalite: e.seq.tonalite }));
   }
 
-  async function sauverMaintenant() {
-    if (e.minuterie) { clearTimeout(e.minuterie); e.minuterie = null; sauver(); }
-    await e.sauvegarde;
-  }
+  const sauverMaintenant = () => ecritures.vider();
 
   function partitionCourante() {
     if (!e.id) return null;
@@ -1059,7 +1092,7 @@ export function creerEditeurIdee(deps) {
   }
 
   return {
-    ouvrir, fermer, recharger, toucheBas, toucheHaut, enfoncer, relever,
+    ouvrir, fermer, recharger, occupe, toucheBas, toucheHaut, enfoncer, relever,
     transformer: (nom) => selection.transformer(nom),
     choisirMode,
     get id() { return e.id; },

@@ -5,7 +5,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { echec, erreur, explication, expliquer, genreErreur } from "../app/erreurs.js";
+import { cause, echec, erreur, explication, expliquer, genreErreur } from "../app/erreurs.js";
 
 /** Une erreur comme le navigateur les lance (un nom, un message). */
 const du = (name, message) => Object.assign(new Error(message), { name });
@@ -41,6 +41,12 @@ test("un message de Portée passe tel quel ; une erreur inconnue peut avoir son 
   assert.equal(explication(new Error("Modèle inconnu : piano-xl")), "Modèle inconnu : piano-xl");
   assert.equal(expliquer(new Error("undefined is not a function"), "Le piano n'a pas pu se charger."), "Le piano n'a pas pu se charger.");
   assert.equal(echec("L'export MIDI", new TypeError("Failed to fetch")), "L'export MIDI n'a pas abouti : pas de connexion. Réessaie quand le réseau sera revenu.");
+});
+
+test("cause : au plus court, pour une ligne d'état", () => {
+  assert.equal(cause(new TypeError("Failed to fetch")), "pas de connexion");
+  assert.equal(cause({ name: "NetworkError", message: "hors ligne" }), "pas de connexion");
+  assert.equal(cause(new Error("Cette partition est illisible : rien n'a été enregistré.")), "Cette partition est illisible : rien n'a été enregistré.");
 });
 
 test("erreur() : une Error avec sa pile, son code et sa cause, plutôt qu'un objet brut", () => {
