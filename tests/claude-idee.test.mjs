@@ -1,15 +1,17 @@
 /**
  * « Demander à Claude » sur une idée (H2) : ce qui part (un texte compact,
  * la forme exacte du JSON attendu), ce qui revient (vérifié, jamais réparé),
- * ce qui s'applique (une nouvelle idée, l'ancienne intacte), et les outils
- * de « libre », qui ne touchent qu'une copie. Les bonnes réponses, les
- * fausses, et les pièges qu'un modèle tend sans le vouloir.
+ * ce qui s'applique (une nouvelle idée, l'ancienne intacte), ce que l'écran
+ * en montre et en écoute, et ce qu'il fait quand `sample` échoue. Les bonnes
+ * réponses, les fausses, et les pièges qu'un modèle tend sans le vouloir.
+ * Les outils de « libre », qui ne touchent qu'une copie : claude-outils.test.mjs.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as sq from "../app/sequence.js";
 import { MESURES } from "../supabase/functions/portee-remarkable/conversation.js";
-import { INTENTIONS, MESSAGE_REFUS, appliquer, chevauchement, demande, empechement, formeSure, nettoyer, outilsSurCopie, poserAccords, valider } from "../app/claude-idee.js";
+import { INTENTIONS, MESSAGE_REFUS, appliquer, chevauchement, demande, empechement, etendueEcoute, formeSure, lireEchec, nettoyer, poserAccords, resume, valider } from "../app/claude-idee.js";
+import { outilsSurCopie } from "../app/claude-outils.js";
 
 /** Une idée de notes [d, l, h] (piste 0), avec ses accords. */
 function idee(notes, { accords = [], ...options } = {}) {
@@ -57,13 +59,13 @@ test("chaque genre dit ce qu'il attend : la place, les bornes, l'exemple", () =>
   const libre = demande("libre", seq, { phrase: "  Rends la fin\nplus triste " }).input;
   for (const x of ["« Rends la fin plus triste »", "celles que tu ne changes pas comprises", "debut + duree ≤ 84", "rends les notes telles quelles"]) assert.ok(libre.includes(x), x);
   // Avec des outils : ils partent dans les options, et la réponse ne dit que ce qui a été fait.
-  const { outils } = outilsSurCopie(seq, sq);
+  const { outils } = outilsSurCopie(seq);
   const avec = demande("libre", seq, { phrase: "Rends la fin plus triste", outils });
   assert.equal(avec.opts.tools, outils);
   assert.ok(avec.input.includes('{"pourquoi": "…"}') && avec.input.includes("une copie de l'idée"));
 });
 
-test("les noms de notes et la mesure en pas sont ceux de sequence.js (copiés ici, ils ne doivent pas s'écarter)", () => {
+test("la demande nomme les notes et compte la mesure comme sequence.js, sur les 24 tonalités et les 88 touches", () => {
   for (const k of sq.TONALITES) {
     const seq = sq.nouvelleSequence({ tonalite: k });
     for (let h = 21; h <= 108; h++) seq.pistes[0].notes.push({ id: h, d: (h - 21) * 4, l: 4, h });
@@ -343,118 +345,19 @@ test("appliquer un titre : le titre, et les étiquettes proposées ajoutées aux
 });
 
 // ------------------------------------------------------------------------
-// « libre » avec des outils : une copie, les gestes de sequence.js
+// « libre » avec des outils : la copie revérifiée (les outils : claude-outils.test.mjs)
 // ------------------------------------------------------------------------
-
-test("les outils ont la forme de sample.d.ts, et des descriptions et schémas dans les bornes", () => {
-  const { outils, copie } = outilsSurCopie(VALSE(), sq);
-  assert.deepEqual(outils.map((o) => o.name), ["transposer", "etirer", "a_l_envers", "miroir", "recaler", "poser_accords", "ajouter_notes", "effacer_notes"]);
-  for (const o of outils) {
-    assert.match(o.name, /^[A-Za-z0-9_-]{1,128}$/);
-    assert.ok(o.description.length > 40 && Buffer.byteLength(o.description) <= 1024, o.name);
-    assert.equal(o.inputSchema.type, "object", o.name);
-    assert.equal(o.inputSchema.additionalProperties, false, o.name);
-    assert.ok(!("required" in o.inputSchema) || o.inputSchema.required.length > 0, o.name); // pas de « required » vide
-    assert.ok(Buffer.byteLength(JSON.stringify(o.inputSchema)) <= 4096, o.name);
-    assert.equal(typeof o.execute, "function");
-  }
-  assert.equal(typeof copie, "function");
-  assert.equal(outilsSurCopie(VALSE(), sq, { max: 3 }).outils.length, 3);
-  assert.throws(() => outilsSurCopie(VALSE(), {}), /geste « transposer »/);
-});
-
-test("les outils travaillent sur une copie, avec les gestes de sequence.js, et rendent peu de chose", () => {
-  const seq = VALSE();
-  const avant = fige(seq);
-  const { outils, copie } = outilsSurCopie(seq, sq);
-  const outil = (nom) => outils.find((o) => o.name === nom);
-  const r = outil("transposer").execute({ demiTons: 12, debut: 24 }, { signal: new AbortController().signal });
-  assert.deepEqual(r, { fait: "1 note montée de 12 demi-tons", notes: 7, mesures: 3 });
-  assert.ok(JSON.stringify(r).length < 200);
-  // Le même geste que sequence.js, fait à la main sur une autre copie.
-  const attendu = sq.cloner(seq);
-  sq.transposer(attendu, 0, [attendu.pistes[0].notes[6].id], 12);
-  assert.deepEqual(copie(), attendu);
-  outil("etirer").execute({ facteur: 2, debut: 0, fin: 12 });
-  sq.etirer(attendu, 0, attendu.pistes[0].notes.filter((n) => n.d < 12).map((n) => n.id), 2);
-  assert.deepEqual(copie(), attendu);
-  outil("a_l_envers").execute({ piste: 1 });
-  sq.retrograder(attendu, 0, attendu.pistes[0].notes.map((n) => n.id));
-  outil("miroir").execute({});
-  sq.renverser(attendu, 0, attendu.pistes[0].notes.map((n) => n.id));
-  outil("recaler").execute({ grille: 4 });
-  sq.recaler(attendu, 0, attendu.pistes[0].notes.map((n) => n.id), 4);
-  assert.deepEqual(copie(), attendu);
-  outil("poser_accords").execute({ accords: [{ mesure: 2, temps: 1, nom: "F" }] });
-  assert.deepEqual(copie().accords.find((a) => a.d === 12), { d: 12, nom: "F" });
-  outil("ajouter_notes").execute({ notes: [{ debut: 80, duree: 4, hauteur: 60 }] });
-  assert.ok(copie().pistes[0].notes.some((n) => n.d === 80 && n.h === 60));
-  assert.match(outil("effacer_notes").execute({ debut: 80, hauteurs: [60] }).fait, /1 note effacée/);
-  // L'idée reçue n'a pas bougé ; copie() rend un état qu'on peut garder (une copie de la copie).
-  assert.deepEqual(seq, avant);
-  const c = copie();
-  c.pistes[0].notes = [];
-  assert.ok(copie().pistes[0].notes.length > 0);
-});
-
-test("poser_accords : mesure après mesure, ce que Claude pose sonne jusqu'à son accord suivant", () => {
-  const seq = idee([[0, 16, 60], [16, 16, 62], [32, 16, 64]], { accords: [[0, "C"]] });
-  const { outils, copie } = outilsSurCopie(seq, sq);
-  // Donnés dans le désordre : le fa de la mesure 1 tient jusqu'au sol 7 du 3ᵉ temps de la mesure 2,
-  // puis le do d'avant revient à la mesure 3, qu'on n'a pas demandé de changer.
-  outils.find((o) => o.name === "poser_accords").execute({ accords: [{ mesure: 2, temps: 3, nom: "G7" }, { mesure: 1, temps: 1, nom: "F" }] });
-  assert.deepEqual(copie().accords, [{ d: 0, nom: "F" }, { d: 24, nom: "G7" }, { d: 32, nom: "C" }]);
-  assert.equal(copie().accompagnement, "plaque");
-});
-
-test("une entrée invalide lève une erreur en français ; un geste qui abîmerait la copie est défait", () => {
-  const seq = VALSE();
-  const { outils, copie } = outilsSurCopie(seq, sq);
-  const outil = (nom) => outils.find((o) => o.name === nom);
-  for (const [nom, entree, motif] of [
-    ["transposer", { demiTons: 0 }, /sauf 0/],
-    ["transposer", { demiTons: "12" }, /demiTons/],
-    ["transposer", {}, /« demiTons » manque/],
-    ["transposer", { demiTons: 2, octave: 1 }, /clé inattendue « octave »/],
-    ["transposer", { demiTons: 2, piste: 2 }, /piste : de 1 à 1/],
-    ["transposer", { demiTons: 2, debut: 40 }, /Aucune note/],
-    ["etirer", { facteur: 3 }, /2 ou 0.5/],
-    ["recaler", { grille: 3 }, /1, 2, 4 ou 8/],
-    ["poser_accords", { accords: [{ mesure: 1, temps: 1, nom: "Do" }] }, /ne se lit pas/],
-    ["poser_accords", { accords: [{ mesure: 1, temps: 9, nom: "C" }] }, /temps : de 1 à 3/],
-    ["poser_accords", { accords: [] }, /de 1 à 64/],
-    ["ajouter_notes", { notes: [{ debut: 0, duree: 4, hauteur: 69 }] }, /se chevauchent/],
-    ["ajouter_notes", { notes: [{ debut: 0, duree: 0, hauteur: 30 }] }, /durée nulle/],
-    ["ajouter_notes", { notes: [{ debut: 0, duree: 4, hauteur: 200 }] }, /hors du clavier/],
-    ["ajouter_notes", { notes: [{ debut: 84, duree: 4, hauteur: 60 }] }, /hors de la place/],
-    ["effacer_notes", { hauteurs: [61] }, /Aucune note de ces hauteurs/],
-    ["transposer", JSON.parse('{"demiTons": 2, "__proto__": {}}'), /clé/],
-    ["transposer", "monte", /un objet/],
-  ]) {
-    assert.throws(() => outil(nom).execute(entree), (e) => e instanceof Error && motif.test(e.message), `${nom} ${JSON.stringify(entree)}`);
-  }
-  assert.deepEqual(copie(), seq); // rien n'a changé
-  // Recaler sur la blanche ferait se chevaucher deux do5 : défait, et dit.
-  const deux = idee([[0, 2, 72], [2, 2, 72]]);
-  const o = outilsSurCopie(deux, sq);
-  assert.throws(() => o.outils.find((x) => x.name === "recaler").execute({ grille: 8 }), /Rien n'est fait : deux notes de même hauteur/);
-  assert.deepEqual(o.copie(), deux);
-  // Étirer au-delà du double de l'idée : défait aussi.
-  const longue = idee([[0, 48, 60]], { mesure: [3, 4] });
-  const l = outilsSurCopie(longue, sq);
-  l.outils.find((x) => x.name === "etirer").execute({ facteur: 2 });
-  assert.throws(() => l.outils.find((x) => x.name === "etirer").execute({ facteur: 2 }), /dépasserait/);
-});
 
 test("libre avec outils : la copie est revérifiée, et une copie inchangée n'est pas une proposition", () => {
   const seq = VALSE();
   const o = { phrase: "Une octave plus haut" };
-  const s = outilsSurCopie(seq, sq);
+  const s = outilsSurCopie(seq);
+  const outil = (nom) => s.outils.find((x) => x.name === nom);
   // Claude n'a rien fait : son pourquoi dit pourquoi.
   const rien = valider("libre", { pourquoi: "Je ne peux pas changer la mesure." }, seq, { ...o, copie: s.copie() });
   non(rien, /rien changé/);
   assert.match(rien.pourquoi, /mesure/);
-  s.outils[0].execute({ demiTons: 12 });
+  outil("transposer").execute({ demiTons: 12 });
   const p = ok(valider("libre", { pourquoi: "Tout monte d'une octave." }, seq, { ...o, copie: s.copie() }));
   const neuve = appliquer("libre", seq, p, o);
   assert.deepEqual(neuve.pistes[0].notes.map((n) => n.h), seq.pistes[0].notes.map((n) => n.h + 12));
@@ -466,7 +369,15 @@ test("libre avec outils : la copie est revérifiée, et une copie inchangée n'e
   chevauche.pistes[0].notes.push({ id: 99, d: 1, l: 2, h: chevauche.pistes[0].notes[0].h });
   non(valider("libre", {}, seq, { ...o, copie: chevauche }), /se chevauchent/);
   non(valider("libre", { notes: [] }, seq, { ...o, copie: s.copie() }), /clé inattendue « notes »/);
-  non(valider("libre", {}, seq, { ...o, copie: { ...s.copie(), mesure: [7, 8] } }), /tempo, mesure ou tonalité/);
+  non(valider("libre", {}, seq, { ...o, copie: { ...s.copie(), mesure: [7, 8] } }), /tempo ou mesure/);
+  non(valider("libre", {}, seq, { ...o, copie: { ...s.copie(), tempo: 200 } }), /tempo ou mesure/);
+  // La tonalité peut changer (transposer_idee), mais seulement pour une tonalité du menu.
+  non(valider("libre", {}, seq, { ...o, copie: { ...s.copie(), tonalite: "H" } }), /tonalité inconnue/);
+  const enSi = outilsSurCopie(seq);
+  enSi.outils.find((x) => x.name === "transposer_idee").execute({ demiTons: 2 });
+  const q = ok(valider("libre", { pourquoi: "En si mineur." }, seq, { phrase: "Transpose en si", copie: enSi.copie() }));
+  assert.equal(q.sequence.tonalite, "Bm");
+  assert.deepEqual(q.sequence.accords.map((a) => a.nom), ["Bm", "Em", "F#7"]);
   const doublon = s.copie();
   doublon.pistes[0].notes[1].id = doublon.pistes[0].notes[0].id;
   non(valider("libre", {}, seq, { ...o, copie: doublon }), /même numéro/);
@@ -479,4 +390,83 @@ test("chevauchement : seules comptent les paires où une note est neuve", () => 
   assert.match(chevauchement([{ d: 10, l: 4, h: 60 }], vieilles), /hauteur 60/);
   assert.match(chevauchement([{ d: 0, l: 2, h: 62 }, { d: 0, l: 4, h: 62 }]), /se chevauchent/);
   assert.equal(chevauchement([{ d: 0, l: 2, h: 62 }, { d: 2, l: 2, h: 62 }]), null); // qui se suivent ne se chevauchent pas
+});
+
+// ------------------------------------------------------------------------
+// Ce que l'écran montre et fait entendre de la proposition
+// ------------------------------------------------------------------------
+
+test("ce qui s'écoute : ce que la proposition change, de barre en barre, une suite avec la mesure d'avant", () => {
+  const seq = VALSE(); // 3/4 : 12 pas par mesure, trois mesures
+  const ecoute = (genre, reponse, options = {}) => {
+    const p = ok(valider(genre, reponse, seq, options));
+    return etendueEcoute(genre, p, seq, appliquer(genre, seq, p, options));
+  };
+  assert.deepEqual(ecoute("accords", { accords: [{ mesure: 1, temps: 1, nom: "Am" }] }), [0, 36]);
+  const ids = seq.pistes[0].notes.filter((n) => n.d >= 12 && n.d < 24).map((n) => n.id);
+  assert.deepEqual(ecoute("accords", { accords: [{ mesure: 2, temps: 1, nom: "F" }] }, { selection: { piste: 0, ids } }), [12, 24]);
+  assert.deepEqual(ecoute("suite", { notes: [{ debut: 0, duree: 12, hauteur: 69 }] }), [24, 60]);
+  const sel = { selection: { piste: 0, ids: seq.pistes[0].notes.slice(1, 4).map((n) => n.id) }, intention: "plus ornée" };
+  assert.deepEqual(ecoute("variation", { notes: [{ debut: 4, duree: 4, hauteur: 72 }, { debut: 8, duree: 4, hauteur: 74 }] }, sel), [0, 12]);
+  assert.deepEqual(ecoute("libre", { notes: [{ debut: 0, duree: 48, hauteur: 69 }] }, { phrase: "Une seule longue note" }), [0, 48]);
+  assert.equal(etendueEcoute("titre", ok(valider("titre", { titre: "Averse" }, seq)), seq, seq), null);
+});
+
+test("ce que dit la proposition, en une ligne", () => {
+  const seq = VALSE();
+  const dit = (genre, reponse, options = {}) => {
+    const p = ok(valider(genre, reponse, seq, options));
+    return resume(genre, p, seq, appliquer(genre, seq, p, options));
+  };
+  assert.equal(dit("accords", { accords: [{ mesure: 1, temps: 1, nom: "Am" }, { mesure: 2, temps: 1, nom: "Dm" }, { mesure: 2, temps: 3, nom: "G7" }, { mesure: 3, temps: 1, nom: "E7" }] }), "4 accords sur les mesures 1 à 3");
+  assert.equal(dit("suite", { notes: [{ debut: 0, duree: 12, hauteur: 69 }] }), "1 note sur les mesures 4 et 5");
+  const sel = { selection: { piste: 0, ids: seq.pistes[0].notes.slice(1, 4).map((n) => n.id) }, intention: "plus calme" };
+  assert.equal(dit("variation", { notes: [{ debut: 4, duree: 8, hauteur: 72 }] }, sel), "1 note à la place de 3");
+  // « libre » avec outils : la copie comparée à l'idée.
+  const o = { phrase: "En si" };
+  const enSi = outilsSurCopie(seq);
+  enSi.outils.find((x) => x.name === "transposer_idee").execute({ demiTons: 2 });
+  assert.equal(dit("libre", { pourquoi: "En si." }, { ...o, copie: enSi.copie() }), "7 notes changées, en si mineur, d'autres accords");
+  const plus = outilsSurCopie(seq);
+  plus.outils.find((x) => x.name === "ajouter_notes").execute({ notes: [{ debut: 36, duree: 12, hauteur: 69 }] });
+  assert.equal(dit("libre", { pourquoi: "Une fin." }, { ...o, copie: plus.copie() }), "1 note de plus");
+  assert.equal(dit("titre", { titre: "Averse" }), "");
+});
+
+// ------------------------------------------------------------------------
+// Quand `sample` échoue
+// ------------------------------------------------------------------------
+
+test("un échec de sample : rien pour « Arrêter », la fonction cachée quand claude.ai la refuse, un message sinon", () => {
+  const lu = (code) => lireEchec({ code, message: "in English, for the developer" });
+  assert.deepEqual(lu("cancelled"), { code: "cancelled", texte: "", cacher: false, autoriser: false, sansOutils: false, sansImages: false });
+  assert.deepEqual([lu("not_granted").cacher, lu("not_granted").autoriser], [true, true]);
+  assert.match(lu("not_granted").texte, /autorise/);
+  for (const code of ["sampling_disabled", "not_declared", "capability_disabled", "capability_removed"]) {
+    assert.equal(lu(code).cacher, true, code);
+    assert.equal(lu(code).autoriser, false, code);
+  }
+  assert.equal(lu("rate_limited").texte, "Claude est très demandé : réessaie dans un moment.");
+  assert.equal(lu("rate_limited").cacher, false); // la fonction reste : Adrien réessaiera
+  assert.match(lu("session_expired").texte, /reconnecte-toi/);
+  assert.match(lu("refused").texte, /formule-la autrement/);
+  assert.equal(lu("tools_unavailable").sansOutils, true);
+  assert.equal(lu("images_unavailable").sansImages, true);
+  for (const code of ["invalid_json", "empty_completion", "upstream_error", "invalid_request", "transform_error", "queue_overflow"]) assert.equal(lu(code).texte, MESSAGE_REFUS, code);
+  // Un code inconnu se lit comme upstream_error (sample.d.ts).
+  assert.deepEqual([lu("tout_nouveau").code, lu("tout_nouveau").texte], ["upstream_error", MESSAGE_REFUS]);
+  // Ce qui n'est pas de sample passe par erreurs.js : null.
+  assert.equal(lireEchec(Object.assign(new Error("L'adresse du connecteur n'est pas valide."), { code: "adresse_invalide" })), null);
+  assert.equal(lireEchec(new TypeError("Failed to fetch")), null);
+  assert.equal(lireEchec(null), null);
+  assert.equal(lireEchec("rate_limited"), null);
+  assert.equal(lireEchec({ message: "sans code" }), null);
+  // Une Error qui porte un code de sample (un autre environnement) se lit quand même.
+  assert.equal(lireEchec(Object.assign(new Error("x"), { code: "rate_limited" })).code, "rate_limited");
+  // Tout ce qui se montre est en français, et ne parle ni de connecteur ni de JSON.
+  for (const code of ["not_granted", "sampling_disabled", "not_declared", "tools_unavailable", "images_unavailable", "image_rejected", "rate_limited", "session_expired", "refused", "prompt_too_large", "invalid_json"]) {
+    const { texte } = lu(code);
+    assert.match(texte, /[éèàêôç]|\b(le|la|pas|est|ici)\b/, code);
+    assert.doesNotMatch(texte, /connecteur|JSON|Supabase/i, code);
+  }
 });

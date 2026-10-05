@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="styles/idee-direct.css">
 <link rel="stylesheet" href="styles/idee-accords.css">
 <link rel="stylesheet" href="styles/idee-selection.css">
+<link rel="stylesheet" href="styles/idee-claude.css">
 
 <header class="barre-haut">
   <div class="dedans">
@@ -709,6 +710,8 @@
           </div>
         </div>
       </div>
+      <!-- Seulement dans la version claude.ai, quand la page peut interroger Claude (idee-claude.js) -->
+      <button class="btn boite-claude" data-action="claude" data-avec-claude hidden><svg class="ico" aria-hidden="true"><use href="#i-etincelle"></use></svg>Demander à Claude</button>
     </dialog>
 
 
@@ -813,6 +816,8 @@
         <button class="btn btn-fantome rond" data-fermer aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
       </div>
       <div class="idee-actions">
+        <!-- Seulement dans la version claude.ai, quand la page peut interroger Claude (idee-claude.js) -->
+        <button class="btn" data-menu="claude" data-avec-claude hidden><svg class="ico" aria-hidden="true"><use href="#i-etincelle"></use></svg>Demander à Claude</button>
         <button class="btn" data-menu="telecharger-midi"><svg class="ico" aria-hidden="true"><use href="#i-telecharger"></use></svg>Télécharger le MIDI</button>
         <button class="btn" data-menu="musicxml"><svg class="ico" aria-hidden="true"><use href="#i-partition"></use></svg>MusicXML (MuseScore)</button>
         <button class="btn" data-menu="morceau"><svg class="ico" aria-hidden="true"><use href="#i-morceau"></use></svg>Ajouter à un morceau</button>
@@ -846,6 +851,75 @@
           <button class="btn" id="memo-ecouter" hidden><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg><span>Écouter</span></button>
           <button class="btn btn-danger" id="memo-effacer" hidden>Effacer</button>
           <span class="remarque mono" id="memo-etat"></span>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Feuille · Demander à Claude (idee-claude.js, idee-claude.css). Seulement dans la version
+         claude.ai, quand la page peut interroger Claude (la capacité « sample ») : sur le site, ni
+         cette feuille ni ses deux entrées (le ••• de l'idée, la boîte à outils) ne se montrent.
+         Claude propose, Portée vérifie, tu écoutes, puis tu gardes : un seul « Annuler ». -->
+    <dialog class="feuille-bas idee-feuille feuille-claude" id="idee-claude" aria-labelledby="claude-titre">
+      <div class="feuille-tete">
+        <button class="btn btn-fantome rond" id="claude-retour" aria-label="Demander autre chose" title="Demander autre chose" hidden><svg class="ico" aria-hidden="true"><use href="#i-retour"></use></svg></button>
+        <h2 id="claude-titre">Demander à Claude</h2>
+        <button class="btn btn-fantome rond" data-fermer aria-label="Fermer"><svg class="ico" aria-hidden="true"><use href="#i-fermer"></use></svg></button>
+      </div>
+      <p class="remarque claude-sur" id="claude-sur"></p>
+
+      <!-- 1. Ce que tu demandes (les cinq demandes, dessinées par idee-claude.js) -->
+      <div class="claude-etape claude-genres" id="claude-genres" role="group" aria-label="Ce que tu demandes à Claude"></div>
+
+      <!-- 2. La précision : l'intention d'une variation, ou ta phrase -->
+      <div class="claude-etape" id="claude-intentions" role="group" aria-labelledby="claude-intentions-titre" hidden>
+        <span class="surtitre" id="claude-intentions-titre">Une variation, mais comment ?</span>
+        <div class="claude-intentions" id="claude-intentions-choix"></div>
+      </div>
+      <form class="claude-etape claude-libre" id="claude-libre" hidden>
+        <label class="surtitre" for="claude-phrase">Dis-lui ce que tu veux</label>
+        <textarea class="champ" id="claude-phrase" rows="3" maxlength="500" aria-describedby="claude-libre-aide" placeholder="Transpose en ré et double les durées de la deuxième mesure"></textarea>
+        <p class="remarque" id="claude-libre-aide" role="status">En une phrase, avec tes mots. Rien ne change avant que tu aies écouté et gardé.</p>
+        <button class="btn btn-plein" type="submit"><svg class="ico s" aria-hidden="true"><use href="#i-etincelle"></use></svg>Demander à Claude</button>
+      </form>
+
+      <!-- 3. Claude réfléchit : rien ne s'affiche de ce qu'il écrit (du JSON), seulement où il en est -->
+      <div class="claude-etape claude-attente" id="claude-attente" hidden>
+        <svg class="ico l claude-souffle" aria-hidden="true"><use href="#i-etincelle"></use></svg>
+        <p class="claude-reflechit" id="claude-reflechit" role="status">Claude réfléchit…</p>
+        <p class="remarque claude-progres" id="claude-progres" aria-live="polite" hidden></p>
+        <p class="remarque" id="claude-attente-aide">Souvent 10 à 60 secondes. Portée vérifie sa réponse avant de te la montrer.</p>
+        <button class="btn" id="claude-arreter"><svg class="ico s" aria-hidden="true"><use href="#i-stop"></use></svg>Arrêter</button>
+      </div>
+
+      <!-- 4. Ce que Claude propose, vérifié : la bande des mesures (des accords), un aperçu des
+           notes, ou les champs du titre ; écouter, en redemander une autre, garder -->
+      <div class="claude-etape" id="claude-proposition" hidden>
+        <p class="claude-resume" id="claude-resume"></p>
+        <div class="claude-apercu" id="claude-apercu"></div>
+        <div class="claude-styles" id="claude-styles-bloc" hidden>
+          <span class="surtitre" id="claude-styles-titre">Accompagnement</span>
+          <div class="seg" id="claude-styles" role="group" aria-labelledby="claude-styles-titre"></div>
+        </div>
+        <div class="claude-champs" id="claude-champs" hidden>
+          <label class="claude-champ">Titre<input class="champ" id="claude-titre-champ" maxlength="60" autocomplete="off" spellcheck="false"></label>
+          <label class="claude-champ">Étiquettes<input class="champ" id="claude-etiquettes-champ" autocomplete="off" spellcheck="false" aria-describedby="claude-etiquettes-aide"></label>
+          <span class="remarque" id="claude-etiquettes-aide">Séparées par des virgules. Retouche ce que tu veux avant de garder.</span>
+        </div>
+        <p class="claude-pourquoi" id="claude-pourquoi" hidden></p>
+        <div class="claude-actions">
+          <button class="btn" id="claude-ecouter" aria-pressed="false"><svg class="ico s" aria-hidden="true"><use href="#i-lire"></use></svg><span>Écouter</span></button>
+          <button class="btn" id="claude-autre"><svg class="ico s" aria-hidden="true"><use href="#i-refaire"></use></svg>Une autre</button>
+          <button class="btn btn-plein" id="claude-garder"><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg>Garder</button>
+        </div>
+      </div>
+
+      <!-- 5. Un message : une réponse que Portée refuse, un échec, l'autorisation à donner -->
+      <div class="claude-etape" id="claude-message" hidden>
+        <p class="claude-message-texte" id="claude-message-texte" role="status"></p>
+        <p class="claude-pourquoi" id="claude-message-pourquoi" hidden></p>
+        <div class="claude-actions">
+          <button class="btn btn-plein" id="claude-autoriser" hidden>Autoriser Claude</button>
+          <button class="btn" id="claude-reessayer"><svg class="ico s" aria-hidden="true"><use href="#i-refaire"></use></svg>Réessayer</button>
         </div>
       </div>
     </dialog>
