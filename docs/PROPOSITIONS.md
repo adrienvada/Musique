@@ -3419,3 +3419,7 @@ ou supprimer la fonction dans Supabase.
    ligne 2 fait 11 croches au lieu de 12 : est-ce le petit trait au bout d'une
    hampe, un crochet oublié ?
 2. Les modèles v1 conviennent-ils à la main (interlignes, nombre de portées) ?
+3. Les questions de l'audit du 04/10 (capture après coup, levée du
+   décompte, jeu lié aux petites valeurs, une seule bibliothèque…) : voir
+   « Ce qui reste à décider » dans [AUDIT-2026-10.md](AUDIT-2026-10.md),
+   avec ma recommandation pour chacune.
