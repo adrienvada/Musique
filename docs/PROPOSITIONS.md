@@ -2374,10 +2374,12 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     promettrait ce que le site ne sait pas faire.
   - Une demande sans objet ne part pas : sa ligne dit pourquoi (« Écris
     d'abord quelques notes… ») au lieu d'envoyer une idée vide à Claude.
-  - « Claude réfléchit… » tant qu'il n'a rien dit (souvent 10 à 60 s), puis
-    « Claude écrit sa proposition… » : ce qu'il écrit est du JSON, il ne se
-    montre jamais. « Arrêter » coupe la demande (un AbortController par
-    appel) et ne dit rien.
+  - « Claude réfléchit… » tant qu'il n'a rien dit, puis « Claude écrit sa
+    proposition… » : ce qu'il écrit est du JSON, il ne se montre jamais.
+    Dessous, ce qu'on peut attendre : quelques secondes pour un titre (le
+    modèle rapide), souvent 10 à 60 s, 30 à 90 s avec les outils (plusieurs
+    tours). « Arrêter » coupe la demande (un AbortController par appel) et
+    ne dit rien.
   - Des accords : la bande des mesures, comme dans la feuille des accords,
     avec « avant : … » quand Claude remplace un accord, et teinté quand
     Portée trouve aussi qu'il va avec ta mélodie (harmonie.js : la racine et

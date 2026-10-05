@@ -241,6 +241,10 @@ export function creerClaude(ctx) {
     $("claude-reflechit").textContent = "Claude réfléchit…";
     $("claude-progres").hidden = true;
     $("claude-progres").textContent = "";
+    // Ce qu'on peut attendre (sample.d.ts) : le modèle rapide pour un titre, plusieurs tours avec les outils.
+    $("claude-attente-aide").textContent = genre === "titre" ? "Quelques secondes. Portée vérifie sa réponse avant de te la montrer."
+      : ici.atelier ? "Avec ses outils, souvent 30 à 90 secondes. Portée revérifie la copie avant de te la montrer."
+        : "Souvent 10 à 60 secondes. Portée vérifie sa réponse avant de te la montrer.";
     allerA("attente");
     focaliser();
     let reponse;
