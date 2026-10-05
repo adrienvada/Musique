@@ -19,7 +19,12 @@
  * passé en dépendances, comme pour l'éditeur d'idée et l'écran du morceau.
  */
 import { dessinerApercu, dessinerApercuMorceau, dessinerApercuPage } from "./apercus.js";
-import { assembler } from "./morceau.js";
+import { assembler, sourceDuMorceau } from "./morceau.js";
+import { pasParMesure, pasParTemps } from "./sequence.js";
+import { voixCompletes } from "./harmonie.js";
+import { creerEcoute } from "./ecoute.js";
+import { libelleLecture } from "./atelier.js";
+import { expliquer } from "./erreurs.js";
 import { ico } from "./icones.js";
 import { $, dateCourte, echapper, el, heure, pluriel } from "./ui.js";
 import { ambianceStudio, lirePref, ecrirePref } from "./preferences.js";
@@ -68,15 +73,47 @@ function partiesDuMorceau(p) {
   return (p.blocs || []).map((b) => (b.fois > 1 ? `${b.nom} ×${b.fois}` : b.nom)).filter(Boolean).join(" · ");
 }
 
+/** « 12 notes · ♩ 90 » : ce qu'on sait d'une idée sans l'ouvrir. */
+function resumeIdee(seq) {
+  if (!seq) return "";
+  const notes = seq.pistes.reduce((n, p) => n + p.notes.length, 0);
+  return `${pluriel(notes, "note")} · ♩ ${seq.tempo}`;
+}
+
+/** Le nom du modèle de papier d'une page (« Piano, large »). */
+function nomModele(m) {
+  return { "melodie-large": "Mélodie, large", "melodie-standard": "Mélodie", "piano-large": "Piano, large", "piano-standard": "Piano" }[m] || m || "";
+}
+
+/** La pastille d'une carte : le genre (idée, morceau), ou l'état d'une page lue. */
+function pastilleStatut(p) {
+  const restants = (p.doutes || []).filter((d) => !d.leve).length;
+  if (p.type === "idee") return el("span", "pastille p-idee", "Idée");
+  if (p.type === "morceau") return el("span", "pastille p-morceau", "Morceau");
+  if (p.statut === "prete") return el("span", "pastille p-ok", "Prête");
+  return el("span", "pastille p-doute", restants ? `À relire · ${pluriel(restants, "doute")}` : "À relire");
+}
+
+/** Toutes les étiquettes de la bibliothèque, les plus employées d'abord (le carnet, l'éditeur d'idée). */
+export function toutesEtiquettes(partitions) {
+  const compte = new Map();
+  // Une fiche abîmée (des étiquettes qui ne sont pas une liste) vidait tout le
+  // carnet (audit, S6) : le stockage les remet en forme, et ceci ne casse plus.
+  for (const p of partitions) {
+    for (const t of Array.isArray(p.etiquettes) ? p.etiquettes : []) if (typeof t === "string" && t) compte.set(t, (compte.get(t) || 0) + 1);
+  }
+  return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
+}
+
 /**
  * @param deps {
  *   stockage() → le stockage ouvert, partitions() → la bibliothèque,
  *   panneaux { reculer(), aLaRacine() } (ceux de la tablette, dans l'onglet Partitions),
+ *   transport (pour écouter depuis une carte),
  *   ouvrir(id, vue), ouvrirIdee(p, options), ouvrirMorceau(p),
- *   ecouter(p, bouton), enLecture(bouton), arreter(), partagerMidi(p), exporterMidi(p),
+ *   partagerMidi(p), exporterMidi(p),
  *   supprimer(p) (demande confirmation, puis supprime),
- *   calibration(modele), ideesParId(), etiquettes(), importer(fichiers),
- *   resumeIdee(seq), nomModele(m), pastilleStatut(p), toast(texte)
+ *   calibration(modele), ideesParId(), importer(fichiers), toast(texte)
  * }
  */
 export function creerAccueil(deps) {
@@ -89,6 +126,8 @@ export function creerAccueil(deps) {
     filtrePages: "tout",  // filtre de l'onglet Partitions : tout, a-relire, prete
   };
   const partitions = () => deps.partitions();
+  // Les cartes ont leur écoute (ecoute.js) : la clé est le bouton touché, le même bouton arrête.
+  const ecoute = creerEcoute(deps.transport);
   const onglets = [...document.querySelectorAll("#onglets-accueil [role='tab']")];
   const feuille = $("feuille-actions");
   let actionsDe = null;       // l'id de la partition dont la feuille est ouverte
@@ -228,9 +267,9 @@ export function creerAccueil(deps) {
 
   /** Ce qui précède la date : le genre, puis ce qu'on sait de la pièce. */
   function genreEtResume(p) {
-    if (p.type === "idee") return ["Idée", deps.resumeIdee(p.sequence)];
+    if (p.type === "idee") return ["Idée", resumeIdee(p.sequence)];
     if (p.type === "morceau") return ["Morceau", (p.blocs || []).map((b) => b.nom).join(", ")];
-    return [p.statut === "prete" ? "Partition prête" : "Partition", deps.nomModele(p.modele)];
+    return [p.statut === "prete" ? "Partition prête" : "Partition", nomModele(p.modele)];
   }
 
   /** Mémo, étiquettes, note en abrégé : une seule ligne, discrète. */
@@ -271,7 +310,7 @@ export function creerAccueil(deps) {
 
   function rendreFiltres() {
     for (const b of document.querySelectorAll("#filtres-carnet [data-filtre]")) b.setAttribute("aria-pressed", String(b.dataset.filtre === etat.filtre));
-    const toutes = deps.etiquettes();
+    const toutes = toutesEtiquettes(partitions());
     if (etat.etiquette && !toutes.includes(etat.etiquette)) etat.etiquette = null;
     const zone = $("filtres-etiquettes");
     zone.textContent = "";
@@ -335,7 +374,7 @@ export function creerAccueil(deps) {
       ouvrir.setAttribute("aria-label", `Ouvrir « ${p.titre} »`);
       ouvrir.addEventListener("click", () => ouvrirPartition(p));
       const corps = el("span", "carte-corps");
-      corps.append(el("span", "titre", p.titre), deps.pastilleStatut(p), el("span", "meta", [deps.nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ")));
+      corps.append(el("span", "titre", p.titre), pastilleStatut(p), el("span", "meta", [nomModele(p.modele), quand(p.modifieLe, "Plus ancien")].filter(Boolean).join(" · ")));
       ouvrir.append(apercuDe(p, "apercu-grand", 2), corps);
       carte.append(ouvrir, boutonPlus(p));
       liste.appendChild(carte);
@@ -375,6 +414,37 @@ export function creerAccueil(deps) {
   }
 
   // ---------------------------------------------------------------------------
+  // Écouter depuis une carte, sans l'ouvrir
+  // ---------------------------------------------------------------------------
+
+  /** Écoute une idée (ou un morceau) depuis sa carte. Le même bouton arrête. */
+  async function ecouter(p, bouton) {
+    if (ecoute.cle === bouton) { ecoute.arreter(); return; }
+    let source;
+    if (p.type === "morceau") source = sourceDuMorceau(assembler(p, deps.ideesParId()));
+    else {
+      const seq = p.sequence;
+      const parPas = new Map();
+      let fin = 0;
+      for (const v of voixCompletes(seq)) for (const n of v.notes) { if (!parPas.has(n.d)) parPas.set(n.d, []); parPas.get(n.d).push(n); fin = Math.max(fin, n.d + n.l); }
+      source = () => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA: (x) => parPas.get(x) || [] });
+    }
+    const libelle = bouton.innerHTML;
+    const lecture = ecoute.jouer(bouton, source, {
+      // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
+      titre: p.titre || (p.type === "morceau" ? "Morceau" : "Idée"), relancer: () => { if (ecoute.cle === null) bouton.click(); },
+      surArret: () => { bouton.innerHTML = libelle; },
+    });
+    libelleLecture(bouton, true);
+    try {
+      await lecture;
+    } catch (e) {
+      console.error(e);
+      toast(expliquer(e, "Le piano n'a pas pu se charger."));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // La feuille d'actions (« ••• »)
   // ---------------------------------------------------------------------------
 
@@ -400,7 +470,7 @@ export function creerAccueil(deps) {
     if (p.type === "idee" || p.type === "morceau") {
       ajouter("carnet", "Ouvrir", puis(() => deps.ouvrir(p.id)), { plein: true });
       // L'écoute reste dans la feuille : « Arrêter » est là, sous le doigt ; fermer la feuille coupe le son.
-      boutonEcoute = ajouter("lire", "Écouter", (b) => deps.ecouter(p, b));
+      boutonEcoute = ajouter("lire", "Écouter", (b) => ecouter(p, b));
       ajouter("partager", "Envoyer le MIDI", puis(() => deps.partagerMidi(p)));
     } else {
       ajouter("crayon", "Corriger", puis(() => deps.ouvrir(p.id, "atelier")), { plein: p.statut !== "prete" });
@@ -417,7 +487,7 @@ export function creerAccueil(deps) {
   function brancherFeuilleActions() {
     brancherFeuille(feuille, {
       surFermer: () => {
-        if (boutonEcoute && deps.enLecture(boutonEcoute)) deps.arreter();
+        if (boutonEcoute && ecoute.cle === boutonEcoute) ecoute.arreter();
         actionsDe = null;
         boutonEcoute = null;
       },

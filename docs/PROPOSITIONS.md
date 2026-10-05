@@ -2033,10 +2033,19 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     enregistrement attend 0,7 s, et rien n'écrivait quand la page se
     fermait. Tous les enregistreurs se vident quand la page passe en
     arrière-plan (`visibilitychange`), se recharge ou se ferme
-    (`beforeunload`, `pagehide`). `pagehide` seul ne suffisait pas : à ce
-    moment, Chromium abandonne la transaction IndexedDB avec la page
-    (essayé) ; `beforeunload`, au début de la navigation, lui laisse le
-    temps. Ni l'un ni l'autre ne demande quoi que ce soit à Adrien.
+    (`beforeunload`, `pagehide`). Ni l'un ni l'autre ne demande quoi que ce
+    soit à Adrien.
+  - **Et une copie de secours, pour quand la page n'a pas le temps.**
+    Vider ne suffit pas : à `pagehide`, Chromium abandonne la transaction
+    IndexedDB avec la page (essayé : l'idée était perdue à chaque fois), et
+    à `beforeunload` elle se perdait encore une fois sur six quand la
+    machine était chargée. Ce qui attend ou s'écrit encore part donc aussi
+    dans `localStorage` (`portee:secours`), qui s'écrit d'un coup, sans rien
+    attendre ; au démarrage suivant, `reprendreSecours` le remet dans la
+    bibliothèque si l'écriture n'a pas fini (une version aussi récente ou
+    plus gagne ; une partition supprimée depuis ne revient pas), puis
+    l'efface. Si la page vit encore une fois tout écrit (une fermeture
+    annulée), la copie s'efface aussitôt.
   - Essais : `tests/enregistreur.test.mjs`, et « quatre notes, puis un
     rechargement tout de suite » dans `tests/e2e/ecrans.test.mjs`.
 - **« Corriger » et « Écouter » sont des fabriques, comme l'éditeur d'idée
@@ -2089,6 +2098,20 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     l'accueil en avaient chacun un, et le carnet se dessinait deux fois.
   - Essais : « précédent dans Corriger » et « Portée, en haut »
     (`tests/e2e/ecrans.test.mjs`).
+- **`app.js` ne fait plus que composer (T3) : 2 125 lignes avant le lot,
+  ≈450 après.** Il crée les écrans et les modules, et les relie (ouvrir une
+  partition dans son écran, les actions du « ••• » de l'éditeur,
+  supprimer). Ce qui restait part chez qui s'en sert :
+  - `app/navigation.js` : montrer un écran, la pile des écrans d'où l'on
+    vient, et le bouton « précédent » (il interroge le registre des
+    écrans) ;
+  - l'accueil reprend l'écoute depuis une carte, le résumé d'une idée, le
+    nom d'un modèle, la pastille d'une carte et la liste des étiquettes
+    (`toutesEtiquettes`, que l'éditeur d'idée emprunte) ;
+  - `app/sauvegarde-ui.js` : la sauvegarde dans un fichier et la
+    restauration (`bilanRestauration`, désormais essayée) ;
+  - `app/mises-a-jour.js` : l'appli installable, le service worker et la
+    proposition de recharger après une mise en ligne.
 
 ### Atelier et pages manuscrites (intégration des L, H1)
 

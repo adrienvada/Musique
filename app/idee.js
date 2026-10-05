@@ -88,14 +88,14 @@ export function creerEditeurIdee(deps) {
     accordEnCours: null,
     jetons: [], elements: new Map(),
     ouverte: false,
-    // L'idée ouverte, pour ses enregistrements : son identifiant (une fois créée) et la
-    // dernière version qu'elle sait dans le stockage (`derniere`), d'où part la fusion
-    // si un autre onglet ou la synchro l'a changée entre-temps (S8).
-    session: { id: null, creeLe: null, derniere: null },
+    // L'idée ouverte, pour ses enregistrements : son identifiant, si elle est déjà dans
+    // la bibliothèque (`cree`), et la dernière version qu'elle y sait (`derniere`), d'où
+    // part la fusion si un autre onglet ou la synchro l'a changée entre-temps (S8).
+    session: { id: null, creeLe: null, cree: false, derniere: null },
   };
   const tenues = new Map(); // hauteur → note qui sonne (piano)
   // Les enregistrements de l'idée, un instant après le dernier geste (enregistreur.js).
-  const ecritures = creerEnregistreur({ ecrire: (s, x) => ecrire(s, x), delai: 700, fondre: (_avant, apres) => apres });
+  const ecritures = creerEnregistreur({ ecrire: (s, x) => ecrire(s, x), secours: (s, x) => secours(s, x), delai: 700, fondre: (_avant, apres) => apres });
   // Le tempo se règle par petits pas (−, +, le curseur) : on l'affiche tout
   // de suite, on ne l'écrit qu'une fois le geste fini (un seul « Annuler »).
   let tempoEnAttente = null, minuterieTempo = null;
@@ -160,7 +160,7 @@ export function creerEditeurIdee(deps) {
     // Ce qui attendait pour l'idée d'avant part d'abord, avec son contenu à elle.
     ecritures.vider();
     e.ouverte = true;
-    e.session = { id: p ? p.id : null, creeLe: p ? p.creeLe : null, derniere: p };
+    e.session = { id: p ? p.id : null, creeLe: p ? p.creeLe : null, cree: !!p, derniere: p };
     e.id = p ? p.id : null;
     e.creeLe = p ? p.creeLe : null;
     e.titre = p ? p.titre : titre || titreDuJour();
@@ -320,20 +320,34 @@ export function creerEditeurIdee(deps) {
    * l'ouverture où on l'a prise) : la créer à la première note, sinon la
    * modifier en disant d'où l'on part (S8).
    */
+  /** Une idée neuve reçoit son identifiant : à sa première écriture, ou pour la copie de secours. */
+  function nommer(s, maintenant) {
+    if (s.id) return;
+    s.id = deps.nouvelId();
+    s.creeLe = maintenant;
+    if (s === e.session) { e.id = s.id; e.creeLe = maintenant; }
+  }
+
+  /** La copie de secours, quand la page se ferme avant l'écriture (enregistreur.js). */
+  function secours(s, x) {
+    if (!s.cree && vide(x)) return null;
+    const maintenant = new Date().toISOString();
+    nommer(s, maintenant);
+    return { id: s.id, creer: !s.cree, donnees: { ...donneesDe(x), creeLe: s.creeLe, modifieLe: maintenant } };
+  }
+
   async function ecrire(s, x) {
     const stockage = deps.stockage();
     if (!stockage) return;
     const ici = () => s === e.session && e.ouverte;
     const maintenant = new Date().toISOString();
     try {
-      if (!s.id) {
+      if (!s.cree) {
         if (vide(x)) { if (ici()) $("idee-etat").textContent = ""; return; } // une idée vide ne s'enregistre pas
-        s.id = deps.nouvelId();
-        s.creeLe = maintenant;
-        if (s === e.session) { e.id = s.id; e.creeLe = maintenant; }
-        const fiche = { ...donneesDe(x), creeLe: maintenant, modifieLe: maintenant };
+        nommer(s, maintenant);
+        const fiche = { ...donneesDe(x), creeLe: s.creeLe, modifieLe: maintenant };
         // Écrite, elle devient la dernière version connue (les écritures se suivent : `s` n'a pas bougé).
-        await stockage.creer(s.id, fiche, []).then(() => { s.derniere = fiche; });
+        await stockage.creer(s.id, fiche, []).then(() => { s.cree = true; s.derniere = fiche; });
       } else {
         const fiche = { ...donneesDe(x), modifieLe: maintenant };
         await stockage.modifier(s.id, fiche, { depuis: s.derniere }).then(() => { s.derniere = fiche; });

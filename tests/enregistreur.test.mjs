@@ -7,7 +7,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { creerEnregistreur, viderTout } from "../app/enregistreur.js";
+import { creerEnregistreur, reprendreSecours, viderTout } from "../app/enregistreur.js";
 
 const attendre = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
@@ -80,4 +80,56 @@ test("viderTout vide chaque enregistreur de la page (pagehide) ; oublier abandon
   assert.deepEqual(a.ecrits, [["A", { x: 1 }]]);
   assert.deepEqual(b.ecrits, [["B", { y: 2 }]]);
   assert.deepEqual(c.ecrits, []);
+});
+
+/** Un stockage local du navigateur, le temps d'un essai. */
+function avecStockageLocal(t) {
+  const cles = new Map();
+  globalThis.localStorage = { getItem: (k) => cles.get(k) ?? null, setItem: (k, v) => cles.set(k, String(v)), removeItem: (k) => cles.delete(k) };
+  t.after(() => { delete globalThis.localStorage; });
+  return cles;
+}
+
+/** Une bibliothèque en mémoire, comme celle du stockage (lire, creer, modifier). */
+function fausseBibliotheque(fiches = {}) {
+  const b = new Map(Object.entries(fiches));
+  return {
+    b,
+    lire: async (id) => (b.has(id) ? { ...b.get(id), id } : null),
+    creer: async (id, d) => { b.set(id, d); },
+    modifier: async (id, patch) => { b.set(id, { ...b.get(id), ...patch }); },
+  };
+}
+
+test("la page se ferme avant l'écriture : la copie de secours la remet au démarrage suivant", async (t) => {
+  const cles = avecStockageLocal(t);
+  // L'écriture ne finit jamais : la page est partie avant (Chromium l'abandonne avec elle).
+  const e = creerEnregistreur({
+    delai: 10000, ecrire: () => new Promise(() => {}),
+    secours: (cible, contenu) => ({ id: cible, creer: cible === "neuve", donnees: { ...contenu, modifieLe: "2026-10-05T10:00:00.000Z" } }),
+  });
+  e.planifier("neuve", { titre: "Idée du matin" });
+  e.planifier("vieille", { abc: "C D" });
+  viderTout({ fermeture: true });
+  assert.ok(cles.has("portee:secours"), "la copie est écrite d'un coup, sans attendre");
+  const bib = fausseBibliotheque({ vieille: { abc: "C", modifieLe: "2026-10-05T09:00:00.000Z" } });
+  assert.equal(await reprendreSecours(bib), 2);
+  assert.deepEqual(bib.b.get("neuve"), { titre: "Idée du matin", modifieLe: "2026-10-05T10:00:00.000Z" });
+  assert.equal(bib.b.get("vieille").abc, "C D");
+  assert.equal(cles.has("portee:secours"), false, "la copie s'efface une fois reprise");
+  e.oublier();
+});
+
+test("la copie de secours ne remplace pas une version plus récente, ni ne fait revenir une partition supprimée", async (t) => {
+  const cles = avecStockageLocal(t);
+  cles.set("portee:secours", JSON.stringify([
+    { id: "a", donnees: { abc: "ancien", modifieLe: "2026-10-05T10:00:00.000Z" } },
+    { id: "b", donnees: { abc: "b", modifieLe: "2026-10-05T10:00:00.000Z" } },
+    { id: "c", creer: true, donnees: { titre: "neuve", modifieLe: "2026-10-05T10:00:00.000Z" } },
+  ]));
+  const bib = fausseBibliotheque({ a: { abc: "écrite à temps", modifieLe: "2026-10-05T10:00:00.001Z" } });
+  assert.equal(await reprendreSecours(bib), 1);
+  assert.equal(bib.b.get("a").abc, "écrite à temps");
+  assert.equal(bib.b.has("b"), false, "supprimée depuis : elle ne revient pas");
+  assert.equal(bib.b.get("c").titre, "neuve");
 });

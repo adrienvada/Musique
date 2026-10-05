@@ -38,7 +38,12 @@ export function creerPageOuverte({ stockage, surEtat = () => {} }) {
       if (p === partition) surEtat("erreur", e);
     }
   }
-  const ecritures = creerEnregistreur({ ecrire, delai: 800, surAttente: (p) => { if (p === partition) surEtat("attente"); } });
+  const ecritures = creerEnregistreur({
+    ecrire, delai: 800,
+    surAttente: (p) => { if (p === partition) surEtat("attente"); },
+    // La page se ferme avant l'écriture : le changement part dans la copie de secours.
+    secours: (p, patch) => ({ id: p.id, donnees: { ...patch, modifieLe: new Date().toISOString() } }),
+  });
 
   return {
     /** La fiche de la page ouverte (ou null). */

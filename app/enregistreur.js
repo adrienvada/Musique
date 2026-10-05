@@ -22,17 +22,83 @@
  * (`visibilitychange`, `beforeunload`, `pagehide`). Les écritures se
  * suivent, jamais deux à la fois.
  *
+ * LA COPIE DE SECOURS. Une page qui se recharge ou se ferme n'a pas le
+ * temps d'attendre une écriture d'IndexedDB : Chromium l'abandonne avec la
+ * page (essayé : `pagehide` arrive trop tard, et `beforeunload` ne suffit
+ * pas toujours quand la machine est chargée). Ce qui attend, ou s'écrit
+ * encore, part donc aussi dans une copie de secours, écrite d'un coup dans
+ * le stockage local du navigateur (`localStorage`, qui ne fait pas
+ * attendre) ; au démarrage suivant, `reprendreSecours` la remet dans la
+ * bibliothèque si l'écriture n'a pas eu le temps de finir, puis l'efface.
+ *
  * Sans DOM (essayé sous Node, tests/enregistreur.test.mjs) : la page ne
  * sert qu'à se vider quand elle se ferme, si elle existe.
  */
+
+const CLE_SECOURS = "portee:secours";
 
 /** Tous les enregistreurs de la page, pour les vider quand elle se ferme. */
 const tous = new Set();
 let ecoute = false;
 
-/** Vide tous les enregistreurs : la page part en arrière-plan, ou se ferme. */
-export function viderTout() {
+/** Le stockage local du navigateur, s'il y en a un et qu'on a le droit de s'en servir. */
+function local() {
+  try { return /** @type {any} */ (globalThis).localStorage || null; } catch { return null; }
+}
+
+/**
+ * Vide tous les enregistreurs. `fermeture` : la page se recharge ou se
+ * ferme ; ce qui attend part aussi dans la copie de secours.
+ */
+export function viderTout({ fermeture = false } = {}) {
+  if (fermeture) garderSecours([...tous].flatMap((e) => e.secours()));
   for (const e of tous) e.vider();
+}
+
+/** Écrit la copie de secours, d'un coup (sans rien attendre). */
+function garderSecours(entrees) {
+  const l = local();
+  if (!l || !entrees.length) return;
+  try { l.setItem(CLE_SECOURS, JSON.stringify(entrees)); } catch { /* stockage local plein ou refusé : l'écriture d'IndexedDB reste */ }
+}
+
+function effacerSecours() {
+  const l = local();
+  try { if (l && l.getItem(CLE_SECOURS) !== null) l.removeItem(CLE_SECOURS); } catch { /* refusé : rien à effacer */ }
+}
+
+/**
+ * Remet dans la bibliothèque ce que la page d'avant n'a pas eu le temps
+ * d'écrire en se fermant, puis efface la copie. Une version déjà là, aussi
+ * récente ou plus, gagne : l'écriture avait fini (ou un autre appareil est
+ * passé après).
+ * @param stockage le stockage ouvert (lire, creer, modifier)
+ * @returns {Promise<number>} combien de partitions sont revenues
+ */
+export async function reprendreSecours(stockage) {
+  const l = local();
+  let entrees;
+  try { entrees = JSON.parse((l && l.getItem(CLE_SECOURS)) || "[]"); } catch { entrees = []; }
+  if (!Array.isArray(entrees) || !entrees.length) return 0;
+  try { l.removeItem(CLE_SECOURS); } catch { /* déjà effacée */ }
+  let revenues = 0;
+  for (const x of entrees) {
+    if (!x || typeof x.id !== "string" || !x.donnees || typeof x.donnees.modifieLe !== "string") continue;
+    try {
+      const ici = await stockage.lire(x.id);
+      if (!ici) {
+        if (!x.creer) continue; // supprimée depuis : on ne la fait pas revenir
+        await stockage.creer(x.id, x.donnees, []);
+      } else {
+        if ((ici.modifieLe || "") >= x.donnees.modifieLe) continue;
+        await stockage.modifier(x.id, x.donnees);
+      }
+      revenues++;
+    } catch (e) {
+      console.error("Copie de secours", e);
+    }
+  }
+  return revenues;
 }
 
 function ecouterLaPage() {
@@ -40,13 +106,12 @@ function ecouterLaPage() {
   ecoute = true;
   // `visibilitychange` (cachée) : le téléphone change d'appli, et la page peut être
   // tuée sans autre avertissement ; elle vit encore, l'écriture a le temps de finir.
-  // `beforeunload` : la page va se recharger ou se fermer. `pagehide` seul arrive trop
-  // tard : Chromium abandonne alors la transaction IndexedDB avec la page (essayé :
-  // l'idée rechargée aussitôt était perdue) ; `beforeunload` part au début de la
-  // navigation et lui en laisse le temps. Aucun des deux ne demande rien à Adrien
-  // (pas de `preventDefault`), et aucun n'empêche le cache arrière des navigateurs.
-  globalThis.addEventListener("beforeunload", viderTout);
-  globalThis.addEventListener("pagehide", viderTout);
+  // `beforeunload` et `pagehide` : la page se recharge ou se ferme ; on écrit aussi la
+  // copie de secours. Aucun des deux ne demande rien à Adrien (pas de
+  // `preventDefault`), et aucun n'empêche le cache arrière des navigateurs.
+  const fermer = () => viderTout({ fermeture: true });
+  globalThis.addEventListener("beforeunload", fermer);
+  globalThis.addEventListener("pagehide", fermer);
   const doc = /** @type {any} */ (globalThis).document;
   if (doc) doc.addEventListener("visibilitychange", () => { if (doc.visibilityState === "hidden") viderTout(); });
 }
@@ -58,17 +123,21 @@ function ecouterLaPage() {
  *   delai?: number,
  *   fondre?: (avant: T, apres: T) => T,
  *   surAttente?: (cible: C) => void,
+ *   secours?: (cible: C, contenu: T) => ({ id: string, donnees: any, creer?: boolean } | null),
  * }} o
  *   ecrire    l'écriture elle-même (l'écran sait comment, et dit lui-même ce qui ne va pas) ;
  *   delai     en millisecondes, après le dernier geste ;
  *   fondre    deux contenus pour la même cible (par défaut, le second complète le premier) ;
- *   surAttente  quelque chose attend d'être écrit (l'écran le montre : « … »).
+ *   surAttente  quelque chose attend d'être écrit (l'écran le montre : « … ») ;
+ *   secours   la fiche (ou le changement) à garder dans la copie de secours, daté de
+ *             maintenant ; `creer` : elle n'est pas encore dans la bibliothèque.
  */
-export function creerEnregistreur({ ecrire, delai = 700, fondre = (a, b) => ({ ...a, ...b }), surAttente = () => {} }) {
+export function creerEnregistreur({ ecrire, delai = 700, fondre = (a, b) => ({ ...a, ...b }), surAttente = () => {}, secours = null }) {
   /** @type {{ cible: C, contenu: T } | null} */
   let attente = null;
+  /** @type {{ cible: C, contenu: T }[]} */
+  let enVol = [];
   let minuterie = null;
-  let enVol = 0;
   /** @type {Promise<void>} */
   let chaine = Promise.resolve();
 
@@ -81,12 +150,16 @@ export function creerEnregistreur({ ecrire, delai = 700, fondre = (a, b) => ({ .
     clearTimeout(minuterie);
     minuterie = null;
     if (!attente) return chaine;
-    const { cible, contenu } = attente;
+    const ecriture = attente;
     attente = null;
-    const lancer = () => { try { return Promise.resolve(ecrire(cible, contenu)); } catch (e) { return Promise.reject(e); } };
-    const suite = enVol === 0 ? lancer() : chaine.then(lancer);
-    enVol++;
-    chaine = suite.catch((e) => console.error("Enregistrement", e)).finally(() => { enVol--; });
+    const lancer = () => { try { return Promise.resolve(ecrire(ecriture.cible, ecriture.contenu)); } catch (e) { return Promise.reject(e); } };
+    const suite = enVol.length === 0 ? lancer() : chaine.then(lancer);
+    enVol.push(ecriture);
+    chaine = suite.catch((e) => console.error("Enregistrement", e)).finally(() => {
+      enVol = enVol.filter((x) => x !== ecriture);
+      // Tout est écrit, et la page vit encore (une fermeture annulée) : la copie de secours ne sert plus.
+      if ([...tous].every((x) => !x.occupe)) effacerSecours();
+    });
     return chaine;
   }
 
@@ -113,8 +186,20 @@ export function creerEnregistreur({ ecrire, delai = 700, fondre = (a, b) => ({ .
       minuterie = null;
       attente = null;
     },
+    /**
+     * Ce qui attend ou s'écrit encore, pour la copie de secours (la page se
+     * ferme) : une entrée par cible, ses contenus fondus dans l'ordre.
+     */
+    secours() {
+      if (!secours) return [];
+      const parCible = new Map();
+      for (const x of [...enVol, ...(attente ? [attente] : [])]) {
+        parCible.set(x.cible, parCible.has(x.cible) ? fondre(parCible.get(x.cible), x.contenu) : x.contenu);
+      }
+      return [...parCible].map(([cible, contenu]) => secours(cible, contenu)).filter(Boolean);
+    },
     /** Quelque chose attend d'être écrit, ou s'écrit. */
-    get occupe() { return !!attente || enVol > 0; },
+    get occupe() { return !!attente || enVol.length > 0; },
     /** La cible de ce qui attend (ou null). */
     get enAttente() { return attente ? attente.cible : null; },
   };

@@ -32,7 +32,7 @@ export function creerVueMorceau(deps) {
   const { transport, toast } = deps;
   // `session` : le morceau ouvert, pour ses enregistrements (son identifiant une fois créé, et la
   // dernière version qu'il sait dans le stockage, d'où part la fusion : S8).
-  const m = { id: null, titre: "", blocs: [], tempo: null, creeLe: null, choisi: null, session: { id: null, derniere: null } };
+  const m = { id: null, titre: "", blocs: [], tempo: null, creeLe: null, choisi: null, session: { id: null, cree: false, derniere: null } };
   let tempoEnAttente = false;
   let glisse = null;
   // Ce que cet écran fait sonner (ecoute.js) : sa clé, "tout" ou l'identifiant d'un bloc.
@@ -51,7 +51,7 @@ export function creerVueMorceau(deps) {
   function ouvrir(p) {
     // Ce qui attendait pour le morceau d'avant part d'abord, avec son contenu à lui.
     ecritures.vider();
-    m.session = { id: p ? p.id : null, derniere: p };
+    m.session = { id: p ? p.id : null, creeLe: p ? p.creeLe : null, cree: !!p, derniere: p };
     m.id = p ? p.id : null;
     m.titre = p ? p.titre : "Nouveau morceau";
     m.blocs = p ? structuredClone(p.blocs || []) : [];
@@ -112,19 +112,36 @@ export function creerVueMorceau(deps) {
   }
 
   /** Écrit une copie du morceau (`x`) dans son morceau (`s`) : le créer au premier bloc, sinon le modifier (S8). */
+  const donneesDe = (x) => ({ type: "morceau", titre: x.titre, blocs: x.blocs, tempo: x.tempo, statut: "morceau", nbPages: 0, modele: null });
+
+  /** Un morceau neuf reçoit son identifiant : à sa première écriture, ou pour la copie de secours. */
+  function nommer(s, maintenant) {
+    if (s.id) return;
+    s.id = deps.nouvelId();
+    s.creeLe = maintenant;
+    if (s === m.session) { m.id = s.id; m.creeLe = maintenant; }
+  }
+
+  /** La copie de secours, quand la page se ferme avant l'écriture (enregistreur.js). */
+  function secours(s, x) {
+    if (!s.cree && !x.blocs.length) return null;
+    const maintenant = new Date().toISOString();
+    nommer(s, maintenant);
+    return { id: s.id, creer: !s.cree, donnees: { ...donneesDe(x), creeLe: s.creeLe, modifieLe: maintenant } };
+  }
+
   async function ecrire(s, x) {
     const stockage = deps.stockage();
     const maintenant = new Date().toISOString();
-    const donnees = { type: "morceau", titre: x.titre, blocs: x.blocs, tempo: x.tempo, statut: "morceau", nbPages: 0, modele: null };
+    const donnees = donneesDe(x);
     const ici = s === m.session;
     try {
-      if (!s.id) {
+      if (!s.cree) {
         if (!x.blocs.length) return;
-        s.id = deps.nouvelId();
-        if (ici) { m.id = s.id; m.creeLe = maintenant; }
-        const fiche = { ...donnees, creeLe: maintenant, modifieLe: maintenant };
+        nommer(s, maintenant);
+        const fiche = { ...donnees, creeLe: s.creeLe, modifieLe: maintenant };
         // Écrite, elle devient la dernière version connue (les écritures se suivent : `s` n'a pas bougé).
-        await stockage.creer(s.id, fiche, []).then(() => { s.derniere = fiche; });
+        await stockage.creer(s.id, fiche, []).then(() => { s.cree = true; s.derniere = fiche; });
       } else {
         const fiche = { ...donnees, modifieLe: maintenant };
         await stockage.modifier(s.id, fiche, { depuis: s.derniere }).then(() => { s.derniere = fiche; });
@@ -137,7 +154,7 @@ export function creerVueMorceau(deps) {
       toast(texte, 7000);
     }
   }
-  const ecritures = creerEnregistreur({ ecrire, delai: 500, fondre: (_avant, apres) => apres });
+  const ecritures = creerEnregistreur({ ecrire, secours, delai: 500, fondre: (_avant, apres) => apres });
 
   /**
    * L'état d'enregistrement, discret : un point de suspension qui attend, une
@@ -482,7 +499,7 @@ export function creerVueMorceau(deps) {
       return;
     }
     toast(`« ${titre} » est supprimé.`);
-    if (m.id === id) { m.id = null; m.session = { id: null, derniere: null }; }
+    if (m.id === id) { m.id = null; m.session = { id: null, cree: false, derniere: null }; }
     deps.quitter();
   });
 

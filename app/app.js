@@ -10,44 +10,44 @@
  */
 import { Piano } from "./piano.js";
 import { Transport } from "./transport.js";
-import { nouvelId, ouvrirStockage, restaurer, sauvegarde } from "./stockage.js";
+import { nouvelId, ouvrirStockage } from "./stockage.js";
 import { egal } from "./fiche.js";
-import { pasParMesure, pasParTemps } from "./sequence.js";
-import { voixCompletes } from "./harmonie.js";
-import { midiDuMorceau, sourceDuMorceau, assembler } from "./morceau.js";
+import { midiDuMorceau } from "./morceau.js";
 import { midiDeLIdee } from "./midi.js";
 import { creerEditeurIdee } from "./idee.js";
 import { creerVueMorceau } from "./vue-morceau.js";
-import { creerAccueil } from "./accueil.js";
+import { creerAccueil, toutesEtiquettes } from "./accueil.js";
 import { creerEcranAtelier } from "./ecran-atelier.js";
 import { creerEcranLecteur } from "./ecran-lecteur.js";
 import { creerPageOuverte } from "./page-ouverte.js";
 import { creerEcoute } from "./ecoute.js";
-import { creerEcoutePage, libelleLecture } from "./atelier.js";
+import { reprendreSecours } from "./enregistreur.js";
+import { creerEcoutePage } from "./atelier.js";
 import { creerExports } from "./exports.js";
 import { calibration, creerImport } from "./import-pdf.js";
 import { creerTablette } from "./tablette.js";
 import { creerSynchronisation } from "./synchronisation-ui.js";
+import { brancherSauvegarde } from "./sauvegarde-ui.js";
+import { brancherHorsLigne, brancherInstallation } from "./mises-a-jour.js";
 import { installerEveil } from "./eveil.js";
 import { brancherLive } from "./reglages-live.js";
 import { injecterIcones } from "./icones.js";
 import { ambianceStudio } from "./preferences.js";
+import { creerNavigation } from "./navigation.js";
 import { creerHistorique } from "./historique.js";
 import { installerInfobulles } from "./infobulles.js";
-import { cause, explication, expliquer } from "./erreurs.js";
-import { $, accorde, pluriel, retirerToast, toast } from "./ui.js";
+import { cause, explication } from "./erreurs.js";
+import { $, pluriel, retirerToast, toast } from "./ui.js";
 import { dialogue, veutSupprimer } from "./dialogue.js";
 
 const ABCJS = () => window.ABCJS;
 const dansClaude = () => !!(window.claude && typeof window.claude.use === "function");
-// L'état de l'appli : la bibliothèque, l'écran ouvert, et d'où l'on vient. Chaque
-// écran tient le sien (l'accueil son onglet et ses filtres, « Corriger » sa note
-// choisie et son historique…).
+// L'état de l'appli : la bibliothèque. L'écran montré et d'où l'on vient sont à la
+// navigation (navigation.js) ; chaque écran tient le sien (l'accueil son onglet et
+// ses filtres, « Corriger » sa note choisie et son historique…).
 const etat = {
   stockage: null,
   partitions: [],
-  vue: "biblio",
-  pile: [],           // les écrans d'où l'on vient (hors accueil), pour « précédent »
 };
 
 const piano = new Piano(new URL("./piano/", import.meta.url).href);
@@ -64,6 +64,7 @@ let tablette = null; // le panneau « Ma reMarkable », l'adresse du connecteur,
 let synchronisation = null; // la bibliothèque synchronisée, vue de l'appli (synchronisation-ui.js)
 let atelier = null; // « Corriger » (ecran-atelier.js)
 let lecteur = null; // « Écouter et exporter » (ecran-lecteur.js)
+let ecrans = null; // le registre des écrans, pour la navigation (creerRegistre, plus bas)
 
 // La page lue ouverte, que « Corriger » et « Écouter » partagent, avec ses
 // enregistrements (page-ouverte.js) ; et leur écoute, une seule pour les deux.
@@ -75,60 +76,25 @@ const ecoutePage = creerEcoute(transport);
 const ecouterPage = creerEcoutePage({ ecoute: ecoutePage, abcjs: ABCJS });
 
 // ------------------------------------------------------------------------
-// Petits outils d'interface
+// Ouvrir une partition dans son écran
 // ------------------------------------------------------------------------
 
-function pastilleStatut(p) {
-  const restants = (p.doutes || []).filter((d) => !d.leve).length;
-  const span = document.createElement("span");
-  if (p.type === "idee") { span.className = "pastille p-idee"; span.textContent = "Idée"; }
-  else if (p.type === "morceau") { span.className = "pastille p-morceau"; span.textContent = "Morceau"; }
-  else if (p.statut === "prete") { span.className = "pastille p-ok"; span.textContent = "Prête"; }
-  else { span.className = "pastille p-doute"; span.textContent = restants ? `À relire · ${pluriel(restants, "doute")}` : "À relire"; }
-  return span;
-}
-
-// ------------------------------------------------------------------------
-// Navigation
-// ------------------------------------------------------------------------
-
-function montrer(vue) {
-  if (vue === "biblio") etat.pile = [];
-  // L'écran qu'on quitte s'arrête et fait partir ce qui attendait d'être enregistré.
-  if (etat.vue !== vue && ecrans) ecrans[etat.vue].fermer();
-  ecoutePage.arreter();
-  transport.arreter();
-  etat.vue = vue;
-  for (const v of ["biblio", "atelier", "lecteur", "idee", "morceau"]) $(`vue-${v}`).hidden = v !== vue;
-  const dansPartition = vue !== "biblio";
-  // L'écran Idée prend toute la hauteur : le clavier sous le pouce.
-  document.body.classList.toggle("plein", vue === "idee");
-  // L'écran ouvert, pour les règles qui en dépendent (où tombent les messages…).
-  document.body.dataset.vue = vue;
-  // Papier pour lire, Studio pour jouer : l'éditeur passe en sombre (sauf réglage contraire).
-  document.body.classList.toggle("studio", vue === "idee" && ambianceStudio());
-  // La barre de Portée ne sert qu'à l'accueil : un écran qui a sa propre barre
-  // (avec son retour, [data-retour]) la remplace ; les autres la gardent.
-  document.querySelector(".barre-haut").hidden = vue !== "biblio" && !!$(`vue-${vue}`).querySelector("[data-retour]");
-  // Les onglets, la recherche et la synchro sont ceux de l'accueil : ailleurs, la
-  // barre (quand elle reste) ne garde que son retour, et ne couvre pas le clavier.
-  for (const id of ["onglets-accueil", "chercher", "etat-synchro"]) $(id).hidden = vue !== "biblio";
-  $("fil").hidden = !dansPartition || vue === "idee" || vue === "morceau";
-  // Corriger ↔ Écouter : les onglets vivent dans la barre de l'écran de partition (atelier.js).
-  $("onglet-atelier").setAttribute("aria-selected", String(vue === "atelier"));
-  $("onglet-lecteur").setAttribute("aria-selected", String(vue === "lecteur"));
-  if (vue === "biblio") afficherBibliotheque();
-  if (vue === "atelier") atelier.afficher();
-  if (vue === "lecteur") lecteur.afficher();
-  window.scrollTo({ top: 0 });
-}
+// La navigation entre les écrans et le bouton « précédent » (navigation.js).
+const navigation = creerNavigation({
+  ecrans: () => ecrans,
+  lire: (id) => etat.stockage.lire(id),
+  rouvrir: (p, vue) => (p.type === "idee" ? ouvrirIdee(p) : p.type === "morceau" ? ouvrirMorceau(p) : ouvrir(p.id, vue)),
+  arreterLeSon: () => { ecoutePage.arreter(); transport.arreter(); },
+  studio: ambianceStudio,
+});
+const montrer = (vue) => navigation.montrer(vue);
 
 // Chaque ouverture a son numéro : deux ouvertures rapprochées, seule la dernière s'affiche.
 let ouvertures = 0;
 
 async function ouvrir(id, vue = "atelier") {
   const demande = ++ouvertures;
-  retenirEcran();
+  navigation.retenir();
   let p, pages = [];
   try {
     p = await etat.stockage.lire(id);
@@ -156,87 +122,47 @@ function ouvrirPage(p, pages, vue) {
 
 /** Ouvre un morceau ; sans partition, un nouveau, qui ne s'enregistre qu'au premier bloc. */
 function ouvrirMorceau(p = null) {
-  retenirEcran();
-  if (etat.vue === "morceau") vueMorceau.fermer();
+  navigation.retenir();
+  if (navigation.vue === "morceau") vueMorceau.fermer();
   montrer("morceau");
   vueMorceau.ouvrir(p);
 }
 
 // ------------------------------------------------------------------------
-// « Précédent » : la flèche de retour des écrans, et le bouton du téléphone
+// Le registre des écrans (navigation.js dit ce que chacun déclare)
 // ------------------------------------------------------------------------
 //
-// Un écran peut en ouvrir un autre (l'idée d'un bloc de morceau, « Continuer
-// en idée » depuis une page lue, une idée tirée d'une phrase…) : on retient
-// celui qu'on quitte, et revenir en arrière y ramène, au lieu de sauter à
-// l'accueil. L'accueil vide la pile.
-
-let enRetour = false;
-
-/** Retient l'écran qu'on quitte pour un autre (pas l'accueil), pour y revenir. */
-function retenirEcran() {
-  if (enRetour || etat.vue === "biblio") return;
-  const id = etat.vue === "idee" ? editeur && editeur.id : etat.vue === "morceau" ? vueMorceau && vueMorceau.id : pageOuverte.partition && pageOuverte.partition.id;
-  if (!id) return; // pas encore enregistré (une idée encore vide) : rien où revenir
-  const dernier = etat.pile.at(-1);
-  if (dernier && dernier.id === id) { dernier.vue = etat.vue; return; }
-  etat.pile.push({ vue: etat.vue, id });
-}
-
-/** Un écran en arrière : celui d'où l'on venait, sinon l'accueil. */
-async function revenirEcran() {
-  enRetour = true;
-  try {
-    while (etat.pile.length) {
-      const { vue, id } = etat.pile.pop();
-      const p = await etat.stockage.lire(id).catch(() => null);
-      if (!p) continue; // supprimée entre-temps : on remonte encore
-      if (p.type === "idee") ouvrirIdee(p);
-      else if (p.type === "morceau") ouvrirMorceau(p);
-      else await ouvrir(id, vue);
-      return;
-    }
-    montrer("biblio");
-  } finally { enRetour = false; }
-}
-
-// ------------------------------------------------------------------------
-// Le registre des écrans
-// ------------------------------------------------------------------------
-//
-// Chaque écran dit lui-même comment on le quitte (`fermer` : il arrête son
-// son, fait partir ce qui attendait d'être enregistré), s'il a encore un pas
-// à défaire avant (`reculer` → true : une note choisie, le jeu en direct, un
-// panneau ouvert) et s'il est à sa racine (`aLaRacine`, l'accueil seulement).
-// Avant, « précédent » cliquait les boutons des autres écrans (audit du 04/10,
-// T3). Un calque qui n'est pas un <dialog> se déclare dans le `reculer` et
-// l'`aLaRacine` de son écran ; les <dialog> ouverts se ferment avant tout.
-
-let ecrans = null;
+// Ceux qui montrent une partition disent aussi à la synchronisation
+// (synchronisation-ui.js) laquelle (`partition`), s'ils sont en train
+// d'écrire (`occupe`), comment la reprendre quand elle change ailleurs
+// (`recharger` → true s'ils l'ont reprise), et quoi dire si elle a disparu.
 
 function creerRegistre() {
   const sans = () => false;
+  // « Corriger » et « Écouter » montrent la même page lue.
+  const page = {
+    partition: () => (pageOuverte.partition ? pageOuverte.partition.id : null),
+    occupe: () => pageOuverte.occupe,
+    recharger: rechargerPage,
+    supprimee: () => `« ${pageOuverte.partition.titre} » a été supprimée sur un autre appareil.`,
+  };
   ecrans = {
-    biblio: { fermer: () => {}, reculer: () => accueil.reculer(), aLaRacine: () => accueil.aLaRacine() },
-    atelier: { fermer: () => atelier.fermer(), reculer: () => atelier.reculer(), aLaRacine: sans },
-    lecteur: { fermer: () => lecteur.fermer(), reculer: () => lecteur.reculer(), aLaRacine: sans },
-    idee: { fermer: () => editeur.fermer(), reculer: () => editeur.reculer(), aLaRacine: sans },
-    morceau: { fermer: () => vueMorceau.fermer(), reculer: sans, aLaRacine: sans },
+    biblio: { afficher: () => accueil.afficher(), fermer: () => {}, reculer: () => accueil.reculer(), aLaRacine: () => accueil.aLaRacine(), partition: () => null },
+    atelier: { afficher: () => atelier.afficher(), fermer: () => atelier.fermer(), reculer: () => atelier.reculer(), aLaRacine: sans, ...page },
+    lecteur: { afficher: () => lecteur.afficher(), fermer: () => lecteur.fermer(), reculer: () => lecteur.reculer(), aLaRacine: sans, ...page },
+    idee: {
+      fermer: () => editeur.fermer(), reculer: () => editeur.reculer(), aLaRacine: sans,
+      partition: () => editeur.id, occupe: () => editeur.occupe(), recharger: (p) => editeur.recharger(p),
+      supprimee: () => "Cette idée a été supprimée sur un autre appareil.",
+    },
+    morceau: {
+      fermer: () => vueMorceau.fermer(), reculer: sans, aLaRacine: sans,
+      partition: () => vueMorceau.id, occupe: () => vueMorceau.occupe(), recharger: (p) => vueMorceau.recharger(p),
+      supprimee: () => "Ce morceau a été supprimé sur un autre appareil.",
+    },
   };
 }
 
-/** L'appli est à sa racine : le carnet, rien d'ouvert par-dessus. */
-function aLaRacine() {
-  return etat.vue === "biblio" && !document.querySelector("dialog[open]") && ecrans.biblio.aLaRacine();
-}
-
-/** Un pas en arrière, du plus proche au plus lointain : ce qui est ouvert par-dessus, puis l'écran. */
-function reculer() {
-  const feuilles = [...document.querySelectorAll("dialog[open]")];
-  if (feuilles.length) { feuilles.at(-1).close(); return; }
-  if (ecrans[etat.vue].reculer()) return;
-  if (etat.vue !== "biblio") revenirEcran();
-}
 
 const ideesParId = () => new Map(etat.partitions.filter((x) => x.type === "idee").map((x) => [x.id, x]));
 
@@ -251,39 +177,15 @@ const { exporterMidi, toutEnMidi, partagerMidi, exporterMusicXml, exporterAbc } 
 
 /** Ouvre une idée dans l'éditeur ; sans partition, une nouvelle idée, vide. */
 function ouvrirIdee(p = null, options = {}) {
-  retenirEcran();
-  if (etat.vue === "idee") editeur.fermer();
+  navigation.retenir();
+  if (navigation.vue === "idee") editeur.fermer();
   montrer("idee");
   editeur.ouvrir(p, options);
 }
 
 // ------------------------------------------------------------------------
-// Bibliothèque
+// La page lue ouverte : la reprendre si elle change ailleurs, la supprimer
 // ------------------------------------------------------------------------
-
-/** Toutes les étiquettes de la bibliothèque, les plus employées d'abord. */
-function toutesEtiquettes() {
-  const compte = new Map();
-  // Une fiche abîmée (des étiquettes qui ne sont pas une liste) vidait tout le
-  // carnet (audit, S6) : le stockage les remet en forme, et ceci ne casse plus.
-  for (const p of etat.partitions) {
-    for (const t of Array.isArray(p.etiquettes) ? p.etiquettes : []) if (typeof t === "string" && t) compte.set(t, (compte.get(t) || 0) + 1);
-  }
-  return [...compte].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).map(([t]) => t);
-}
-
-/** Redessine l'onglet visible de l'accueil (carnet, partitions, morceaux). Le dessin est dans accueil.js. */
-function afficherBibliotheque() {
-  accueil.afficher();
-}
-
-// ------------------------------------------------------------------------
-// La partition ouverte, pour la synchronisation
-// ------------------------------------------------------------------------
-//
-// Ce que chaque écran dit de ce qu'il montre (synchronisation-ui.js) : de quoi
-// le reprendre quand la partition change ailleurs, et ne pas le faire pendant
-// qu'il écrit.
 
 // Ce que « Corriger » et « Écouter » montrent d'une page : une version d'ailleurs qui n'y change rien ne se recharge pas.
 const CHAMPS_PAGE = ["titre", "abc", "doutes", "statut", "tempo", "transposition"];
@@ -297,90 +199,14 @@ async function rechargerPage(neuve) {
   if (pageOuverte.partition !== p) return false; // une autre partition s'est ouverte entre-temps
   pageOuverte.ouvrir(neuve, pages || pageOuverte.pages);
   $("fil-titre").textContent = neuve.titre;
-  montrer(etat.vue);
+  montrer(navigation.vue);
   return true;
 }
-
-const montrees = {
-  idee: {
-    partition: () => editeur.id, occupe: () => editeur.occupe(), recharger: (p) => editeur.recharger(p),
-    supprimee: () => "Cette idée a été supprimée sur un autre appareil.",
-  },
-  morceau: {
-    partition: () => vueMorceau.id, occupe: () => vueMorceau.occupe(), recharger: (p) => vueMorceau.recharger(p),
-    supprimee: () => "Ce morceau a été supprimé sur un autre appareil.",
-  },
-  page: {
-    partition: () => (pageOuverte.partition ? pageOuverte.partition.id : null),
-    // Une correction en cours ici garde la main : elle partira à son tour.
-    occupe: () => pageOuverte.occupe,
-    recharger: rechargerPage,
-    supprimee: () => `« ${pageOuverte.partition.titre} » a été supprimée sur un autre appareil.`,
-  },
-};
-/** L'écran ouvert, s'il montre une partition. */
-const partitionOuverte = () => (etat.vue === "idee" ? montrees.idee : etat.vue === "morceau" ? montrees.morceau
-  : etat.vue === "atelier" || etat.vue === "lecteur" ? montrees.page : null);
-
-// ------------------------------------------------------------------------
-// Modèles à mettre sur la tablette, sauvegarde de la bibliothèque
-// ------------------------------------------------------------------------
 
 /** Les panneaux de la reMarkable et des modèles sont dans l'onglet Partitions : on y va d'abord. */
 function versPartitions() {
   if (accueil.onglet !== "partitions") accueil.choisirOnglet("partitions");
 }
-
-async function sauvegarderBibliotheque() {
-  try {
-    const contenu = await sauvegarde(etat.stockage, etat.partitions);
-    const jour = new Date().toISOString().slice(0, 10);
-    await etat.stockage.enregistrerFichier(`Portée - sauvegarde ${jour}.json`, new Blob([JSON.stringify(contenu)], { type: "application/json" }));
-    const n = contenu.partitions.length;
-    toast(`${pluriel(n, "partition")} ${accorde(n, "sauvegardée")}.`);
-  } catch (e) {
-    if (e && e.code === "declined") return;
-    toast("La sauvegarde n'a pas abouti : " + (e.message || e.code || "erreur"));
-  }
-}
-
-async function restaurerBibliotheque(fichier) {
-  try {
-    const contenu = JSON.parse(await fichier.text());
-    const bilan = await restaurer(etat.stockage, contenu, new Set(etat.partitions.map((p) => p.id)));
-    toast(bilanRestauration(bilan), bilan.echecs.length ? 10000 : 5000);
-  } catch (e) {
-    toast(e instanceof SyntaxError ? "Ce fichier n'est pas une sauvegarde de Portée." : (e.message || "La restauration n'a pas abouti."), 7000);
-  }
-}
-
-/**
- * Ce que la restauration a fait, en une phrase : combien sont revenues
- * (même supprimées ailleurs depuis), combien étaient déjà là (gardées telles
- * quelles), et lesquelles n'ont pas pu revenir, avec la raison.
- */
-function bilanRestauration({ revenues = 0, ignorees = 0, differentes = 0, echecs = [] }) {
-  if (!revenues && !echecs.length) return ignorees ? "Rien à restaurer : tout est déjà dans ta bibliothèque." : "Cette sauvegarde est vide.";
-  const morceaux = [];
-  if (revenues) morceaux.push(pluriel(revenues, "partition revenue", "partitions revenues"));
-  if (ignorees) {
-    const changees = differentes ? ` (dont ${pluriel(differentes, "modifiée depuis, gardée telle quelle", "modifiées depuis, gardées telles quelles")})` : "";
-    morceaux.push(`${ignorees} déjà là${changees}`);
-  }
-  if (echecs.length) {
-    const lesquelles = echecs.slice(0, 3).map((x) => `« ${x.titre} » (${x.raison})`).join(", ") + (echecs.length > 3 ? "…" : "");
-    morceaux.push(`${pluriel(echecs.length, "n'a pas pu revenir", "n'ont pas pu revenir")} : ${lesquelles}`);
-  }
-  return morceaux.join(" · ") + ".";
-}
-
-function nomModele(m) {
-  return { "melodie-large": "Mélodie, large", "melodie-standard": "Mélodie", "piano-large": "Piano, large", "piano-standard": "Piano" }[m] || m || "";
-}
-
-// ------------------------------------------------------------------------
-// La page lue ouverte : la supprimer (« Corriger » et « Écouter »)
-// ------------------------------------------------------------------------
 
 /** Supprime la page ouverte, après la même question que depuis le carnet (dialogue.js). */
 async function supprimerOuverte() {
@@ -399,43 +225,6 @@ async function supprimerOuverte() {
   montrer("biblio");
 }
 
-// Les cartes de la bibliothèque ont leur écoute (ecoute.js) : la clé est le bouton touché.
-const ecouteCartes = creerEcoute(transport);
-
-/** Écoute une idée (ou un morceau) depuis sa carte, sans l'ouvrir. Le même bouton arrête. */
-async function ecouterIdee(p, bouton) {
-  if (ecouteCartes.cle === bouton) { ecouteCartes.arreter(); return; }
-  let source;
-  if (p.type === "morceau") source = sourceDuMorceau(assembler(p, ideesParId()));
-  else {
-    const seq = p.sequence;
-    const parPas = new Map();
-    let fin = 0;
-    for (const v of voixCompletes(seq)) for (const n of v.notes) { if (!parPas.has(n.d)) parPas.set(n.d, []); parPas.get(n.d).push(n); fin = Math.max(fin, n.d + n.l); }
-    source = () => ({ tempo: seq.tempo, mesure: pasParMesure(seq), temps: pasParTemps(seq), fin, notesA: (x) => parPas.get(x) || [] });
-  }
-  const libelle = bouton.innerHTML;
-  const lecture = ecouteCartes.jouer(bouton, source, {
-    // Les commandes de l'écran verrouillé (eveil.js, M8) : le titre, et « lecture » qui relance.
-    titre: p.titre || (p.type === "morceau" ? "Morceau" : "Idée"), relancer: () => { if (ecouteCartes.cle === null) bouton.click(); },
-    surArret: () => { bouton.innerHTML = libelle; },
-  });
-  libelleLecture(bouton, true);
-  try {
-    await lecture;
-  } catch (e) {
-    console.error(e);
-    toast(expliquer(e, "Le piano n'a pas pu se charger."));
-  }
-}
-
-/** « 4 mesures · ♩ 90 · Do majeur » */
-function resumeIdee(seq) {
-  if (!seq) return "";
-  const notes = seq.pistes.reduce((n, p) => n + p.notes.length, 0);
-  return `${pluriel(notes, "note")} · ♩ ${seq.tempo}`;
-}
-
 // ------------------------------------------------------------------------
 // Branchements
 // ------------------------------------------------------------------------
@@ -444,7 +233,7 @@ function brancher() {
   // « Portée », en haut : le carnet. Un seul dessin (l'accueil en avait un second, à lui).
   $("aller-biblio").addEventListener("click", () => { accueil.choisirOnglet("carnet", { dessiner: false }); montrer("biblio"); });
   // Chaque écran (idée, morceau, pages) a sa propre barre et son bouton retour.
-  document.addEventListener("click", (ev) => { if (ev.target.closest("[data-retour]")) revenirEcran(); });
+  document.addEventListener("click", (ev) => { if (ev.target.closest("[data-retour]")) navigation.revenir(); });
   $("onglet-atelier").addEventListener("click", () => montrer("atelier"));
   $("onglet-lecteur").addEventListener("click", () => montrer("lecteur"));
 
@@ -452,36 +241,27 @@ function brancher() {
   $("fichier").addEventListener("change", (e) => { importer([...e.target.files]); e.target.value = ""; });
   $("exemples").addEventListener("click", importerExemples);
 
-  // La bibliothèque
+  // La bibliothèque : tout en MIDI ; la sauvegarde dans un fichier (sauvegarde-ui.js)
   $("tout-midi").addEventListener("click", toutEnMidi);
-  $("sauvegarder").addEventListener("click", sauvegarderBibliotheque);
-  $("restaurer").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) restaurerBibliotheque(f); });
+  brancherSauvegarde({ stockage: () => etat.stockage, partitions: () => etat.partitions });
 
   document.addEventListener("keydown", clavier);
-  document.addEventListener("keyup", (e) => { if (etat.vue === "idee" && editeur.toucheHaut(e)) e.preventDefault(); });
+  document.addEventListener("keyup", (e) => { if (navigation.vue === "idee" && editeur.toucheHaut(e)) e.preventDefault(); });
 
-  // Appli installable (hors claude.ai) : le navigateur propose, on montre le bouton.
-  let invitation = null;
-  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); invitation = e; $("installer").hidden = false; });
-  $("installer").addEventListener("click", async () => {
-    if (!invitation) return;
-    invitation.prompt();
-    await invitation.userChoice.catch(() => null);
-    invitation = null;
-    $("installer").hidden = true;
-  });
+  // Appli installable (hors claude.ai) : le navigateur propose, on montre le bouton (mises-a-jour.js).
+  brancherInstallation();
 }
 
 /** Raccourcis : chaque écran a les siens (Espace pour écouter ; dans « Corriger », les gestes sur la note choisie). */
 function clavier(e) {
   const cible = e.target;
   if (cible.closest && cible.closest("input, textarea, select, [contenteditable]")) return;
-  if (etat.vue === "idee") {
+  if (navigation.vue === "idee") {
     if (cible.closest && cible.closest("button") && (e.key === " " || e.key === "Enter")) return;
     if (editeur.toucheBas(e)) e.preventDefault();
     return;
   }
-  const ecran = etat.vue === "atelier" ? atelier : etat.vue === "lecteur" ? lecteur : null;
+  const ecran = navigation.vue === "atelier" ? atelier : navigation.vue === "lecteur" ? lecteur : null;
   if (ecran && ecran.toucheBas(e)) e.preventDefault();
 }
 
@@ -561,16 +341,11 @@ function creerVueDuMorceau() {
 /** L'accueil : ses onglets, sa recherche, ses listes. Il ne sait rien de la tablette ni du stockage : tout passe par ces dépendances. */
 function creerAccueilDeLAppli() {
   accueil = creerAccueil({
-    toast, ouvrir, ouvrirIdee, ouvrirMorceau, calibration, ideesParId, importer,
+    toast, transport, ouvrir, ouvrirIdee, ouvrirMorceau, calibration, ideesParId, importer,
     stockage: () => etat.stockage, partitions: () => etat.partitions,
     panneaux: { reculer: () => tablette.reculer(), aLaRacine: () => tablette.aLaRacine() },
-    ecouter: ecouterIdee,
-    enLecture: (bouton) => ecouteCartes.cle === bouton,
-    arreter: () => ecouteCartes.arreter(),
     partagerMidi, exporterMidi,
     supprimer: async (p) => { if (await veutSupprimer(p, etat.partitions)) await supprimerDeLaBibliotheque(p); },
-    etiquettes: toutesEtiquettes,
-    resumeIdee, nomModele, pastilleStatut,
   });
 }
 
@@ -582,68 +357,9 @@ function creerEditeur() {
     partager: partagerMidi,
     menu: actionIdee,
     titreChange: (t) => { $("fil-titre").textContent = t; },
-    etiquettes: toutesEtiquettes,
+    etiquettes: () => toutesEtiquettes(etat.partitions),
     nouvelleDepuis: (seq) => ouvrirIdee(null, { seq, titre: "Idée tirée d'une phrase" }),
   });
-}
-
-/**
- * Le service worker (sw.js) garde l'appli pour le hors-ligne. Une version
- * mise en ligne s'installe en arrière-plan, puis prend la main ; si la page
- * ouverte n'est pas de cette version, un message passager propose de
- * recharger. Rien ne se recharge tout seul : on peut être au milieu d'une
- * prise ou d'une correction.
- *
- * Une appli installée reste ouverte des jours : en y revenant (au plus une
- * fois toutes les dix minutes), on demande s'il y a une nouvelle version,
- * sans attendre que le navigateur y pense.
- *
- * L'inscription attend que la page soit chargée : la copie de l'appli ne
- * lui dispute pas le réseau. Ce qui est lourd et ne sert pas au démarrage
- * (pdf.js, le piano) se copie ensuite, en tâche de fond.
- */
-function brancherServiceWorker() {
-  // La version de la page : celle de l'adresse de ce module (app.js?v=…).
-  const maVersion = new URL(import.meta.url).searchParams.get("v");
-  const copierEnFond = (sw) => sw && sw.postMessage({ type: "portee-precharger" });
-  navigator.serviceWorker.addEventListener("message", (e) => {
-    const m = e.data;
-    if (!m || m.type !== "portee-version") return;
-    copierEnFond(e.source); // une version qui vient de prendre la main
-    if (maVersion && m.version !== maVersion) proposerRechargement();
-  });
-  let verifiee = Date.now();
-  const inscrire = () => navigator.serviceWorker.register("sw.js").then((inscription) => {
-    navigator.serviceWorker.ready.then((r) => copierEnFond(r.active));
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "visible" || Date.now() - verifiee < 10 * 60 * 1000) return;
-      verifiee = Date.now();
-      inscription.update().catch(() => {}); // hors ligne : la prochaine fois
-    });
-  }).catch(() => {});
-  if (document.readyState === "complete") inscrire();
-  else addEventListener("load", inscrire, { once: true });
-}
-
-/** « Une nouvelle version est prête » : un message passager, avec de quoi recharger. */
-function proposerRechargement() {
-  if ($("toast-version")) return;
-  const m = document.createElement("div");
-  m.className = "toast toast-action";
-  m.id = "toast-version";
-  m.setAttribute("role", "status");
-  m.setAttribute("popover", "manual");
-  const texte = document.createElement("span");
-  texte.textContent = "Une nouvelle version de Portée est prête.";
-  const recharger = document.createElement("button");
-  recharger.className = "btn btn-petit";
-  recharger.textContent = "Recharger";
-  recharger.addEventListener("click", () => location.reload());
-  m.append(texte, recharger);
-  document.body.appendChild(m);
-  // En « popover », comme les autres messages : au-dessus d'une feuille ouverte.
-  if (m.showPopover) { try { m.showPopover(); } catch { /* sans popover : il s'affiche quand même */ } }
-  setTimeout(() => m.remove(), 20000);
 }
 
 async function demarrer() {
@@ -663,15 +379,15 @@ async function demarrer() {
     appeler: (outil, args) => tablette.appelerOutil(outil, args),
     formulaireAdresse: (apres) => tablette.formulaireAdresse(apres), majReglagesRm: () => tablette.majReglagesRm(),
     montrerSynchro: (x) => accueil.montrerSynchro(x),
-    ouverte: partitionOuverte,
-    quitter: () => { if (etat.vue === "atelier" || etat.vue === "lecteur") pageOuverte.fermer(); montrer("biblio"); },
+    ouverte: () => navigation.partitionOuverte(),
+    quitter: () => { if (navigation.vue === "atelier" || navigation.vue === "lecteur") pageOuverte.fermer(); montrer("biblio"); },
   });
   brancher();
   creerEditeur();
   creerVueDuMorceau();
   creerEcransDePage();
   creerRegistre();
-  afficherBibliotheque();
+  accueil.afficher();
   let bloquee = false;
   try {
     etat.stockage = await ouvrirStockage({
@@ -687,10 +403,12 @@ async function demarrer() {
     return;
   }
   if (bloquee) toast("Ta bibliothèque est ouverte.");
+  // Ce que la page d'avant n'a pas eu le temps d'écrire en se fermant (enregistreur.js).
+  await reprendreSecours(etat.stockage);
   // Une version plus récente de Portée, ouverte dans un autre onglet, a besoin de la base : celle-ci la lâche.
   if (etat.stockage.surFermeture) etat.stockage.surFermeture(() => toast("Portée a été mise à jour dans un autre onglet : recharge cette page pour continuer.", 120000));
   // Le bouton « précédent » du téléphone recule dans l'appli au lieu de la quitter.
-  creerHistorique({ racine: aLaRacine, reculer }).synchroniser();
+  creerHistorique({ racine: navigation.aLaRacine, reculer: navigation.reculer }).synchroniser();
   // Raccourci de l'appli installée (« Nouvelle idée ») : on y va tout droit.
   if (new URLSearchParams(location.search).has("idee")) ouvrirIdee(null);
   const surClaude = etat.stockage.mode === "claude";
@@ -703,14 +421,13 @@ async function demarrer() {
   // Un autre onglet a changé une partition : celle qui est ouverte ici se reprend (S8).
   synchronisation.brancher();
   tablette.majReglagesRm();
-  // Hors ligne et installable, hors de claude.ai (sw.js n'existe que sur le site).
-  // Un contexte sûr : https, ou l'ordinateur lui-même (les essais de bout en bout).
-  if (!dansClaude() && "serviceWorker" in navigator && window.isSecureContext) brancherServiceWorker();
+  // Hors ligne et ses mises à jour, sur le site (mises-a-jour.js).
+  brancherHorsLigne({ dansClaude: dansClaude() });
   etat.stockage.ecouter(
     (liste) => {
       etat.partitions = liste;
-      if (etat.vue === "biblio") afficherBibliotheque();
-      if (etat.vue === "morceau") vueMorceau.rafraichir();
+      if (navigation.vue === "biblio") accueil.afficher();
+      if (navigation.vue === "morceau") vueMorceau.rafraichir();
     },
     (e) => toast("La bibliothèque ne répond plus : recharge la page. (" + (e.code || e.message) + ")", 9000),
   );
