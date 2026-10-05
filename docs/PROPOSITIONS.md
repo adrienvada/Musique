@@ -2001,6 +2001,54 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 <!-- lot claude -->
 
+### Claude dans Portée : ce qui part, ce qui est vérifié (H1, H2, H3)
+
+Trois modules purs, sans DOM, pour les écrans qui viendront. Le principe de
+l'audit : Claude propose, Portée vérifie, Adrien écoute puis choisit. Aucun
+module n'appelle `sample` ni n'écrit quoi que ce soit : l'écran appelle
+(avec `signal`, `onText` et les codes d'erreur), puis écrit ce qu'Adrien
+garde.
+
+- **Sur une idée (H2, `app/claude-idee.js`).** `demande`, `valider`,
+  `appliquer`, `outilsSurCopie`, et `empechement` pour griser un bouton.
+  - Ce qui part : un texte compact en français. Tempo, mesure en pas,
+    tonalité, accords en « mesure.temps », notes mesure par mesure (début et
+    durée en pas, hauteur MIDI et nom épelé dans la tonalité). Puis la
+    tâche, ses bornes et la forme exacte du JSON, avec un exemple. Les
+    bornes sont dites d'avance : Claude s'y tient, et chaque refus coûte un
+    aller-retour à Adrien.
+  - Genres : accords (l'idée ou la sélection), suite (deux mesures après la
+    dernière), variation (quatre intentions glosées : un mot seul laisse
+    trop de place), titre (au modèle rapide), libre (une phrase d'Adrien).
+  - Taille : l'idée la plus dense de 64 mesures (1 024 notes) fait 18 000
+    caractères, une idée ordinaire moins de 3 000. Au-delà de 2 000 notes,
+    on ne demande pas : mieux vaut un passage.
+  - `cache: false` : une réponse que Portée refuse a réussi pour `sample`,
+    qui la rejouerait cinq minutes à chaque « réessaie ».
+  - Ce qui revient est vérifié champ par champ : forme sûre (ni
+    `__proto__`, ni tableau énorme, ni NaN), clés exactes, entiers, notes
+    dans leur place, hauteurs de 21 à 108 et à une octave au plus de la
+    piste (deux pour « libre », où Adrien a pu demander un autre registre),
+    pas deux fois la même note en même temps, accords lisibles par
+    `accords.js`, un ou deux par mesure, sur un temps. Rien n'est réparé :
+    une réponse « presque juste » a souvent compris autre chose. Seul le
+    `pourquoi` est coupé s'il est trop long : il n'est qu'à montrer.
+  - Une variation identique à l'original n'est pas une proposition. Le
+    refus garde le `pourquoi` de Claude, que l'écran peut montrer.
+  - `appliquer` rend une nouvelle séquence, écrite d'un coup : un seul
+    « Annuler ». Des accords posés sur une sélection redisent à sa fin
+    celui qui sonnait, sinon la mesure d'après changerait d'harmonie. Le
+    premier accord met les accords plaqués en route, comme à la main.
+  - « libre » avec outils : ils ne touchent qu'une copie, et ce sont les
+    gestes de `sequence.js` (Claude fait ce que ferait le doigt d'Adrien).
+    Un geste qui ferait se chevaucher deux notes, ou déborderait, est
+    défait, et Claude lit pourquoi. La copie est revérifiée à la fin.
+  - Pourquoi les gestes passent en paramètre : `sequence.js` ne passe pas
+    encore `npm run types` (deux JSDoc), et un module vérifié qui
+    l'importerait l'y entraînerait. La mesure en pas et le nom des notes
+    sont recopiés ; un test les compare à `sequence.js` sur les 24
+    tonalités et les 88 touches.
+
 ## La refonte visuelle : le plan (02/10)
 
 Dans l'ordre (le numéro est celui du classement) :
