@@ -2408,6 +2408,54 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   `tests/e2e/atelier.test.mjs` (« Croche », le recompte, la proposition et
   deux « Annuler » ; chaque genre de doute, au téléphone et à l'ordinateur ;
   l'avis rangé et le mode avancé).
+- **La page d'étalonnage s'importe (L16).** Depuis la tablette ou en PDF,
+  une page sur le modèle « Étalonnage » (son sujet le dit, ou ses lignes
+  grises) n'est pas une partition : chaque case apprend son signe, page
+  après page, et le message dit combien de signes sont appris et quelles
+  cases sont restées vides (« Cases restées vides : quart de soupir,
+  chiffre 7. Tu peux les remplir et importer la page à nouveau. »). Elle
+  est dans Partitions › Modèles pour la tablette.
+- **Tes gabarits voyagent avec ta bibliothèque.** Une fiche cachée par
+  signe (`gabarits-bemol`…, `type: "gabarits"`) : 24 exemples d'un signe
+  font 13 Ko, les 18 signes ensemble plus de 200, trop près des 256 Kio
+  d'un document de claude.ai et de la bibliothèque commune. Elles ne sont
+  ni dans le carnet, ni dans les partitions, ni dans « Tout en MIDI »
+  (`stockage.js` les écarte de la liste) ; la synchro, la base de claude.ai,
+  la sauvegarde et la restauration les emportent.
+  - Deux versions d'une fiche se réunissent (l'union de leurs exemples,
+    `fusionnerFiches`), avec ou sans base, jamais « le plus récent gagne » :
+    un signe appris sur le téléphone disparaissait dès que l'ordinateur en
+    apprenait un autre. La restauration les réunit aussi à ceux d'ici (une
+    partition déjà là, elle, reste telle quelle).
+  - `normaliserFiche` ne garde que les exemples justes de leur signe :
+    32 points finis, un identifiant, 24 au plus (les plus anciens partent).
+  - La liste des signes et la règle de fusion sont recopiées de
+    `gabarits.js` dans `fiche.js`, qui ne peut pas importer le lecteur (il
+    est ailleurs dans `dist/`, et la vérification des types le suivrait) :
+    un test vérifie qu'elles restent d'accord.
+- **Chaque lecture se fait avec tes gabarits** : l'import d'un PDF ou de la
+  tablette, la relecture d'une page de l'ancien lecteur. Sans gabarits, rien
+  ne change (le lot lecteur le vérifie).
+- **Une réponse t'apprend le signe** (un signe inconnu, un triolet, un
+  chiffrage : les réponses qui portent `apprendre`). Pas au toucher : en
+  quittant la page, seules les réponses qui tiennent encore apprennent. Une
+  réponse annulée n'apprend rien : un exemple faux resterait (les gabarits
+  se réunissent d'un appareil à l'autre, rien n'en sort) et ferait lire de
+  travers les signes qui lui ressemblent.
+- **Quand tes gabarits changent, Portée propose de relire tes pages pas
+  encore corrigées** (rien de corrigé, aucun doute réglé, pas « Prête ») :
+  une question après une page d'étalonnage, un message avec « Relire »
+  quand tu quittes une page dont les réponses ont appris. Jamais d'office,
+  et une page que tu as corrigée ne bouge pas.
+- Essais : `tests/gabarits-bibliotheque.test.mjs` (la forme, la fusion
+  d'accord avec le lecteur, IndexedDB, deux appareils qui apprennent chacun
+  de leur côté et se synchronisent, la sauvegarde et la restauration, la
+  base de claude.ai pleine : 18 fiches de moins de 32 Ko) ; le bilan d'une
+  page d'étalonnage (`tests/tablette.test.mjs`) ; au navigateur, une croix
+  apprise comme dièse puis l'autre page relue sans question
+  (`tests/e2e/atelier.test.mjs`), et la page d'étalonnage venue de la
+  tablette dans la version claude.ai simulée
+  (`tests/e2e/atelier-claude.test.mjs`).
 
 ### Écrans des données (D6, D7, D9, H3)
 

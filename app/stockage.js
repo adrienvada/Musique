@@ -17,7 +17,10 @@
  * rangée, restaurée ou lue : une fiche mal formée, venue d'une sauvegarde
  * ou d'un autre appareil, ne peut plus vider le carnet (audit du 04/10, S6).
  */
-import { EPOQUE, compacter, dateIso, decompacter, egal, fusionnerFiches, normaliserChamps, normaliserFiche, sansDates, uneMsPlusTard } from "./fiche.js";
+import {
+  EPOQUE, compacter, dateIso, decompacter, egal, ficheDeGabarits, fusionnerExemples, fusionnerFiches, idGabarits, normaliserChamps, normaliserFiche,
+  sansDates, SIGNES_GABARITS, TYPE_GABARITS, uneMsPlusTard,
+} from "./fiche.js";
 import { cause, genreErreur } from "./erreurs.js";
 
 // Ils vivent dans fiche.js, sans DOM (la synchro et ses essais s'en servent
@@ -45,6 +48,12 @@ const lireFiche = (brute, id) => {
   return f ? { ...f, id } : null;
 };
 const parDate = (a, b) => (b.modifieLe || "").localeCompare(a.modifieLe || "");
+/**
+ * Ce que l'appli montre de la bibliothèque : tout, sauf les fiches de tes
+ * gabarits (L16), qui voyagent avec elle mais ne sont pas des partitions
+ * (ni dans le carnet, ni dans les partitions, ni dans « Tout en MIDI »).
+ */
+const montrable = (f) => !!f && f.type !== TYPE_GABARITS;
 
 /**
  * Le stockage de l'appli : la base de claude.ai, sinon IndexedDB, sinon
@@ -101,7 +110,7 @@ export function stockageClaude(db, downloads) {
     midiDirect: false, // la liste des téléchargements de claude.ai ignore .mid
     ecouter(rappel, erreur) {
       return col.orderBy("modifieLe", "desc").onSnapshot(
-        (snap) => rappel(snap.docs.map((d) => lireFiche(d.data(), d.id)).filter(Boolean)),
+        (snap) => rappel(snap.docs.map((d) => lireFiche(d.data(), d.id)).filter(montrable)),
         (e) => erreur && erreur(e),
       );
     },
@@ -168,7 +177,7 @@ function stockageLocal() {
   const lireTout = () => {
     try { return JSON.parse(localStorage.getItem(CLE_LOCALE) || "{}"); } catch { return {}; }
   };
-  const enListe = (tout) => Object.entries(tout).map(([id, d]) => lireFiche(d, id)).filter(Boolean).sort(parDate);
+  const enListe = (tout) => Object.entries(tout).map(([id, d]) => lireFiche(d, id)).filter(montrable).sort(parDate);
   const ecrireTout = (tout) => {
     try { localStorage.setItem(CLE_LOCALE, JSON.stringify(tout)); }
     catch { throw new Error("Le stockage de ce navigateur est plein : supprime une partition ou ouvre l'appli sur claude.ai."); }
@@ -355,7 +364,7 @@ export async function stockageIndexe(nom = "portee", { surBloque } = {}) {
   });
 
   const abonnes = new Set();
-  const liste = async () => (await toutLire("partitions")).map(([id, d]) => lireFiche(d, id)).filter(Boolean).sort(parDate);
+  const liste = async () => (await toutLire("partitions")).map(([id, d]) => lireFiche(d, id)).filter(montrable).sort(parDate);
   const prevenir = () => liste().then((l) => abonnes.forEach((f) => f(l)), () => {});
   if (canal) canal.onmessage = (ev) => { prevenir(); surAutreOnglet(Array.isArray(ev.data && ev.data.ids) ? ev.data.ids : []); };
   const annoncer = (ids) => { try { canal?.postMessage({ type: "changement", ids }); } catch { /* canal fermé */ } };
@@ -645,10 +654,53 @@ export async function demanderProtection() {
 }
 
 // ------------------------------------------------------------------------
+// Les gabarits de ton écriture (L16) : une fiche cachée par signe
+// ------------------------------------------------------------------------
+
+/**
+ * Tes gabarits, tels que la bibliothèque les range (une fiche par signe,
+ * fiche.js), réunis en un seul jeu, celui que le lecteur attend :
+ * { version, exemples }. Une fiche illisible n'empêche pas les autres.
+ * @param {any} stockage
+ */
+export async function lireGabarits(stockage) {
+  const fiches = await Promise.all(SIGNES_GABARITS.map((s) => stockage.lire(idGabarits(s)).catch(() => null)));
+  return { version: 1, exemples: fiches.filter((f) => f && f.type === TYPE_GABARITS).flatMap((f) => f.exemples || []) };
+}
+
+/**
+ * Range des gabarits : chaque signe dans sa fiche, réuni à ce qu'elle
+ * avait (l'union, comme la synchro : rien de ce qui est appris ne se perd).
+ * Seules les fiches qui changent s'écrivent, par `creer` et `modifier` :
+ * elles partent ainsi vers les autres appareils. Rend le nombre d'exemples
+ * neufs.
+ * @param {any} stockage
+ * @param {{ exemples?: unknown[] } | null} gabarits
+ */
+export async function rangerGabarits(stockage, gabarits) {
+  const parSigne = Map.groupBy(fusionnerExemples(gabarits && gabarits.exemples, []), (e) => e.etiquette);
+  let neufs = 0;
+  for (const [signe, exemples] of parSigne) {
+    const id = idGabarits(signe);
+    const ici = await stockage.lire(id);
+    const avant = ici && ici.type === TYPE_GABARITS ? ici.exemples : [];
+    const reunis = fusionnerExemples(avant, exemples);
+    if (egal(reunis, avant)) continue;
+    const connus = new Set(avant.map((e) => e.id));
+    neufs += reunis.filter((e) => !connus.has(e.id)).length;
+    const maintenant = new Date().toISOString();
+    // `depuis` : si un autre onglet a appris entre-temps, les deux se réunissent (fusionnerFiches).
+    if (ici) await stockage.modifier(id, { exemples: reunis, modifieLe: maintenant }, { depuis: ici });
+    else await stockage.creer(id, ficheDeGabarits(signe, reunis, maintenant), []);
+  }
+  return neufs;
+}
+
+// ------------------------------------------------------------------------
 // Sauvegarde : toute la bibliothèque dans un fichier, et retour
 // ------------------------------------------------------------------------
 
-/** Toute la bibliothèque, traits compris, en un objet JSON. */
+/** Toute la bibliothèque, traits compris (et tes gabarits), en un objet JSON. */
 export async function sauvegarde(stockage, partitions) {
   const sortie = [];
   for (const p of partitions) {
@@ -662,7 +714,9 @@ export async function sauvegarde(stockage, partitions) {
     const pages = await stockage.pages(id, p.nbPages || 0).catch(() => []);
     sortie.push({ id, donnees, pages: pages.map(compacter) });
   }
-  return { format: FORMAT_SAUVEGARDE, version: 1, creeLe: new Date().toISOString(), partitions: sortie };
+  // Tes gabarits partent aussi, à part : une version de Portée d'avant les ignore, au lieu d'en faire des partitions.
+  const gabarits = await lireGabarits(stockage).catch(() => null);
+  return { format: FORMAT_SAUVEGARDE, version: 1, creeLe: new Date().toISOString(), partitions: sortie, ...(gabarits && gabarits.exemples.length ? { gabarits } : {}) };
 }
 
 /** Des pages compactées : chaque page, une liste de traits ; chaque trait, des nombres (x et y alternés). */
@@ -683,7 +737,8 @@ export async function restaurer(stockage, contenu, _dejaLa = null) {
   if (!contenu || contenu.format !== FORMAT_SAUVEGARDE || !Array.isArray(contenu.partitions)) {
     throw new Error("Ce fichier n'est pas une sauvegarde de Portée.");
   }
-  const bilan = { revenues: 0, ignorees: 0, differentes: 0, echecs: [] };
+  // `gabarits` : combien d'exemples de ton écriture (L16) la sauvegarde a appris en plus à cette bibliothèque.
+  const bilan = { revenues: 0, ignorees: 0, differentes: 0, echecs: [], gabarits: 0 };
   // De la plus ancienne à la plus récente : les dates neuves gardent l'ordre du carnet.
   const entrees = contenu.partitions
     .map((e, i) => ({ e, i, quand: dateIso(e && e.donnees && e.donnees.modifieLe) || EPOQUE }))
@@ -702,6 +757,8 @@ export async function restaurer(stockage, contenu, _dejaLa = null) {
       if (!e || typeof e.id !== "string" || !e.id) throw new Error("pas d'identifiant");
       const donnees = normaliserFiche(e.donnees);
       if (!donnees) throw new Error("fiche illisible");
+      // Une fiche de gabarits (venue de la bibliothèque commune, ou d'une version à venir) : réunie aux tiens, jamais laissée de côté.
+      if (donnees.type === TYPE_GABARITS) { bilan.gabarits += await rangerGabarits(stockage, donnees); continue; }
       const id = renommees.get(e.id) || e.id;
       if (donnees.type === "morceau") donnees.blocs = donnees.blocs.map((b) => (renommees.has(b.idee) ? { ...b, idee: renommees.get(b.idee) } : b));
       const ici = await stockage.lire(id);
@@ -721,6 +778,11 @@ export async function restaurer(stockage, contenu, _dejaLa = null) {
       // les nôtres, déjà en français (« fiche illisible »), passent telles quelles.
       bilan.echecs.push({ id: e && e.id, titre, raison: genreErreur(err) === "inconnue" ? (err && err.message) || String(err) : cause(err) });
     }
+  }
+  // Tes gabarits : réunis à ceux d'ici (l'union), pas « déjà là, laissés tels quels » comme une partition.
+  if (contenu.gabarits && typeof contenu.gabarits === "object") {
+    try { bilan.gabarits += await rangerGabarits(stockage, contenu.gabarits); }
+    catch (err) { bilan.echecs.push({ id: "gabarits", titre: "Gabarits de ton écriture", raison: genreErreur(err) === "inconnue" ? (err && err.message) || String(err) : cause(err) }); }
   }
   return { ...bilan, ajoutees: bilan.revenues };
 }

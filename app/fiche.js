@@ -267,6 +267,84 @@ const NORMES = {
   modifieLe: (v) => dateIso(v) ?? undefined,
 };
 
+// ------------------------------------------------------------------------
+// Les gabarits de ton écriture (L16) : des fiches cachées de la bibliothèque
+// ------------------------------------------------------------------------
+//
+// Les exemples de tes signes (lecteur/gabarits.js : { id, etiquette, source,
+// points }) voyagent avec la bibliothèque, comme tes partitions : la synchro,
+// la base de claude.ai, la sauvegarde. Une fiche par signe
+// (`gabarits-bemol`…) : 24 exemples d'un signe font 13 Ko, tous les signes
+// ensemble plus de 200, trop près des 256 Kio d'un document de claude.ai et
+// de la bibliothèque commune. Ces fiches ne s'affichent nulle part
+// (stockage.js les écarte de la liste), et deux versions d'une même fiche
+// se réunissent (l'union de leurs exemples), jamais « la plus récente
+// gagne » : un signe appris sur le téléphone serait perdu dès que
+// l'ordinateur en apprend un autre.
+//
+// fiche.js n'importe pas le lecteur (dans dist/, il est dans lecteur/ ; ici,
+// à côté de app/, et la vérification des types le suivrait) : la liste des
+// signes et la règle de fusion sont recopiées de gabarits.js, et un test
+// vérifie qu'elles restent d'accord.
+
+/** Le genre des fiches de gabarits. */
+export const TYPE_GABARITS = "gabarits";
+/** Les signes que tes gabarits savent reconnaître (ETIQUETTES de lecteur/gabarits.js). */
+export const SIGNES_GABARITS = ["soupir", "demi-soupir", "quart-soupir", "diese", "bemol", "becarre", "1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "C|", "triolet"];
+// Au plus 24 exemples par signe, les plus anciens partent ; 32 points par exemple (NB_POINTS).
+const MAX_PAR_SIGNE = 24;
+const POINTS_PAR_EXEMPLE = 32;
+const ID_EXEMPLE = /^[0-9a-z]{1,32}$/;
+
+/** L'identifiant de la fiche d'un signe (« C| » n'est pas un caractère d'identifiant : « C-barre »). */
+export const idGabarits = (signe) => `gabarits-${signe === "C|" ? "C-barre" : signe}`;
+
+/** Un exemple remis en forme, ou null : un identifiant, un signe connu, 32 points finis (en interlignes, près du centre). */
+function normaliserExemple(e) {
+  if (!estObjet(e) || typeof e.id !== "string" || !ID_EXEMPLE.test(e.id) || !SIGNES_GABARITS.includes(e.etiquette)) return null;
+  if (!Array.isArray(e.points) || e.points.length !== POINTS_PAR_EXEMPLE) return null;
+  const points = [];
+  for (const p of e.points) {
+    if (!Array.isArray(p) || p.length !== 2 || !p.every((v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 20)) return null;
+    points.push([p[0], p[1]]);
+  }
+  return { id: e.id, etiquette: e.etiquette, source: typeof e.source === "string" ? e.source.slice(0, 20) : "correction", points };
+}
+
+/** Au plus `max` exemples par signe : les plus anciens (les premiers) partent, comme dans gabarits.js. */
+function bornerExemples(exemples, max = MAX_PAR_SIGNE) {
+  const restants = new Map();
+  for (const e of exemples) restants.set(e.etiquette, (restants.get(e.etiquette) || 0) + 1);
+  return exemples.filter((e) => {
+    const n = restants.get(e.etiquette);
+    if (n > max) { restants.set(e.etiquette, n - 1); return false; }
+    return true;
+  });
+}
+
+/**
+ * Les exemples de deux versions, réunis : chacun une fois (par son
+ * identifiant, tiré de son contenu), ceux de `a` d'abord, bornés par signe.
+ * La règle de fusionnerGabarits (gabarits.js), sur des exemples remis en forme.
+ * @param {unknown} a  @param {unknown} b
+ */
+export function fusionnerExemples(a, b) {
+  const vus = new Set();
+  const sortie = [];
+  for (const brut of [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]) {
+    const e = normaliserExemple(brut);
+    if (!e || vus.has(e.id)) continue;
+    vus.add(e.id);
+    sortie.push(e);
+  }
+  return bornerExemples(sortie);
+}
+
+/** La fiche d'un signe, neuve. */
+export function ficheDeGabarits(signe, exemples, date) {
+  return { type: TYPE_GABARITS, titre: `Gabarits de ton écriture (${signe})`, etiquette: signe, version: 1, exemples: fusionnerExemples(exemples, []), statut: TYPE_GABARITS, nbPages: 0, creeLe: date, modifieLe: date };
+}
+
 /** L'ABC d'une idée, refait depuis ses notes, comme l'éditeur le fait à chaque changement (idee.js). */
 export function abcDeLIdee(f) {
   try {
@@ -304,6 +382,14 @@ export function normaliserFiche(brute) {
   } else if (f.type === "morceau") {
     f.blocs ??= [];
     f.statut ??= "morceau";
+  } else if (f.type === TYPE_GABARITS) {
+    // Les exemples d'un seul signe, en forme et bornés (lus sur la fiche brute : la copie
+    // générique d'un champ inconnu s'arrête à 100 Ko, et ne vérifie rien).
+    f.etiquette = SIGNES_GABARITS.includes(brute.etiquette) ? brute.etiquette : null;
+    f.version = entier(brute.version, 1, 99, 1);
+    f.exemples = fusionnerExemples(brute.exemples, []).filter((e) => e.etiquette === f.etiquette);
+    f.statut = TYPE_GABARITS;
+    f.nbPages = 0;
   } else if (!f.type) {
     f.statut ??= "a-relire";
     if (f.abc === undefined) f.abc = f.abcLu ?? "";
@@ -488,6 +574,19 @@ function fusionnerSequences(b, l, d, departager) {
  */
 export function fusionnerFiches({ base, locale, distante }) {
   const plusRecente = (locale.modifieLe || "") >= (distante.modifieLe || "") ? "locale" : "distante";
+  if (locale.type === TYPE_GABARITS && distante.type === TYPE_GABARITS) {
+    // Tes gabarits (L16) : l'union des exemples des deux côtés, avec ou sans
+    // base. Le plus récent gagnant perdrait ce que l'autre appareil a appris.
+    const gagnante = plusRecente === "locale" ? locale : distante;
+    const apres = uneMsPlusTard(distante.modifieLe || EPOQUE);
+    const donnees = {
+      ...gagnante,
+      exemples: fusionnerExemples(locale.exemples, distante.exemples),
+      creeLe: [locale.creeLe, distante.creeLe].filter(Boolean).sort()[0] || EPOQUE,
+      modifieLe: (locale.modifieLe || "") > apres ? locale.modifieLe : apres,
+    };
+    return { donnees: normaliserFiche(donnees), copie: null, memo: "locale" };
+  }
   if (!base) {
     const gagnante = plusRecente === "locale" ? locale : distante;
     return { donnees: gagnante, copie: null, memo: plusRecente };

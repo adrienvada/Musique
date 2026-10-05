@@ -17,12 +17,13 @@
  * enregistrements) est partagée avec « Écouter » (page-ouverte.js).
  */
 import { lirePartition, VERSION_LECTEUR } from "./lecteur/partition.js";
+import { ajouterExemple, gabaritsVides } from "./lecteur/gabarits.js";
 import { dessinerPage } from "./manuscrit.js";
 import * as ed from "./edition.js";
 import { cibleVisible, completerDoutes, initialiserVise, modifEntre, poser, preparerDoutes, recalculerDoutes, suivre } from "./doutes.js";
 import {
   afficherVueAtelier, avertissementAbc, dessinerCarteDoute, dessinerConsigne, dessinerPas, dessinerRelu, dessinerReperes,
-  pastilleBarre, placerOnglets, PREFIXE_GRAVURE, pourGravure, suivreDock, tempoInitial,
+  pastilleBarre, placerOnglets, PREFIXE_GRAVURE, pourGravure, proposerGeste, suivreDock, tempoInitial,
 } from "./atelier.js";
 import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 import { explication } from "./erreurs.js";
@@ -40,10 +41,12 @@ const dureeDeLaTouche = (e) => (!e.shiftKey && DUREES_AU_CLAVIER[e.code]) || DUR
 
 /**
  * @param deps {
- *   page (page-ouverte.js), piano, abcjs() → window.ABCJS, calibration(modele),
+ *   page (page-ouverte.js), piano, abcjs() → window.ABCJS, calibration(modele, version),
  *   ecouter(o) (atelier.js, creerEcoutePage), arreterEcoute(),
  *   valider() (« C'est bon » : la page est prête, on va l'écouter),
- *   supprimer() (la page ouverte, après la question)
+ *   supprimer() (la page ouverte, après la question),
+ *   gabarits() → tes gabarits (L16), apprendre(g) → le nombre d'exemples neufs,
+ *   aRelire(sauf) → les pages pas encore corrigées, relireEtDire(ids) (import-pdf.js)
  * }
  */
 export function creerEcranAtelier(deps) {
@@ -65,15 +68,63 @@ export function creerEcranAtelier(deps) {
   let renduDoutes = 0;
   let dockEnOutils = false, dockReplie = false;
   let derniereNote = { alteration: "", lettre: "C", octave: 5 };
+  // Ce que tes réponses apprennent à tes gabarits (L16), en attendant qu'on quitte la page.
+  let lecons = [];
 
   const p = () => page.partition;
   const doutesDe = () => (p() && p().doutes) || [];
   const premierOuvert = () => doutesDe().findIndex((d) => !d.leve);
   const jetonChoisi = () => (a.selection === null ? null : ed.lireJeton(a.abc, a.selection));
 
-  /** Une autre page s'ouvre : « Corriger » repart d'un historique neuf, sans note choisie. */
+  /** Une autre page s'ouvre : « Corriger » repart d'un historique neuf, sans note choisie (ce que la page d'avant a appris part d'abord). */
   function ouvrir() {
+    apprendreDesReponses();
     Object.assign(a, { numeroPage: 0, douteActif: -1, selection: null, historique: [], manuel: null });
+  }
+
+  /**
+   * Une réponse qui t'apprend un signe (L16 : un signe inconnu, un triolet,
+   * un chiffrage) : ses traits et ce qu'ils sont, retenus pour plus tard.
+   * Pas tout de suite : une réponse annulée n'apprend rien. Un exemple faux
+   * resterait dans tes gabarits (ils se réunissent d'un appareil à l'autre,
+   * rien n'en sort), et ferait lire de travers les signes qui lui ressemblent.
+   */
+  function retenirLecon(d, r) {
+    if (!r.apprendre || !r.apprendre.length || d.id === undefined) return;
+    const traits = page.pages[(d.page || 1) - 1] || [];
+    const exemples = r.apprendre
+      .map((x) => ({ etiquette: x.etiquette, traits: (x.traits || []).map((k) => traits[k]).filter((t) => Array.isArray(t) && t.length) }))
+      .filter((x) => x.traits.length);
+    if (exemples.length) lecons.push({ fiche: p(), doute: d.id, reponse: r.texte, exemples });
+  }
+
+  /**
+   * On quitte la page (ou on en ouvre une autre) : les réponses qui tiennent
+   * encore apprennent leurs signes à tes gabarits, avec l'interligne de leur
+   * page. S'il y a du neuf et des pages pas encore corrigées, un message
+   * propose de les relire (jamais d'office).
+   */
+  async function apprendreDesReponses() {
+    const aFaire = lecons;
+    lecons = [];
+    const tiennent = aFaire.filter((l) => { const d = (l.fiche.doutes || []).find((x) => x.id === l.doute); return d && d.leve && d.reponse === l.reponse; });
+    if (!tiennent.length || !deps.apprendre) return;
+    try {
+      let g = gabaritsVides();
+      for (const l of tiennent) {
+        const cal = await calibration(l.fiche.modele, l.fiche.versionModele);
+        for (const x of l.exemples) g = ajouterExemple(g, x.traits, x.etiquette, cal.interligne);
+      }
+      const neufs = await deps.apprendre(g);
+      if (!neufs) return;
+      const ids = deps.aRelire ? deps.aRelire(tiennent[0].fiche.id) : [];
+      const appris = `Portée a appris ${neufs === 1 ? "un signe" : `${neufs} signes`} de ton écriture.`;
+      if (ids.length) proposerGeste(`${appris} Relire ${ids.length > 1 ? `tes ${ids.length} pages pas encore corrigées` : "ta page pas encore corrigée"} ?`, "Relire", () => deps.relireEtDire(ids));
+      else toast(appris, 4000);
+    } catch (e) {
+      console.error(e);
+      toast(`Ce que tes réponses ont appris à Portée n'a pas pu être gardé : ${explication(e)}`, 7000);
+    }
   }
 
   /** Le texte ABC de l'atelier ; il en garde la valeur d'avant pour suivre les doutes. */
@@ -119,10 +170,11 @@ export function creerEcranAtelier(deps) {
     afficherDoutes();
   }
 
-  /** On quitte l'écran : la lecture s'arrête, ce qui attendait d'être enregistré part. */
+  /** On quitte l'écran : la lecture s'arrête, ce qui attendait d'être enregistré part, et tes réponses apprennent leurs signes. */
   function fermer() {
     a.ouvert = false;
     clearTimeout(minuterieGravure);
+    apprendreDesReponses();
     return page.vider();
   }
 
@@ -141,7 +193,8 @@ export function creerEcranAtelier(deps) {
     const doutes = x.doutes || [];
     if ((x.versionLecteur || 1) >= VERSION_LECTEUR || x.abc !== x.abcLu || x.statut === "prete" || doutes.some((d) => d.leve) || !page.pages.length) return false;
     const cal = await calibration(x.modele, x.versionModele);
-    const res = lirePartition(page.pages, cal, { titre: titreLu(x) });
+    const gabarits = deps.gabarits ? await deps.gabarits() : null;
+    const res = lirePartition(page.pages, cal, { titre: titreLu(x), gabarits });
     if (p() !== x) return false; // une autre page s'est ouverte pendant la lecture
     page.changer({ abc: res.abc, abcLu: res.abc, doutes: preparerDoutes(res.doutes), versionLecteur: VERSION_LECTEUR, versionModele: cal.version || 1 }, { p: x });
     const bilan = res.doutes.length ? `${pluriel(res.doutes.length, "point")} à vérifier` : "rien à signaler";
@@ -531,6 +584,7 @@ export function creerEcranAtelier(deps) {
   function repondre(i, r) {
     const res = r.geste ? r.geste(a.abc) : null;
     if (r.geste && !res) { toast("Cette réponse ne s'applique plus : corrige la note toi-même."); afficherDoutes(); return; }
+    retenirLecon(doutesDe()[i], r);
     if (res) appliquer(res, { doute: i, reponse: r.texte, regle: r.regle, selectionner: false });
     else {
       memoriser();

@@ -18,13 +18,16 @@
 import { lireDocument } from "./lecteur/extraction.js";
 import { lirePartition, VERSION_LECTEUR } from "./lecteur/partition.js";
 import { ajuster, fichierCalibration, identifierModele, recaler, verifierVersion } from "./lecteur/modeles.js";
-import { nouvelId } from "./stockage.js";
+import { gabaritsVides, lireEtalonnage } from "./lecteur/gabarits.js";
+import { lireGabarits, nouvelId, rangerGabarits } from "./stockage.js";
+import { egal } from "./fiche.js";
 import { ideeDepuisMidi } from "./midi.js";
 import { ecrireAbc } from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
 import { preparerDoutes } from "./doutes.js";
 import { apercuTraits } from "./apercus.js";
-import { MODELES, nomModele } from "./tablette.js";
+import { bilanEtalonnage, MODELES, nomModele } from "./tablette.js";
+import { confirmer } from "./dialogue.js";
 import { erreur, explication } from "./erreurs.js";
 import { pluriel, toast } from "./ui.js";
 
@@ -131,20 +134,45 @@ function chargerPdfjs() {
   return pdfjsPromesse;
 }
 
+/** Le titre que la lecture a écrit dans l'ABC (T:), pour qu'une relecture écrive le même. */
+const titreLu = (p) => ((p.abcLu || "").match(/^T:(.*)$/m) || [])[1] ?? p.titre;
+
 /**
- * @param {Object} deps { stockage() → le stockage ouvert, ouvrir(id, vue) }
+ * Une page lue que tu n'as pas encore touchée : rien de corrigé, aucun doute
+ * réglé, pas « Prête ». Une relecture ne peut rien y défaire ; une page
+ * corrigée ou validée porte ta lecture (et le banc d'essai la prend pour vraie).
+ * @param {any} p
  */
-export function creerImport({ stockage, ouvrir }) {
+export const pasEncoreCorrigee = (p) => !!p && !p.type && p.abc === p.abcLu && p.statut !== "prete" && !(p.doutes || []).some((d) => d.leve);
+
+/**
+ * @param {Object} deps { stockage() → le stockage ouvert, ouvrir(id, vue),
+ *   partitions() → la bibliothèque (pour relire les pages pas encore corrigées) }
+ */
+export function creerImport({ stockage, ouvrir, partitions = () => [] }) {
+  /**
+   * Tes gabarits (L16), pour lire avec eux. Une bibliothèque qui ne les rend
+   * pas (une fiche abîmée) ne bloque pas la lecture : sans eux, rien ne
+   * change à ce qu'elle lit.
+   */
+  async function gabarits() {
+    try { return await lireGabarits(stockage()); } catch (e) { console.warn("Tes gabarits ne se lisent pas : lecture sans eux.", e); return null; }
+  }
+
+  /** Range ce que Portée vient d'apprendre de ton écriture (une page d'étalonnage, une réponse) ; rend le nombre d'exemples neufs. */
+  const apprendre = (g) => rangerGabarits(stockage(), g);
+
   /**
    * Lit les pages et range la partition. Commun à l'import d'un PDF et à
    * l'import direct depuis la reMarkable. `version` : celle du modèle
    * (le sujet du PDF, ou `versionModele` du connecteur ; absente, la v1).
    * `avertissement` : ce qu'il faut dire en plus (un modèle reconnu à ses
-   * lignes, une page de la tablette illisible).
+   * lignes, une page de la tablette illisible). La lecture se fait avec tes
+   * gabarits : tes silences, altérations et chiffres, appris (L16).
    */
   async function enregistrerLecture({ titre, modele, version = null, pages, source = null, avertissement = null }) {
     const cal = await calibration(modele, version);
-    const res = lirePartition(pages, cal, { titre });
+    const res = lirePartition(pages, cal, { titre, gabarits: await gabarits() });
     const maintenant = new Date().toISOString();
     const id = nouvelId();
     await stockage().creer(id, {
@@ -192,6 +220,86 @@ export function creerImport({ stockage, ouvrir }) {
     return id;
   }
 
+  /**
+   * Les pages pas encore corrigées, relues avec tes gabarits d'aujourd'hui
+   * (L16) : un signe qu'elles laissaient de côté peut maintenant se lire.
+   * Chaque page est relue d'après sa fiche du moment (si tu l'as corrigée
+   * entre-temps, elle n'y passe pas). Rend { relues, changees }.
+   */
+  async function relirePages(ids) {
+    const g = await gabarits();
+    let relues = 0, changees = 0;
+    for (const id of ids) {
+      try {
+        const f = await stockage().lire(id);
+        if (!pasEncoreCorrigee(f) || !f.nbPages) continue;
+        const pages = await stockage().pages(id, f.nbPages);
+        if (!pages.some((t) => t.length)) continue;
+        const res = lirePartition(pages, await calibration(f.modele, f.versionModele), { titre: titreLu(f), gabarits: g });
+        relues++;
+        const doutes = preparerDoutes(res.doutes);
+        if (res.abc === f.abc && egal(doutes, f.doutes || [])) continue;
+        await stockage().modifier(id, { abc: res.abc, abcLu: res.abc, doutes, versionLecteur: VERSION_LECTEUR, modifieLe: new Date().toISOString() }, { depuis: f });
+        changees++;
+      } catch (e) {
+        console.error(e); // une page qui ne se relit pas garde sa lecture ; les autres continuent
+      }
+    }
+    return { relues, changees };
+  }
+
+  /** Les pages qui gagneraient à être relues (hors `sauf`, la page ouverte). */
+  const aRelire = (sauf = null) => partitions().filter((p) => pasEncoreCorrigee(p) && p.nbPages > 0 && p.id !== sauf).map((p) => p.id);
+
+  /** Relit, puis dit ce qui a changé. */
+  async function relireEtDire(ids) {
+    toast(`Relecture de ${pluriel(ids.length, "page")}…`, 60000);
+    const { changees } = await relirePages(ids);
+    toast(changees ? `${pluriel(changees, "page")} ${changees > 1 ? "se lisent" : "se lit"} autrement avec ce que Portée a appris : ses doutes sont à jour.` : "Relues : elles se lisent comme avant.", 6000);
+  }
+
+  /**
+   * Quand tes gabarits changent : relire les pages pas encore corrigées ?
+   * Une question (dialogue.js), jamais une relecture d'office. `texte` : ce
+   * qui vient d'être appris, dit avant la question.
+   */
+  async function proposerRelecture({ sauf = null, texte = "" } = {}) {
+    const ids = aRelire(sauf);
+    if (!ids.length) return false;
+    const n = ids.length;
+    const oui = await confirmer({
+      titre: n > 1 ? `Relire tes ${n} pages pas encore corrigées ?` : "Relire ta page pas encore corrigée ?",
+      texte: `${texte ? `${texte} ` : ""}Relue avec ce que Portée vient d'apprendre, ${n > 1 ? "chacune se lira" : "elle se lira"} peut-être mieux. Les pages que tu as corrigées ne bougent pas.`,
+      oui: "Relire", danger: false,
+    });
+    if (oui) await relireEtDire(ids);
+    return oui;
+  }
+
+  /**
+   * Une page d'étalonnage remplie (L16) : pas une partition. Chaque case
+   * apprend son signe (lireEtalonnage), page après page ; ce qui est appris
+   * rejoint tes gabarits, puis Portée propose de relire les pages pas encore
+   * corrigées. Le message dit combien de signes sont appris, et quelles
+   * cases sont restées vides.
+   */
+  async function importerEtalonnage({ nom, pages, version = null, avertissement = null }) {
+    const cal = await calibration("etalonnage", version);
+    let g = (await gabarits()) || gabaritsVides();
+    const compte = new Map(cal.cases.map((c) => [c.etiquette, 0]));
+    for (const traits of pages) {
+      const r = lireEtalonnage(traits, cal, g);
+      g = r.gabarits;
+      for (const c of r.cases) compte.set(c.etiquette, (compte.get(c.etiquette) || 0) + c.exemples);
+    }
+    const appris = [...compte.values()].reduce((a, b) => a + b, 0);
+    const neufs = appris ? await apprendre(g) : 0;
+    const vides = cal.cases.filter((c) => !compte.get(c.etiquette)).map((c) => c.nom);
+    const bilan = bilanEtalonnage({ appris, neufs, vides, cases: cal.cases.length }) + (avertissement ? ` ${avertissement}` : "");
+    if (!neufs || !(await proposerRelecture({ texte: bilan }))) toast(bilan, 12000);
+    return { appris, neufs, vides, nom };
+  }
+
   /** Des PDF de la tablette, ou des .mid : chacun lu à son tour ; un seul fichier s'ouvre aussitôt. */
   async function importer(fichiers) {
     if (!stockage()) { toast("La bibliothèque s'ouvre encore, réessaie dans un instant."); return; }
@@ -210,6 +318,8 @@ export function creerImport({ stockage, ouvrir }) {
         // La tablette exporte tout le document : on ne garde que les pages écrites.
         const pages = lu.pages.filter((t) => t.length > 0);
         if (!pages.length) { toast(`« ${f.name} » ne contient aucun trait.`); continue; }
+        // La page d'étalonnage (L16) apprend tes signes : pas de partition.
+        if (lu.cal.genre === "etalonnage") { await importerEtalonnage({ nom: titreDepuisFichier(f.name), pages, version: lu.version, avertissement: lu.avertissement }); continue; }
         dernier = await enregistrerLecture({ titre: titreDepuisFichier(f.name), modele: lu.modele, version: lu.version, pages, avertissement: lu.avertissement });
       } catch (e) {
         console.error(e);
@@ -235,5 +345,5 @@ export function creerImport({ stockage, ouvrir }) {
     await importer(fichiers);
   }
 
-  return { importer, importerExemples, enregistrerLecture };
+  return { importer, importerExemples, enregistrerLecture, importerEtalonnage, gabarits, apprendre, proposerRelecture, aRelire, relireEtDire };
 }

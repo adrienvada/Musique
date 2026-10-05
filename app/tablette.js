@@ -41,6 +41,28 @@ export function nomModele(id) {
   return m ? m.nom : String(id || "");
 }
 
+/** « Quart de soupir » → « quart de soupir » ; « C (4/4) » et « 3 de triolet » restent tels quels. */
+const enMinuscule = (nom) => (/^[A-ZÀ-Ý][a-zà-ÿ]/.test(nom) ? nom.charAt(0).toLowerCase() + nom.slice(1) : nom);
+
+/**
+ * Ce qu'une page d'étalonnage a appris (L16), en clair : combien de signes,
+ * et quelles cases sont restées vides (à remplir pour que Portée les
+ * reconnaisse). `appris` : les exemples lus sur la page ; `neufs` : ceux
+ * que tes gabarits n'avaient pas encore (la même page importée deux fois
+ * n'apprend rien de plus) ; `vides` : les noms des cases sans exemple.
+ * @param {{ appris: number, neufs: number, vides: string[], cases: number }} bilan
+ */
+export function bilanEtalonnage({ appris, neufs, vides, cases }) {
+  if (!appris) return "Ta page d'étalonnage n'a rien appris à Portée : ses cases sont vides. Écris chaque signe trois fois dans sa case, à côté du signe gris, puis importe-la à nouveau.";
+  const quoi = neufs === appris ? `Portée a appris ${appris} ${accorde(appris, "signe")} de ton écriture.`
+    : neufs ? `Portée a appris ${neufs} ${accorde(neufs, "signe")} de ton écriture (elle en connaissait déjà ${appris - neufs}).`
+      : `Portée connaissait déjà ${appris === 1 ? "ce signe" : `ces ${appris} signes`} de ton écriture : rien de neuf.`;
+  if (!vides.length) return `${quoi} Toutes les cases sont remplies.`;
+  if (vides.length === cases) return quoi;
+  const liste = vides.map(enMinuscule);
+  return `${quoi} ${vides.length === 1 ? "Case restée vide" : "Cases restées vides"} : ${liste.join(", ")}. Tu peux les remplir et importer la page à nouveau.`;
+}
+
 /**
  * Ce qu'on dit des pages que le connecteur n'a pas su lire (C3) :
  * « La page 3 n'a pas pu être lue… », ou null s'il n'y en a pas. `liste` :
@@ -57,7 +79,8 @@ export function pagesIllisibles(liste) {
 /**
  * @param deps {
  *   dansClaude(), stockage() → le stockage ouvert, partitions() → la bibliothèque,
- *   ouvrir(id, vue), enregistrerLecture({ titre, modele, pages, source }) (import-pdf.js),
+ *   ouvrir(id, vue), enregistrerLecture({ titre, modele, version, pages, source, avertissement }) (import-pdf.js),
+ *   importerEtalonnage({ nom, pages, version, avertissement }) (import-pdf.js : une page d'étalonnage, L16),
  *   versPartitions() (l'onglet où vivent les panneaux), surAdresse() (une adresse
  *   enregistrée : la synchronisation démarre), surOubli() (l'adresse oubliée : elle s'arrête)
  * }
@@ -371,6 +394,8 @@ export function creerTablette(deps) {
           toast(illisibles ? `« ${d.nom} » : ${illisibles.charAt(0).toLowerCase()}${illisibles.slice(1)}` : `« ${d.nom} » ne contient encore aucun trait.`, illisibles ? 9000 : 4000);
           return;
         }
+        // Une page d'étalonnage (L16) n'est pas une partition : elle apprend tes signes, et le panneau reste ouvert.
+        if (doc.modele === "etalonnage") { await deps.importerEtalonnage({ nom: doc.nom || d.nom, pages, version, avertissement: illisibles }); return; }
         const id = await deps.enregistrerLecture({ titre: doc.nom || d.nom, modele: doc.modele, version, pages, source: { remarkable: d.id, modifie: d.modifie || null }, avertissement: illisibles });
         $("panneau-remarkable").hidden = true;
         deps.ouvrir(id, "atelier");

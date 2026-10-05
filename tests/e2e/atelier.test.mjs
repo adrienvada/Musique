@@ -15,6 +15,9 @@ import { ORDINATEUR, RACINE, TELEPHONE, contexte, dossierTemporaire, importerLes
 import { lireFichier } from "../../outils/lire.mjs";
 import { compacter } from "../../app/fiche.js";
 import { preparerDoutes } from "../../app/doutes.js";
+import { lirePartition } from "../../lecteur/partition.js";
+import { ajouterExemple, gabaritsVides } from "../../lecteur/gabarits.js";
+import { chargerFabrique, forme, Page } from "../fabrique.mjs";
 
 const MELODIE = path.join(RACINE, "tests/pages/2026-09-30-melodie-standard.pdf");
 
@@ -195,6 +198,67 @@ test("H3 · l'avis que Claude a rangé depuis une conversation se lit dans la ca
     await page.waitForFunction(() => /Texte ABC à revoir/.test(document.getElementById("etat-abc").textContent));
     const etat = await page.textContent("#etat-abc");
     assert.match(etat, /^Texte ABC à revoir Ligne \d+, \d+ᵉ caractère \(« h »\) : un caractère que la gravure ne connaît pas, ignoré\.( Et \d+ autres endroits\.)?$/, etat);
+    await verifierPropre(page);
+  } finally { await ctx.close(); }
+});
+
+// ------------------------------------------------------------------------
+// Tes gabarits (L16) : apprendre d'une réponse
+// ------------------------------------------------------------------------
+
+/** Une mesure fabriquée de tes vrais traits, avec une croix que les règles ne savent pas lire (tests/fabrique.mjs). */
+function pageCroix(f, graine) {
+  const pg = new Page(f);
+  pg.haut(240, 2); pg.haut(304, 3);
+  const croix = pg.ajouter(forme("croix", 370, pg.p.y(4), f.IL, graine));
+  pg.haut(420, 4); pg.haut(484, 5); pg.barre(540);
+  return { traits: pg.traits, croix };
+}
+/** Une page lue comme l'import la range (enregistrerLecture), pour une sauvegarde. */
+function pageLue(id, titre, traits, cal) {
+  const r = lirePartition([traits], cal, { titre });
+  const date = new Date().toISOString();
+  return { id, pages: [compacter(traits)], donnees: { titre, modele: "melodie-standard", versionModele: 1, versionLecteur: 2, abc: r.abc, abcLu: r.abc, doutes: preparerDoutes(r.doutes), statut: "a-relire", nbPages: 1, creeLe: date, modifieLe: date } };
+}
+
+test("L16 · une réponse t'apprend le signe : la page quittée, Portée propose de relire l'autre, qui se lit alors sans question ; une réponse annulée n'apprend rien", async () => {
+  const f = await chargerFabrique();
+  const un = pageCroix(f, 41), deux = pageCroix(f, 42);
+  // Ce que doit lire la seconde page avec ce que la première aura appris (un dièse, d'après sa croix).
+  const appris = ajouterExemple(gabaritsVides(), un.croix.map((i) => un.traits[i]), "diese", f.IL);
+  const attendu = lirePartition([deux.traits], f.CAL, { titre: "Croix 2", gabarits: appris });
+  assert.deepEqual(attendu.doutes, []);
+  assert.match(attendu.abc, /\^B2/);
+  const fichier = sauvegarde("croix", [pageLue("pcroix1", "Croix 1", un.traits, f.CAL), pageLue("pcroix2", "Croix 2", deux.traits, f.CAL)]);
+  const ctx = await contexte(navigateur, { appareil: ORDINATEUR });
+  try {
+    const page = await ouvrirPortee(ctx, serveur.url);
+    await restaurer(page, fichier, 2);
+    await ouvrirPartition(page, "Croix 1");
+    assert.equal(await page.textContent("#doutes .doute-question"), "Un signe que je ne reconnais pas");
+    // « Un bécarre », puis « Annuler » : rien à apprendre de cette réponse-là.
+    await page.click('#doutes .reponse[data-reponse="becarre"]');
+    await page.waitForFunction(() => /=B2/.test(document.getElementById("abc").value));
+    await page.click("#annuler");
+    await page.waitForFunction(() => !/=B2/.test(document.getElementById("abc").value));
+    await page.click('#doutes .reponse[data-reponse="diese"]');
+    await page.waitForFunction(() => /\^B2/.test(document.getElementById("abc").value));
+    // On quitte la page : le dièse rejoint tes gabarits, et un message propose de relire l'autre page.
+    await page.click("#vue-atelier [data-retour]");
+    await page.waitForSelector("#toast-geste button");
+    assert.equal(await page.textContent("#toast-geste span"), "Portée a appris un signe de ton écriture. Relire ta page pas encore corrigée ?");
+    const gabarits = await page.evaluate(() => new Promise((ok) => {
+      const r = indexedDB.open("portee");
+      r.onsuccess = () => { const q = r.result.transaction("partitions").objectStore("partitions").getAll(); q.onsuccess = () => { ok(q.result.filter((x) => x.type === "gabarits").map((x) => [x.etiquette, x.exemples.length])); r.result.close(); }; };
+    }));
+    assert.deepEqual(gabarits, [["diese", 1]]);
+    await page.click("#toast-geste button");
+    await messageQui(page, /^1 page se lit autrement avec ce que Portée a appris/);
+    // La seconde page, relue : la croix est un dièse, sans question. Le carnet ne montre que tes deux pages.
+    assert.equal(await page.locator("#liste .ligne-carnet").count(), 2);
+    await ouvrirPartition(page, "Croix 2");
+    assert.equal(await page.inputValue("#abc"), attendu.abc);
+    await page.waitForSelector("#doutes .relu");
     await verifierPropre(page);
   } finally { await ctx.close(); }
 });

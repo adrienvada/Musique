@@ -8,7 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { documentParTranches } from "../app/connecteur.js";
-import { MODELES, nomModele, pagesIllisibles } from "../app/tablette.js";
+import { bilanEtalonnage, MODELES, nomModele, pagesIllisibles } from "../app/tablette.js";
 import { CloudRemarkable } from "../supabase/functions/portee-remarkable/remarkable.js";
 import { coffreMemoire } from "../supabase/functions/portee-remarkable/coffre.js";
 import { traiter } from "../supabase/functions/portee-remarkable/mcp.js";
@@ -100,6 +100,16 @@ test("C3 · un connecteur qui ne progresse plus ne fait pas tourner l'appli sans
   const d = await documentParTranches(bloque, "Portée reMarkable", "doc");
   assert.equal(appels, 2);
   assert.deepEqual(d.pages.map((p) => p.numero), [1]);
+});
+
+test("L16 · ce qu'une page d'étalonnage a appris se dit en clair, cases vides comprises", () => {
+  const noms = JSON.parse(fs.readFileSync("modeles/etalonnage-v1.json", "utf8")).cases.map((c) => c.nom);
+  assert.equal(bilanEtalonnage({ appris: 0, neufs: 0, vides: noms, cases: noms.length }), "Ta page d'étalonnage n'a rien appris à Portée : ses cases sont vides. Écris chaque signe trois fois dans sa case, à côté du signe gris, puis importe-la à nouveau.");
+  assert.equal(bilanEtalonnage({ appris: 54, neufs: 54, vides: [], cases: 18 }), "Portée a appris 54 signes de ton écriture. Toutes les cases sont remplies.");
+  assert.equal(bilanEtalonnage({ appris: 3, neufs: 3, vides: noms.filter((n) => n !== "Quart de soupir"), cases: 18 }).split(" : ")[0], "Portée a appris 3 signes de ton écriture. Cases restées vides");
+  assert.equal(bilanEtalonnage({ appris: 48, neufs: 48, vides: ["Quart de soupir", "Chiffre 7", "C barré (2/2)"], cases: 18 }), "Portée a appris 48 signes de ton écriture. Cases restées vides : quart de soupir, chiffre 7, C barré (2/2). Tu peux les remplir et importer la page à nouveau.");
+  assert.equal(bilanEtalonnage({ appris: 51, neufs: 0, vides: ["3 de triolet"], cases: 18 }), "Portée connaissait déjà ces 51 signes de ton écriture : rien de neuf. Case restée vide : 3 de triolet. Tu peux les remplir et importer la page à nouveau.");
+  assert.equal(bilanEtalonnage({ appris: 10, neufs: 4, vides: [], cases: 18 }), "Portée a appris 4 signes de ton écriture (elle en connaissait déjà 6). Toutes les cases sont remplies.");
 });
 
 test("les pages illisibles se disent en clair", () => {

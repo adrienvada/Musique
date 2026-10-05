@@ -53,6 +53,28 @@ export function pastilleBarre(p) {
   return el("span", "pastille p-doute", restants ? pluriel(restants, "doute") : "À relire");
 }
 
+/**
+ * Un message passager qui propose un geste (« Relire »), comme celui d'une
+ * mise à jour (mises-a-jour.js, `.toast-action`) : seul son bouton prend le
+ * toucher, et il part seul au bout de `duree`. Ce n'est pas une question qui
+ * arrête tout : on peut l'ignorer.
+ */
+export function proposerGeste(texte, libelle, geste, duree = 12000) {
+  $("toast-geste")?.remove();
+  const m = el("div", "toast toast-action");
+  m.id = "toast-geste";
+  m.setAttribute("role", "status");
+  m.setAttribute("popover", "manual");
+  const b = el("button", "btn btn-petit", libelle);
+  b.type = "button";
+  b.addEventListener("click", () => { m.remove(); geste(); });
+  m.append(el("span", "", texte), b);
+  document.body.appendChild(m);
+  // En « popover », comme les autres messages : au-dessus d'une feuille ouverte.
+  if (m.showPopover) { try { m.showPopover(); } catch { /* sans popover : il s'affiche quand même */ } }
+  setTimeout(() => m.remove(), duree);
+}
+
 /** Le panneau du bas est fixé : l'écran lui laisse sa hauteur, mesurée, pour que rien ne passe dessous. */
 export function suivreDock(section, dock) {
   if (!("ResizeObserver" in window)) { section.style.setProperty("--dock-h", "340px"); return; }
