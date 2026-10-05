@@ -28,9 +28,13 @@
     "types": []
   },
   "files": [
+    "lecteur/extraction.js",
+    "lecteur/gabarits.js",
     "lecteur/geometrie.js",
     "lecteur/lecteur.js",
+    "lecteur/modeles.js",
     "lecteur/partition.js",
+    "lecteur/traits.js",
     "app/edition.js",
     "app/doutes.js",
     "app/zip.js",

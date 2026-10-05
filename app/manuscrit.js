@@ -14,12 +14,24 @@ function el(tag, attrs, parent) {
   return e;
 }
 
+/**
+ * Ce qu'on montre de la page, d'après la calibration (et plus des pixels
+ * écrits en dur, valables pour le seul format de la reMarkable 2) : toute la
+ * hauteur, et en largeur, de la moitié de la marge gauche (l'accolade du piano
+ * y est) à la moitié de la marge droite.
+ */
+export function cadrePage(cal) {
+  const largeur = (cal.page && cal.page.largeur) || 1404, hauteur = (cal.page && cal.page.hauteur) || 1872;
+  const gauche = cal.x_debut / 2, droite = cal.x_fin + (largeur - cal.x_fin) / 2;
+  return { gauche, droite, largeur: droite - gauche, hauteur };
+}
+
 /** Hauteur utile : des premières aux dernières portées où tu as écrit. */
 function cadrage(cal, traits, marge) {
   let y0 = Infinity, y1 = -Infinity;
   for (const t of traits) for (const [, y] of t) { if (y < y0) y0 = y; if (y > y1) y1 = y; }
   if (!Number.isFinite(y0)) { y0 = cal.systemes[0].portees[0].lignes[0]; y1 = y0 + 8 * cal.interligne; }
-  return [Math.max(0, y0 - marge), Math.min(1872, y1 + marge)];
+  return [Math.max(0, y0 - marge), Math.min(cadrePage(cal).hauteur, y1 + marge)];
 }
 
 /** Le cadre d'un doute : sa boîte, un peu élargie pour entourer le geste plutôt que le serrer. */
@@ -41,9 +53,10 @@ export function fenetreLoupe(cal, boite, ratio) {
   let w = h * ratio;
   if (largeurBoite + 3 * il > w) { w = largeurBoite + 3 * il; h = w / ratio; }
   // Une loupe très large (tablette) ne montre pas plus que la page : elle perd en hauteur plutôt que de sortir de la feuille.
-  if (w > 1330) { w = 1330; h = w / ratio; }
-  const x = Math.min(Math.max((boite.x0 + boite.x1) / 2 - w / 2, 40), Math.max(40, 1370 - w));
-  const y = Math.min(Math.max((boite.y0 + boite.y1) / 2 - h / 2, 0), Math.max(0, 1872 - h));
+  const page = cadrePage(cal);
+  if (w > page.largeur) { w = page.largeur; h = w / ratio; }
+  const x = Math.min(Math.max((boite.x0 + boite.x1) / 2 - w / 2, page.gauche), Math.max(page.gauche, page.droite - w));
+  const y = Math.min(Math.max((boite.y0 + boite.y1) / 2 - h / 2, 0), Math.max(0, page.hauteur - h));
   return { x, y, w, h };
 }
 
@@ -64,7 +77,8 @@ export function dessinerPage(svg, cal, traits, options = {}) {
     svg.setAttribute("viewBox", `${vue.x} ${vue.y} ${vue.w} ${vue.h}`);
     svg.setAttribute("preserveAspectRatio", "xMidYMid slice");
   } else {
-    svg.setAttribute("viewBox", `40 ${y0} 1330 ${y1 - y0}`);
+    const page = cadrePage(cal);
+    svg.setAttribute("viewBox", `${page.gauche} ${y0} ${page.largeur} ${y1 - y0}`);
     svg.setAttribute("preserveAspectRatio", "xMidYMin meet");
   }
   const fond = el("g", { class: "papier" }, svg);

@@ -19,6 +19,10 @@ coordonnées seraient à recalculer.
 
 Écrit dans modeles/ : <id>.pdf (12 pages identiques), <id>.json (la
 calibration) et apercu/<id>.svg (la première page, pour la documentation).
+
+Et la page d'étalonnage (L16), `etalonnage.pdf` : des cases où chaque signe
+est imprimé en gris, à écrire trois fois à côté. Le lecteur en tire des
+gabarits de ton écriture (lecteur/gabarits.js).
 """
 import json
 from dataclasses import dataclass
@@ -116,13 +120,10 @@ def mise_en_page(m: Modele) -> dict:
         "ecart_entre_blocs": round(ecart, 1),
         "x_debut": X_DEBUT,
         "x_fin": X_FIN,
-        # Au-delà de cette abscisse commence ce que tu écris (armure, chiffrage, notes).
+        # Au-delà de cette abscisse commence ce que tu écris (armure, chiffrage,
+        # notes) ; le lecteur borne l'en-tête de chaque ligne à 9 interlignes plus loin.
         "x_apres_cle": X_DEBUT + round(3.2 * m.interligne),
         "systemes": systemes,
-        "a_verifier": (
-            "Dans les fichiers .rm v6, l'abscisse des traits semble centrée sur la page "
-            "(x_page = x_rm + 702). À confirmer sur la première page écrite."
-        ),
     }
 
 
@@ -238,17 +239,213 @@ def ecrire_svg(m: Modele, cal: dict, chemin: Path) -> None:
     chemin.write_text("\n".join(parts) + "\n", encoding="utf-8")
 
 
+def ecrire_calibration(racine: Path, ident: str, cal: dict) -> None:
+    """La calibration en cours (<id>.json) et celle de sa version (<id>-v<N>.json).
+
+    POURQUOI DEUX FICHIERS. Une page écrite sur un modèle v1 doit toujours se
+    lire avec la calibration v1, même quand le modèle passe en v2 : le sujet du
+    PDF dit sa version, et le lecteur charge <id>-v<N>.json. Les versions
+    passées restent dans modeles/ (le générateur n'efface rien) ; <id>.json
+    reste la version en cours, pour ce qui ne connaît pas la version.
+    """
+    texte = json.dumps(cal, ensure_ascii=False, indent=2) + "\n"
+    (racine / f"{ident}.json").write_text(texte, encoding="utf-8")
+    (racine / f"{ident}-v{cal['version']}.json").write_text(texte, encoding="utf-8")
+
+
+# --- La page d'étalonnage (L16) ---------------------------------------------
+#
+# POURQUOI. Le lecteur reconnaît les silences, les altérations et les
+# chiffres d'après des règles réglées sur deux pages : elles ne savent pas
+# lire un chiffre, et chaque main fait ses signes à sa façon. Écrits une fois
+# ici, trois fois chacun, ils deviennent des gabarits de TON écriture, que le
+# lecteur compare ensuite à chaque signe de tes pages (lecteur/gabarits.js).
+#
+# Chaque rangée est une portée, au même interligne que la mélodie standard :
+# un signe s'écrit à sa taille habituelle, et c'est en interlignes que le
+# lecteur le mesure. Chaque case montre le signe en gris à sa place sur la
+# portée, puis trois cases vides séparées par des pointillés, une par exemple.
+
+ETALONNAGE = Modele("etalonnage", "Étalonnage", "etalonnage", interligne=32, blocs=6)
+COLONNES_ETALONNAGE = 3
+EXEMPLES_PAR_CASE = 3
+PAGES_ETALONNAGE = 4
+GUIDE = 3.2                              # largeur de la case du signe imprimé, en interlignes
+
+
+@dataclass(frozen=True)
+class CaseEtalonnage:
+    etiquette: str                       # ce que le lecteur en retient (lecteur/gabarits.js)
+    nom: str                             # ce que tu lis sous la case
+    glyphe: str                          # le signe imprimé en gris (glyphes_bravura.py)
+    position: float                      # son origine, en interlignes sous la ligne du haut
+
+
+CASES_ETALONNAGE = [
+    # Silences et altérations : centrés sur la ligne du milieu, comme gravés.
+    CaseEtalonnage("soupir", "Soupir", "soupir", 2),
+    CaseEtalonnage("demi-soupir", "Demi-soupir", "demi_soupir", 2),
+    CaseEtalonnage("quart-soupir", "Quart de soupir", "quart_soupir", 2),
+    CaseEtalonnage("diese", "Dièse", "diese", 2),
+    CaseEtalonnage("bemol", "Bémol", "bemol", 2),
+    CaseEtalonnage("becarre", "Bécarre", "becarre", 2),
+    # Chiffres du chiffrage : en haut de la portée, comme le chiffre du dessus.
+    *[CaseEtalonnage(str(k), f"Chiffre {k}", f"chiffre_{k}", 1) for k in range(1, 10)],
+    CaseEtalonnage("C", "C (4/4)", "mesure_c", 2),
+    CaseEtalonnage("C|", "C barré (2/2)", "mesure_c_barre", 2),
+    # Le « 3 » d'un triolet, petit, au-dessus de la portée.
+    CaseEtalonnage("triolet", "3 de triolet", "triolet_3", -0.6),
+]
+
+
+def mise_en_page_etalonnage(m: Modele) -> dict:
+    """Les rangées (des portées sans clé) et les cases, en pixels de l'écran.
+
+    Les portées sont réparties comme sur les modèles de mélodie ; la zone où
+    tu écris dans une case va jusqu'à mi-chemin des portées voisines (un
+    « 3 » de triolet s'écrit au-dessus de la portée).
+    """
+    haut_portee = 4 * m.interligne
+    dispo = HAUTEUR - MARGE_HAUT - MARGE_BAS
+    ecart = (dispo - m.blocs * haut_portee) / m.blocs
+    il = m.interligne
+    largeur_case = (X_FIN - X_DEBUT) / COLONNES_ETALONNAGE
+    systemes, cases = [], []
+    for b in range(m.blocs):
+        haut = MARGE_HAUT + ecart / 2 + b * (haut_portee + ecart)
+        lignes = [round(haut + i * il, 1) for i in range(5)]
+        systemes.append({"portees": [{"lignes": lignes}]})
+    for k, c in enumerate(CASES_ETALONNAGE):
+        rangee, colonne = divmod(k, COLONNES_ETALONNAGE)
+        lignes = systemes[rangee]["portees"][0]["lignes"]
+        x0 = X_DEBUT + colonne * largeur_case
+        cases.append({
+            "etiquette": c.etiquette,
+            "nom": c.nom,
+            "rangee": rangee,
+            # La zone où tu écris : après le signe imprimé, jusqu'au bord de la case.
+            "x0": round(x0 + GUIDE * il, 1),
+            "y0": round(lignes[0] - ecart / 2, 1),
+            "x1": round(x0 + largeur_case, 1),
+            "y1": round(lignes[4] + ecart / 2, 1),
+            "exemples": EXEMPLES_PAR_CASE,
+        })
+    return {
+        "modele": m.ident,
+        "titre": m.titre,
+        "genre": "etalonnage",
+        "version": VERSION,
+        "page": {
+            "largeur": LARGEUR,
+            "hauteur": HAUTEUR,
+            "unite": "pixel de l'écran de la reMarkable 2 (226 ppp), origine en haut à gauche, y vers le bas",
+        },
+        "interligne": m.interligne,
+        "ecart_entre_blocs": round(ecart, 1),
+        "x_debut": X_DEBUT,
+        "x_fin": X_FIN,
+        "systemes": systemes,
+        "cases": cases,
+    }
+
+
+def separations_etalonnage(cal: dict, case: dict) -> tuple[float, list[float]]:
+    """Le bord gauche d'une case (trait plein) et ses pointillés : avant la zone où tu écris, et entre deux exemples."""
+    il = cal["interligne"]
+    gauche = case["x0"] - GUIDE * il
+    pas = (case["x1"] - case["x0"]) / case["exemples"]
+    return gauche, [case["x0"] + k * pas for k in range(case["exemples"])]
+
+
+def dessiner_page_etalonnage(c: canvas.Canvas, m: Modele, cal: dict, page: int) -> None:
+    il = m.interligne
+    echelle = il / 250
+    c.saveState()
+    c.translate(0, HAUTEUR * PT)
+    c.scale(PT, -PT)
+    c.setStrokeColorRGB(*GRIS)
+    c.setFillColorRGB(*GRIS_SIGNES)
+    c.setLineWidth(EPAISSEUR_LIGNE)
+    for systeme in cal["systemes"]:
+        lignes = systeme["portees"][0]["lignes"]
+        for y in lignes:
+            c.line(X_DEBUT, y, X_FIN, y)
+        c.line(X_FIN, lignes[0], X_FIN, lignes[4])
+    for case, modele_case in zip(cal["cases"], CASES_ETALONNAGE):
+        lignes = cal["systemes"][case["rangee"]]["portees"][0]["lignes"]
+        gauche, pointilles = separations_etalonnage(cal, case)
+        c.setLineWidth(EPAISSEUR_LIGNE)
+        c.setDash()
+        c.line(gauche, lignes[0], gauche, lignes[4])
+        c.setLineWidth(1)
+        c.setDash([4, 6])
+        for x in pointilles:
+            c.line(x, lignes[0], x, lignes[4])
+        tracer_glyphe(c, modele_case.glyphe, gauche + 0.6 * il, lignes[0] + modele_case.position * il, echelle)
+    c.restoreState()
+    c.setFillColorRGB(*GRIS_TEXTE)
+    c.setFont("Helvetica", 6.5)
+    for case in cal["cases"]:
+        lignes = cal["systemes"][case["rangee"]]["portees"][0]["lignes"]
+        gauche, _ = separations_etalonnage(cal, case)
+        c.drawString((gauche + 0.25 * il) * PT, (HAUTEUR - lignes[4] - 1.1 * il) * PT, case["nom"])
+    c.setFont("Helvetica", 7)
+    c.drawString(X_DEBUT * PT, 50 * PT, f"Portée · {m.titre} · modèle v{VERSION} · écris chaque signe trois fois, comme d'habitude")
+    c.drawRightString(X_FIN * PT, 50 * PT, f"{page} / {PAGES_ETALONNAGE}")
+
+
+def ecrire_pdf_etalonnage(m: Modele, cal: dict, chemin: Path) -> None:
+    c = canvas.Canvas(str(chemin), pagesize=(LARGEUR * PT, HAUTEUR * PT), invariant=1)
+    c.setTitle(f"Portée — {m.titre}")
+    c.setAuthor("Portée")
+    c.setSubject(f"portee:{m.ident}:v{VERSION}")
+    for page in range(1, PAGES_ETALONNAGE + 1):
+        dessiner_page_etalonnage(c, m, cal, page)
+        c.showPage()
+    c.save()
+
+
+def ecrire_svg_etalonnage(m: Modele, cal: dict, chemin: Path) -> None:
+    il = m.interligne
+    echelle = il / 250
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {LARGEUR} {HAUTEUR}" '
+             f'role="img" aria-label="Page d\'étalonnage">',
+             f'<g stroke="currentColor" stroke-width="{EPAISSEUR_LIGNE}" fill="currentColor">']
+    for systeme in cal["systemes"]:
+        lignes = systeme["portees"][0]["lignes"]
+        for y in lignes:
+            parts.append(f'<line x1="{X_DEBUT}" y1="{y}" x2="{X_FIN}" y2="{y}"/>')
+        parts.append(f'<line x1="{X_FIN}" y1="{lignes[0]}" x2="{X_FIN}" y2="{lignes[4]}"/>')
+    for case, modele_case in zip(cal["cases"], CASES_ETALONNAGE):
+        lignes = cal["systemes"][case["rangee"]]["portees"][0]["lignes"]
+        gauche, pointilles = separations_etalonnage(cal, case)
+        parts.append(f'<line x1="{gauche:g}" y1="{lignes[0]}" x2="{gauche:g}" y2="{lignes[4]}"/>')
+        for x in pointilles:
+            parts.append(f'<line x1="{x:g}" y1="{lignes[0]}" x2="{x:g}" y2="{lignes[4]}" stroke-width="1" stroke-dasharray="4 6"/>')
+        parts.append(chemin_svg(modele_case.glyphe, gauche + 0.6 * il, lignes[0] + modele_case.position * il, echelle))
+        parts.append(f'<text x="{gauche + 0.25 * il:g}" y="{lignes[4] + 1.1 * il:g}" font-family="sans-serif" '
+                     f'font-size="20" stroke="none">{case["nom"]}</text>')
+    parts.append("</g></svg>")
+    chemin.write_text("\n".join(parts) + "\n", encoding="utf-8")
+
+
 def main() -> None:
     racine = Path(__file__).resolve().parent.parent / "modeles"
     (racine / "apercu").mkdir(parents=True, exist_ok=True)
     for m in MODELES:
         cal = mise_en_page(m)
-        (racine / f"{m.ident}.json").write_text(json.dumps(cal, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        ecrire_calibration(racine, m.ident, cal)
         ecrire_pdf(m, cal, racine / f"{m.ident}.pdf")
         ecrire_svg(m, cal, racine / "apercu" / f"{m.ident}.svg")
         print(f"{m.ident}: {m.blocs} {'portées' if m.genre == 'melodie' else 'systèmes'}, "
               f"interligne {m.interligne} px ({m.interligne / PPP * 25.4:.1f} mm), "
               f"écart entre blocs {cal['ecart_entre_blocs']} px ({cal['ecart_entre_blocs'] / m.interligne:.1f} interlignes)")
+    cal = mise_en_page_etalonnage(ETALONNAGE)
+    ecrire_calibration(racine, ETALONNAGE.ident, cal)
+    ecrire_pdf_etalonnage(ETALONNAGE, cal, racine / f"{ETALONNAGE.ident}.pdf")
+    ecrire_svg_etalonnage(ETALONNAGE, cal, racine / "apercu" / f"{ETALONNAGE.ident}.svg")
+    print(f"{ETALONNAGE.ident}: {len(cal['cases'])} signes, {EXEMPLES_PAR_CASE} exemples chacun, "
+          f"interligne {ETALONNAGE.interligne} px")
 
 
 if __name__ == "__main__":

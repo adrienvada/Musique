@@ -523,7 +523,305 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
 
 ### Lecteur (L1 à L19, C7)
 
-<!-- lot lecteur -->
+- **Une même page donne toujours la même lecture (L14).** Le lecteur
+  ramène tous les traits au demi-pixel avant de lire (`lecteur/traits.js`),
+  avec l'arrondi du stockage. Avant, une page importée en PDF était lue sur
+  ses décimaux, puis relue sur ses traits rangés, arrondis : l'audit a trouvé
+  42 relectures différentes sur 100. Il écarte aussi les points non finis ou
+  très loin de la page, et garde un trait vide à sa place, vide : les numéros
+  des traits suivent ceux de l'entrée.
+- **Le PDF dit son modèle, sa version et ses lignes grises.** `lireDocument`
+  rend la version du sujet (`portee:<modèle>:v<N>`), qu'il jetait (M1), et
+  les lignes grises imprimées du modèle, exactes à la calibration à 0,001 px
+  près sur tes deux pages : elles serviront à reconnaître le modèle (L9).
+  L'origine de la page est son coin haut gauche tel que le PDF le décrit :
+  une page dont la boîte ne part pas de (0, 0) était lue décalée, toutes ses
+  notes fausses (M9).
+- **Plus de plantage sur une entrée inattendue (L19).** Une calibration sans
+  interligne ou sans portée, une page d'étalonnage passée au lecteur, une
+  clé autre que sol ou fa, un modèle inconnu dans `npm run lire` : un
+  message clair à la place d'une erreur JavaScript. La ligne du bas de
+  chaque portée se lit d'après son nom (« fa3 ») plutôt que dans une table
+  de deux clés : un modèle en clé d'ut se lirait sans toucher au lecteur.
+- **Les traits de la tablette suivent les règles du PDF (C7).** Le PDF
+  exporté ne garde que l'encre noire ; `traitsDePage` (`rm.js`) écarte
+  désormais aussi le gris, le blanc, les couleurs, le surligneur et l'outil
+  « ombrage » (23). Sinon une page lue par le connecteur et la même page
+  lue par son PDF pouvaient différer. `lireLignes` rend toujours tout ce que
+  rmscene rend, pour le diagnostic.
+  - Un point non fini ou absurde est écarté ; une ligne dont les points
+    débordent de leur bloc est sautée (elle lisait le bloc suivant comme des
+    coordonnées) ; un bloc plus long que le fichier arrête la lecture. Les
+    9 000 fichiers abîmés de l'audit se lisent sans un point invalide.
+  - `lirePageRm` rend `{ traits, erreur }` sans jamais lever d'erreur : à
+    `remarkable.js` (lot connecteur) de s'en servir pour qu'une page
+    illisible ne fasse plus échouer tout le document.
+- **Repasser un trait ne change plus rien (L3).** Un trait repassé à
+  l'identique, ou à moins de 0,15 interligne d'un autre qu'il ne prolonge
+  pas, est écarté avant toute lecture. Avant, une hampe repassée devenait une
+  barre, un bémol d'armure repassé un dièse (la ligne passait en do), un
+  point repassé n'était plus un point. Les têtes n'y passent pas : leurs
+  coups de stylo se réunissent déjà, et en retirer un déplacerait leur boîte.
+  Les retouches de hampe sont cherchées avant les barres de mesure. Vérifié
+  sur tes deux pages : chaque trait repassé, tel quel ou décalé de
+  0,08 interligne, laisse la lecture identique (28 lectures changeaient).
+- **Le point d'une noire pointée à hampe montante (L4).** Il tombe juste à
+  côté de la hampe : il était pris pour une retouche de hampe, ou avalé par
+  la tête. Une retouche de hampe fait maintenant au moins une
+  demi-interligne, et un trait de la taille d'un point n'appartient à une
+  tête que s'il tombe dedans.
+- **Une barre repassée est une barre simple (L19).** Deux traits à moins
+  d'un quart d'interligne s'écrivaient « || ». Tes deux pages en ont une
+  (main gauche du piano, milieu de la 3ᵉ ligne de la mélodie), et l'image
+  montre un seul trait appuyé : elles se lisent maintenant « | ».
+  `tests/lecteur.test.mjs` est mis à jour en ce sens. Une vraie double barre
+  a ses deux traits nettement séparés (au moins un quart d'interligne).
+- **Armure ou altération de la première note (L5).** Un dièse collé à la
+  première note d'une ligne, à sa hauteur, devenait l'armure : toute la
+  ligne passait en sol majeur. C'est maintenant une altération quand il colle
+  à la note (moins de 1,2 interligne ; tes armures du 30/09 en sont à 1,6)
+  ou quand il n'est pas là où l'armure le mettrait (le fa♯ d'armure s'écrit
+  sur la ligne du haut en clé de sol). Dans les deux cas, un doute
+  « Armure ou altération ? » propose l'autre lecture, en un seul geste.
+  - La hauteur d'un bémol est celle de sa boucle, pas de sa boîte : mesuré
+    sur tes armures, elle tombe à 0,4 demi-interligne de sa note.
+- **Armure mêlée de bémols et de dièses (L3).** La ligne passait en do sans
+  rien dire. Elle garde les plus nombreux, et le doute « Bémols ou dièses ? »
+  propose les deux autres lectures (dont « Sans armure »).
+- **Un geste pour réécrire l'armure d'une ligne** (`changerArmure`,
+  `edition.js`). Il change les deux voix d'un système de piano, laisse les
+  lignes suivantes dans leur tonalité, et passe par l'en-tête pour la
+  première ligne. Il comble le « Non, sans armure » qui manquait au doute
+  d'armure reprise (refonte 10). `suivre` accepte désormais une liste de
+  modifications : une réponse qui touche l'armure et une note est un seul
+  pas d'« Annuler ».
+- **Bécarre et dièses collés (L10).** Un bécarre en deux « L » est reconnu
+  (il devenait un soupir) ; une altération sans note derrière elle n'est
+  jamais un silence, c'est un signe à relire. Deux dièses d'armure qui se
+  touchent sont séparés par leurs barres verticales : la ligne était lue en
+  do majeur au lieu de ré.
+- **Du texte n'est plus de la musique (L6).** Quelques « o » d'un titre ou
+  de paroles devenaient des rondes. Une « tête » sans hampe ni ligne
+  supplémentaire, hors de la portée, est du texte si elle en est à plus de
+  2,5 interlignes, ou si une autre boucle pareille est écrite à côté (les
+  lettres d'un mot). Seule et plus proche, elle reste une note, mais le
+  doute « Est-ce une ronde ? » le demande.
+- **Une note entre deux portées va à la sienne (L7).** La plus proche se
+  trompait : le do6 de la 2ᵉ portée, à deux lignes supplémentaires, était lu
+  sur la 1ʳᵉ (sur tes modèles standard, il n'y a que 3,2 interlignes entre
+  deux portées). Décident les lignes supplémentaires (combien il en faut
+  pour rejoindre chaque portée, et celles qui sont entre la note et sa
+  portée), puis la hampe (elle pointe vers sa portée), puis la ligature.
+  Une note dans sa bande, ou juste au bord, ne change pas : tes deux pages se
+  lisent comme avant (le do4 et le la5 de la mélodie ont leur ligne
+  supplémentaire).
+- **Un soupir doit zigzaguer (L8).** Une hampe dont la tête n'a pas été lue,
+  un peu courbée et haute de plus de 2,3 interlignes, passait pour un soupir
+  en silence (13 têtes sur 54 retirées une à une changeaient la lecture sans
+  rien dire). Réglé sur tes cinq silences : un soupir a au moins trois
+  allers-retours d'un dixième d'interligne et n'est pas droit. Un trait seul,
+  droit et vertical, sans tête, lève le doute « Il manque une note ? », qui
+  vise la note d'avant (« Je corrige moi-même » la choisit).
+- **Plus d'erreur de rythme qui se cache (L1, critique).** Le chiffrage
+  acceptait n'importe quelle durée de mesure : une mesure fausse sur deux
+  donnait 5/4, un point oublié 7/8, un triolet 9/8, sans un doute ; une
+  ligne aux mesures fausses changeait de chiffrage sans rien demander.
+  - Il se choisit maintenant parmi les mesures usuelles (2/4, 3/4, 4/4,
+    3/8, 6/8, 9/8, 12/8), celle qui explique le plus de mesures. 5/4 et 7/8
+    ne sont retenus que si toutes les mesures (au moins deux) le disent ; 2/2
+    a la durée de 4/4, il se lira (L16), il ne se devine pas.
+  - Il ne change qu'à une ligne où un chiffrage est écrit (une « section »).
+    Une mesure qui ne tombe pas juste est un doute ; si moins de la moitié
+    des mesures tombent juste, le chiffrage lui-même en est un, et ses
+    réponses proposent les autres (`changerChiffrage`).
+  - Une levée n'est acceptée qu'en tête de pièce, de même durée dans toutes
+    les voix, et suivie d'une mesure complète. Pourquoi aussi en tête d'une
+    section dont le chiffrage est écrit : ta page de mélodie commence par
+    une gamme sans mesure, puis la pièce en 12/8 avec sa levée. Avant, toute
+    première mesure plus courte d'une ligne passait (un soupir retiré à la
+    main gauche du piano ne levait rien : c'est maintenant un doute).
+  - La levée n'est plus comptée comme une mesure (L19) : la mesure de
+    11 croches de ta mélodie est la « 2ᵉ mesure » de sa ligne, plus la 3ᵉ.
+    `tests/doutes.test.mjs` suit.
+- **Accords à hampe courte (L10).** La hampe devait dépasser la note du haut
+  de plus de 2 interlignes : il suffit maintenant d'un peu plus d'une tête.
+  Une tête sans hampe juste au-dessus d'une note à hampe propose « Une note
+  de l'accord », qui refait l'accord d'un geste (`joindreAccord`).
+- **Liaisons de durée (L11).** Un arc qui part d'une tête et arrive à la
+  note suivante, de même hauteur, s'écrit « - » ; il était détecté puis
+  jeté. Entre deux hauteurs différentes (un legato), il reste ignoré : il
+  ne change pas le rythme. Les gestes d'`edition.js` gardent la liaison à sa
+  place (copier, supprimer, compléter la mesure).
+- **Pauses, demi-pauses et triolets (L12).** Un pavé noirci pendu sous la
+  4ᵉ ligne est une pause (toute la mesure, quel que soit le chiffrage), posé
+  sur la 3ᵉ une demi-pause ; ils étaient lus comme des noires sans hampe. Tes
+  têtes ne sont jamais plus larges qu'une fois et quart leur hauteur : le
+  pavé, si. Un petit signe plus haut que large, à deux bosses, sur trois
+  notes liées lève « Un triolet ? » ; la réponse écrit « (3 » (`faireTriolet`)
+  et la mesure se recompte. En 6/8, 9/8 ou 12/8, trois croches liées sont la
+  règle : pas de doute. Le chiffre lui-même se lira avec les gabarits (L16).
+- **Petits défauts (L19).** Le deuxième fa d'une mesure « ^F2 F2 » se
+  faisait entendre naturel quand on le touchait : `hauteursMidiA` tient
+  compte des altérations de la mesure (à brancher dans l'atelier).
+  Supprimer la première note d'une ligne laissait une espace en tête.
+  `alterationsArmure`, jamais appelée, est retirée. `dureeABC` reste en
+  double (le lecteur et `edition.js` n'importent rien l'un de l'autre :
+  chacun doit tourner seul dans `dist/`) ; un test vérifie qu'ils écrivent
+  la même chose.
+- **Une décision au ras d'un seuil devient une question (L2).** Le lecteur
+  garde sa lecture, mais la demande, avec l'autre lecture en réponse fermée
+  (`alternative`, écrite comme un geste d'`edition.js`) :
+  - « Croche liée ou noire ? » : une ligature qui s'arrête entre 0,3 et
+    0,7 interligne d'une hampe (la tolérance est 0,55). Ta mélodie en a
+    deux, à 0,47 : le 2ᵉ sol de « GG » et le do de « dedc », que l'audit
+    lisait comme des noires. La réponse coupe aussi la ligature dans l'ABC
+    (« G G2 », « ded c2 ») ;
+  - « La ou sol ? » : une tête à plus de 0,4 demi-interligne de sa place (0,5
+    la fait changer de note). Deux sur ta mélodie (la5 et sol5 de la
+    3ᵉ ligne, à 0,43), aucune sur le piano ;
+  - « Une note ou un trait ? » (un gribouillis tout juste assez long pour une
+    tête) et « Pointée ou pas ? » (un point à la limite de sa distance).
+  - Pourquoi ces bornes : réglées sur tes deux pages et sur 100 pages
+    perturbées par niveau (bruit, rotation, pente, espacement). À 0,35, ta
+    mélodie avait 9 doutes et le piano 1 ; à 0,46, des notes du piano
+    basculaient de nouveau en silence. À 0,4, plus aucune lecture ne change
+    en silence au niveau 1 (avant : 9 % sur la mélodie, 7 % sur le piano),
+    1 % au niveau 2 (6 % et 13 %). Elles sont rangées dans `MARGES`
+    (`lecteur.js`), avec ces raisons.
+  - La largeur minimale d'une tête passe de 0,35 à 0,25 interligne (une de
+    tes têtes en fait 0,353, et c'est elle qui faisait changer 42 relectures
+    sur 100) ; pour qu'un point ne devienne jamais une tête, une tête mesure
+    au moins 0,45 interligne dans un sens. Une barre de mesure doit aller
+    près des deux lignes extérieures, et un silence est d'un seul trait : une
+    hampe sans tête devenait une barre ou un demi-soupir.
+  - Tes deux pages se lisent comme avant ; la mélodie a maintenant 6 doutes
+    (2 avant), dans l'ordre de la page, chacun avec un numéro (`id`).
+- **Trancher par la mesure (L15).** Quand une mesure ne tombe pas juste, le
+  lecteur essaie les autres lectures de ses décisions limites, seules ou
+  deux à deux (et, en mesure simple, un triolet sur trois croches liées), et
+  propose en réponses fermées celles qui la complètent (« 4ᵉ note en
+  croche »). Chaque proposition dit quelles notes changer (leur `cible`) et
+  quels doutes elle règle (`regle`).
+- **Les doutes de mesure se recalculent après chaque geste (L13).**
+  `recalculerDoutes(doutes, abc)` (`doutes.js`, pure) relit les mesures de
+  l'ABC d'aujourd'hui avec les règles du lecteur et ajoute un doute à chaque
+  mesure fausse qu'aucun doute ne vise encore, avec ses propositions. Sur ta
+  mélodie : répondre « Croche » au doute du crochet fait tomber la mesure à
+  11 croches ; le nouveau doute le dit, et propose « 8ᵉ note en noire » (le
+  2ᵉ sol de « GG ») ; les deux réponses donnent la lecture de l'audit
+  (« c2 c edc g2 G G2 G »). L'atelier doit l'appeler après chaque geste
+  (lot atelier).
+- **Lecture reproductible (L14, L18).** Sur tes deux pages, la lecture ne
+  change plus quelle que soit la phase de l'arrondi au demi-pixel, ni en
+  déplaçant toute la page de ±0,1 px (des tests le vérifient). Les doutes de
+  marge, eux, peuvent apparaître ou disparaître au ras de leur propre seuil :
+  c'est leur nature.
+- **Chaque version de modèle garde sa calibration (L9).** Une page écrite
+  sur un modèle v2 aurait été lue avec la calibration v1, sans rien dire. Le
+  générateur écrit maintenant `<modèle>-v<N>.json` à côté de `<modèle>.json`
+  (la version en cours) et n'efface jamais une version passée ; une version
+  inconnue est refusée (« mets l'appli à jour »). Les PDF et les aperçus
+  sont identiques à l'octet près ; les JSON perdent la note « à vérifier »
+  sur les `.rm`, vérifiée depuis le 30/09. `VERSION` reste 1 : la géométrie
+  n'a pas changé.
+  - **Le modèle se reconnaît à ses lignes grises** (`lecteur/modeles.js`) :
+    quand le sujet du PDF manque ou se trompe, les lignes décident (et
+    l'appli peut le dire). Une page qui a bougé (boîte agrandie, export
+    redimensionné) se recale dessus. Les cinq PDF abîmés de l'audit (sans
+    sujet, mauvais modèle, modèle inconnu, v2, boîte décalée) se lisent
+    juste, ou sont refusés avec un message clair pour la v2.
+  - `x_apres_cle`, jamais lu, sert maintenant : l'en-tête d'une ligne ne va
+    pas plus de 9 interlignes au-delà. Une ligne dont aucune tête n'était lue
+    devenait tout entière un « en-tête », sans un doute.
+- **Ta page redessinée suit la taille de la calibration (L19).** `manuscrit.js`
+  écrivait 1872, 1330, 1370 et 40 en dur (le seul format de la reMarkable 2) ;
+  `cadrePage(cal)` les calcule. Le README des modèles ne promet plus qu'un
+  point appuyé fait une tête pleine : le lecteur ne le lit pas, et c'est
+  voulu (il se confondrait avec un point de durée).
+- **Le lecteur passe le lint et la vérification des types (L19, T2).**
+  `assembler` ne demande plus la calibration, dont il ne se servait plus :
+  l'exception provisoire d'ESLint qui le tolérait est retirée. Les JSDoc
+  disent vrai (`lireDocument` rend une promesse, la page de `preparerTraits`
+  est facultative), et `extraction.js`, `modeles.js` et `traits.js`
+  rejoignent les fichiers vérifiés, sans erreur.
+- **Un reconnaisseur de signes appris sur ton écriture (L16).**
+  `lecteur/gabarits.js` compare un signe à des exemples de ta main : c'est
+  $Q (Vatavu, Anthony et Wobbrock, MobileHCI 2018), écrit d'après l'article
+  en JavaScript pur. Un signe devient 32 points ; deux signes se comparent
+  comme deux nuages, quels que soient l'ordre et le sens des traits ; des
+  bornes inférieures évitent les comparaisons inutiles (une milliseconde par
+  signe pour 18 exemples).
+  - Mesuré en interlignes, pas ramené à sa propre taille comme dans
+    l'article : la taille compte (un soupir est deux fois plus haut qu'un
+    demi-soupir), et l'interligne la rend comparable d'un modèle à l'autre.
+    Sur tes signes déformés, 288 reconnus sur 288, contre 276 à la taille du
+    signe. Les soupirs du piano (interligne 28) sont reconnus d'après celui
+    de la mélodie (32).
+  - Les seuils, rapportés au rayon du signe : reconnu nettement en deçà de
+    0,3, rejeté au-delà de 0,45, de justesse entre les deux ou quand une
+    autre étiquette est presque aussi proche. Réglés sur tes six bémols, tes
+    trois soupirs, tes deux demi-soupirs, les chiffres du « 12/8 » et vingt
+    variantes déformées de chacun : un bémol est à 0,14 à 0,17 de tes autres
+    bémols, à plus de 0,29 de tout autre signe ; une tête ou un accent, à
+    plus de 0,7 de tout exemple.
+  - HOMUS (le jeu de signes manuscrits de la recherche) n'est pas embarqué :
+    sa licence n'est pas indiquée. Les essais utilisent tes signes, ou des
+    signes tracés comme à la main (`tests/fabrique.mjs`).
+- **La page d'étalonnage** (`modeles/etalonnage.pdf`, sujet
+  `portee:etalonnage:v1`) : six portées de trois cases, une par signe
+  (silences, altérations, chiffres 1 à 9, « C », « C » barré, « 3 » de
+  triolet), le signe imprimé en gris à gauche, trois places pour l'écrire.
+  `lireEtalonnage` en tire tes gabarits ; ses lignes grises la reconnaissent
+  comme les autres modèles ; `npm run lire` dit ce qu'elle a appris, et
+  `--gabarits-sortie` l'écrit (à repasser avec `--gabarits`). Les signes
+  gris viennent de Bravura 1.392 ; ceux déjà imprimés sur tes modèles
+  restent ceux d'avant (`extraire_glyphes.py` n'ajoute que ce qui manque) :
+  tes modèles sont identiques à l'octet près.
+- **Lire avec tes gabarits** (`lirePartition(pages, cal, { gabarits })`).
+  Sans eux, rien ne change (vérifié sur tes deux pages). Avec eux, un signe
+  reconnu nettement prend leur lecture : silences (le quart de soupir, que
+  les règles ne connaissent pas), altérations, chiffres, « 3 » d'un triolet
+  (écrit « (3 », sans question). Reconnu de justesse, la lecture des règles
+  reste, et un signe qu'elles ne lisent pas devient « Est-ce un bécarre ? ».
+  - Le chiffrage écrit est lu au lieu d'être deviné : 3/4 et 6/8 ont la
+    même durée, seul l'écrit les distingue. Il faut que tous ses signes
+    soient reconnus nettement (lire « 2/8 » pour « 12/8 » serait pire que
+    deviner) ; deux chiffres qui se touchent se séparent à la ligne du
+    milieu. Lu mais contredit par la plupart des mesures, c'est une question.
+  - Sur ta mélodie, le « 12/8 » est lu, les six bémols et les trois silences
+    reconnus : même ABC, mêmes doutes.
+  - Un « 3 » de triolet écrit dans la portée (hampes descendantes, ligature
+    dans la portée) : les règles en font un soupir au milieu du groupe, avec
+    un doute de mesure. Tes gabarits le lisent comme un triolet. Sans eux,
+    c'est encore le cas (à revoir si tes pages en montrent).
+- **Apprendre d'une correction.** `ajouterExemple` rend de nouveaux
+  gabarits (au plus 24 exemples par signe, les plus anciens partent ; le même
+  exemple ne compte qu'une fois), `fusionnerGabarits` réunit ceux de deux
+  appareils sans rien perdre. Les doutes de signe, de triolet et de
+  chiffrage disent leurs traits, et leurs réponses ce qu'elles apprennent
+  (`apprendre`, `doutes.js`). « Un signe que je ne reconnais pas » propose
+  maintenant des réponses : une altération de la note qui suit, un silence
+  après celle qui précède. Brancher tout cela dans l'appli (importer la page
+  d'étalonnage, ranger les gabarits avec la bibliothèque, apprendre des
+  réponses) revient au lot atelier.
+- **Un banc d'essai sur tes pages validées (L17).** `node
+  outils/banc-lecteur.mjs ta-sauvegarde.json` relit chaque page marquée
+  « Prête » d'une sauvegarde avec le lecteur d'aujourd'hui, et la compare à
+  l'ABC que tu as validé : erreurs de hauteur (la note qui sonne, armure et
+  altérations de la mesure comprises), de durée, notes manquantes ou en
+  trop, barres mal placées ; part des erreurs silencieuses (qu'aucun doute
+  ne signalait) ; précision des doutes (combien désignent une vraie
+  erreur). `--json` pour comparer deux versions, `--detail` pour voir chaque
+  erreur, `--gabarits` pour lire avec tes gabarits.
+  - Pourquoi : les seuils sont réglés sur deux pages, et un réglage qui les
+    améliore peut en abîmer d'autres. À lancer avant et après chaque
+    changement du lecteur.
+  - Rien n'est écrit, tout s'affiche : tes pages ne doivent pas entrer dans
+    le dépôt, qui est public.
+  - Les barres se comparent par leur place dans la suite des notes, pas par
+    l'instant : une seule durée fausse aurait décalé toutes les suivantes.
+  - Une page lit la calibration de sa version (`versionModele`, que l'appli
+    doit ranger avec la page : lot atelier) ; sans elle, la v1.
 
 ### Connecteur (S3 à S5, C1 à C6)
 
@@ -1856,11 +2154,16 @@ la main, il se convertit en partition gravée, MIDI et MusicXML (MuseScore).
    échantillonné, curseur, tempo, transposition, mains séparables, raccourci
    Espace. MIDI en un clic (tempo et transposition compris), impression ou
    PDF, texte ABC.
-4. **Autres signes** : *en partie*.
-   - Reconnus : soupirs et demi-soupirs, bémols (un ou deux traits), dièses
-     (au moins trois traits), accents.
-   - Pas encore : pauses et demi-pauses, silences courts, liaisons de durée,
-     triolets, lecture des chiffres du chiffrage. Le classifieur HOMUS reste à faire.
+4. **Autres signes** : *fait dans le lecteur (04/10), à brancher dans l'appli*.
+   - Reconnus par les règles : soupirs et demi-soupirs, pauses et
+     demi-pauses (par leur place), bémols, dièses (même collés), bécarres,
+     accents, liaisons de durée ; un triolet est un doute.
+   - Avec tes gabarits (page d'étalonnage, puis tes corrections) : silences
+     courts (dont le quart de soupir), altérations, chiffres du chiffrage
+     (lu au lieu d'être deviné), « 3 » des triolets.
+   - Pas encore : importer la page d'étalonnage et apprendre des réponses
+     dans l'appli (lot atelier) ; nuances, ornements et paroles restent
+     ignorés. HOMUS écarté (licence non indiquée) : les gabarits viennent de toi.
 5. **Corriger** : *fait*. Correction au toucher (voir la décision du 30/09),
    ta page redessinée à côté, les doutes surlignés, « Annuler », enregistrement
    automatique. L'ABC reste accessible en mode avancé.
@@ -1996,8 +2299,12 @@ ou supprimer la fonction dans Supabase.
   `tests/lecteur.test.mjs` dans le même commit.
 - **Traits arrondis au demi-pixel par le connecteur.** Des seuils trop justes
   font basculer une lecture (une ligature à 0,80 interligne, deux bémols
-  fusionnés). Le test « arrondir les traits » garde la lecture identique pour
-  des pas de 0 à 1 px.
+  fusionnés). L'ancien test « arrondir les traits » ne le vérifiait que pour
+  un arrondi sans décalage : avec une autre phase, la mélodie se relisait
+  autrement 42 fois sur 100 (audit du 04/10). Le lecteur arrondit maintenant
+  lui-même (`lecteur/traits.js`), et un test vérifie la lecture pour 36
+  phases sur tes deux pages. Un réglage qui rapproche une décision d'un seuil
+  le fera échouer : c'est voulu.
 - **Le projet Supabase gratuit s'endort** après une semaine sans requête. Le
   connecteur répond alors « ne répond pas » : relancer le projet depuis le
   tableau de bord.
