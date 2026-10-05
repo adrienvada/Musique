@@ -156,6 +156,28 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
     (`#titre-ecran-<vue>`) que `navigation.js` remplit, et `document.title`
     suit l'écran. Toute gravure abcjs avec `clickListener` passe par
     `gravureSansTabulation`.
+  - Les tailles de texte, les rayons et les calques viennent des jetons
+    `--t-*`, `--r-*`, `--z-*` ; ombres, voiles et lueurs de `--ombre-douce`,
+    `--voile`, `--lueur`. Un bord de champ ou d'interrupteur prend
+    `--bord-champ` (3:1), pas `--trait-fort`. Un jeton calculé à partir d'un
+    autre se déclare sur `:root, .studio` : une propriété personnalisée se
+    calcule là où elle est déclarée, sinon le Studio garde la valeur du
+    Papier. Un texte pour le lecteur d'écran prend `visuellement-cache`.
+  - Au doigt, `.btn`, `.puce`, `.champ` et `.seg > button` font 44 px de
+    haut (`systeme.css`) : une feuille d'écran ne leur donne pas moins. Un
+    nouvel écran ou une nouvelle feuille entre dans le tour de l'essai des
+    44 px (`tests/e2e/interface.test.mjs`), qui passe à 390 et 320 px de
+    large et couché ; toute exception y est commentée.
+  - Une rangée qui doit tenir dans sa largeur suit son conteneur, en `em`
+    (`@container … (max-width: 16em)`), placée après la règle qu'elle
+    remplace ; elle ne peut pas styler le conteneur lui-même.
+  - Les feuilles et les écrans s'animent en CSS (`@starting-style`), et
+    plus du tout quand moins d'animations est demandé ; tout défilement
+    animé passe par `defilement()` (`mouvement.js`). Pas de
+    `closedby="any"` (au doigt, Chromium laisse le toucher traverser le
+    voile : `feuilles.js` ferme au clic) ni de `startViewTransition` dans
+    `montrer()` (l'éditeur se mesure dès qu'il s'affiche). La couleur de la
+    barre du navigateur suit l'ambiance par `suivreAmbiance()`.
   - Carnet : une ligne est reprise telle quelle si `cleDeLigne` ne change
     pas ; toute donnée affichée qui ne vient pas de la fiche (le compte des
     suggestions) entre dans la clé. Pas de `will-change` sur la grille
@@ -224,8 +246,9 @@ problème hors du périmètre demandé se signale, il ne se corrige pas en passa
   raccourcis par écran), `historique.js` (le bouton « précédent » du
   téléphone).
 - **Petits outils** : `ui.js` (`$`, `el`, `pluriel`, les dates, `toast`,
-  `echapper`, `couleurDuJeton`), `dialogue.js`, `erreurs.js`, `feuilles.js`,
-  `infobulles.js`, `icones.js`, `preferences.js`.
+  `annoncer`, `echapper`, `couleurDuJeton`), `dialogue.js`, `erreurs.js`,
+  `feuilles.js`, `infobulles.js`, `icones.js`, `mouvement.js` (les
+  défilements, selon les animations demandées), `preferences.js`.
 - **Écrans** : `accueil.js` (les quatre onglets), `ecran-atelier.js`
   (« Corriger »), `ecran-lecteur.js` (« Écouter et exporter »),
   `page-ouverte.js` (la page lue que ces deux écrans partagent),
@@ -272,7 +295,8 @@ Ici, Chromium est déjà installé (`PLAYWRIGHT_BROWSERS_PATH`) ; ailleurs :
 `npx playwright install chromium`. La CI (job `verifier` de `site.yml`) lance
 tout cela, plus `deno check`, sur chaque PR.
 
-Pièges des essais dans Chromium : `:focus-visible` ne distingue pas le
+Pièges des essais dans Chromium : un `<dialog>` fermé reste visible le
+temps de redescendre (attendre `state: "hidden"`) ; `:focus-visible` ne distingue pas le
 clavier de la souris dans un gestionnaire de touche ; sans écran, la carte
 du clavier (`getLayoutMap`) est vide ; l'installabilité se vérifie avec
 `launchPersistentContext` et `channel: "chromium"` ; la `launchQueue` se

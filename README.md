@@ -87,8 +87,15 @@ connecteur) ou d'une sauvegarde. Le piano sonne même en mode silencieux, l'écr
 pendant l'écoute, le direct, le chant et le mémo, et l'écran verrouillé
 montre ce qui joue.
 
-L'éditeur est en ambiance *Studio* (sombre) ; Réglages › Éditeur la remet en
-*Papier* si tu préfères.
+L'éditeur est en ambiance *Studio* (sombre), et la barre du navigateur
+avec lui ; Réglages › Éditeur la remet en *Papier* si tu préfères. Au
+téléphone, tout ce qui se touche fait au moins 44 px, même sur un petit
+écran ou couché ; couché, l'éditeur met le clavier à droite de la portée,
+et « Corriger » les doutes à droite de la page. Avec le texte agrandi
+(jusqu'à 200 %), les rangées serrées gardent leurs icônes, et un appui long
+dit leur nom. Un toucher sur le voile ferme une feuille, « précédent » ne
+ferme que la fenêtre du dessus, et si ton téléphone demande moins
+d'animations, Portée n'en fait plus.
 
 ## Une page écrite sur la reMarkable
 
