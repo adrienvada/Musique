@@ -2213,6 +2213,29 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
   `conversation.js` devient une directive sur la seule ligne qui en a
   besoin, avec son pourquoi. Restent cinq avertissements hors du lot :
   `objets.js` (connecteur) et quatre dans les essais de la synchro.
+- **La palette sombre n'est plus écrite qu'une fois (T5).** Chaque jeton
+  de `systeme.css` dit sa couleur claire puis sa couleur sombre,
+  `light-dark(clair, sombre)`, et la racine suit le réglage du téléphone
+  (`color-scheme: light dark`). Le contrat de claude.ai ne change pas :
+  `data-theme="light"` ou `"dark"` sur la racine l'emporte (il fixe
+  `color-scheme`). La palette sombre était écrite deux fois mot pour mot
+  (pour le réglage du téléphone, puis pour `data-theme`), et
+  `morceau.css` refaisait les deux pour une couleur. Le Studio garde sa
+  palette à lui.
+  - Vérifié écran par écran (bibliothèque, Corriger, éditeur, menu,
+    fenêtre, morceau ; téléphone et ordinateur ; clair, sombre, et
+    `data-theme` forcé dans les deux sens) : chaque jeton calcule la même
+    couleur qu'avant, et les images sont les mêmes au pixel près, sauf
+    l'anticrénelage de quelques icônes en clair (moins de 50 sur 255).
+  - `light-dark()` ne choisit que des couleurs : l'ombre (`--ombre`), plus
+    grande en sombre, s'écrit en deux ombres dont celle de l'autre
+    ambiance est transparente.
+  - Piège : la valeur brute d'un jeton n'est plus une couleur
+    (`getPropertyValue("--stylo")` rend `light-dark(…)`). Pour colorer
+    soi-même (abcjs et la note choisie), `couleurDuJeton("--stylo")`
+    (ui.js) la fait résoudre par le navigateur.
+  - Il faut Safari 17.5, Chrome 123 ou Firefox 120 (2024) ; un navigateur
+    plus ancien perdrait toutes les couleurs.
 - **Code mort retiré**, chaque cas vérifié (ni la page, ni le code, ni
   les essais ne s'en servaient) : la classe `.transport` de l'atelier
   (l'écoute a son dock, `.dock-transport`), la classe `.mode` (l'état de

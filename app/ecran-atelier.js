@@ -26,9 +26,7 @@ import {
 } from "./atelier.js";
 import { fermerFeuille, ouvrirFeuille } from "./feuilles.js";
 import { explication } from "./erreurs.js";
-import { $, dateRelative, el, pluriel, toast } from "./ui.js";
-
-const couleur = (nom, secours) => getComputedStyle(document.documentElement).getPropertyValue(nom).trim() || secours;
+import { $, couleurDuJeton as couleur, dateRelative, el, pluriel, toast } from "./ui.js";
 
 /**
  * Les durées au clavier : 1 double croche… 5 ronde (en croches). Par la place

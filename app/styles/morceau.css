@@ -19,16 +19,12 @@
  */
 :root {
   --section-1: var(--stylo);                                              --sur-section-1: var(--sur-stylo);
-  --section-2: var(--surligneur);                                         --sur-section-2: var(--encre);
+  --section-2: var(--surligneur);                                         --sur-section-2: light-dark(var(--encre), var(--sur-stylo));
   --section-3: var(--ok);                                                 --sur-section-3: var(--sur-stylo);
   --section-4: color-mix(in oklab, var(--danger) 55%, var(--alerte));     --sur-section-4: var(--sur-stylo);
   --section-5: color-mix(in oklab, var(--stylo) 55%, var(--danger));      --sur-section-5: var(--sur-stylo);
   --section-6: var(--gris);                                               --sur-section-6: var(--sur-stylo);
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --sur-section-2: var(--sur-stylo); }
-}
-:root[data-theme="dark"] { --sur-section-2: var(--sur-stylo); }
 
 .section-1 { --c: var(--section-1); --t: var(--sur-section-1); }
 .section-2 { --c: var(--section-2); --t: var(--sur-section-2); }

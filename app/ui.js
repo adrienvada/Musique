@@ -40,6 +40,25 @@ export function el(tag, classe = "", texte = null) {
 }
 
 /**
+ * La couleur d'un jeton (« --stylo ») telle qu'elle s'affiche ici, pour qui
+ * colore lui-même (abcjs, la note choisie). Un jeton s'écrit
+ * light-dark(clair, sombre) (systeme.css, T5) : sa valeur brute n'est pas
+ * une couleur, seul son emploi la résout. On la fait donc employer.
+ * @param {string} nom
+ * @param {string} secours  si la page n'est pas là
+ */
+export function couleurDuJeton(nom, secours) {
+  const corps = page() && page().body;
+  if (!corps) return secours;
+  const sonde = el("span");
+  sonde.style.color = `var(${nom})`;
+  corps.appendChild(sonde);
+  const couleur = /** @type {any} */ (globalThis).getComputedStyle(sonde).color;
+  sonde.remove();
+  return couleur || secours;
+}
+
+/**
  * « 1 note », « 3 notes », « 2 morceaux » : le nombre et son nom, accordé
  * (le pluriel au-delà de 1, comme chaque écran le faisait chez lui).
  * @param {number} n

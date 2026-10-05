@@ -10,45 +10,41 @@
  *
  * Les autres feuilles (bibliotheque, atelier, morceau, idee) n'emploient que
  * ces jetons et ces composants : une couleur ou une forme qui manque
- * s'ajoute ici, pas dans l'écran qui en a besoin.
+ * s'ajoute ici, pas dans l'écran qui en a besoin. Une couleur qui change
+ * entre le clair et le sombre s'écrit light-dark(clair, sombre).
  */
 
+/* Chaque jeton dit sa couleur claire puis sa couleur sombre : light-dark()
+ * choisit selon le réglage du téléphone (color-scheme: light dark). Dans
+ * claude.ai, la page reçoit data-theme="light" ou "dark", qui l'emporte.
+ * La palette sombre était écrite deux fois mot pour mot (pour le réglage du
+ * téléphone, puis pour data-theme), et une troisième pour morceau.css :
+ * elle ne l'est plus qu'une fois (audit du 04/10, T5). */
 :root {
-  --papier: #EDEEEA; --feuille: #F8F8F5; --creux: #E3E5DF; --encre: #1C1E21; --gris: #565A61;
-  --trait: #D3D5CF; --trait-fort: #A9ACA5; --stylo: #2F4BC2; --stylo-doux: #DDE3F6; --sur-stylo: #FFFFFF;
-  --surligneur: #F2D04B; --surligneur-doux: #FBF1B0; --rouge: #D93A3F; --ok: #2F7A4D; --ok-doux: #DCEFE2;
-  --alerte: #9A5B00; --danger: #A5281B;
+  color-scheme: light dark;
+  --papier: light-dark(#EDEEEA, #17181B); --feuille: light-dark(#F8F8F5, #202226); --creux: light-dark(#E3E5DF, #2A2D32);
+  --encre: light-dark(#1C1E21, #E6E6E1); --gris: light-dark(#565A61, #A3A7AE);
+  --trait: light-dark(#D3D5CF, #34373C); --trait-fort: light-dark(#A9ACA5, #50545A);
+  --stylo: light-dark(#2F4BC2, #93A8FF); --stylo-doux: light-dark(#DDE3F6, #242C4A); --sur-stylo: light-dark(#FFFFFF, #10162E);
+  --surligneur: light-dark(#F2D04B, #E6CB3A); --surligneur-doux: light-dark(#FBF1B0, #4A4214);
+  --rouge: light-dark(#D93A3F, #FF6B6F); --ok: light-dark(#2F7A4D, #74C995); --ok-doux: light-dark(#DCEFE2, #1D3527);
+  --alerte: light-dark(#9A5B00, #E8B35A); --danger: light-dark(#A5281B, #F0877A);
   /* Le surligneur reste clair dans toutes les ambiances : on y écrit toujours en sombre. */
   --sur-surligneur: #1C1E21;
   /* Le piano reste un piano, mais n'éblouit pas en sombre. */
-  --touche-blanche: #FAFAF7; --touche-noire: #1C1E21; --touche-texte: #565A61; --touche-bord: #A9ACA5;
-  --voile: rgba(28, 30, 33, 0.34);
-  --ombre: 0 10px 28px rgba(28, 30, 33, 0.18);
+  --touche-blanche: light-dark(#FAFAF7, #D9DAD4); --touche-noire: light-dark(#1C1E21, #08090A);
+  --touche-texte: light-dark(#565A61, #3B3E44); --touche-bord: light-dark(#A9ACA5, #0B0C0E);
+  --voile: light-dark(rgba(28, 30, 33, 0.34), rgba(0, 0, 0, 0.55));
+  /* light-dark() ne choisit que des couleurs, et l'ombre sombre est aussi plus
+     grande : deux ombres, celle de l'autre ambiance transparente. */
+  --ombre: 0 10px 28px light-dark(rgba(28, 30, 33, 0.18), transparent), 0 12px 32px light-dark(transparent, rgba(0, 0, 0, 0.55));
   --f-titre: "Young Serif", "Iowan Old Style", Georgia, serif;
   --f-texte: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-code: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --barre: 56px;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --papier: #17181B; --feuille: #202226; --creux: #2A2D32; --encre: #E6E6E1; --gris: #A3A7AE;
-    --trait: #34373C; --trait-fort: #50545A; --stylo: #93A8FF; --stylo-doux: #242C4A; --sur-stylo: #10162E;
-    --surligneur: #E6CB3A; --surligneur-doux: #4A4214; --rouge: #FF6B6F; --ok: #74C995; --ok-doux: #1D3527;
-    --alerte: #E8B35A; --danger: #F0877A;
-    --touche-blanche: #D9DAD4; --touche-noire: #08090A; --touche-texte: #3B3E44; --touche-bord: #0B0C0E;
-    --voile: rgba(0, 0, 0, 0.55); --ombre: 0 12px 32px rgba(0, 0, 0, 0.55);
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --papier: #17181B; --feuille: #202226; --creux: #2A2D32; --encre: #E6E6E1; --gris: #A3A7AE;
-  --trait: #34373C; --trait-fort: #50545A; --stylo: #93A8FF; --stylo-doux: #242C4A; --sur-stylo: #10162E;
-  --surligneur: #E6CB3A; --surligneur-doux: #4A4214; --rouge: #FF6B6F; --ok: #74C995; --ok-doux: #1D3527;
-  --alerte: #E8B35A; --danger: #F0877A;
-  --touche-blanche: #D9DAD4; --touche-noire: #08090A; --touche-texte: #3B3E44; --touche-bord: #0B0C0E;
-  --voile: rgba(0, 0, 0, 0.55); --ombre: 0 12px 32px rgba(0, 0, 0, 0.55);
-  color-scheme: dark;
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 .studio {
   --papier: #121315; --feuille: #1B1D21; --creux: #26292E; --encre: #ECECE7; --gris: #A3A7AE;
   --trait: #2B2E33; --trait-fort: #464A51; --stylo: #8EA2FF; --stylo-doux: #262E52; --sur-stylo: #0E1330;

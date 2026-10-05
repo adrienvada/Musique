@@ -17,6 +17,7 @@
  */
 import * as sq from "./sequence.js";
 import { voixCompletes } from "./harmonie.js";
+import { couleurDuJeton } from "./ui.js";
 
 // La gravure se regroupe (audit du 04/10, M2, et audit de l'interface).
 // abcjs regrave toute la partition : de 10 à 40 ms pour une idée courte au
@@ -146,7 +147,7 @@ export function creerPartition(ctx) {
     if (!lib) { zone.textContent = "La partition n'a pas pu se charger (connexion ?). La grille marche sans."; return; }
     const { largeur, hauteur } = taille();
     const toutes = voixCompletes(e.seq);
-    const couleur = getComputedStyle(document.body).getPropertyValue("--stylo").trim() || "#2B48B0";
+    const couleur = couleurDuJeton("--stylo", "#2B48B0");
     const mesures = sq.nbMesures(e.seq);
     const reprise = unPassage && miseEnPage && miseEnPage.largeur === largeur ? miseEnPage : null;
     let objet = null, graves = [];
