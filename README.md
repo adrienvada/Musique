@@ -186,7 +186,7 @@ passer Claude sur ses doutes, un par un.
 | Dossier | Contenu |
 |---|---|
 | `lecteur/` | Le lecteur de traits (JavaScript, sans dépendance) : PDF → traits → notes → ABC |
-| `app/` | L'appli : accueil (`accueil.js`), éditeur d'idée (`idee.js` et ses modules `idee-clavier`, `idee-chant`, `idee-accords`, `idee-selection`, `idee-direct` ; `sequence.js`, `grille.js`, `clavier.js`, `micro.js`, `transport.js`, `midi.js`, `musicxml.js`, `harmonie.js`, `menu-radial.js`), morceaux (`morceau.js`, `vue-morceau.js`), pages relues (`atelier.js`, `doutes.js`, `edition.js`), écoute et exports, piano échantillonné, site installable ; le système visuel (`styles/systeme.css`, `icones.js`, `feuilles.js`) et une feuille de style par écran (`styles/`) |
+| `app/` | L'appli, sans framework ni compilation : `app.js` compose les écrans (carnet et bibliothèque, éditeur d'idée, morceaux, « Corriger » et « Écouter » une page lue), le stockage et la synchro, le piano échantillonné et le transport, les exports (MIDI, MusicXML), et ce que Claude propose ; le système visuel (`styles/systeme.css`, `icones.js`, `feuilles.js`) et une feuille de style par écran. La carte module par module est dans [CLAUDE.md](CLAUDE.md) |
 | `supabase/functions/portee-remarkable/` | Le connecteur « Portée reMarkable » : lit le cloud reMarkable au clic, tient la bibliothèque synchronisée, et sert Claude dans tes conversations (fonction Supabase) |
 | `modeles/` | Les modèles de papier calibré (PDF, calibration JSON, aperçus) |
 | `outils/` | Générateur de modèles (Python), lecture en ligne de commande, banc d'essai du lecteur (`banc-lecteur.mjs`), échantillons du piano (`echantillons-piano.mjs`), assemblage de l'appli, déploiement du connecteur |
