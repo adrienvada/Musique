@@ -347,6 +347,21 @@ test("un triolet se lit avec tes gabarits : « (3 », la mesure tombe juste, san
   for (const g of [1, 2, 3]) G = ajouterExemple(G, forme("triolet", 0, 0, f.IL, g), "triolet", f.IL);
   const avec = lire(pg, { gabarits: G });
   assert.deepEqual([avec.abc, avec.doutes], ["M:4/4 K:C | (3GAB A2 B2 c2 | G2 A2 B2 c2 |", []]);
+  // Hampes descendantes, ligature dans la portée : le « 3 » y tombe, et les règles en font un soupir.
+  // Tes gabarits (qui connaissent aussi tes silences) le lisent comme un triolet.
+  const bas = new Page(f);
+  x = 240;
+  const hb = [0, 1, 2].map((k) => bas.bas(x + k * 52, 9 + k));
+  bas.ligature(hb[0], hb[2]);
+  bas.ajouter(forme("triolet", x + 37, hb[1].bout[1] + 1.4 * f.IL, f.IL, 31));
+  x += 186;
+  for (let k = 0; k < 3; k++) { bas.bas(x, 8 + k); x += 64; }
+  bas.barre(x); x += 40;
+  for (let k = 0; k < 4; k++) { bas.bas(x, 8 + k); x += 64; }
+  bas.barre(x);
+  assert.equal(lire(bas).abc, "M:4/4 K:C | g z2 ab f2 g2 a2 | f2 g2 a2 b2 |");
+  G = ajouterExemple(ajouterExemple(G, [f.T[83]], "demi-soupir", f.IL), [f.T[134]], "soupir", f.IL);
+  assert.deepEqual([lire(bas, { gabarits: G }).abc, lire(bas, { gabarits: G }).doutes], ["M:4/4 K:C | (3gab f2 g2 a2 | f2 g2 a2 b2 |", []]);
 });
 
 test("un signe que tes gabarits reconnaissent : nettement, il est lu ; de justesse, la question le propose et l'apprend", async () => {

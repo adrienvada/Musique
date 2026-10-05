@@ -790,6 +790,10 @@ Chaque lot dit ce qu'il a changé et pourquoi, avec les repères du rapport.
     milieu. Lu mais contredit par la plupart des mesures, c'est une question.
   - Sur ta mélodie, le « 12/8 » est lu, les six bémols et les trois silences
     reconnus : même ABC, mêmes doutes.
+  - Un « 3 » de triolet écrit dans la portée (hampes descendantes, ligature
+    dans la portée) : les règles en font un soupir au milieu du groupe, avec
+    un doute de mesure. Tes gabarits le lisent comme un triolet. Sans eux,
+    c'est encore le cas (à revoir si tes pages en montrent).
 - **Apprendre d'une correction.** `ajouterExemple` rend de nouveaux
   gabarits (au plus 24 exemples par signe, les plus anciens partent ; le même
   exemple ne compte qu'une fois), `fusionnerGabarits` réunit ceux de deux

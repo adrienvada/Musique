@@ -26,10 +26,11 @@ import { ETIQUETTES, etiquettesDe, reconnaitre } from "./gabarits.js";
 import { preparerTraits } from "./traits.js";
 
 // Ce que tes gabarits (L16) peuvent dire à chaque endroit : en tête de ligne,
-// une armure ou un chiffrage ; dans la portée, une altération ou un silence ;
-// au-dessus ou au-dessous d'une ligature, le « 3 » d'un triolet.
+// une armure ou un chiffrage ; dans la portée, une altération, un silence ou
+// le « 3 » d'un triolet (quand la ligature passe dans la portée) ; au-dessus
+// ou au-dessous d'une ligature, le « 3 ».
 const SIGNES_ENTETE = etiquettesDe("alteration", "chiffre", "metre");
-const SIGNES_PORTEE = etiquettesDe("alteration", "silence");
+const SIGNES_PORTEE = etiquettesDe("alteration", "silence", "triolet");
 const SIGNES_TRIOLET = etiquettesDe("triolet");
 
 const NOMS = ["C", "D", "E", "F", "G", "A", "B"];
@@ -730,6 +731,9 @@ export function lirePage(traitsBruts, cal, numeroPage = 1, { gabarits = null } =
     if (lu) g.reconnu = r;
     else if (r) g.propose = r.etiquette;
     if (lu && ETIQUETTES[lu].famille === "silence") { g.nature = lu; continue; }
+    // Un « 3 » de triolet écrit dans la portée : les règles en faisaient un
+    // soupir. assembler le lit avec les ligatures (sinon, un signe à relire).
+    if (lu === "triolet") { g.nature = "inconnu"; continue; }
     const forme = lu || formeRegles;
     // L'altération va à la tête qui la suit, à sa hauteur : pour un bémol, celle de sa boucle.
     const pasG = forme ? hauteurAlteration(g, forme, p, il) : null;
