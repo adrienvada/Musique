@@ -39,6 +39,7 @@ export function creerSynchronisation(deps) {
   let synchro = null, minuterieSynchro = null, battement = null, dernierEtat = null;
   let deCote = 0; // ce qui est mis de côté (D2), d'après le dernier état connu
   let rendusDeCote = 0;
+  const signalees = new Set(); // les raisons déjà écrites dans la console
 
   const synchronisable = () => !dansClaude() && !!stockage() && stockage().synchronisable && !!adresseEnregistree();
 
@@ -181,8 +182,9 @@ export function creerSynchronisation(deps) {
     const ul = $("de-cote-liste");
     ul.textContent = "";
     liste.forEach((q, i) => {
-      // La raison brute reste dans la console : à l'écran, elle passe par la traduction des erreurs.
-      console.warn("Synchronisation : mise de côté", q.id, q.sens, q.raison);
+      // La raison brute reste dans la console (une fois) : à l'écran, elle passe par la traduction des erreurs.
+      const cle = `${q.sens}:${q.id}:${q.raison}`;
+      if (!signalees.has(cle)) { signalees.add(cle); console.warn("Synchronisation : mise de côté", q.id, q.sens, q.raison); }
       const li = el("li");
       li.append(el("span", "de-cote-titre", titres[i]), el("span", "de-cote-raison", phraseDeCote(q)));
       ul.appendChild(li);
