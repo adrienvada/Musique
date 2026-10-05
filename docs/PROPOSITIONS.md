@@ -2320,7 +2320,51 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
 
 ### Écrans des données (D6, D7, D9, H3)
 
-<!-- lot écrans des données -->
+- **Ce qui garde ta bibliothèque se voit dans les Réglages (D9,
+  `app/garde.js`, `app/sauvegarde-ui.js`).** « L'appli » dit maintenant si
+  la bibliothèque est protégée sur cet appareil (Oui, Non, On ne sait pas)
+  et la place que Portée y prend. Le lot données savait le lire
+  (`etatStockage`), personne ne le montrait.
+  - Sur l'iPhone, dans Safari, sans installation : « Non », même si Safari
+    a promis de la garder, et un pas à pas pour l'installer sur l'écran
+    d'accueil (Partager, puis « Sur l'écran d'accueil »), avec le pourquoi :
+    sinon, Safari efface tout au bout de 7 jours sans visite. Sur un Mac :
+    Fichier, puis « Ajouter au Dock ».
+  - Le guide dit aussi que l'appli installée a sa propre bibliothèque,
+    vide au début : elle repart de la synchronisation (l'adresse du
+    connecteur à recoller), ou d'une sauvegarde qu'on y restaure. Safari ne
+    partage pas ses données avec l'appli de l'écran d'accueil.
+  - Ailleurs (Chrome, Firefox), quand le navigateur n'a rien promis : une
+    ligne « Demander au navigateur de la garder », qui lit sa réponse et la
+    dit. Sur claude.ai, rien de tout cela : c'est claude.ai qui garde la
+    bibliothèque.
+- **La dernière sauvegarde, et un rappel au-delà de 30 jours (D9).** Chaque
+  sauvegarde réussie note sa date (une préférence de l'appareil,
+  `portee:derniere-sauvegarde`), que la ligne « Dernière sauvegarde »
+  montre. Sans synchronisation, c'est la seule copie de ta bibliothèque
+  hors de ce navigateur : au-delà de 30 jours (ou jamais faite, pour une
+  bibliothèque de plus de 30 jours), un rappel discret dans « Sauvegarde »,
+  et le nuage du haut passe à l'ambre ; le toucher mène à la sauvegarde.
+  Avec la synchronisation, ou sur claude.ai, pas de rappel : la
+  bibliothèque est déjà ailleurs.
+- **Une idée n'est plus une « partition » dans les messages (B12).**
+  « 3 partitions sauvegardées » comptait les idées et les morceaux. La
+  sauvegarde dit maintenant « 1 idée et 2 partitions sauvegardées », et la
+  restauration « 2 idées et 1 morceau revenus ». Le compte par sorte se
+  calcule d'après le fichier (ce qui n'était pas là et n'a pas échoué) ;
+  s'il ne tombe pas juste (un identifiant en double dans le fichier),
+  l'appli dit « 3 éléments revenus » plutôt que de se tromper de sorte.
+- **Deux onglets (D7) : c'était branché, un mot était faux.** Le lot
+  architecture avait déjà relié `surAutreOnglet` (la liste et la partition
+  ouverte se reprennent) et `surBloque` (« Ferme l'autre onglet de
+  Portée », dans les Réglages et en message). Mais un changement venu d'un
+  autre onglet se disait « modifiée sur un autre appareil » : il se dit
+  maintenant « dans un autre onglet ». Essai : « deux onglets… »
+  (`tests/e2e/donnees.test.mjs`).
+- Essais : `tests/garde.test.mjs`, `tests/sauvegarde-ui.test.mjs`, et les
+  trois essais « Réglages… », « sans synchronisation… » et « sur
+  l'iPhone… » de `tests/e2e/donnees.test.mjs` (un iPhone simulé par son
+  agent utilisateur).
 
 ### Interface (I1 à I4, I6 à I15)
 

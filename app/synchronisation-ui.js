@@ -26,8 +26,9 @@ import { $, el, heure, pluriel, toast } from "./ui.js";
  *     partition() → son identifiant (null : pas encore enregistrée),
  *     occupe() → une écriture attend ou est en cours ici,
  *     recharger(p) → true s'il a repris la version p (false : rien de ce qu'il montre n'a changé),
- *     supprimee() → ce qu'on dit si elle a disparu ailleurs },
- *   quitter() (revenir à la bibliothèque)
+ *     supprimee(ou) → ce qu'on dit si elle a disparu ailleurs (`ou` : « sur un autre appareil »…) },
+ *   quitter() (revenir à la bibliothèque),
+ *   rappel() → le rappel de sauvegarde, ou null (sauvegarde-ui.js)
  * }
  */
 export function creerSynchronisation(deps) {
@@ -65,7 +66,7 @@ export function creerSynchronisation(deps) {
     if (!synchro || !synchronisable()) return;
     try {
       const { recues } = await synchro.synchroniser();
-      if (recues) await rafraichirOuverte();
+      if (recues) await rafraichirOuverte("sur un autre appareil");
     } catch (e) {
       console.warn("Synchronisation", e);
     }
@@ -77,20 +78,22 @@ export function creerSynchronisation(deps) {
    * quatre écrans (audit du 04/10, T4) : l'idée et le morceau se
    * rechargeaient dès que la synchro recevait quoi que ce soit, avec un
    * faux « modifiée sur un autre appareil » ; et une écriture en cours ici
-   * se voyait remplacée à l'écran par la version d'avant.
+   * se voyait remplacée à l'écran par la version d'avant. `ou` : d'où vient
+   * le changement, pour le dire juste (un autre onglet n'est pas un autre
+   * appareil, D7).
    */
-  async function rafraichirOuverte() {
+  async function rafraichirOuverte(ou = "sur un autre appareil") {
     const ecran = deps.ouverte();
     const id = ecran && ecran.partition();
     if (!id) return;
     const neuve = await stockage().lire(id);
     // Entre-temps, on a pu changer d'écran ou de partition : ce qu'on a lu n'est plus pour lui.
     if (deps.ouverte() !== ecran || ecran.partition() !== id) return;
-    if (!neuve) { toast(ecran.supprimee()); deps.quitter(); return; }
+    if (!neuve) { toast(ecran.supprimee(ou)); deps.quitter(); return; }
     // Une écriture qui attend ou qui part garde la main : elle partira à son tour, et le
     // stockage la fusionnera avec ce qui est arrivé (S8).
     if (ecran.occupe()) return;
-    if (await ecran.recharger(neuve)) toast(`« ${neuve.titre} » a été modifiée sur un autre appareil : mise à jour.`);
+    if (await ecran.recharger(neuve)) toast(`« ${neuve.titre} » a été modifiée ${ou} : mise à jour.`);
   }
 
   function afficher(e) {
@@ -113,7 +116,11 @@ export function creerSynchronisation(deps) {
     if (!actif) {
       $("mode").textContent = "Enregistré dans ce navigateur";
       $("mode-detail").textContent = "Tes partitions restent dans ce navigateur. Active la synchronisation pour les retrouver sur tous tes appareils, ou sauvegarde-les dans un fichier.";
-      deps.montrerSynchro({ nuage: false, ton: "gris", titre: "Enregistré dans ce navigateur, pas synchronisé" });
+      // Sans synchronisation, une sauvegarde trop ancienne se voit aussi en haut, discrètement (D9).
+      const rappel = deps.rappel ? deps.rappel() : null;
+      deps.montrerSynchro(rappel
+        ? { nuage: false, ton: "alerte", titre: "Enregistré dans ce navigateur, pas synchronisé : pense à sauvegarder", vers: "rg-sauvegarde" }
+        : { nuage: false, ton: "gris", titre: "Enregistré dans ce navigateur, pas synchronisé" });
       return;
     }
     const d = dernierEtat || { etat: "encours" };
@@ -145,10 +152,12 @@ export function creerSynchronisation(deps) {
 
   return {
     demarrer, arreter, synchroniser, afficher, rafraichirOuverte,
+    /** La synchronisation est branchée (le site, une adresse de connecteur, IndexedDB). */
+    active: synchronisable,
     /** Le stockage est ouvert : un autre onglet qui change une partition la fait reprendre ici (S8). */
     brancher() {
       const s = stockage();
-      if (s && s.surAutreOnglet) s.surAutreOnglet(() => rafraichirOuverte());
+      if (s && s.surAutreOnglet) s.surAutreOnglet(() => rafraichirOuverte("dans un autre onglet"));
     },
   };
 }

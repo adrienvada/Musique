@@ -179,6 +179,14 @@ button.reglages-ligne:hover, label.reglages-ligne:hover { background: var(--creu
 .reglages-groupe .seg { flex: none; }
 .reglages-groupe .seg > button { min-height: 44px; }
 #zone-adresse:empty, #zone-synchro:empty { display: none; }
+/* Un rappel (la sauvegarde à refaire) : la couleur des avertissements, sans crier. */
+.reglages-rappel { display: flex; align-items: flex-start; gap: 8px; color: var(--alerte); }
+.reglages-rappel .ico { flex: none; margin-top: 1px; }
+/* Le guide d'installation (Safari) : un pas à pas, dans le groupe. */
+.reglages-guide { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--trait); background: var(--surligneur-doux); font-size: 0.9rem; }
+.reglages-guide .guide-titre { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.reglages-guide .guide-titre .ico { color: var(--alerte); }
+.reglages-guide ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 4px; }
 
 /* ---------- La feuille d'actions (« ••• ») ---------- */
 .feuille-liste { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }

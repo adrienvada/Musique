@@ -49,6 +49,7 @@
     "app/claude-idee.js",
     "app/claude-doute.js",
     "app/suggestions.js",
+    "app/garde.js",
     "app/zip.js",
     "app/ui.js",
     "app/erreurs.js",

@@ -71,6 +71,7 @@ let vueMorceau = null; // l'écran d'un morceau (vue-morceau.js)
 let accueil = null; // l'accueil et ses quatre onglets (accueil.js)
 let tablette = null; // le panneau « Ma reMarkable », l'adresse du connecteur, les modèles (tablette.js)
 let synchronisation = null; // la bibliothèque synchronisée, vue de l'appli (synchronisation-ui.js)
+let sauvegardes = null; // la sauvegarde, et ce qui garde la bibliothèque sur cet appareil (sauvegarde-ui.js)
 let atelier = null; // « Corriger » (ecran-atelier.js)
 let lecteur = null; // « Écouter et exporter » (ecran-lecteur.js)
 let ecrans = null; // le registre des écrans, pour la navigation (creerRegistre, plus bas)
@@ -153,7 +154,7 @@ function creerRegistre() {
     partition: () => (pageOuverte.partition ? pageOuverte.partition.id : null),
     occupe: () => pageOuverte.occupe,
     recharger: rechargerPage,
-    supprimee: () => `« ${pageOuverte.partition.titre} » a été supprimée sur un autre appareil.`,
+    supprimee: (ou = "sur un autre appareil") => `« ${pageOuverte.partition.titre} » a été supprimée ${ou}.`,
   };
   ecrans = {
     biblio: { afficher: () => accueil.afficher(), fermer: () => {}, reculer: () => accueil.reculer(), aLaRacine: () => accueil.aLaRacine(), partition: () => null },
@@ -165,12 +166,12 @@ function creerRegistre() {
       toucheBas: (e) => !(e.target.closest && e.target.closest("button") && (e.key === " " || e.key === "Enter")) && editeur.toucheBas(e),
       toucheHaut: (e) => editeur.toucheHaut(e),
       partition: () => editeur.id, occupe: () => editeur.occupe(), recharger: (p) => editeur.recharger(p),
-      supprimee: () => "Cette idée a été supprimée sur un autre appareil.",
+      supprimee: (ou = "sur un autre appareil") => `Cette idée a été supprimée ${ou}.`,
     },
     morceau: {
       fermer: () => vueMorceau.fermer(), reculer: sans, aLaRacine: sans,
       partition: () => vueMorceau.id, occupe: () => vueMorceau.occupe(), recharger: (p) => vueMorceau.recharger(p),
-      supprimee: () => "Ce morceau a été supprimé sur un autre appareil.",
+      supprimee: (ou = "sur un autre appareil") => `Ce morceau a été supprimé ${ou}.`,
     },
   };
 }
@@ -245,7 +246,10 @@ function brancher() {
 
   // La bibliothèque : tout en MIDI ; la sauvegarde dans un fichier (sauvegarde-ui.js)
   $("tout-midi").addEventListener("click", toutEnMidi);
-  brancherSauvegarde({ stockage: () => etat.stockage, partitions: () => etat.partitions });
+  sauvegardes = brancherSauvegarde({
+    stockage: () => etat.stockage, partitions: () => etat.partitions, dansClaude,
+    synchronisee: () => synchronisation.active(), apresSauvegarde: () => synchronisation.afficher(null),
+  });
 
   // Les raccourcis : chaque écran les siens (le registre, navigation.js).
   document.addEventListener("keydown", navigation.toucheBas);
@@ -289,6 +293,7 @@ function creerAccueilDeLAppli() {
     panneaux: { reculer: () => tablette.reculer(), aLaRacine: () => tablette.aLaRacine() },
     partagerMidi, exporterMidi,
     supprimer: async (p) => { if (await veutSupprimer(p, etat.partitions)) await gestes.supprimerDeLaBibliotheque(p); },
+    afficherReglages: () => sauvegardes && sauvegardes.afficher(),
   });
 }
 
@@ -326,6 +331,7 @@ async function demarrer() {
     montrerSynchro: (x) => accueil.montrerSynchro(x),
     ouverte: () => navigation.partitionOuverte(),
     quitter: () => { if (navigation.vue === "atelier" || navigation.vue === "lecteur") pageOuverte.fermer(); montrer("biblio"); },
+    rappel: () => (sauvegardes ? sauvegardes.rappel() : null),
   });
   brancher();
   creerEditeur();
@@ -373,6 +379,8 @@ async function demarrer() {
   etat.stockage.ecouter(
     (liste) => {
       etat.partitions = liste;
+      // L'état du haut peut porter le rappel de sauvegarde, qui dépend de la bibliothèque.
+      synchronisation.afficher(null);
       if (navigation.vue === "biblio") accueil.afficher();
       if (navigation.vue === "morceau") vueMorceau.rafraichir();
     },

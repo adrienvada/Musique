@@ -558,11 +558,16 @@ export function creerAccueil(deps) {
     montrer();
   }
 
-  /** L'icône de la barre du haut : l'état de la synchronisation d'un coup d'œil. */
-  function montrerSynchro({ nuage, ton, titre }) {
+  /**
+   * L'icône de la barre du haut : l'état de la synchronisation d'un coup d'œil.
+   * `vers` : la section des Réglages où elle mène (la synchronisation, ou la
+   * sauvegarde quand c'est elle qu'il faut refaire).
+   */
+  function montrerSynchro({ nuage, ton, titre, vers = "rg-synchro" }) {
     const b = $("etat-synchro");
     b.innerHTML = ico(nuage ? "nuage" : "nuage-vide");
     b.dataset.ton = ton;
+    b.dataset.vers = vers;
     b.title = titre;
     b.setAttribute("aria-label", `${titre} (ouvrir les réglages)`);
   }
@@ -576,6 +581,8 @@ export function creerAccueil(deps) {
     if (etat.onglet === "carnet") rendreCarnet();
     else if (etat.onglet === "partitions") rendrePartitions();
     else if (etat.onglet === "morceaux") rendreMorceaux();
+    // Les Réglages relisent ce qui garde la bibliothèque (sauvegarde-ui.js) : la place, la dernière sauvegarde.
+    else if (deps.afficherReglages) deps.afficherReglages();
     // Sans partition, rien à exporter ni à sauvegarder (restaurer reste là).
     $("tout-midi").hidden = $("sauvegarder").hidden = partitions().length === 0;
     // La feuille ouverte sur une partition qui vient de disparaître (une autre fenêtre l'a supprimée) se ferme.
@@ -620,8 +627,11 @@ export function creerAccueil(deps) {
     if (f) { etat.filtrePages = f.dataset.filtrePage; afficher(); }
   });
 
-  // L'état de la synchronisation mène aux réglages.
-  $("etat-synchro").addEventListener("click", () => { choisirOnglet("reglages"); $("rg-synchro").scrollIntoView({ block: "start" }); });
+  // L'état de la synchronisation mène aux réglages : à la section dont il parle.
+  $("etat-synchro").addEventListener("click", (ev) => {
+    choisirOnglet("reglages");
+    ($(ev.currentTarget.dataset.vers || "rg-synchro") || $("rg-synchro")).scrollIntoView({ block: "start" });
+  });
 
   choisirOnglet(etat.onglet);
   return {

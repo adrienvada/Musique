@@ -208,8 +208,11 @@
       <section class="reglages-bloc" aria-labelledby="rg-sauvegarde">
         <h2 class="surtitre" id="rg-sauvegarde">Sauvegarde</h2>
         <div class="reglages-groupe">
+          <!-- Sans synchronisation, au-delà de 30 jours sans sauvegarde : un rappel (sauvegarde-ui.js, garde.js). -->
+          <p class="reglages-texte reglages-rappel" id="rappel-sauvegarde" role="status" hidden></p>
           <button class="reglages-ligne" id="tout-midi"><span>Tout exporter en MIDI (.zip)</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
           <button class="reglages-ligne" id="sauvegarder"><span>Sauvegarder ma bibliothèque</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
+          <div class="reglages-ligne" id="derniere-sauvegarde-ligne" hidden><span>Dernière sauvegarde</span><span class="valeur" id="derniere-sauvegarde">Jamais</span></div>
           <label class="reglages-ligne" for="restaurer" tabindex="0" id="restaurer-ligne"><span>Restaurer une sauvegarde</span><svg class="ico s" aria-hidden="true"><use href="#i-partager"></use></svg></label>
           <input id="restaurer" type="file" accept="application/json,.json" hidden>
         </div>
@@ -220,6 +223,12 @@
         <div class="reglages-groupe">
           <button class="reglages-ligne" id="installer" hidden><span>Installer l'appli sur cet appareil</span><svg class="ico s" aria-hidden="true"><use href="#i-telecharger"></use></svg></button>
           <div class="reglages-ligne"><span>Tes données</span><span class="valeur" id="mode">Ouverture de ta bibliothèque…</span></div>
+          <!-- Ce qui garde la bibliothèque de ce navigateur (D9, sauvegarde-ui.js) : rien de cela sur claude.ai. -->
+          <div class="reglages-ligne" id="garde-ligne" hidden><span>Bibliothèque protégée sur cet appareil</span><span class="valeur" id="garde-protegee"></span></div>
+          <div class="reglages-ligne" id="garde-place-ligne" hidden><span>Place prise</span><span class="valeur" id="garde-place"></span></div>
+          <p class="reglages-texte" id="garde-conseil" hidden></p>
+          <button class="reglages-ligne principal" id="garde-proteger" hidden><span>Demander au navigateur de la garder</span><svg class="ico s" aria-hidden="true"><use href="#i-ok"></use></svg></button>
+          <div class="reglages-guide" id="garde-guide" role="note" hidden></div>
         </div>
       </section>
     </div>
