@@ -681,20 +681,11 @@ export function creerEditeurIdee(deps) {
      */
     changer(f) {
       if (!e.ouverte || !f || f.id !== e.id) return false;
-      e.titre = f.titre;
-      e.etiquettes = Array.isArray(f.etiquettes) ? [...f.etiquettes] : [];
+      // Les mêmes chemins que « Demander à Claude » (plus haut) : le titre et les étiquettes hors
+      // d'« Annuler », comme quand on les écrit ; les notes et les accords en un seul pas.
       e.note = typeof f.note === "string" ? f.note : "";
-      $("idee-titre").value = e.titre;
-      if (deps.titreChange) deps.titreChange(e.titre);
-      carnet.afficher();
-      // Les mêmes notes (un titre, une étiquette) : rien à annuler dans la grille, l'idée s'enregistre.
-      if (egal(f.sequence, e.seq)) { rafraichir(); planifierSauvegarde(0); return true; }
-      modifier(() => {
-        e.seq = sq.cloner(f.sequence);
-        if (!e.seq.pistes[e.piste]) e.piste = 0;
-        e.selection = new Set();
-        e.curseur = Math.min(e.curseur, sq.finSequence(e.seq));
-      });
+      changerTitre(f.titre, Array.isArray(f.etiquettes) ? f.etiquettes : []);
+      if (!egal(f.sequence, e.seq)) remplacerIdee(f.sequence);
       return true;
     },
   };

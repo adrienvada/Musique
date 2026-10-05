@@ -290,7 +290,7 @@ export function creerAccueil(deps) {
   /** « Claude propose » : des suggestions de Claude attendent dans la partition (H3). */
   function marqueClaude(n) {
     const c = el("span", "aide-claude");
-    c.innerHTML = ico("suggestion", "s");
+    c.innerHTML = ico("etincelle", "s");
     c.appendChild(el("span", "", n > 1 ? `Claude propose ${n} choses` : "Claude propose"));
     return c;
   }

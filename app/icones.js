@@ -54,8 +54,6 @@ export const ICONES = {
   corbeille: '<path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/>',
   // Les versions précédentes (D6) : une horloge qu'on remonte.
   historique: '<path d="M4 12a8 8 0 1 0 2.35-5.65"/><path d="M4 4.5v4.2h4.2"/><path d="M12 8v4.3l2.8 1.7"/>',
-  // Une suggestion de Claude (H3) : une étincelle, et une petite.
-  suggestion: '<path d="M10.5 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1-5.1-1.9 5.1-1.9z"/><path d="M18 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
   copier: '<rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V5.5A1.5 1.5 0 0 0 14 4H5.5A1.5 1.5 0 0 0 4 5.5V14a1.5 1.5 0 0 0 1.5 1.5h3"/>',
   crayon: '<path d="M4 20l4.2-1 10.6-10.6a2 2 0 0 0-2.8-2.8L5.4 16.2z"/><path d="M14.5 7l2.5 2.5"/>',
   etoile: '<path d="M12 3.8l2.5 5.1 5.6.8-4.05 3.95.95 5.6L12 16.6l-5 2.65.95-5.6L3.9 9.7l5.6-.8z"/>',

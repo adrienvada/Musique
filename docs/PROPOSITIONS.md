@@ -2388,9 +2388,11 @@ avec un faux contexte audio (`tests/faux-audio.mjs`).
     seul.
   - L'éditeur d'idée s'ouvre d'une entrée, à un seul endroit (`idee.js`,
     son API) : `fiche()` (l'idée telle qu'elle est) et `changer(f)` (la
-    poser en un geste, par son `modifier` interne). « Corriger » ne
-    change pas : la page passe par `page-ouverte.js`, comme une correction,
-    et l'écran se redessine.
+    poser en un geste), qui passe par les mêmes chemins que « Demander à
+    Claude » (`remplacerIdee` par `modifier`, `changerTitre`). « Corriger »
+    ne change pas : la page passe par `page-ouverte.js`, comme une
+    correction, et l'écran se redessine. La marque est l'étincelle de
+    « Demander à Claude » : une seule icône pour Claude dans Portée.
   - Essais : « une idée notée par Claude, et ses suggestions… », « Corriger :
     Claude répond à un doute… » et « claude.ai : les suggestions passent
     par la capacité mcp… » (`tests/e2e/donnees.test.mjs`). L'essai

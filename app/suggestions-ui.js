@@ -163,7 +163,7 @@ export function creerSuggestions(deps) {
       quoi.type = "button";
       quoi.setAttribute("aria-expanded", String(deplie));
       quoi.title = deplie ? "Cacher pourquoi" : "Pourquoi ?";
-      quoi.innerHTML = ico("suggestion", "s");
+      quoi.innerHTML = ico("etincelle", "s");
       quoi.appendChild(el("span", "bandeau-texte", resumeSuggestion(fiche)));
       if (liste.length > 1) quoi.appendChild(el("span", "bandeau-compte", `1 sur ${liste.length}`));
       quoi.addEventListener("click", () => { deplie = !deplie; rendre(); });
