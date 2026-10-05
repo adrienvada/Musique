@@ -337,9 +337,18 @@ qui la met dans la file d'envois.
      explicite pour `.mjs` (`text/javascript`), `.mp3` (`audio/mpeg`),
      `.pdf` (`application/pdf`), `.svg` (`image/svg+xml`), `.woff2`
      (`font/woff2`) et `.txt` (`text/plain`) ;
-   - ne pas repasser `capabilities`, pour garder `db`, `downloads` et `mcp`
-     (connecteur « Portée reMarkable » : `arborescence`, `document`, `relier`).
-     Si on les repasse, redonner l'ensemble complet : ce qui manque est retiré.
+   - **la première publication après l'audit du 04/10** redonne les
+     capacités au complet, une fois : celles d'avant (`db`, `downloads`,
+     `mcp`), relues d'abord sur l'artefact (outil `Artifact`, `read`) pour
+     garder leur réglage tel quel, plus `sample` (Claude dans la page : H1,
+     H2), et, dans `mcp`, le connecteur « Portée reMarkable » avec
+     `arborescence`, `document`, `relier`, `suggestions_lister` et
+     `suggestion_retirer`. Ce qui manque est retiré. `permissions` ne se
+     déclare jamais. Si les fonctions de Claude n'apparaissent pas, regarder
+     la version du contrat de l'artefact (`contract: "latest"` est un geste
+     délibéré, à proposer à Adrien) ;
+   - les fois suivantes, ne plus repasser `capabilities` : la publication
+     garde ce qui est déclaré.
 
    Sans l'URL, on crée une seconde appli vide, et Adrien perd sa bibliothèque.
 3. La base de l'appli (`partitions/<id>`, `partitions/<id>/pages/<n>`) contient
